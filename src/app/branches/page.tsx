@@ -6,7 +6,6 @@ import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import type { AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData } from "@/lib/dashboard-data";
-import { BranchPerformanceBars } from "../dashboard/branch-performance-bars";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
 import { BranchRankingChart } from "../dashboard/branch-ranking-chart";
 import { RevenuePerVehicleTable } from "../dashboard/revenue-per-vehicle-table";
@@ -66,7 +65,6 @@ async function BranchesContent({
       />
       <div className="mt-4 space-y-4">
         <BranchPerformanceHeatmap branches={data.filteredBranches} />
-        <BranchPerformanceBars branches={data.filteredBranches} defaultExpanded />
         <BranchRankingChart branches={data.filteredBranches} defaultOpen />
         <RevenuePerVehicleTable branches={data.filteredBranches} />
       </div>
