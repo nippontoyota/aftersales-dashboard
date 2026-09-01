@@ -30,10 +30,6 @@ const UTILITY_NAV_ITEMS = [
   // leave, an issue on their side) — report type auto-detected, branch
   // always confirmed by hand, never guessed. See /upload-sheet.
   { href: "/upload-sheet", label: "Upload Sheet", key: "upload-sheet" as const },
-  // Approve/reject self-service branch-admin signups (see /signup) — the
-  // gate that stops anyone from just creating an account and logging in
-  // (2026-09-01, at the user's request).
-  { href: "/account-requests", label: "Account Requests", key: "account-requests" as const },
 ];
 
 type NavKey = (typeof NAV_ITEMS)[number]["key"] | (typeof UTILITY_NAV_ITEMS)[number]["key"];
@@ -117,16 +113,6 @@ function UploadSheetIcon() {
   );
 }
 
-function AccountRequestsIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
-      <circle cx="8" cy="7" r="3" />
-      <path d="M2.5 17c0-3 2.5-5 5.5-5s5.5 2 5.5 5" strokeLinecap="round" />
-      <path d="M14 5.5l1.3 1.3L17.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 const ICONS: Record<NavKey, () => React.ReactElement> = {
   dashboard: DashboardIcon,
   "tkm-targets": TkmTargetsIcon,
@@ -136,7 +122,6 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   upload: UploadIcon,
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,
-  "account-requests": AccountRequestsIcon,
 };
 
 export function AppShell({
