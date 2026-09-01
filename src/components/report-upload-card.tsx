@@ -2,10 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { yesterdayIso } from "@/lib/utils";
 
 function formatUploadedAt(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
@@ -46,7 +43,7 @@ export function ReportUploadCard({
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true">
             <path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <h2 className="text-sm font-semibold text-emerald-900">{title} — already uploaded today</h2>
+          <h2 className="text-sm font-semibold text-emerald-900">{title} — already uploaded</h2>
         </div>
         <p className="text-xs text-emerald-800">
           {alreadyUploaded.sourceFileName} · {formatUploadedAt(alreadyUploaded.uploadedAt)}
@@ -123,7 +120,7 @@ function ReportUploadForm({
           name="date"
           type="date"
           required
-          defaultValue={todayIso()}
+          defaultValue={yesterdayIso()}
           className="mt-1 h-9 w-full rounded border border-slate-300 px-3 text-sm"
         />
       </div>

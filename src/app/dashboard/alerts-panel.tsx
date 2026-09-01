@@ -27,6 +27,22 @@ export type WatchedMetric = { label: string; actual: keyof BranchReport; target:
  * dashboard's Alerts. */
 const DEFAULT_WATCHED: WatchedMetric[] = [{ label: "VAS", actual: "vasAchievementForTheMonth", target: "vasBillTarget" }];
 
+/** TKM Targets page's own watched list — exported so both the page's own
+ * preview panel AND the full /alerts page (reached via "View all") count
+ * the same alerts. Previously defined only locally in tkm-targets/page.tsx,
+ * which meant /alerts always fell back to DEFAULT_WATCHED (VAS) regardless
+ * of which page "View all" was clicked from — e.g. TKM's preview showing
+ * "Critical (7)" but the full page showing "Critical (0)" for a completely
+ * different metric (found 2026-09-01, from the user noticing the mismatch
+ * live). See viewAllHref below for the other half of the fix (also
+ * preserving date/region, which the plain "/alerts" link used to drop). */
+export const TKM_WATCHED: WatchedMetric[] = [
+  { label: "BPU", actual: "bpuAchievementForTheMonth", target: "bpuTarget" },
+  { label: "Offtake", actual: "offtakeAchievementForTheMonth", target: "offtakeTarget" },
+  { label: "Parts Retail", actual: "partsRetailAchievementForTheMonth", target: "partsRetailTarget" },
+  { label: "PM+OC", actual: "pmOcAchievementForTheMonth", target: "pmOcTarget" },
+];
+
 const COLLAPSED_COUNT = 4;
 
 type Tab = "critical" | "watch" | "all";
@@ -180,11 +196,18 @@ export function AlertsPanel({
   branches,
   variant = "full",
   watched = DEFAULT_WATCHED,
+  viewAllHref = "/alerts",
 }: {
   branches: BranchReport[];
   variant?: "preview" | "full";
   /** Defaults to the main dashboard's own set (VAS only); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC watched list instead. */
   watched?: WatchedMetric[];
+  /** Where "View all" (preview variant only) links to — must carry the same
+   * `watched` set (via a `?watched=` param the /alerts page reads) plus the
+   * current date/region, or the full page silently shows a different set of
+   * alerts than the preview just did. Callers build this from their own
+   * `date`/`region`/watched-set — see tkm-targets/page.tsx. */
+  viewAllHref?: string;
 }) {
   const [tab, setTab] = useState<Tab>("critical");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -241,7 +264,7 @@ export function AlertsPanel({
           ))}
         </div>
         {variant === "preview" && shownAll.length > COLLAPSED_COUNT ? (
-          <Link href="/alerts" className="shrink-0 text-[11px] font-medium text-red-600 hover:underline">
+          <Link href={viewAllHref} className="shrink-0 text-[11px] font-medium text-red-600 hover:underline">
             View all
           </Link>
         ) : null}

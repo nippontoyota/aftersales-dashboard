@@ -79,6 +79,12 @@ export default async function DashboardPage({
 
   const vasGentani = achievementRatio(kpis.vasAchievementForTheMonth, kpis.gusRoMtd);
 
+  // Same date/region preservation as tkm-targets/page.tsx's alertsHref — no
+  // `watched` param needed here since VAS is already /alerts' own default.
+  const alertsHrefParams = new URLSearchParams({ date });
+  if (region !== "All") alertsHrefParams.set("region", region);
+  const alertsHref = `/alerts?${alertsHrefParams.toString()}`;
+
   const uploadedAtLabel = new Date(report.uploadedAt).toLocaleString("en-IN", {
     day: "numeric",
     month: "short",
@@ -170,7 +176,7 @@ export default async function DashboardPage({
 
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <InsightsPanel kpis={allKpis} branches={report.branches} date={date} />
-          <AlertsPanel branches={filteredBranches} variant="preview" />
+          <AlertsPanel branches={filteredBranches} variant="preview" viewAllHref={alertsHref} />
         </div>
 
         <div className="mt-4">

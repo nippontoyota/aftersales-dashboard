@@ -3,9 +3,9 @@ import { AppShell } from "@/components/app-shell";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData } from "@/lib/dashboard-data";
-import { AlertsPanel } from "../dashboard/alerts-panel";
+import { AlertsPanel, TKM_WATCHED } from "../dashboard/alerts-panel";
 
-export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
+export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string; watched?: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin?.canViewDashboard) redirect("/upload");
   // Full company-wide access for everyone (2026-08-29 branch-lock reversed
@@ -15,6 +15,11 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
 
   const params = await searchParams;
   const data = await loadDashboardData(params, admin);
+  // Defaults to VAS (the main Dashboard's own alerts) — TKM Targets' "View
+  // all" links here with ?watched=tkm so the full page counts the same
+  // BPU/Offtake/Parts Retail/PM+OC alerts its preview just showed, instead
+  // of silently falling back to a different metric set (found 2026-09-01).
+  const isTkm = params.watched === "tkm";
 
   return (
     <AppShell current="alerts" showDashboardLink isHq={admin.role === "hq"} identity={identity}>
@@ -40,9 +45,11 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
               daysSincePrevious={data.report?.daysSincePrevious ?? null}
               isPublished={data.isPublished}
               canPublish={data.canPublish}
+              extraParams={isTkm ? { watched: "tkm" } : undefined}
             />
+            <p className="mt-1 text-xs text-slate-400">Watching: {isTkm ? "BPU, Offtake, Parts Retail, PM+OC (TKM Targets)" : "VAS (Dashboard)"}</p>
             <div className="mt-4">
-              <AlertsPanel branches={data.filteredBranches} variant="full" />
+              <AlertsPanel branches={data.filteredBranches} variant="full" watched={isTkm ? TKM_WATCHED : undefined} />
             </div>
           </>
         )}

@@ -3,7 +3,19 @@
 import { useRouter } from "next/navigation";
 import { REGIONS } from "@/lib/regions";
 
-export function RegionSelect({ selected, date, basePath = "/dashboard" }: { selected: string; date: string; basePath?: string }) {
+export function RegionSelect({
+  selected,
+  date,
+  basePath = "/dashboard",
+  extraParams,
+}: {
+  selected: string;
+  date: string;
+  basePath?: string;
+  /** Extra query params (e.g. /alerts' `watched=tkm`) to carry along on
+   * every navigation — otherwise switching regions silently drops them. */
+  extraParams?: Record<string, string>;
+}) {
   const router = useRouter();
   const options = ["All", ...Object.keys(REGIONS)];
 
@@ -11,7 +23,7 @@ export function RegionSelect({ selected, date, basePath = "/dashboard" }: { sele
     <select
       value={selected}
       onChange={(e) => {
-        const params = new URLSearchParams({ date });
+        const params = new URLSearchParams({ date, ...extraParams });
         if (e.target.value !== "All") params.set("region", e.target.value);
         router.push(`${basePath}?${params.toString()}`);
       }}

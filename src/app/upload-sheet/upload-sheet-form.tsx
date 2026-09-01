@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { yesterdayIso } from "@/lib/utils";
 
 type DetectedReportType = "service-info" | "part-sale" | "ssrv089" | "scom205";
 
@@ -13,10 +14,6 @@ const TYPE_LABEL: Record<DetectedReportType, string> = {
 };
 
 type Detection = { type: DetectedReportType; suggestedBranch: string | null; branchCodes: string[]; sourceFileName: string };
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 /** HQ-only fallback for when a branch admin can't upload themselves —
  * detects the report type from the file itself (reliable: every report
@@ -32,7 +29,7 @@ export function UploadSheetForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
-  const [date, setDate] = useState(todayIso());
+  const [date, setDate] = useState(yesterdayIso());
   const [detecting, setDetecting] = useState(false);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [branch, setBranch] = useState("");

@@ -20,6 +20,7 @@ export function DashboardPageHeader({
   showRegionSelect = true,
   isPublished,
   canPublish = false,
+  extraParams,
 }: {
   title: string;
   basePath: string;
@@ -35,8 +36,15 @@ export function DashboardPageHeader({
   isPublished?: boolean;
   /** Only HQ can publish — the control renders only when this is true. */
   canPublish?: boolean;
+  /** Extra query params (e.g. /alerts' `watched=tkm`) that identify which
+   * variant of the page this is — carried through the refresh link, the
+   * publish redirect, and passed down to Date/RegionSelect, so switching
+   * date/region or publishing doesn't silently drop back to a default
+   * variant (found 2026-09-01, see alerts-panel.tsx's viewAllHref). */
+  extraParams?: Record<string, string>;
 }) {
-  const currentHref = `${basePath}?date=${date}${region !== "All" ? `&region=${region}` : ""}`;
+  const extraQuery = extraParams ? `&${new URLSearchParams(extraParams).toString()}` : "";
+  const currentHref = `${basePath}?date=${date}${region !== "All" ? `&region=${region}` : ""}${extraQuery}`;
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -76,8 +84,8 @@ export function DashboardPageHeader({
             </form>
           )
         ) : null}
-        {showRegionSelect ? <RegionSelect selected={region} date={date} basePath={basePath} /> : null}
-        <DateSelect dates={[...dates].reverse()} selected={date} region={region} basePath={basePath} />
+        {showRegionSelect ? <RegionSelect selected={region} date={date} basePath={basePath} extraParams={extraParams} /> : null}
+        <DateSelect dates={[...dates].reverse()} selected={date} region={region} basePath={basePath} extraParams={extraParams} />
         <Link
           href={currentHref}
           aria-label="Refresh"

@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { getCurrentAdmin } from "@/lib/auth";
+import { yesterdayIso } from "@/lib/utils";
 import { loadServiceInfoSnapshot } from "@/lib/service-info/store";
 import { loadPartSaleSnapshot } from "@/lib/part-sale/store";
 import { loadSsrv089Snapshot } from "@/lib/ssrv089/store";
@@ -10,18 +11,15 @@ import { Scom205UploadForm } from "./scom205-upload-form";
 import { ServiceInfoUploadForm } from "./service-info-upload-form";
 import { Ssrv089GeneralUploadForm } from "./ssrv089-general-upload-form";
 
-// Matches the date picker's own default (see report-upload-card.tsx's
-// todayIso()) — a UTC-based ISO date, so the "already uploaded today" check
-// lines up with what the form actually defaults to.
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export default async function UploadPage() {
   const admin = await getCurrentAdmin();
   const identity = admin?.role === "hq" ? "HQ admin" : admin?.role === "branch" ? `${admin.branch} branch` : "";
 
-  const today = todayIso();
+  // Branches upload today for yesterday's report, and every upload form's
+  // date picker defaults to yesterdayIso() to match — so the lock-status
+  // check here has to look at the same date, or it would check "today"
+  // (almost never actually uploaded under) and the lock would never show.
+  const reportDate = yesterdayIso();
   const alreadyUploaded =
     admin?.role === "branch"
       ? await (async () => {
@@ -29,10 +27,10 @@ export default async function UploadPage() {
           // at the user's request — never fed any dashboard formula). Only
           // these 4 report types are required per branch per day now.
           const [serviceInfo, partSale, ssrvGeneral, scom205] = await Promise.all([
-            loadServiceInfoSnapshot(today, admin.branch),
-            loadPartSaleSnapshot(today, admin.branch),
-            loadSsrv089Snapshot(today, admin.branch, "general"),
-            loadScom205Snapshot(today, admin.branch),
+            loadServiceInfoSnapshot(reportDate, admin.branch),
+            loadPartSaleSnapshot(reportDate, admin.branch),
+            loadSsrv089Snapshot(reportDate, admin.branch, "general"),
+            loadScom205Snapshot(reportDate, admin.branch),
           ]);
           const pick = (s: { sourceFileName: string; uploadedAt: string } | null) =>
             s ? { sourceFileName: s.sourceFileName, uploadedAt: s.uploadedAt } : null;

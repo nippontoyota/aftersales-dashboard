@@ -10,7 +10,7 @@ import { formatCompactCurrency, formatNumber } from "@/lib/format";
 import { computePace } from "@/lib/pace";
 import { computeTrendSeries } from "@/lib/trend";
 import { AchievementDonut, type DonutMetricConfig } from "../dashboard/achievement-donut";
-import { AlertsPanel, type WatchedMetric } from "../dashboard/alerts-panel";
+import { AlertsPanel, TKM_WATCHED } from "../dashboard/alerts-panel";
 import { BranchPerformanceBars, type BarsMetricConfig } from "../dashboard/branch-performance-bars";
 import { BranchPerformanceHeatmap, type HeatmapMetricConfig } from "../dashboard/branch-performance-heatmap";
 import { BranchRankingChart, TKM_RANKING_METRICS } from "../dashboard/branch-ranking-chart";
@@ -60,13 +60,6 @@ const BARS_METRICS: BarsMetricConfig[] = [
   { key: "pmOc", label: "PM+OC", actual: "pmOcAchievementForTheMonth", target: "pmOcTarget" },
 ];
 
-const WATCHED: WatchedMetric[] = [
-  { label: "BPU", actual: "bpuAchievementForTheMonth", target: "bpuTarget" },
-  { label: "Offtake", actual: "offtakeAchievementForTheMonth", target: "offtakeTarget" },
-  { label: "Parts Retail", actual: "partsRetailAchievementForTheMonth", target: "partsRetailTarget" },
-  { label: "PM+OC", actual: "pmOcAchievementForTheMonth", target: "pmOcTarget" },
-];
-
 const PER_BRANCH_METRICS = [
   { actual: "bpuAchievementForTheMonth" as const, target: "bpuTarget" as const },
   { actual: "offtakeAchievementForTheMonth" as const, target: "offtakeTarget" as const },
@@ -114,6 +107,15 @@ export default async function TkmTargetsPage({ searchParams }: { searchParams: P
     partsRetail: computePace(date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget),
     pmOc: computePace(date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget),
   };
+
+  // "View all" has to carry both the TKM watched-set (so /alerts counts the
+  // same BPU/Offtake/Parts Retail/PM+OC alerts the preview just did, not its
+  // own VAS default) and the current date/region — a bare "/alerts" used to
+  // drop both, silently swapping to a different metric set (found
+  // 2026-09-01) and resetting to the latest date.
+  const alertsHrefParams = new URLSearchParams({ date, watched: "tkm" });
+  if (region !== "All") alertsHrefParams.set("region", region);
+  const alertsHref = `/alerts?${alertsHrefParams.toString()}`;
 
   return (
     <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} identity={identity}>
@@ -204,7 +206,7 @@ export default async function TkmTargetsPage({ searchParams }: { searchParams: P
             perBranchMetrics={PER_BRANCH_METRICS}
             regionGapMetric={REGION_GAP_METRIC}
           />
-          <AlertsPanel branches={filteredBranches} variant="preview" watched={WATCHED} />
+          <AlertsPanel branches={filteredBranches} variant="preview" watched={TKM_WATCHED} viewAllHref={alertsHref} />
         </div>
 
         <div className="mt-4">
