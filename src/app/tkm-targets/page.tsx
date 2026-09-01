@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
+import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { TargetIcon, WrenchIcon, StorefrontIcon } from "@/components/dashboard-icons";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { computeKpiSummary, TKM_TRACKED_KPIS } from "@/lib/aggregate";
+import type { AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatNumber } from "@/lib/format";
@@ -74,19 +77,33 @@ export default async function TkmTargetsPage({ searchParams }: { searchParams: P
   if (!admin?.canViewDashboard) redirect("/upload");
   const identity = admin.role === "hq" ? "HQ admin" : `${admin.branch} branch`;
 
+  return (
+    <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} identity={identity}>
+      <Suspense fallback={<DashboardPageSkeleton heroCards={5} />}>
+        <TkmTargetsContent searchParams={searchParams} admin={admin} />
+      </Suspense>
+    </AppShell>
+  );
+}
+
+async function TkmTargetsContent({
+  searchParams,
+  admin,
+}: {
+  searchParams: Promise<{ date?: string; region?: string }>;
+  admin: AdminAccount;
+}) {
   const params = await searchParams;
   const data = await loadDashboardData(params, admin);
 
   if (!data || !data.report) {
     return (
-      <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} identity={identity}>
-        <div className="p-6">
-          <h1 className="text-lg font-semibold text-slate-900">TKM Targets</h1>
-          <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-            {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "Nothing has been published yet — check back once HQ publishes a day's dashboard."}
-          </div>
+      <div className="p-6">
+        <h1 className="text-lg font-semibold text-slate-900">TKM Targets</h1>
+        <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+          {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "Nothing has been published yet — check back once HQ publishes a day's dashboard."}
         </div>
-      </AppShell>
+      </div>
     );
   }
 
@@ -118,101 +135,99 @@ export default async function TkmTargetsPage({ searchParams }: { searchParams: P
   const alertsHref = `/alerts?${alertsHrefParams.toString()}`;
 
   return (
-    <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} identity={identity}>
-      <div className="p-6">
-        <DashboardPageHeader
-          title="TKM Targets"
-          basePath="/tkm-targets"
-          date={date}
-          region={region}
-          dates={dates}
-          branchCount={filteredBranches.length}
+    <div className="p-6">
+      <DashboardPageHeader
+        title="TKM Targets"
+        basePath="/tkm-targets"
+        date={date}
+        region={region}
+        dates={dates}
+        branchCount={filteredBranches.length}
+        hasPreviousUpload={hasPreviousUpload}
+        previousDate={report.previousDate}
+        daysSincePrevious={report.daysSincePrevious}
+        isPublished={isPublished}
+        canPublish={canPublish}
+      />
+
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <RichKpiCard icon={<TargetIcon />} color="amber" label="CPU Achievement MTD" value={formatNumber(kpis.cpuAchievementForTheMonth)} sub="no target set" pace={pace.cpu} />
+        <RichKpiCard
+          icon={<WrenchIcon />}
+          color="blue"
+          label="BPU Achievement"
+          value={formatNumber(kpis.bpuAchievementForTheMonth)}
+          actual={kpis.bpuAchievementForTheMonth}
+          target={kpis.bpuTarget}
           hasPreviousUpload={hasPreviousUpload}
-          previousDate={report.previousDate}
-          daysSincePrevious={report.daysSincePrevious}
-          isPublished={isPublished}
-          canPublish={canPublish}
+          pace={pace.bpu}
         />
+        <RichKpiCard
+          icon={<TargetIcon />}
+          color="violet"
+          label="Offtake Achievement"
+          value={formatCompactCurrency(kpis.offtakeAchievementForTheMonth)}
+          actual={kpis.offtakeAchievementForTheMonth}
+          target={kpis.offtakeTarget}
+          hasPreviousUpload={hasPreviousUpload}
+          pace={pace.offtake}
+          formatPaceValue={formatCompactCurrency}
+        />
+        <RichKpiCard
+          icon={<StorefrontIcon />}
+          color="emerald"
+          label="Parts Retail Achievement"
+          value={formatCompactCurrency(kpis.partsRetailAchievementForTheMonth)}
+          actual={kpis.partsRetailAchievementForTheMonth}
+          target={kpis.partsRetailTarget}
+          hasPreviousUpload={hasPreviousUpload}
+          pace={pace.partsRetail}
+          formatPaceValue={formatCompactCurrency}
+        />
+        <RichKpiCard
+          icon={<TargetIcon />}
+          color="blue"
+          label="PM+OC Achievement"
+          value={formatNumber(kpis.pmOcAchievementForTheMonth)}
+          actual={kpis.pmOcAchievementForTheMonth}
+          target={kpis.pmOcTarget}
+          hasPreviousUpload={hasPreviousUpload}
+          pace={pace.pmOc}
+        />
+      </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-          <RichKpiCard icon={<TargetIcon />} color="amber" label="CPU Achievement MTD" value={formatNumber(kpis.cpuAchievementForTheMonth)} sub="no target set" pace={pace.cpu} />
-          <RichKpiCard
-            icon={<WrenchIcon />}
-            color="blue"
-            label="BPU Achievement"
-            value={formatNumber(kpis.bpuAchievementForTheMonth)}
-            actual={kpis.bpuAchievementForTheMonth}
-            target={kpis.bpuTarget}
-            hasPreviousUpload={hasPreviousUpload}
-            pace={pace.bpu}
-          />
-          <RichKpiCard
-            icon={<TargetIcon />}
-            color="violet"
-            label="Offtake Achievement"
-            value={formatCompactCurrency(kpis.offtakeAchievementForTheMonth)}
-            actual={kpis.offtakeAchievementForTheMonth}
-            target={kpis.offtakeTarget}
-            hasPreviousUpload={hasPreviousUpload}
-            pace={pace.offtake}
-            formatPaceValue={formatCompactCurrency}
-          />
-          <RichKpiCard
-            icon={<StorefrontIcon />}
-            color="emerald"
-            label="Parts Retail Achievement"
-            value={formatCompactCurrency(kpis.partsRetailAchievementForTheMonth)}
-            actual={kpis.partsRetailAchievementForTheMonth}
-            target={kpis.partsRetailTarget}
-            hasPreviousUpload={hasPreviousUpload}
-            pace={pace.partsRetail}
-            formatPaceValue={formatCompactCurrency}
-          />
-          <RichKpiCard
-            icon={<TargetIcon />}
-            color="blue"
-            label="PM+OC Achievement"
-            value={formatNumber(kpis.pmOcAchievementForTheMonth)}
-            actual={kpis.pmOcAchievementForTheMonth}
-            target={kpis.pmOcTarget}
-            hasPreviousUpload={hasPreviousUpload}
-            pace={pace.pmOc}
-          />
-        </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <TrendChart seriesByMetric={trendSeriesByMetric} metrics={TREND_METRICS} />
+        <AchievementDonut branches={filteredBranches} metrics={DONUT_METRICS} />
+      </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <TrendChart seriesByMetric={trendSeriesByMetric} metrics={TREND_METRICS} />
-          <AchievementDonut branches={filteredBranches} metrics={DONUT_METRICS} />
-        </div>
+      <div className="mt-4">
+        <RegionScorecard branches={report.branches} monthSnapshots={monthSnapshots} date={date} metrics={REGION_METRICS} />
+      </div>
 
-        <div className="mt-4">
-          <RegionScorecard branches={report.branches} monthSnapshots={monthSnapshots} date={date} metrics={REGION_METRICS} />
-        </div>
-
-        <div className="mt-4 space-y-4">
-          <BranchPerformanceHeatmap branches={report.branches} metrics={HEATMAP_METRICS} />
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <BranchPerformanceBars branches={report.branches} metrics={BARS_METRICS} />
-            <BranchRankingChart branches={report.branches} metrics={TKM_RANKING_METRICS} />
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <InsightsPanel
-            kpis={allKpis}
-            branches={report.branches}
-            date={date}
-            trackedKpis={TKM_TRACKED_KPIS}
-            perBranchMetrics={PER_BRANCH_METRICS}
-            regionGapMetric={REGION_GAP_METRIC}
-          />
-          <AlertsPanel branches={filteredBranches} variant="preview" watched={TKM_WATCHED} viewAllHref={alertsHref} />
-        </div>
-
-        <div className="mt-4">
-          <TkmReportTable branches={filteredBranches} daysSincePrevious={report.daysSincePrevious} />
+      <div className="mt-4 space-y-4">
+        <BranchPerformanceHeatmap branches={report.branches} metrics={HEATMAP_METRICS} />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <BranchPerformanceBars branches={report.branches} metrics={BARS_METRICS} />
+          <BranchRankingChart branches={report.branches} metrics={TKM_RANKING_METRICS} />
         </div>
       </div>
-    </AppShell>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <InsightsPanel
+          kpis={allKpis}
+          branches={report.branches}
+          date={date}
+          trackedKpis={TKM_TRACKED_KPIS}
+          perBranchMetrics={PER_BRANCH_METRICS}
+          regionGapMetric={REGION_GAP_METRIC}
+        />
+        <AlertsPanel branches={filteredBranches} variant="preview" watched={TKM_WATCHED} viewAllHref={alertsHref} />
+      </div>
+
+      <div className="mt-4">
+        <TkmReportTable branches={filteredBranches} daysSincePrevious={report.daysSincePrevious} />
+      </div>
+    </div>
   );
 }
