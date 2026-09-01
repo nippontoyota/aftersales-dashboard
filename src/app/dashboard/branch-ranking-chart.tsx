@@ -111,9 +111,9 @@ export function BranchRankingChart({
               title={`${r.branch}${r.region ? ` (${r.region})` : ""} — ${metrics.find((m) => m.key === metricKey)?.label}: ${formatNumber(r.value)}`}
             >
               <div className="w-16 shrink-0 text-xs font-medium text-slate-700">{r.branch}</div>
-              <div className="h-4 flex-1 overflow-hidden rounded-sm bg-slate-100">
+              <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-100">
                 <div
-                  className="h-full rounded-sm"
+                  className="h-full rounded-full"
                   style={{
                     width: `${(r.value / max) * 100}%`,
                     backgroundColor: r.region ? REGION_COLOR[r.region] : "#94a3b8",

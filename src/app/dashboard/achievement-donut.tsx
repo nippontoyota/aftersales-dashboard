@@ -32,6 +32,7 @@ const SIZE = 148;
 const STROKE = 22;
 const R = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * R;
+const GAP = 4; // px of arc-length breathing room between ring segments
 
 type ToneBranch = { branch: string; onlineStoreBreakdown?: OnlineStoreBreakdown };
 
@@ -117,22 +118,31 @@ export function AchievementDonut({ branches, metrics = DEFAULT_METRICS }: { bran
       <div className="mt-3 flex items-center gap-4">
         <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE} className="shrink-0 -rotate-90">
           <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="#f1f5f9" strokeWidth={STROKE} />
-          {segments.map((seg) => (
-            <circle
-              key={seg.tone}
-              cx={SIZE / 2}
-              cy={SIZE / 2}
-              r={R}
-              fill="none"
-              stroke={TONE_HEX[seg.tone]}
-              strokeWidth={STROKE}
-              strokeDasharray={`${seg.dash} ${CIRCUMFERENCE - seg.dash}`}
-              strokeDashoffset={-seg.offset}
-              strokeLinecap="butt"
-            >
-              <title>{`${TONE_LABEL[seg.tone]}: ${branchesByTone[seg.tone].map((b) => b.branch).join(", ")}`}</title>
-            </circle>
-          ))}
+          {segments.map((seg) => {
+            // A small rounded-cap gap between segments (2026-09-01, at the
+            // user's request) — trims a few px off each segment's visible
+            // length and re-centers it in its true slot, rather than just
+            // switching to round caps directly, which would overlap the
+            // *next* segment instead of leaving a real gap.
+            const visibleDash = Math.max(0, seg.dash - GAP);
+            const visibleOffset = seg.offset + GAP / 2;
+            return (
+              <circle
+                key={seg.tone}
+                cx={SIZE / 2}
+                cy={SIZE / 2}
+                r={R}
+                fill="none"
+                stroke={TONE_HEX[seg.tone]}
+                strokeWidth={STROKE}
+                strokeDasharray={`${visibleDash} ${CIRCUMFERENCE - visibleDash}`}
+                strokeDashoffset={-visibleOffset}
+                strokeLinecap="round"
+              >
+                <title>{`${TONE_LABEL[seg.tone]}: ${branchesByTone[seg.tone].map((b) => b.branch).join(", ")}`}</title>
+              </circle>
+            );
+          })}
           <g transform={`rotate(90 ${SIZE / 2} ${SIZE / 2})`}>
             <text x={SIZE / 2} y={SIZE / 2 - 4} textAnchor="middle" fontSize={20} fontWeight={700} className="fill-slate-900">
               {overallPct === null ? "—" : `${Math.round(overallPct)}%`}

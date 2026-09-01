@@ -101,8 +101,8 @@ function BarRow({
             </button>
           ) : null}
         </span>
-        <div className="h-3.5 flex-1 overflow-hidden rounded-sm bg-slate-100">
-          <div className={`h-full rounded-sm ${activityOnly ? "bg-sky-400" : TONE_BAR[tone]}`} style={{ width: `${widthPct}%` }} />
+        <div className="h-3.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+          <div className={`h-full rounded-full ${activityOnly ? "bg-sky-400" : TONE_BAR[tone]}`} style={{ width: `${widthPct}%` }} />
         </div>
         <span className={`w-11 shrink-0 text-right font-semibold tabular-nums ${activityOnly ? "text-sky-700" : TONE_TEXT[tone]}`}>
           {r.ratio !== null ? formatPercent(r.ratio) : activityOnly ? formatCompact(r.actual) : "—"}

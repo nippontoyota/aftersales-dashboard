@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TrendPoint } from "@/lib/trend";
 import { formatNumber } from "@/lib/format";
 
@@ -17,10 +17,37 @@ const EMPTY_POINTS: TrendPoint[] = [];
 
 const ACCENT = "#dc2626"; // Toyota-red accent, matches the sidebar mark
 const TARGET_COLOR = "#94a3b8"; // slate-400, recessive — target is reference, not the story
+const GRID_COLOR = "#eef2f7";
 
 const WIDTH = 640;
 const HEIGHT = 220;
-const PAD = { top: 12, right: 12, bottom: 24, left: 12 };
+const MODAL_HEIGHT = 400;
+const PAD = { top: 16, right: 16, bottom: 26, left: 44 };
+
+/** Catmull-Rom → cubic-Bézier smoothing — turns the straight-segment
+ * polyline into a gentle curve without inventing values between real
+ * points (every original x,y still sits exactly on the curve, this only
+ * changes how the pen travels between them). Skipped for target lines
+ * (those stay straight/dashed — a smoothed reference line reads as "the
+ * target moved," which it didn't) and for anything under 3 points, where
+ * a curve has nothing meaningful to bend through. */
+function smoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return "";
+  if (pts.length === 2) return `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)} L${pts[1].x.toFixed(1)},${pts[1].y.toFixed(1)}`;
+  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)} `;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] ?? p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += `C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)} `;
+  }
+  return d.trim();
+}
 
 function formatShortDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -52,16 +79,22 @@ function ChartBody({
   points,
   maxY,
   path,
+  areaPath,
   targetPath,
   scaleX,
   scaleY,
   hoverIndex,
   setHoverIndex,
   height,
+  gradientId,
 }: {
   points: TrendPoint[];
   maxY: number;
   path: string;
+  /** Same curve as `path`, closed down to the baseline — filled with a soft
+   * gradient so the line has something to sit on instead of floating on
+   * bare white (2026-09-01, at the user's request for more inviting charts). */
+  areaPath: string;
   targetPath: string;
   scaleX: (i: number) => number;
   scaleY: (v: number) => number;
@@ -69,9 +102,17 @@ function ChartBody({
   setHoverIndex: (i: number | null) => void;
   /** Taller in the expanded modal — same viewBox width, more vertical room to read. */
   height: number;
+  /** SVG gradient ids can't repeat across the page (the card and the
+   * expanded modal render this same body at once) — each caller passes its
+   * own. */
+  gradientId: string;
 }) {
-  const gridLines = [0, 0.25, 0.5, 0.75, 1];
+  const innerH = height - PAD.top - PAD.bottom;
+  const gridSteps = 4;
+  const gridLines = Array.from({ length: gridSteps + 1 }, (_, i) => i / gridSteps);
   const hovered = hoverIndex !== null ? points[hoverIndex] : null;
+  const lastIndex = points.length - 1;
+  const lastActual = points[lastIndex]?.actual;
 
   if (points.length === 0) {
     return <div className="mt-4 flex h-[180px] items-center justify-center text-xs text-slate-400">No uploads yet this month.</div>;
@@ -92,34 +133,47 @@ function ChartBody({
           }}
           onMouseLeave={() => setHoverIndex(null)}
         >
-          {gridLines.map((g) => (
-            <line
-              key={g}
-              x1={PAD.left}
-              x2={WIDTH - PAD.right}
-              y1={PAD.top + g * (height - PAD.top - PAD.bottom)}
-              y2={PAD.top + g * (height - PAD.top - PAD.bottom)}
-              stroke="#f1f5f9"
-              strokeWidth={1}
-            />
-          ))}
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={ACCENT} stopOpacity={0.22} />
+              <stop offset="100%" stopColor={ACCENT} stopOpacity={0} />
+            </linearGradient>
+          </defs>
 
+          {gridLines.map((g) => {
+            const y = PAD.top + g * innerH;
+            const value = maxY * (1 - g);
+            return (
+              <g key={g}>
+                <line x1={PAD.left} x2={WIDTH - PAD.right} y1={y} y2={y} stroke={GRID_COLOR} strokeWidth={1} />
+                <text x={PAD.left - 8} y={y + 3} textAnchor="end" className="fill-slate-400" fontSize={9.5}>
+                  {formatNumber(value)}
+                </text>
+              </g>
+            );
+          })}
+
+          {areaPath ? <path d={areaPath} fill={`url(#${gradientId})`} stroke="none" /> : null}
           {targetPath ? <path d={targetPath} fill="none" stroke={TARGET_COLOR} strokeWidth={2} strokeDasharray="4 3" strokeLinecap="round" /> : null}
-          {path ? <path d={path} fill="none" stroke={ACCENT} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /> : null}
+          {path ? <path d={path} fill="none" stroke={ACCENT} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" /> : null}
+
+          {lastActual !== null && lastActual !== undefined ? (
+            <circle cx={scaleX(lastIndex)} cy={scaleY(lastActual)} r={3} fill={ACCENT} stroke="white" strokeWidth={1.5} />
+          ) : null}
 
           {hoverIndex !== null ? (
             <line x1={scaleX(hoverIndex)} x2={scaleX(hoverIndex)} y1={PAD.top} y2={height - PAD.bottom} stroke="#cbd5e1" strokeWidth={1} />
           ) : null}
           {hovered?.actual !== null && hovered?.actual !== undefined && hoverIndex !== null ? (
-            <circle cx={scaleX(hoverIndex)} cy={scaleY(hovered.actual)} r={3.5} fill={ACCENT} stroke="white" strokeWidth={1.5} />
+            <circle cx={scaleX(hoverIndex)} cy={scaleY(hovered.actual)} r={4} fill={ACCENT} stroke="white" strokeWidth={1.75} />
           ) : null}
 
           {points.length > 1 ? (
             <>
-              <text x={PAD.left} y={height - 6} className="fill-slate-400" fontSize={10}>
+              <text x={PAD.left} y={height - 8} className="fill-slate-400" fontSize={10}>
                 {formatShortDate(points[0].date)}
               </text>
-              <text x={WIDTH - PAD.right} y={height - 6} textAnchor="end" className="fill-slate-400" fontSize={10}>
+              <text x={WIDTH - PAD.right} y={height - 8} textAnchor="end" className="fill-slate-400" fontSize={10}>
                 {formatShortDate(points[points.length - 1].date)}
               </text>
             </>
@@ -143,7 +197,6 @@ function ChartBody({
           </div>
         ) : null}
       </div>
-      <p className="mt-1 text-[10px] text-slate-400">Max on chart: {formatNumber(maxY)}</p>
     </>
   );
 }
@@ -162,63 +215,64 @@ export function TrendChart({
 
   const points = seriesByMetric[metric] ?? EMPTY_POINTS;
 
-  const { path, targetPath, scaleX, scaleY, maxY } = useMemo(() => {
+  const maxY = useMemo(() => {
     const values = points.flatMap((p) => [p.actual, p.target]).filter((v): v is number => v !== null);
-    const maxY = Math.max(1, ...values);
+    return Math.max(1, ...values);
+  }, [points]);
+
+  const scaleX = useMemo(() => {
     const innerW = WIDTH - PAD.left - PAD.right;
-    const innerH = HEIGHT - PAD.top - PAD.bottom;
+    return (i: number) => PAD.left + (points.length <= 1 ? 0 : (i / (points.length - 1)) * innerW);
+  }, [points.length]);
 
-    const scaleX = (i: number) => PAD.left + (points.length <= 1 ? 0 : (i / (points.length - 1)) * innerW);
-    const scaleY = (v: number) => PAD.top + innerH - (v / maxY) * innerH;
+  /** Builds the smoothed actual curve, its filled-to-baseline twin, and the
+   * straight (unsmoothed) target line for a given pixel height — shared by
+   * the compact card and the taller expanded modal so they only ever differ
+   * in `height`, never in how the paths themselves are built. */
+  const buildPaths = useCallback(
+    (scaleY: (v: number) => number, height: number) => {
+      const baseline = height - PAD.bottom;
+      const actualPts: { x: number; y: number }[] = [];
+      points.forEach((p, i) => {
+        if (p.actual === null) return;
+        actualPts.push({ x: scaleX(i), y: scaleY(p.actual) });
+      });
+      const path = smoothPath(actualPts);
+      const areaPath = actualPts.length > 0 ? `${path} L${actualPts[actualPts.length - 1].x.toFixed(1)},${baseline} L${actualPts[0].x.toFixed(1)},${baseline} Z` : "";
 
-    const buildPath = (key: "actual" | "target") => {
-      let d = "";
+      let targetPath = "";
       let started = false;
       points.forEach((p, i) => {
-        const v = p[key];
-        if (v === null) return;
+        if (p.target === null) return;
         const cmd = started ? "L" : "M";
-        d += `${cmd}${scaleX(i).toFixed(1)},${scaleY(v).toFixed(1)} `;
+        targetPath += `${cmd}${scaleX(i).toFixed(1)},${scaleY(p.target).toFixed(1)} `;
         started = true;
       });
-      return d.trim();
-    };
 
-    return { path: buildPath("actual"), targetPath: buildPath("target"), scaleX, scaleY, maxY };
-  }, [points]);
+      return { path, areaPath, targetPath: targetPath.trim() };
+    },
+    [points, scaleX]
+  );
+
+  const scaleY = useMemo(() => {
+    const innerH = HEIGHT - PAD.top - PAD.bottom;
+    return (v: number) => PAD.top + innerH - (v / maxY) * innerH;
+  }, [maxY]);
+  const { path, areaPath, targetPath } = useMemo(() => buildPaths(scaleY, HEIGHT), [scaleY, buildPaths]);
 
   // scaleY was built against HEIGHT — the modal renders taller, so it needs
   // its own scaleY sharing the same maxY/domain but a different pixel range.
+  // (Previously computed against a 480px domain while the modal's SVG
+  // viewBox was actually 400px tall — a pre-existing mismatch that clipped
+  // the bottom of the curve; MODAL_HEIGHT keeps both in sync now.)
   const modalScaleY = useMemo(() => {
-    const innerH = 480 - PAD.top - PAD.bottom;
+    const innerH = MODAL_HEIGHT - PAD.top - PAD.bottom;
     return (v: number) => PAD.top + innerH - (v / maxY) * innerH;
   }, [maxY]);
-  const modalPath = useMemo(() => {
-    let d = "";
-    let started = false;
-    const innerW = WIDTH - PAD.left - PAD.right;
-    const sx = (i: number) => PAD.left + (points.length <= 1 ? 0 : (i / (points.length - 1)) * innerW);
-    points.forEach((p, i) => {
-      if (p.actual === null) return;
-      const cmd = started ? "L" : "M";
-      d += `${cmd}${sx(i).toFixed(1)},${modalScaleY(p.actual).toFixed(1)} `;
-      started = true;
-    });
-    return d.trim();
-  }, [points, modalScaleY]);
-  const modalTargetPath = useMemo(() => {
-    let d = "";
-    let started = false;
-    const innerW = WIDTH - PAD.left - PAD.right;
-    const sx = (i: number) => PAD.left + (points.length <= 1 ? 0 : (i / (points.length - 1)) * innerW);
-    points.forEach((p, i) => {
-      if (p.target === null) return;
-      const cmd = started ? "L" : "M";
-      d += `${cmd}${sx(i).toFixed(1)},${modalScaleY(p.target).toFixed(1)} `;
-      started = true;
-    });
-    return d.trim();
-  }, [points, modalScaleY]);
+  const { path: modalPath, areaPath: modalAreaPath, targetPath: modalTargetPath } = useMemo(
+    () => buildPaths(modalScaleY, MODAL_HEIGHT),
+    [modalScaleY, buildPaths]
+  );
 
   useEffect(() => {
     if (!isExpanded) return;
@@ -284,12 +338,14 @@ export function TrendChart({
         points={points}
         maxY={maxY}
         path={path}
+        areaPath={areaPath}
         targetPath={targetPath}
         scaleX={scaleX}
         scaleY={scaleY}
         hoverIndex={hoverIndex}
         setHoverIndex={setHoverIndex}
         height={HEIGHT}
+        gradientId="trend-area-card"
       />
 
       {isExpanded ? (
@@ -327,12 +383,14 @@ export function TrendChart({
                 points={points}
                 maxY={maxY}
                 path={modalPath}
+                areaPath={modalAreaPath}
                 targetPath={modalTargetPath}
                 scaleX={scaleX}
                 scaleY={modalScaleY}
                 hoverIndex={hoverIndex}
                 setHoverIndex={setHoverIndex}
-                height={400}
+                height={MODAL_HEIGHT}
+                gradientId="trend-area-modal"
               />
             </div>
           </div>
