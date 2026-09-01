@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
+import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { loadSsrv089Snapshot, saveSsrv089Snapshot } from "@/lib/ssrv089/store";
 
@@ -42,10 +43,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not read the uploaded file." }, { status: 400 });
   }
 
-  let totals;
+  let totals, rawRows;
   try {
     const staffNames = await listAccessoriesStaffNamesForBranch(admin.branch);
-    totals = parseSsrv089Workbook(buffer, staffNames);
+    ({ totals, rawRows } = parseSsrv089Workbook(buffer, staffNames));
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
@@ -53,13 +54,21 @@ export async function POST(request: Request) {
     );
   }
 
+  const uploadedAt = new Date().toISOString();
   await saveSsrv089Snapshot({
     date,
     branch: admin.branch,
     variant: "general",
-    uploadedAt: new Date().toISOString(),
+    uploadedAt,
     sourceFileName: file.name,
     totals,
+  });
+  await saveRawUploadRows({
+    reportType: "ssrv089",
+    date,
+    uploadedAt,
+    sourceFileName: file.name,
+    rows: rawRows.map((data) => ({ branch: admin.branch, data })),
   });
 
   return NextResponse.json({ success: true, date, branch: admin.branch, totals });

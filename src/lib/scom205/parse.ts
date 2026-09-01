@@ -58,7 +58,16 @@ function findTotalGroupStartColumn(rows: unknown[][]): number | null {
   return null;
 }
 
-export function parseScom205Workbook(buffer: Buffer): Scom205Totals {
+export type ParsedScom205 = {
+  totals: Scom205Totals;
+  /** Every row exactly as read from the file — this report has no reliable
+   * column headers (see the module doc comment above), so each raw row is
+   * kept as its raw cell array rather than a keyed object (2026-09-01, at
+   * the user's request) — see raw-upload-rows/store.ts. */
+  rawRows: unknown[][];
+};
+
+export function parseScom205Workbook(buffer: Buffer): ParsedScom205 {
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: true });
@@ -80,9 +89,12 @@ export function parseScom205Workbook(buffer: Buffer): Scom205Totals {
   const spRevCol = totalUnitsCol + 2;
 
   return {
-    gusSpRevMtd: toAmount(gusRow[spRevCol]),
-    gusLabRevMtd: toAmount(gusRow[labRevCol]),
-    bpuSpRevMtd: toAmount(bpuRow[spRevCol]),
-    bpuLabRevMtd: toAmount(bpuRow[labRevCol]),
+    totals: {
+      gusSpRevMtd: toAmount(gusRow[spRevCol]),
+      gusLabRevMtd: toAmount(gusRow[labRevCol]),
+      bpuSpRevMtd: toAmount(bpuRow[spRevCol]),
+      bpuLabRevMtd: toAmount(bpuRow[labRevCol]),
+    },
+    rawRows: rows,
   };
 }

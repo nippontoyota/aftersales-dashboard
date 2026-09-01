@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { parseBaToolWorkbook } from "@/lib/ba-tool/parse";
+import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { saveSnapshot } from "@/lib/snapshot-store";
 
 export async function POST(request: Request) {
@@ -44,11 +45,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No branch rows found in this file — is it a BA Tool export?" }, { status: 422 });
   }
 
+  const uploadedAt = new Date().toISOString();
   await saveSnapshot({
     date,
-    uploadedAt: new Date().toISOString(),
+    uploadedAt,
     sourceFileName: file.name,
     branches: parsed.branches,
+  });
+  await saveRawUploadRows({
+    reportType: "ba_tool",
+    date,
+    uploadedAt,
+    sourceFileName: file.name,
+    rows: parsed.rawRows,
   });
 
   return NextResponse.json({

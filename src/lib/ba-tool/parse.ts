@@ -8,6 +8,12 @@ export type BaToolBranchRow = Partial<Record<BaToolKey, number | string | null>>
 export type ParsedBaTool = {
   branches: BaToolBranchRow[];
   unmatchedColumns: string[];
+  /** Every row exactly as read from the file, every column (not just the
+   * ones the KPI formulas use), keyed by that row's own branch — this is
+   * one company-wide file, so raw storage has to be split per branch the
+   * same way the computed `branches` above already is (2026-09-01, at the
+   * user's request). See raw-upload-rows/store.ts. */
+  rawRows: { branch: string; data: Record<string, unknown> }[];
 };
 
 /** Matches numbers with thousands separators, e.g. "1,529" or "16,553.20" —
@@ -42,9 +48,10 @@ export function parseBaToolWorkbook(buffer: Buffer): ParsedBaTool {
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: false, blankrows: true });
 
-  if (rows.length === 0) return { branches: [], unmatchedColumns: [] };
+  if (rows.length === 0) return { branches: [], unmatchedColumns: [], rawRows: [] };
 
-  const headerRow = (rows[0] ?? []).map((h) => normalizeHeader(String(h ?? "")));
+  const rawHeaderRow = (rows[0] ?? []).map((h) => String(h ?? "").trim());
+  const headerRow = rawHeaderRow.map((h) => normalizeHeader(h));
 
   const columnIndexByKey = new Map<BaToolKey, number>();
   for (const [key, headerName] of Object.entries(BA_TOOL_COLUMNS) as [BaToolKey, string][]) {
@@ -56,19 +63,27 @@ export function parseBaToolWorkbook(buffer: Buffer): ParsedBaTool {
   const unmatchedColumns = headerRow.filter((h, i) => h && !matchedIndexes.has(i));
 
   const branches: BaToolBranchRow[] = [];
+  const rawRows: { branch: string; data: Record<string, unknown> }[] = [];
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r] ?? [];
     const branchIdx = columnIndexByKey.get("branch");
     const branchValue = branchIdx !== undefined ? row[branchIdx] : null;
     if (!branchValue || String(branchValue).trim() === "") continue; // skip the blank/total row
+    const branch = String(branchValue).trim();
 
-    const entry: BaToolBranchRow = { branch: String(branchValue).trim() };
+    const entry: BaToolBranchRow = { branch };
     for (const [key, idx] of columnIndexByKey.entries()) {
       if (key === "branch") continue;
       entry[key] = toNumberOrRaw(row[idx]);
     }
     branches.push(entry);
+
+    const rawData: Record<string, unknown> = {};
+    rawHeaderRow.forEach((header, i) => {
+      if (header) rawData[header] = row[i] ?? null;
+    });
+    rawRows.push({ branch, data: rawData });
   }
 
-  return { branches, unmatchedColumns };
+  return { branches, unmatchedColumns, rawRows };
 }

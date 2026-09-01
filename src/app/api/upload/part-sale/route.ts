@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { loadPartSaleSnapshot, savePartSaleSnapshot } from "@/lib/part-sale/store";
+import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -41,9 +42,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not read the uploaded file." }, { status: 400 });
   }
 
-  let counts;
+  let counts, rawRows;
   try {
-    counts = parsePartSaleWorkbook(buffer);
+    ({ counts, rawRows } = parsePartSaleWorkbook(buffer));
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
@@ -51,12 +52,20 @@ export async function POST(request: Request) {
     );
   }
 
+  const uploadedAt = new Date().toISOString();
   await savePartSaleSnapshot({
     date,
     branch: admin.branch,
-    uploadedAt: new Date().toISOString(),
+    uploadedAt,
     sourceFileName: file.name,
     counts,
+  });
+  await saveRawUploadRows({
+    reportType: "part_sale",
+    date,
+    uploadedAt,
+    sourceFileName: file.name,
+    rows: rawRows.map((data) => ({ branch: admin.branch, data })),
   });
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });

@@ -5,6 +5,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { savePartSaleSnapshot } from "@/lib/part-sale/store";
 import { saveRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { detectReportType } from "@/lib/report-sniffer";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
 import { saveScom205Snapshot } from "@/lib/scom205/store";
@@ -80,14 +81,17 @@ export async function POST(request: Request) {
         await saveRawReportUpload({ date, branch, reportType: "service_info_bp", uploadedAt, sourceFileName: file.name, fileData: buffer });
         return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name });
       }
-      const counts = parseServiceInfoWorkbook(buffer, branch);
+      const svcInfoStaffNames = await listAccessoriesStaffNamesForBranch(branch);
+      const { counts, rawRows } = parseServiceInfoWorkbook(buffer, branch, svcInfoStaffNames);
       await saveServiceInfoSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts });
+      await saveRawUploadRows({ reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
       return NextResponse.json({ success: true, type, variant, date, branch, counts });
     }
 
     if (type === "part-sale") {
-      const counts = parsePartSaleWorkbook(buffer);
+      const { counts, rawRows } = parsePartSaleWorkbook(buffer);
       await savePartSaleSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts });
+      await saveRawUploadRows({ reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
       return NextResponse.json({ success: true, type, date, branch, counts });
     }
 
@@ -97,14 +101,16 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name });
       }
       const staffNames = await listAccessoriesStaffNamesForBranch(branch);
-      const totals = parseSsrv089Workbook(buffer, staffNames);
+      const { totals, rawRows } = parseSsrv089Workbook(buffer, staffNames);
       await saveSsrv089Snapshot({ date, branch, variant: "general", uploadedAt, sourceFileName: file.name, totals });
+      await saveRawUploadRows({ reportType: "ssrv089", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
       return NextResponse.json({ success: true, type, variant, date, branch, totals });
     }
 
     // type === "scom205"
-    const totals = parseScom205Workbook(buffer);
+    const { totals, rawRows } = parseScom205Workbook(buffer);
     await saveScom205Snapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals });
+    await saveRawUploadRows({ reportType: "scom205", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
     return NextResponse.json({ success: true, type, date, branch, totals });
   } catch (err) {
     return NextResponse.json(

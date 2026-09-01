@@ -74,7 +74,14 @@ function isExternalSalesRow(billNo: string, partNo: string): boolean {
   return EXTERNAL_SALES_PART_PREFIXES.includes(partNo[0]);
 }
 
-export function parsePartSaleWorkbook(buffer: Buffer): PartSaleCounts {
+export type ParsedPartSale = {
+  counts: PartSaleCounts;
+  /** Every row exactly as read from the file, every column (2026-09-01, at
+   * the user's request) — see raw-upload-rows/store.ts. */
+  rawRows: Record<string, unknown>[];
+};
+
+export function parsePartSaleWorkbook(buffer: Buffer): ParsedPartSale {
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
@@ -114,12 +121,15 @@ export function parsePartSaleWorkbook(buffer: Buffer): PartSaleCounts {
   }
 
   return {
-    engineFlush,
-    injectorCleaner,
-    syntheticOilLtrs: syntheticOilRaw / 100,
-    brakeCleaningSpray,
-    externalSales,
-    diyCount,
-    diyRevenue,
+    counts: {
+      engineFlush,
+      injectorCleaner,
+      syntheticOilLtrs: syntheticOilRaw / 100,
+      brakeCleaningSpray,
+      externalSales,
+      diyCount,
+      diyRevenue,
+    },
+    rawRows: rows,
   };
 }

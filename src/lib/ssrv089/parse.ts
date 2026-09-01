@@ -27,6 +27,13 @@ export type Ssrv089Totals = {
   accessoriesLabourSale: number;
 };
 
+export type ParsedSsrv089 = {
+  totals: Ssrv089Totals;
+  /** Every row exactly as read from the file, every column (2026-09-01, at
+   * the user's request) — see raw-upload-rows/store.ts. */
+  rawRows: Record<string, unknown>[];
+};
+
 function toAmount(value: unknown): number {
   const n = Number(String(value ?? "").replace(/,/g, "").trim());
   return Number.isFinite(n) ? n : 0;
@@ -49,7 +56,7 @@ function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | nul
   return null;
 }
 
-export function parseSsrv089Workbook(buffer: Buffer, staffNames: string[]): Ssrv089Totals {
+export function parseSsrv089Workbook(buffer: Buffer, staffNames: string[]): ParsedSsrv089 {
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const rows = findDataSheet(workbook);
 
@@ -67,5 +74,5 @@ export function parseSsrv089Workbook(buffer: Buffer, staffNames: string[]): Ssrv
     accessoriesLabourSale += toAmount(row[LABOUR_SALE_COLUMN]);
   }
 
-  return { accessoriesPartSale, accessoriesLabourSale };
+  return { totals: { accessoriesPartSale, accessoriesLabourSale }, rawRows: rows };
 }

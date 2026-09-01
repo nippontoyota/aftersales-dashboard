@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { isAccessoriesStaff } from "../accessories-staff";
 import { tierForBranch } from "../branch-tier";
 import { VAS_PRICE_BY_JOB_CODE } from "../vas-price-list";
 import { seriesToSize } from "../vas-series-map";
@@ -26,10 +27,18 @@ import { seriesToSize } from "../vas-series-map";
  * guess. This is additive revenue only, confirmed with the user as an
  * informational match against real counts already being uploaded — it
  * doesn't change what the four counts above mean or how they're computed.
+ *
+ * VAS revenue excludes Accessories-department staff (2026-09-01, at the
+ * user's request): a row whose "Close SA Name" is an Accessories staff
+ * member for the branch (same list/matching as ssrv089/parse.ts's
+ * Accessories Part/Labour Sale — see accessories-staff.ts) contributes
+ * nothing to vasRevenue, regardless of job code/series match. Only this
+ * total is filtered — the four plain counts above are unaffected.
  */
 const JOB_DESC_COLUMN = "Job Desc";
 const JOB_CODE_COLUMN = "Job Code";
 const SERIES_COLUMN = "Series";
+const CLOSE_SA_NAME_COLUMN = "Close SA Name";
 
 const WHEEL_BALANCING_DESC = "WB (OFF-VEHICLE, TWO WHEELS) - ADJST";
 const WHEEL_ALIGNMENT_DESC = "WHEEL ALIGNMENT - INSP";
@@ -65,7 +74,16 @@ function vasRevenueForRow(jobCode: string, series: string, tier: "A" | "B" | nul
   return prices[size] ?? 0;
 }
 
-export function parseServiceInfoWorkbook(buffer: Buffer, branch: string): ServiceInfoCounts {
+export type ParsedServiceInfo = {
+  counts: ServiceInfoCounts;
+  /** Every row exactly as read from the file, every column — not just the
+   * ones this parser uses — so a rule change later (like the accessories-
+   * staff exclusion above) can be re-applied without needing the original
+   * file back (2026-09-01, at the user's request). See raw-upload-rows/store.ts. */
+  rawRows: Record<string, unknown>[];
+};
+
+export function parseServiceInfoWorkbook(buffer: Buffer, branch: string, staffNames: string[]): ParsedServiceInfo {
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
@@ -88,11 +106,12 @@ export function parseServiceInfoWorkbook(buffer: Buffer, branch: string): Servic
     else if (EVAPORATOR_CLEANING_DESCS.includes(desc)) counts.evaporatorCleaning++;
 
     const jobCode = normalize(row[JOB_CODE_COLUMN]);
-    if (jobCode) {
+    const closeSaName = normalize(row[CLOSE_SA_NAME_COLUMN]);
+    if (jobCode && !isAccessoriesStaff(staffNames, closeSaName)) {
       const series = normalize(row[SERIES_COLUMN]);
       counts.vasRevenue += vasRevenueForRow(jobCode, series, tier);
     }
   }
 
-  return counts;
+  return { counts, rawRows: rows };
 }

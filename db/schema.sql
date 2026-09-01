@@ -184,3 +184,29 @@ create table if not exists raw_report_uploads (
   file_data bytea not null,
   primary key (date, branch, report_type)
 );
+
+-- Every row of every uploaded file, verbatim (2026-09-01, at the user's
+-- request: "all the fields and rows in excel need to be saved in supabase,
+-- otherwise later if i need to pull something, it will be difficult") — the
+-- parsed snapshot tables above only ever kept the final computed totals, so
+-- a rule change (like the accessories-staff VAS exclusion added the same
+-- day) can never be applied retroactively without the original file back in
+-- hand. This is that missing piece: one row per source-file row, every
+-- column preserved as JSON (not just the columns a parser currently reads),
+-- so a later question — a new formula, a correction, an audit — can be
+-- answered by querying this table instead of hunting down the original
+-- file again. Covers service_info/ssrv089/part_sale/scom205 (one branch's
+-- own upload) and ba_tool (one HQ upload spanning every branch — `branch`
+-- comes from that row's own branch column, not the uploader).
+create table if not exists raw_upload_rows (
+  id bigserial primary key,
+  report_type text not null check (report_type in ('service_info', 'ssrv089', 'part_sale', 'scom205', 'ba_tool')),
+  date date not null,
+  branch text not null,
+  uploaded_at timestamptz not null,
+  source_file_name text not null,
+  row_index integer not null,
+  row_data jsonb not null
+);
+create index if not exists raw_upload_rows_lookup_idx on raw_upload_rows (report_type, date, branch);
+create index if not exists raw_upload_rows_data_gin_idx on raw_upload_rows using gin (row_data);

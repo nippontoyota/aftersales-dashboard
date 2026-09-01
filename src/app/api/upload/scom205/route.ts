@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
+import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
 import { loadScom205Snapshot, saveScom205Snapshot } from "@/lib/scom205/store";
 
@@ -41,9 +42,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not read the uploaded file." }, { status: 400 });
   }
 
-  let totals;
+  let totals, rawRows;
   try {
-    totals = parseScom205Workbook(buffer);
+    ({ totals, rawRows } = parseScom205Workbook(buffer));
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
@@ -51,12 +52,20 @@ export async function POST(request: Request) {
     );
   }
 
+  const uploadedAt = new Date().toISOString();
   await saveScom205Snapshot({
     date,
     branch: admin.branch,
-    uploadedAt: new Date().toISOString(),
+    uploadedAt,
     sourceFileName: file.name,
     totals,
+  });
+  await saveRawUploadRows({
+    reportType: "scom205",
+    date,
+    uploadedAt,
+    sourceFileName: file.name,
+    rows: rawRows.map((data) => ({ branch: admin.branch, data })),
   });
 
   return NextResponse.json({ success: true, date, branch: admin.branch, totals });
