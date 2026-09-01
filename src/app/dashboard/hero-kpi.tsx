@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { computeHeroSummary, filterBranchesByRegion, type HeroSummary } from "@/lib/aggregate";
-import { formatNumber, formatPercent } from "@/lib/format";
+import { formatCompact, formatNumber, formatPercent } from "@/lib/format";
 import type { BranchReport } from "@/lib/report";
 import { REGIONS, type RegionName } from "@/lib/regions";
 
@@ -36,18 +36,22 @@ function ScopeBanner({ label, value, accent, compact }: { label: string; value: 
 
 type MetricGroup = "GUS" | "BPU" | "External Sales" | "Total";
 
+// Rs-denominated rows use formatCompact (whole numbers) instead of the
+// default formatNumber (up to 2 decimals) — at these magnitudes, paise-level
+// precision is just visual noise (2026-09-01, at the user's request). RO
+// counts are left on the default since they're already whole numbers.
 const METRIC_ROWS: { label: string; key: keyof HeroSummary; group: MetricGroup; formatValue?: (v: number | null) => string }[] = [
   { label: "RO billed today", key: "gusRoBilledForTheDay", group: "GUS" },
   { label: "RO — MTD", key: "gusRoMtd", group: "GUS" },
-  { label: "Parts MTD (Rs)", key: "gusPartsMtd", group: "GUS" },
-  { label: "Labour MTD (Rs)", key: "gusLabourMtd", group: "GUS" },
+  { label: "Parts MTD (Rs)", key: "gusPartsMtd", group: "GUS", formatValue: formatCompact },
+  { label: "Labour MTD (Rs)", key: "gusLabourMtd", group: "GUS", formatValue: formatCompact },
   { label: "RO billed today", key: "bpuRoBilledForTheDay", group: "BPU" },
   { label: "RO — MTD", key: "bpuRoMtd", group: "BPU" },
-  { label: "Parts MTD (Rs)", key: "bpuPartsMtd", group: "BPU" },
-  { label: "Labour MTD (Rs)", key: "bpuLabourMtd", group: "BPU" },
-  { label: "External Sales MTD (Rs)", key: "externalSalesMtd", group: "External Sales" },
+  { label: "Parts MTD (Rs)", key: "bpuPartsMtd", group: "BPU", formatValue: formatCompact },
+  { label: "Labour MTD (Rs)", key: "bpuLabourMtd", group: "BPU", formatValue: formatCompact },
+  { label: "External Sales MTD (Rs)", key: "externalSalesMtd", group: "External Sales", formatValue: formatCompact },
   { label: "% on SPR I", key: "externalSalesPctOfSprInternal", group: "External Sales", formatValue: formatPercent },
-  { label: "Total MTD (Rs)", key: "totalRevenueStreamMtd", group: "Total" },
+  { label: "Total MTD (Rs)", key: "totalRevenueStreamMtd", group: "Total", formatValue: formatCompact },
 ];
 
 /** Scopes run across the columns (not down the rows) so All/Central/South/North
@@ -177,7 +181,7 @@ export function HeroKpi({ branches, compact, lockedBranch }: { branches: BranchR
 
       <div className={`mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 ${scopes.length > 4 ? "xl:grid-cols-5" : ""}`}>
         {scopes.map((s) => (
-          <ScopeBanner key={s.label} label={s.label} value={formatNumber(s.summary.totalRevenueStreamMtd)} accent={s.accent} compact={compact} />
+          <ScopeBanner key={s.label} label={s.label} value={formatCompact(s.summary.totalRevenueStreamMtd)} accent={s.accent} compact={compact} />
         ))}
       </div>
 
