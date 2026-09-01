@@ -38,7 +38,13 @@ import { seriesToSize } from "../vas-series-map";
 const JOB_DESC_COLUMN = "Job Desc";
 const JOB_CODE_COLUMN = "Job Code";
 const SERIES_COLUMN = "Series";
-const CLOSE_SA_NAME_COLUMN = "Close SA Name";
+// Not "Close SA Name" (that's SSRV089's column name) — Service Info Report
+// exports spell this out in full. Confirmed 2026-09-01 against real
+// re-uploaded raw_upload_rows data after the exclusion silently matched
+// nothing: the column was never present under the assumed name, so
+// isAccessoriesStaff() was always being asked to match against "" and
+// correctly (per its own logic) finding nothing every time.
+const CLOSE_SA_NAME_COLUMN = "Close Service Advisor Name";
 
 const WHEEL_BALANCING_DESC = "WB (OFF-VEHICLE, TWO WHEELS) - ADJST";
 const WHEEL_ALIGNMENT_DESC = "WHEEL ALIGNMENT - INSP";
