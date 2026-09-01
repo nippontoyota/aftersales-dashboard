@@ -26,6 +26,17 @@ export async function loadRawReportUpload(date: string, branch: string, reportTy
   return rows[0] ? { sourceFileName: rows[0].source_file_name, uploadedAt: rows[0].uploaded_at } : null;
 }
 
+/** Every branch that's uploaded a given report type for a date, in one
+ * query — the pending-uploads view needs "who's done vs. who hasn't" across
+ * all 20 branches, not a one-branch lock check. */
+export async function loadAllRawReportUploadsForDate(date: string, reportType: RawReportType): Promise<{ branch: string }[]> {
+  const { rows } = await pool.query<{ branch: string }>(`select branch from raw_report_uploads where date = $1 and report_type = $2`, [
+    date,
+    reportType,
+  ]);
+  return rows;
+}
+
 /** Upserts on (date, branch, report_type) — branches are blocked from
  * re-uploading by the lock check in each API route before this ever runs,
  * but HQ's Upload Sheet correction path needs to freely overwrite, same as
