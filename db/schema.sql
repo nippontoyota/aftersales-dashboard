@@ -164,3 +164,27 @@ create table if not exists dashboard_publish_log (
   published_at timestamptz not null,
   published_by text not null
 );
+
+-- Self-service branch-admin signup, gated by HQ approval (2026-09-01, at the
+-- user's request: branch users request their own login — name, username,
+-- password, branch — instead of everyone sharing the one fixed per-branch
+-- account HQ originally provisioned; HQ has to explicitly approve before it
+-- can actually log in, so anyone can't just create an account and get in).
+-- The password is hashed at request time, exactly like a real account
+-- (scrypt, salted, never stored in plain text anywhere) — approving just
+-- copies the hash+salt straight into `admins`, nothing is re-collected. A
+-- rejected or still-pending username has no row in `admins`, so it behaves
+-- exactly like a login that never existed — see signup-store.ts.
+create table if not exists admin_signup_requests (
+  id serial primary key,
+  name text not null,
+  username text not null,
+  password_hash text not null,
+  salt text not null,
+  branch text not null,
+  status text not null check (status in ('pending', 'approved', 'rejected')) default 'pending',
+  requested_at timestamptz not null default now(),
+  decided_at timestamptz,
+  decided_by text
+);
+create index if not exists admin_signup_requests_status_idx on admin_signup_requests (status);

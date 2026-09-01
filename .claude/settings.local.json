@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(uipro *)"
+      "Bash(uipro *)",
+      "Bash(git remote add*)",
+      "Bash(git push*)"
     ]
   }
 }
