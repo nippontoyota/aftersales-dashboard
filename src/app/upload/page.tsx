@@ -5,11 +5,14 @@ import { loadServiceInfoSnapshot } from "@/lib/service-info/store";
 import { loadPartSaleSnapshot } from "@/lib/part-sale/store";
 import { loadSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { loadScom205Snapshot } from "@/lib/scom205/store";
+import { loadRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { BaToolUploadForm } from "./ba-tool-upload-form";
 import { PartSaleUploadForm } from "./part-sale-upload-form";
 import { Scom205UploadForm } from "./scom205-upload-form";
 import { ServiceInfoUploadForm } from "./service-info-upload-form";
+import { ServiceInfoBpUploadForm } from "./service-info-bp-upload-form";
 import { Ssrv089GeneralUploadForm } from "./ssrv089-general-upload-form";
+import { Ssrv089BpUploadForm } from "./ssrv089-bp-upload-form";
 
 export default async function UploadPage() {
   const admin = await getCurrentAdmin();
@@ -23,21 +26,26 @@ export default async function UploadPage() {
   const alreadyUploaded =
     admin?.role === "branch"
       ? await (async () => {
-          // Body & Paint dropped from branch uploads entirely (2026-08-31,
-          // at the user's request — never fed any dashboard formula). Only
-          // these 4 report types are required per branch per day now.
-          const [serviceInfo, partSale, ssrvGeneral, scom205] = await Promise.all([
+          // Service Info - BP and Cost and Sales - BP joined the required
+          // set 2026-09-01, at the user's request — six report types per
+          // branch per day now, nothing parsed out of the two BP ones (see
+          // raw-report-uploads/store.ts).
+          const [serviceInfo, serviceInfoBp, ssrvGeneral, ssrvBp, partSale, scom205] = await Promise.all([
             loadServiceInfoSnapshot(reportDate, admin.branch),
-            loadPartSaleSnapshot(reportDate, admin.branch),
+            loadRawReportUpload(reportDate, admin.branch, "service_info_bp"),
             loadSsrv089Snapshot(reportDate, admin.branch, "general"),
+            loadRawReportUpload(reportDate, admin.branch, "ssrv089_bp"),
+            loadPartSaleSnapshot(reportDate, admin.branch),
             loadScom205Snapshot(reportDate, admin.branch),
           ]);
           const pick = (s: { sourceFileName: string; uploadedAt: string } | null) =>
             s ? { sourceFileName: s.sourceFileName, uploadedAt: s.uploadedAt } : null;
           return {
             serviceInfo: pick(serviceInfo),
-            partSale: pick(partSale),
+            serviceInfoBp: pick(serviceInfoBp),
             ssrvGeneral: pick(ssrvGeneral),
+            ssrvBp: pick(ssrvBp),
+            partSale: pick(partSale),
             scom205: pick(scom205),
           };
         })()
@@ -67,7 +75,9 @@ export default async function UploadPage() {
             </p>
             <div className="mt-4 space-y-4">
               <ServiceInfoUploadForm alreadyUploaded={alreadyUploaded?.serviceInfo} />
+              <ServiceInfoBpUploadForm alreadyUploaded={alreadyUploaded?.serviceInfoBp} />
               <Ssrv089GeneralUploadForm alreadyUploaded={alreadyUploaded?.ssrvGeneral} />
+              <Ssrv089BpUploadForm alreadyUploaded={alreadyUploaded?.ssrvBp} />
               <PartSaleUploadForm alreadyUploaded={alreadyUploaded?.partSale} />
               <Scom205UploadForm alreadyUploaded={alreadyUploaded?.scom205} />
             </div>

@@ -4,6 +4,7 @@ import { listBranchCodes } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { savePartSaleSnapshot } from "@/lib/part-sale/store";
+import { saveRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { detectReportType } from "@/lib/report-sniffer";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
 import { saveScom205Snapshot } from "@/lib/scom205/store";
@@ -18,9 +19,15 @@ import { saveSsrv089Snapshot } from "@/lib/ssrv089/store";
  * whatever the client showed after /detect — the client can't tamper with
  * what gets parsed. Branch is the one thing that's never inferred: it's
  * exactly what the HQ admin confirmed in the form, checked here only
- * against the real list of branch codes. SSRV089 always saves as the
- * "General" variant — Body & Paint was dropped entirely (2026-08-31, at
- * the user's request — it never fed any dashboard formula).
+ * against the real list of branch codes.
+ *
+ * Service Info and SSRV089 each need one more thing confirmed by hand: the
+ * GS/BP variant (2026-09-01, at the user's request) — the file signature
+ * alone can't tell them apart, same reason the old SSRV089 General/Body &
+ * Paint picker existed before it was dropped 2026-08-31. GS parses and
+ * feeds the real dashboard figures exactly as before; BP just stores the
+ * file as-is, unparsed (see raw-report-uploads/store.ts) — a fresh,
+ * deliberately-unparsed path, not a revival of the old BP parsing.
  */
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -35,6 +42,9 @@ export async function POST(request: Request) {
   const file = formData.get("file");
   const date = String(formData.get("date") ?? "").trim();
   const branch = String(formData.get("branch") ?? "").trim();
+  // Only meaningful for service-info/ssrv089 — defaults to "gs" so a
+  // missing/unexpected value never silently falls into the unparsed BP path.
+  const variant = String(formData.get("variant") ?? "gs").trim() === "bp" ? "bp" : "gs";
 
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "Choose a file to upload." }, { status: 400 });
@@ -66,9 +76,13 @@ export async function POST(request: Request) {
 
   try {
     if (type === "service-info") {
+      if (variant === "bp") {
+        await saveRawReportUpload({ date, branch, reportType: "service_info_bp", uploadedAt, sourceFileName: file.name, fileData: buffer });
+        return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name });
+      }
       const counts = parseServiceInfoWorkbook(buffer, branch);
       await saveServiceInfoSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts });
-      return NextResponse.json({ success: true, type, date, branch, counts });
+      return NextResponse.json({ success: true, type, variant, date, branch, counts });
     }
 
     if (type === "part-sale") {
@@ -78,10 +92,14 @@ export async function POST(request: Request) {
     }
 
     if (type === "ssrv089") {
+      if (variant === "bp") {
+        await saveRawReportUpload({ date, branch, reportType: "ssrv089_bp", uploadedAt, sourceFileName: file.name, fileData: buffer });
+        return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name });
+      }
       const staffNames = await listAccessoriesStaffNamesForBranch(branch);
       const totals = parseSsrv089Workbook(buffer, staffNames);
       await saveSsrv089Snapshot({ date, branch, variant: "general", uploadedAt, sourceFileName: file.name, totals });
-      return NextResponse.json({ success: true, type, date, branch, totals });
+      return NextResponse.json({ success: true, type, variant, date, branch, totals });
     }
 
     // type === "scom205"

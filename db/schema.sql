@@ -164,3 +164,23 @@ create table if not exists dashboard_publish_log (
   published_at timestamptz not null,
   published_by text not null
 );
+
+-- Service Information Report - BP and Cost and Sales Report - BP
+-- (2026-09-01, at the user's request): two more required daily uploads per
+-- branch, alongside the four that already feed real dashboard figures.
+-- Nothing is parsed out of either one yet — the file itself is just kept,
+-- so the upload can still be tracked and locked exactly like the other
+-- four (see raw-report-uploads/store.ts), and revisited later if a real
+-- use for the data emerges. One table covers both report types (report_type
+-- distinguishes them) since they're identical in every way that matters
+-- here: no parsing, one file per branch per date, HQ can correct via
+-- Upload Sheet like anything else.
+create table if not exists raw_report_uploads (
+  date date not null,
+  branch text not null,
+  report_type text not null check (report_type in ('service_info_bp', 'ssrv089_bp')),
+  uploaded_at timestamptz not null,
+  source_file_name text not null,
+  file_data bytea not null,
+  primary key (date, branch, report_type)
+);

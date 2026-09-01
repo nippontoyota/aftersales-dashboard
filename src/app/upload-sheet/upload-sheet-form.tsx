@@ -5,12 +5,22 @@ import { useRouter } from "next/navigation";
 import { yesterdayIso } from "@/lib/utils";
 
 type DetectedReportType = "service-info" | "part-sale" | "ssrv089" | "scom205";
+type Variant = "gs" | "bp";
 
 const TYPE_LABEL: Record<DetectedReportType, string> = {
-  "service-info": "Service Information Report - GS",
+  "service-info": "Service Information Report",
   "part-sale": "Part Sale Report",
-  ssrv089: "Cost and Sales Report - GS",
+  ssrv089: "Cost and Sales Report",
   scom205: "KPI",
+};
+
+/** Only Service Info and Cost and Sales split into GS/BP — Part Sale and
+ * KPI have no such variant, so the picker only shows up for those two. */
+const HAS_VARIANT: Record<DetectedReportType, boolean> = {
+  "service-info": true,
+  "part-sale": false,
+  ssrv089: true,
+  scom205: false,
 };
 
 type Detection = { type: DetectedReportType; suggestedBranch: string | null; branchCodes: string[]; sourceFileName: string };
@@ -18,12 +28,16 @@ type Detection = { type: DetectedReportType; suggestedBranch: string | null; bra
 /** HQ-only fallback for when a branch admin can't upload themselves —
  * detects the report type from the file itself (reliable: every report
  * type has a real, distinct column/label signature) but always makes HQ
- * confirm the branch rather than guessing — three of the four report types
- * have no branch anywhere in their data, so a filename-based guess is a
- * starting point, never treated as fact. See lib/report-sniffer.ts.
- * SSRV089 uploads always save as the "General" variant now — Body & Paint
- * was dropped entirely (2026-08-31, at the user's request — it never fed
- * any dashboard formula), so there's no variant to choose any more. */
+ * confirm the branch rather than guessing — three of the four base report
+ * types have no branch anywhere in their data, so a filename-based guess is
+ * a starting point, never treated as fact. See lib/report-sniffer.ts.
+ *
+ * Service Info and Cost and Sales each come as two variants — GS and BP —
+ * that share the same file signature (the sniffer can only tell "this is a
+ * Service Info-shaped file," not which variant), so HQ picks GS/BP by hand
+ * here, same as the file's own upload button would already disambiguate on
+ * the branch's own /upload page. BP saves the file as-is, unparsed — see
+ * raw-report-uploads/store.ts. (2026-09-01, at the user's request.) */
 export function UploadSheetForm() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -33,6 +47,7 @@ export function UploadSheetForm() {
   const [detecting, setDetecting] = useState(false);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [branch, setBranch] = useState("");
+  const [variant, setVariant] = useState<Variant>("gs");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -42,6 +57,7 @@ export function UploadSheetForm() {
     setFile(picked);
     setDetection(null);
     setBranch("");
+    setVariant("gs");
     setError(null);
     setSuccess(null);
     if (!picked) return;
@@ -80,6 +96,7 @@ export function UploadSheetForm() {
       formData.append("file", file);
       formData.append("date", date);
       formData.append("branch", branch);
+      if (HAS_VARIANT[detection.type]) formData.append("variant", variant);
 
       const res = await fetch("/api/upload-sheet/save", { method: "POST", body: formData });
       const data = await res.json();
@@ -87,10 +104,12 @@ export function UploadSheetForm() {
         setError(data.error ?? "Save failed.");
         return;
       }
-      setSuccess(`Saved ${TYPE_LABEL[detection.type]} for ${branch}, ${date}.`);
+      const label = HAS_VARIANT[detection.type] ? `${TYPE_LABEL[detection.type]} - ${variant.toUpperCase()}` : TYPE_LABEL[detection.type];
+      setSuccess(`Saved ${label} for ${branch}, ${date}.`);
       setFile(null);
       setDetection(null);
       setBranch("");
+      setVariant("gs");
       if (fileInputRef.current) fileInputRef.current.value = "";
       router.refresh();
     } catch {
@@ -106,8 +125,8 @@ export function UploadSheetForm() {
         <h2 className="text-sm font-semibold text-slate-900">Upload Sheet</h2>
         <p className="mt-0.5 text-xs text-slate-500">
           For when a branch can&apos;t upload themselves — pick any Service Information Report, Cost and Sales Report,
-          Part Sale Report, or KPI file and the report type is detected automatically. Confirm the branch before
-          saving — that part is never guessed.
+          Part Sale Report, or KPI file and the report type is detected automatically. Confirm the branch (and, for
+          Service Info / Cost and Sales, the GS or BP variant) before saving — neither is ever guessed.
         </p>
       </div>
 
@@ -146,6 +165,22 @@ export function UploadSheetForm() {
           <div className="text-xs text-slate-600">
             Detected: <span className="font-semibold text-slate-900">{TYPE_LABEL[detection.type]}</span>
           </div>
+
+          {HAS_VARIANT[detection.type] ? (
+            <div>
+              <label className="block text-xs font-medium text-slate-600">Variant</label>
+              <div className="mt-1 flex gap-3 text-sm">
+                <label className="inline-flex items-center gap-1.5">
+                  <input type="radio" name="variant" checked={variant === "gs"} onChange={() => setVariant("gs")} />
+                  GS
+                </label>
+                <label className="inline-flex items-center gap-1.5">
+                  <input type="radio" name="variant" checked={variant === "bp"} onChange={() => setVariant("bp")} />
+                  BP
+                </label>
+              </div>
+            </div>
+          ) : null}
 
           <div>
             <label htmlFor="upload-sheet-branch" className="block text-xs font-medium text-slate-600">
