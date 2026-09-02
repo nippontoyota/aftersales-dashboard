@@ -31,7 +31,7 @@ const COLUMNS: SectionColumn[] = [
   { label: "BPU Labour (Rs/Car)", render: (r) => perVehicleCell(r.bpuLabourMtd, r.bpuRoMtd) },
   { label: "Parts Retail (Rs/Car)", render: (r) => perVehicleCell(r.partsRetailAchievementForTheMonth, r.gusRoMtd) },
   { label: "Offtake (Rs/Car)", render: (r) => perVehicleCell(r.offtakeAchievementForTheMonth, r.gusRoMtd) },
-  { label: "External Sales (Rs/Car)", render: (r) => perVehicleCell(r.externalSalesMtd, r.gusRoMtd) },
+
   { label: "VAS (Rs/Car)", render: (r) => perVehicleCell(r.vasAchievementForTheMonth, r.gusRoMtd) },
   {
     label: "Total Revenue (Rs/Car)",

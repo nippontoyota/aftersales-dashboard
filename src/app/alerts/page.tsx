@@ -45,7 +45,7 @@ async function AlertsContent({
       <div className="p-6">
         <h1 className="text-lg font-semibold text-slate-900">Alerts</h1>
         <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-          {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "Nothing has been published yet — check back once HQ publishes a day's dashboard."}
+          {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
         </div>
       </div>
     );
@@ -65,6 +65,7 @@ async function AlertsContent({
         daysSincePrevious={data.report?.daysSincePrevious ?? null}
         isPublished={data.isPublished}
         canPublish={data.canPublish}
+        isCompanyScope={data.isCompanyScope}
         extraParams={isTkm ? { watched: "tkm" } : undefined}
       />
       <p className="mt-1 text-xs text-slate-400">Watching: {isTkm ? "BPU, Offtake, Parts Retail, PM+OC (TKM Targets)" : "VAS (Dashboard)"}</p>

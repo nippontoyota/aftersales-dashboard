@@ -40,7 +40,7 @@ async function ReportsContent({
       <div className="p-6">
         <h1 className="text-lg font-semibold text-slate-900">Reports</h1>
         <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-          {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "Nothing has been published yet — check back once HQ publishes a day's dashboard."}
+          {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
         </div>
       </div>
     );
@@ -60,6 +60,7 @@ async function ReportsContent({
         daysSincePrevious={data.report.daysSincePrevious}
         isPublished={data.isPublished}
         canPublish={data.canPublish}
+        isCompanyScope={data.isCompanyScope}
       />
       <div className="mt-4">
         <ReportTable branches={data.filteredBranches} daysSincePrevious={data.report.daysSincePrevious} />

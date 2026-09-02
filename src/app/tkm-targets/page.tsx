@@ -101,13 +101,13 @@ async function TkmTargetsContent({
       <div className="p-6">
         <h1 className="text-lg font-semibold text-slate-900">TKM Targets</h1>
         <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-          {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "Nothing has been published yet — check back once HQ publishes a day's dashboard."}
+          {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
         </div>
       </div>
     );
   }
 
-  const { date, region, dates, report, filteredBranches, kpis, hasPreviousUpload, monthSnapshots, isPublished, canPublish } = data;
+  const { date, region, dates, report, filteredBranches, kpis, hasPreviousUpload, monthSnapshots, isPublished, canPublish, isCompanyScope } = data;
   const allKpis = computeKpiSummary(report.branches);
 
   const trendSeriesByMetric = {
@@ -148,6 +148,7 @@ async function TkmTargetsContent({
         daysSincePrevious={report.daysSincePrevious}
         isPublished={isPublished}
         canPublish={canPublish}
+        isCompanyScope={isCompanyScope}
       />
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
