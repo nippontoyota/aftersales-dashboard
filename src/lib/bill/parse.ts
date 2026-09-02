@@ -2,6 +2,12 @@
 // (DOMMatrix, Path2D, ImageData) at module-evaluation time. See the file's
 // comment for why an inline polyfill here would run too late.
 import "./pdf-polyfill";
+// pdf-parse's "fake worker" setup does a *dynamic* `import(workerSrc)` that
+// Vercel's file tracing can't follow, so the worker chunk is missing from the
+// deployed function ("Cannot find module '.../pdf.worker.mjs'"). Importing it
+// statically here gets it bundled AND sets `globalThis.pdfjsWorker`, which
+// pdf-parse checks first — so the dynamic import is never reached.
+import "pdfjs-dist/legacy/build/pdf.worker.mjs";
 import { PDFParse } from "pdf-parse";
 
 export type BillParseResult = {

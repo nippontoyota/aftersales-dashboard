@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   // and can't load the native canvas binary. Polyfills still apply via the
   // "./pdf-polyfill" import in src/lib/bill/parse.ts.
   serverExternalPackages: ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas"],
+  // The pdf.js worker is loaded via a dynamic import that file tracing can't
+  // resolve; force it into the bill-upload function's bundle.
+  outputFileTracingIncludes: {
+    "/api/upload/bill": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
+  },
   experimental: {
     // proxy.ts runs on every request and Next.js buffers the whole body in
     // memory so both proxy and the route handler can read it — capped at
