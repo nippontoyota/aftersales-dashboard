@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { parseBillPdf } from "@/lib/bill/parse";
-import { loadBillByInvoiceNumber, saveBillUpload } from "@/lib/bill/store";
+import { loadBillByInvoiceNumber, saveBillUpload, type BillCategory } from "@/lib/bill/store";
 
 type FileResult = {
   fileName: string;
@@ -29,6 +29,12 @@ export async function POST(request: Request) {
   const manualInvoiceNumber = String(formData.get("manualInvoiceNumber") ?? "").trim() || null;
   const manualTaxableValueStr = String(formData.get("manualTaxableValue") ?? "").trim();
   const manualTaxableValue = manualTaxableValueStr ? parseFloat(manualTaxableValueStr) : null;
+
+  const categoryRaw = String(formData.get("category") ?? "").trim();
+  if (categoryRaw !== "scrap" && categoryRaw !== "used_oil") {
+    return NextResponse.json({ error: "Choose a revenue type (Scrap or Used Oil) for this upload." }, { status: 400 });
+  }
+  const category: BillCategory = categoryRaw;
 
   if (files.length === 0) {
     return NextResponse.json({ error: "Choose at least one PDF file to upload." }, { status: 400 });
@@ -96,6 +102,7 @@ export async function POST(request: Request) {
         invoiceNumber,
         branch,
         taxableValue,
+        category,
         fileData: buffer,
         sourceFileName: fileName,
         uploadedAt: new Date().toISOString(),

@@ -1,14 +1,29 @@
 import { pool } from "../db";
 
+/** How a bill's taxable value is counted on the dashboard. Chosen on the
+ * upload form; `null` on legacy rows means "not yet classified" — counted
+ * toward neither revenue line. */
+export type BillCategory = "scrap" | "used_oil";
+
 export type BillUpload = {
   id: number;
   invoiceNumber: string;
   branch: string;
   taxableValue: number;
+  category: BillCategory | null;
   sourceFileName: string;
   uploadedAt: string;
   uploadedBy: string;
   extractionMethod: "auto" | "manual";
+};
+
+/** Per-branch scrap / used-oil revenue for one calendar month (Asia/Kolkata),
+ * summed from bill taxable values. Branches with no bills that month simply
+ * don't appear — callers default them to 0. */
+export type BillBranchRevenue = {
+  branch: string;
+  scrapRevenue: number;
+  usedOilRevenue: number;
 };
 
 export type BillMonthTotal = {
@@ -30,11 +45,15 @@ type BillRow = {
   invoice_number: string;
   branch: string;
   taxable_value: string;
+  category: string | null;
   source_file_name: string;
   uploaded_at: string;
   uploaded_by: string;
   extraction_method: string;
 };
+
+const BILL_COLUMNS =
+  "id, invoice_number, branch, taxable_value, category, source_file_name, uploaded_at, uploaded_by, extraction_method";
 
 function toBillUpload(row: BillRow): BillUpload {
   return {
@@ -42,6 +61,7 @@ function toBillUpload(row: BillRow): BillUpload {
     invoiceNumber: row.invoice_number,
     branch: row.branch,
     taxableValue: Number(row.taxable_value),
+    category: (row.category as BillCategory | null) ?? null,
     sourceFileName: row.source_file_name,
     uploadedAt: row.uploaded_at,
     uploadedBy: row.uploaded_by,
@@ -53,6 +73,7 @@ export async function saveBillUpload(params: {
   invoiceNumber: string;
   branch: string;
   taxableValue: number;
+  category: BillCategory;
   fileData: Buffer;
   sourceFileName: string;
   uploadedAt: string;
@@ -60,17 +81,17 @@ export async function saveBillUpload(params: {
   extractionMethod: "auto" | "manual";
 }): Promise<BillUpload> {
   const { rows } = await pool.query<BillRow>(
-    `insert into bill_uploads (invoice_number, branch, taxable_value, file_data, source_file_name, uploaded_at, uploaded_by, extraction_method)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
-     returning id, invoice_number, branch, taxable_value, source_file_name, uploaded_at, uploaded_by, extraction_method`,
-    [params.invoiceNumber, params.branch, params.taxableValue, params.fileData, params.sourceFileName, params.uploadedAt, params.uploadedBy, params.extractionMethod]
+    `insert into bill_uploads (invoice_number, branch, taxable_value, category, file_data, source_file_name, uploaded_at, uploaded_by, extraction_method)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     returning ${BILL_COLUMNS}`,
+    [params.invoiceNumber, params.branch, params.taxableValue, params.category, params.fileData, params.sourceFileName, params.uploadedAt, params.uploadedBy, params.extractionMethod]
   );
   return toBillUpload(rows[0]);
 }
 
 export async function loadBillByInvoiceNumber(invoiceNumber: string): Promise<BillUpload | null> {
   const { rows } = await pool.query<BillRow>(
-    `select id, invoice_number, branch, taxable_value, source_file_name, uploaded_at, uploaded_by, extraction_method from bill_uploads where invoice_number = $1`,
+    `select ${BILL_COLUMNS} from bill_uploads where invoice_number = $1`,
     [invoiceNumber]
   );
   return rows[0] ? toBillUpload(rows[0]) : null;
@@ -126,10 +147,32 @@ export async function loadBillsForMonth(month: string, branch?: string): Promise
 
 export async function getBillById(id: number): Promise<BillUpload | null> {
   const { rows } = await pool.query<BillRow>(
-    `select id, invoice_number, branch, taxable_value, source_file_name, uploaded_at, uploaded_by, extraction_method from bill_uploads where id = $1`,
+    `select ${BILL_COLUMNS} from bill_uploads where id = $1`,
     [id]
   );
   return rows[0] ? toBillUpload(rows[0]) : null;
+}
+
+/** Scrap / used-oil revenue by branch for one `YYYY-MM` month (Asia/Kolkata),
+ * from bill taxable values. Uncategorised bills (category null) are excluded.
+ * Used by buildReport to fold bill revenue into each branch's Total Revenue
+ * Stream — see report.ts. */
+export async function loadBillRevenueByBranchForMonth(month: string): Promise<BillBranchRevenue[]> {
+  const { rows } = await pool.query<{ branch: string; scrap: string; used_oil: string }>(
+    `select branch,
+            coalesce(sum(taxable_value) filter (where category = 'scrap'), 0)    as scrap,
+            coalesce(sum(taxable_value) filter (where category = 'used_oil'), 0) as used_oil
+     from bill_uploads
+     where to_char(uploaded_at at time zone 'Asia/Kolkata', 'YYYY-MM') = $1
+       and category is not null
+     group by branch`,
+    [month]
+  );
+  return rows.map((r) => ({
+    branch: r.branch,
+    scrapRevenue: Number(r.scrap),
+    usedOilRevenue: Number(r.used_oil),
+  }));
 }
 
 /** Fetches the raw PDF bytes for a bill — separate from getBillById to avoid

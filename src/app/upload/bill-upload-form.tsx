@@ -20,6 +20,8 @@ export function BillUploadForm() {
   const [results, setResults] = useState<FileResult[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const [category, setCategory] = useState<"" | "scrap" | "used_oil">("");
+
   const [manualFile, setManualFile] = useState<File | null>(null);
   const [manualInvoice, setManualInvoice] = useState("");
   const [manualTaxable, setManualTaxable] = useState("");
@@ -77,6 +79,7 @@ export function BillUploadForm() {
 
     const formData = new FormData();
     formData.set("file", manualFile);
+    formData.set("category", category);
     formData.set("manualInvoiceNumber", manualInvoice);
     formData.set("manualTaxableValue", manualTaxable);
 
@@ -121,6 +124,27 @@ export function BillUploadForm() {
           </div>
 
           <div>
+            <label htmlFor="bill-category" className="block text-xs font-medium text-slate-600">
+              Revenue type
+            </label>
+            <select
+              id="bill-category"
+              name="category"
+              required
+              value={category}
+              onChange={(e) => setCategory(e.target.value as "" | "scrap" | "used_oil")}
+              className="mt-1 h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm"
+            >
+              <option value="" disabled>
+                Choose Scrap or Used Oil…
+              </option>
+              <option value="scrap">Scrap revenue</option>
+              <option value="used_oil">Used oil revenue</option>
+            </select>
+            <p className="mt-0.5 text-xs text-slate-400">Applies to every file in this upload. Counts toward Total Revenue Stream (without tax).</p>
+          </div>
+
+          <div>
             <label htmlFor="bill-file" className="block text-xs font-medium text-slate-600">
               Invoice PDF(s)
             </label>
@@ -149,6 +173,25 @@ export function BillUploadForm() {
               Could not auto-extract all fields from <span className="font-medium">{manualFile.name}</span>.
               Please enter the missing values below.
             </p>
+          </div>
+
+          <div>
+            <label htmlFor="manual-category" className="block text-xs font-medium text-slate-600">
+              Revenue type
+            </label>
+            <select
+              id="manual-category"
+              required
+              value={category}
+              onChange={(e) => setCategory(e.target.value as "" | "scrap" | "used_oil")}
+              className="mt-1 h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm"
+            >
+              <option value="" disabled>
+                Choose Scrap or Used Oil…
+              </option>
+              <option value="scrap">Scrap revenue</option>
+              <option value="used_oil">Used oil revenue</option>
+            </select>
           </div>
 
           <div>

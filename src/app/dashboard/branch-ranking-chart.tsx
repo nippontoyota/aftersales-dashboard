@@ -28,6 +28,8 @@ type MetricKey =
   | "bpuPartsMtd"
   | "bpuLabourMtd"
   | "externalSalesMtd"
+  | "scrapRevenueMtd"
+  | "usedOilRevenueMtd"
   | "totalRevenueStreamMtd";
 
 export type RankingMetricConfig = { key: MetricKey; label: string };
@@ -52,6 +54,8 @@ const DEFAULT_METRICS: RankingMetricConfig[] = [
   { key: "brakeCleaningSprayMtd", label: "Brake Cleaning Spray MTD" },
   { key: "vasAchievementForTheMonth", label: "VAS Achievement MTD (Rs)" },
   { key: "externalSalesMtd", label: "External Sales MTD (Rs)" },
+  { key: "scrapRevenueMtd", label: "Scrap Revenue MTD (Rs)" },
+  { key: "usedOilRevenueMtd", label: "Used Oil Revenue MTD (Rs)" },
   { key: "totalRevenueStreamMtd", label: "Total Revenue Stream MTD (Rs)" },
 ];
 

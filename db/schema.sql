@@ -233,3 +233,13 @@ create index if not exists idx_bill_uploads_branch_uploaded
 -- Migrate from storage_path to file_data if upgrading an existing database:
 alter table bill_uploads add column if not exists file_data bytea;
 alter table bill_uploads drop column if exists storage_path;
+
+-- Scrap vs used-oil revenue classification (2026-09-02, at the user's
+-- request). Each bill's taxable value ("without tax") is counted as either
+-- scrap revenue or used oil revenue, chosen on the upload form, and folded
+-- into Total Revenue Stream MTD. Nullable: a bill with no category counts
+-- toward neither line until classified.
+alter table bill_uploads add column if not exists category text
+  check (category in ('scrap', 'used_oil'));
+create index if not exists idx_bill_uploads_category_uploaded
+  on bill_uploads (category, uploaded_at);

@@ -34,7 +34,7 @@ function ScopeBanner({ label, value, accent, compact }: { label: string; value: 
   );
 }
 
-type MetricGroup = "GUS" | "BPU" | "External Sales" | "Total";
+type MetricGroup = "GUS" | "BPU" | "External Sales" | "Scrap & Used Oil" | "Total";
 
 // Rs-denominated rows use formatCompact (whole numbers) instead of the
 // default formatNumber (up to 2 decimals) — at these magnitudes, paise-level
@@ -51,6 +51,8 @@ const METRIC_ROWS: { label: string; key: keyof HeroSummary; group: MetricGroup; 
   { label: "Labour MTD (Rs)", key: "bpuLabourMtd", group: "BPU", formatValue: formatCompact },
   { label: "External Sales MTD (Rs)", key: "externalSalesMtd", group: "External Sales", formatValue: formatCompact },
   { label: "% on SPR I", key: "externalSalesPctOfSprInternal", group: "External Sales", formatValue: formatPercent },
+  { label: "Scrap MTD (Rs)", key: "scrapRevenueMtd", group: "Scrap & Used Oil", formatValue: formatCompact },
+  { label: "Used Oil MTD (Rs)", key: "usedOilRevenueMtd", group: "Scrap & Used Oil", formatValue: formatCompact },
   { label: "Total MTD (Rs)", key: "totalRevenueStreamMtd", group: "Total", formatValue: formatCompact },
 ];
 
