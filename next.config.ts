@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // pdf-parse bundles pdfjs-dist + the native @napi-rs/canvas addon. Let Node
+  // require them at runtime instead of having the bundler inline them — the
+  // bundled copy triggered "ReferenceError: DOMMatrix is not defined" on Vercel
+  // and can't load the native canvas binary. Polyfills still apply via the
+  // "./pdf-polyfill" import in src/lib/bill/parse.ts.
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas"],
   experimental: {
     // proxy.ts runs on every request and Next.js buffers the whole body in
     // memory so both proxy and the route handler can read it — capped at

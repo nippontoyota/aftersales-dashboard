@@ -1,14 +1,7 @@
-// Polyfills required for pdf.js (used by pdf-parse) in Vercel Node environments
-if (typeof globalThis.DOMMatrix === "undefined") {
-  (globalThis as any).DOMMatrix = class DOMMatrix {};
-}
-if (typeof globalThis.ImageData === "undefined") {
-  (globalThis as any).ImageData = class ImageData {};
-}
-if (typeof globalThis.Path2D === "undefined") {
-  (globalThis as any).Path2D = class Path2D {};
-}
-
+// MUST be imported before "pdf-parse": pdfjs-dist references browser globals
+// (DOMMatrix, Path2D, ImageData) at module-evaluation time. See the file's
+// comment for why an inline polyfill here would run too late.
+import "./pdf-polyfill";
 import { PDFParse } from "pdf-parse";
 
 export type BillParseResult = {
