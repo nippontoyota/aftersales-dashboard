@@ -210,3 +210,23 @@ create table if not exists raw_upload_rows (
 );
 create index if not exists raw_upload_rows_lookup_idx on raw_upload_rows (report_type, date, branch);
 create index if not exists raw_upload_rows_data_gin_idx on raw_upload_rows using gin (row_data);
+
+-- PDF bill uploads (2026-09-02, at the user's request): any logged-in user
+-- can upload a Toyota or generic PDF tax invoice; the app auto-extracts the
+-- total taxable value and invoice number, stores the PDF in Supabase
+-- Storage, and shows monthly aggregated totals on the dashboard. Unlike the
+-- snapshot tables (one row per branch per date), each bill is its own row
+-- keyed by invoice_number; duplicate detection is by that unique constraint.
+create table if not exists bill_uploads (
+  id              bigserial    primary key,
+  invoice_number  text         not null unique,
+  branch          text         not null,
+  taxable_value   numeric      not null,
+  storage_path    text         not null,
+  source_file_name text        not null,
+  uploaded_at     timestamptz  not null,
+  uploaded_by     text         not null,
+  extraction_method text       not null check (extraction_method in ('auto', 'manual'))
+);
+create index if not exists idx_bill_uploads_branch_uploaded
+  on bill_uploads (branch, uploaded_at);

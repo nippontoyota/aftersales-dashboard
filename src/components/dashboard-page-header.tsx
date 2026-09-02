@@ -21,6 +21,7 @@ export function DashboardPageHeader({
   isPublished,
   canPublish = false,
   extraParams,
+  isCompanyScope = true,
 }: {
   title: string;
   basePath: string;
@@ -42,14 +43,29 @@ export function DashboardPageHeader({
    * date/region or publishing doesn't silently drop back to a default
    * variant (found 2026-09-01, see alerts-panel.tsx's viewAllHref). */
   extraParams?: Record<string, string>;
+  /** Whether the user has company-wide access for this date. If false, the view is locked to their own branch. */
+  isCompanyScope?: boolean;
 }) {
   const extraQuery = extraParams ? `&${new URLSearchParams(extraParams).toString()}` : "";
-  const currentHref = `${basePath}?date=${date}${region !== "All" ? `&region=${region}` : ""}${extraQuery}`;
+  const currentHref = `${basePath}?date=${date}${isCompanyScope && region !== "All" ? `&region=${region}` : ""}${extraQuery}`;
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">{title}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold text-slate-900">{title}</h1>
+          {!isCompanyScope && (
+            <span
+              className="flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-500"
+              title="Unpublished view: showing only your branch"
+            >
+              <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3" aria-hidden="true">
+                <path fillRule="evenodd" d="M8 2a3 3 0 0 0-3 3v2H4.5A1.5 1.5 0 0 0 3 8.5v5A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 11.5 7H11V5a3 3 0 0 0-3-3zm-1 3a1 1 0 1 1 2 0v2H7V5z" clipRule="evenodd" />
+              </svg>
+              Unpublished
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-sm text-slate-500">
           MTD as of {date} · {branchCount} branch{branchCount === 1 ? "" : "es"}
           {region !== "All" ? ` in ${region}` : ""}
@@ -84,7 +100,7 @@ export function DashboardPageHeader({
             </form>
           )
         ) : null}
-        {showRegionSelect ? <RegionSelect selected={region} date={date} basePath={basePath} extraParams={extraParams} /> : null}
+        {showRegionSelect && isCompanyScope ? <RegionSelect selected={region} date={date} basePath={basePath} extraParams={extraParams} /> : null}
         <DateSelect dates={[...dates].reverse()} selected={date} region={region} basePath={basePath} extraParams={extraParams} />
         <Link
           href={currentHref}

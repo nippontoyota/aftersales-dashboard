@@ -66,7 +66,8 @@ export async function findAdmin(username: string): Promise<AdminAccount | null> 
  * to populate its branch picker and to seed filename-matching candidates. */
 export async function listBranchCodes(): Promise<string[]> {
   const { rows } = await pool.query<{ branch: string }>("select distinct branch from admins where role = 'branch' order by branch");
-  return rows.map((r) => r.branch);
+  // CO01C is an online store (no uploads), CO01D is deactivated
+  return rows.map((r) => r.branch).filter((b) => b !== "CO01C" && b !== "CO01D");
 }
 
 export async function verifyAdminPassword(username: string, password: string): Promise<AdminAccount | null> {

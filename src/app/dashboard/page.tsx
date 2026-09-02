@@ -12,9 +12,10 @@ import type { AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computePace } from "@/lib/pace";
-import { computeTrendSeries, computeVasTrendSeries } from "@/lib/trend";
+import { computeVasTrendSeries } from "@/lib/trend";
 import { AchievementDonut } from "./achievement-donut";
 import { AlertsPanel } from "./alerts-panel";
+import { BillDrilldown } from "./bill-drilldown";
 import { HeroKpi } from "./hero-kpi";
 import { InsightsPanel } from "./insights-panel";
 import { RegionScorecard } from "./region-scorecard";
@@ -68,13 +69,13 @@ async function DashboardContent({
         <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
           {admin.role === "hq"
             ? "No BA Tool reports have been uploaded yet. Go to Upload to add today's file."
-            : "Nothing has been published yet — check back once HQ publishes a day's dashboard."}
+            : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
         </div>
       </div>
     );
   }
 
-  const { date, region, dates, report, filteredBranches, kpis, hasPreviousUpload, monthSnapshots, serviceInfoMonthSnapshots, isPublished, canPublish } =
+  const { date, region, dates, report, filteredBranches, kpis, hasPreviousUpload, monthSnapshots, serviceInfoMonthSnapshots, isPublished, canPublish, billTotals, isCompanyScope } =
     data;
 
   if (!report) {
@@ -89,13 +90,8 @@ async function DashboardContent({
   const heroSummary = computeHeroSummary(filteredBranches);
 
   const trendSeriesByMetric = { vas: computeVasTrendSeries(monthSnapshots, serviceInfoMonthSnapshots, region) };
-  const gusRoSeries = computeTrendSeries(monthSnapshots, region, "gus").map((p) => p.actual);
-  const bpuRoSeries = computeTrendSeries(monthSnapshots, region, "bpus").map((p) => p.actual);
-
   const pace = {
     vas: computePace(date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget),
-    gusRo: computePace(date, kpis.gusRoMtd, null),
-    bpuRo: computePace(date, kpis.bpuRoMtd, null),
   };
 
   const vasGentani = achievementRatio(kpis.vasAchievementForTheMonth, kpis.gusRoMtd);
@@ -128,6 +124,7 @@ async function DashboardContent({
         daysSincePrevious={report.daysSincePrevious}
         isPublished={isPublished}
         canPublish={canPublish}
+        isCompanyScope={isCompanyScope}
       />
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -142,19 +139,25 @@ async function DashboardContent({
           icon={<RevenueIcon />}
           color="red"
           label="GUS RO — MTD"
-          value={formatNumber(kpis.gusRoMtd)}
+          value={formatCompactCurrency(
+            heroSummary.gusPartsMtd !== null && heroSummary.gusLabourMtd !== null
+              ? heroSummary.gusPartsMtd + heroSummary.gusLabourMtd
+              : null,
+          )}
+          sub={`${formatNumber(kpis.gusRoMtd)} ROs`}
           hasPreviousUpload={hasPreviousUpload}
-          sparklineValues={gusRoSeries}
-          pace={pace.gusRo}
         />
         <RichKpiCard
           icon={<WrenchIcon />}
           color="blue"
           label="BPU RO — MTD"
-          value={formatNumber(kpis.bpuRoMtd)}
+          value={formatCompactCurrency(
+            heroSummary.bpuPartsMtd !== null && heroSummary.bpuLabourMtd !== null
+              ? heroSummary.bpuPartsMtd + heroSummary.bpuLabourMtd
+              : null,
+          )}
+          sub={`${formatNumber(kpis.bpuRoMtd)} ROs`}
           hasPreviousUpload={hasPreviousUpload}
-          sparklineValues={bpuRoSeries}
-          pace={pace.bpuRo}
         />
         <RichKpiCard
           icon={<RevenueIcon />}
@@ -207,6 +210,18 @@ async function DashboardContent({
           </div>
         </CollapsibleCard>
       </div>
+
+      {billTotals.length > 0 && (
+        <div className="mt-4">
+          <CollapsibleCard title="Bills — Taxable Value" defaultOpen>
+            <div className="space-y-2 p-3">
+              {billTotals.map((bt) => (
+                <BillDrilldown key={bt.month} month={bt.month} total={bt.total} count={bt.count} />
+              ))}
+            </div>
+          </CollapsibleCard>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 text-[11px] text-slate-400">
         <span>Data as of: {uploadedAtLabel} IST</span>

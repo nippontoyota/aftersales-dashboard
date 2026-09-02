@@ -1,10 +1,11 @@
 import { computeKpiSummary, filterBranchesByRegion, type KpiSummary } from "./aggregate";
 import type { AdminAccount } from "./admin-store";
+import { loadBillTotalsByMonth, type BillMonthTotal } from "./bill/store";
 import { buildReport, type Report } from "./report";
 import { REGIONS, type RegionName } from "./regions";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
 import { loadAllServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
-import { isDatePublished, listPublishedDates } from "./publish-store";
+import { isDatePublished } from "./publish-store";
 
 /** Resolves date/region from searchParams and loads everything the
  * Dashboard, Alerts, Branches, Reports, and TKM Targets pages all need in
@@ -39,6 +40,7 @@ export type DashboardData = {
   isPublished: boolean;
   /** Only HQ can publish — drives whether the Publish control renders at all. */
   canPublish: boolean;
+  billTotals: BillMonthTotal[];
 };
 
 export async function loadDashboardData(searchParams: { date?: string; region?: string }, admin: AdminAccount): Promise<DashboardData | null> {
@@ -49,31 +51,28 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   let dates: string[];
   let date: string;
 
-  if (isHq) {
-    // HQ always sees every date, published or not — they're the ones deciding when to publish.
-    dates = allDates;
-    date = searchParams.date && dates.includes(searchParams.date) ? searchParams.date : dates.at(-1)!;
-  } else {
-    // A branch admin can only ever land on a published date — falls back to
-    // the latest published one (yesterday's dashboard, most likely) when
-    // none is requested, or when the requested one isn't published yet.
-    // This is the real access boundary: a page must never fall back to
-    // `allDates`/`report.branches` unfiltered by this, or the gate does
-    // nothing.
-    dates = await listPublishedDates();
-    if (dates.length === 0) return null;
-    date = searchParams.date && dates.includes(searchParams.date) ? searchParams.date : dates.at(-1)!;
-  }
+  // Everyone sees all dates — HQ to review/publish, branch admins to view their
+  // own restricted dashboard (only their branch) or the full published dashboard.
+  dates = allDates;
+  date = searchParams.date && dates.includes(searchParams.date) ? searchParams.date : dates.at(-1)!;
 
-  const region: RegionName | "All" = searchParams.region && searchParams.region in REGIONS ? (searchParams.region as RegionName) : "All";
-
-  const [report, monthSnapshots, serviceInfoMonthSnapshots, isPublished] = await Promise.all([
+  const billBranch = isHq ? undefined : admin.branch;
+  const [report, monthSnapshots, serviceInfoMonthSnapshots, isPublished, billTotals] = await Promise.all([
     buildReport(date),
     loadSnapshotsForMonthUpTo(date),
     loadAllServiceInfoSnapshotsForMonthUpTo(date),
     isDatePublished(date),
+    loadBillTotalsByMonth(billBranch),
   ]);
-  const filteredBranches = report ? filterBranchesByRegion(report.branches, region) : [];
+
+  const isCompanyScope = isHq || isPublished;
+  const region: RegionName | "All" = isCompanyScope && searchParams.region && searchParams.region in REGIONS ? (searchParams.region as RegionName) : "All";
+
+  let filteredBranches = report ? filterBranchesByRegion(report.branches, region) : [];
+  if (!isCompanyScope && !isHq) {
+    filteredBranches = filteredBranches.filter(b => b.branch === admin.branch);
+  }
+
   const kpis = computeKpiSummary(filteredBranches);
   const hasPreviousUpload = report?.hasPreviousSnapshot ?? false;
 
@@ -87,9 +86,10 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
     hasPreviousUpload,
     monthSnapshots,
     serviceInfoMonthSnapshots,
-    currentHrefBase: `date=${date}${region !== "All" ? `&region=${region}` : ""}`,
-    isCompanyScope: true,
+    currentHrefBase: `date=${date}${isCompanyScope && region !== "All" ? `&region=${region}` : ""}`,
+    isCompanyScope,
     isPublished,
     canPublish: isHq,
+    billTotals,
   };
 }
