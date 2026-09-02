@@ -5,7 +5,6 @@ export type BillUpload = {
   invoiceNumber: string;
   branch: string;
   taxableValue: number;
-  storagePath: string;
   sourceFileName: string;
   uploadedAt: string;
   uploadedBy: string;
@@ -31,7 +30,6 @@ type BillRow = {
   invoice_number: string;
   branch: string;
   taxable_value: string;
-  storage_path: string;
   source_file_name: string;
   uploaded_at: string;
   uploaded_by: string;
@@ -44,7 +42,6 @@ function toBillUpload(row: BillRow): BillUpload {
     invoiceNumber: row.invoice_number,
     branch: row.branch,
     taxableValue: Number(row.taxable_value),
-    storagePath: row.storage_path,
     sourceFileName: row.source_file_name,
     uploadedAt: row.uploaded_at,
     uploadedBy: row.uploaded_by,
@@ -56,24 +53,24 @@ export async function saveBillUpload(params: {
   invoiceNumber: string;
   branch: string;
   taxableValue: number;
-  storagePath: string;
+  fileData: Buffer;
   sourceFileName: string;
   uploadedAt: string;
   uploadedBy: string;
   extractionMethod: "auto" | "manual";
 }): Promise<BillUpload> {
   const { rows } = await pool.query<BillRow>(
-    `insert into bill_uploads (invoice_number, branch, taxable_value, storage_path, source_file_name, uploaded_at, uploaded_by, extraction_method)
+    `insert into bill_uploads (invoice_number, branch, taxable_value, file_data, source_file_name, uploaded_at, uploaded_by, extraction_method)
      values ($1, $2, $3, $4, $5, $6, $7, $8)
-     returning *`,
-    [params.invoiceNumber, params.branch, params.taxableValue, params.storagePath, params.sourceFileName, params.uploadedAt, params.uploadedBy, params.extractionMethod]
+     returning id, invoice_number, branch, taxable_value, source_file_name, uploaded_at, uploaded_by, extraction_method`,
+    [params.invoiceNumber, params.branch, params.taxableValue, params.fileData, params.sourceFileName, params.uploadedAt, params.uploadedBy, params.extractionMethod]
   );
   return toBillUpload(rows[0]);
 }
 
 export async function loadBillByInvoiceNumber(invoiceNumber: string): Promise<BillUpload | null> {
   const { rows } = await pool.query<BillRow>(
-    `select * from bill_uploads where invoice_number = $1`,
+    `select id, invoice_number, branch, taxable_value, source_file_name, uploaded_at, uploaded_by, extraction_method from bill_uploads where invoice_number = $1`,
     [invoiceNumber]
   );
   return rows[0] ? toBillUpload(rows[0]) : null;
@@ -129,8 +126,18 @@ export async function loadBillsForMonth(month: string, branch?: string): Promise
 
 export async function getBillById(id: number): Promise<BillUpload | null> {
   const { rows } = await pool.query<BillRow>(
-    `select * from bill_uploads where id = $1`,
+    `select id, invoice_number, branch, taxable_value, source_file_name, uploaded_at, uploaded_by, extraction_method from bill_uploads where id = $1`,
     [id]
   );
   return rows[0] ? toBillUpload(rows[0]) : null;
+}
+
+/** Fetches the raw PDF bytes for a bill — separate from getBillById to avoid
+ * loading the (potentially large) bytea column when only metadata is needed. */
+export async function getBillPdfData(id: number): Promise<Buffer | null> {
+  const { rows } = await pool.query<{ file_data: Buffer }>(
+    `select file_data from bill_uploads where id = $1`,
+    [id]
+  );
+  return rows[0]?.file_data ?? null;
 }

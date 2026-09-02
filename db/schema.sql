@@ -222,7 +222,7 @@ create table if not exists bill_uploads (
   invoice_number  text         not null unique,
   branch          text         not null,
   taxable_value   numeric      not null,
-  storage_path    text         not null,
+  file_data       bytea        not null,
   source_file_name text        not null,
   uploaded_at     timestamptz  not null,
   uploaded_by     text         not null,
@@ -230,3 +230,6 @@ create table if not exists bill_uploads (
 );
 create index if not exists idx_bill_uploads_branch_uploaded
   on bill_uploads (branch, uploaded_at);
+-- Migrate from storage_path to file_data if upgrading an existing database:
+alter table bill_uploads add column if not exists file_data bytea;
+alter table bill_uploads drop column if exists storage_path;
