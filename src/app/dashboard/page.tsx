@@ -12,7 +12,7 @@ import type { AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computePace } from "@/lib/pace";
-import { computeTrendSeries, computeVasTrendSeries } from "@/lib/trend";
+import { computeVasTrendSeries } from "@/lib/trend";
 import { AchievementDonut } from "./achievement-donut";
 import { AlertsPanel } from "./alerts-panel";
 import { HeroKpi } from "./hero-kpi";
@@ -89,13 +89,8 @@ async function DashboardContent({
   const heroSummary = computeHeroSummary(filteredBranches);
 
   const trendSeriesByMetric = { vas: computeVasTrendSeries(monthSnapshots, serviceInfoMonthSnapshots, region) };
-  const gusRoSeries = computeTrendSeries(monthSnapshots, region, "gus").map((p) => p.actual);
-  const bpuRoSeries = computeTrendSeries(monthSnapshots, region, "bpus").map((p) => p.actual);
-
   const pace = {
     vas: computePace(date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget),
-    gusRo: computePace(date, kpis.gusRoMtd, null),
-    bpuRo: computePace(date, kpis.bpuRoMtd, null),
   };
 
   const vasGentani = achievementRatio(kpis.vasAchievementForTheMonth, kpis.gusRoMtd);
@@ -142,19 +137,25 @@ async function DashboardContent({
           icon={<RevenueIcon />}
           color="red"
           label="GUS RO — MTD"
-          value={formatNumber(kpis.gusRoMtd)}
+          value={formatCompactCurrency(
+            heroSummary.gusPartsMtd !== null && heroSummary.gusLabourMtd !== null
+              ? heroSummary.gusPartsMtd + heroSummary.gusLabourMtd
+              : null,
+          )}
+          sub={`${formatNumber(kpis.gusRoMtd)} ROs`}
           hasPreviousUpload={hasPreviousUpload}
-          sparklineValues={gusRoSeries}
-          pace={pace.gusRo}
         />
         <RichKpiCard
           icon={<WrenchIcon />}
           color="blue"
           label="BPU RO — MTD"
-          value={formatNumber(kpis.bpuRoMtd)}
+          value={formatCompactCurrency(
+            heroSummary.bpuPartsMtd !== null && heroSummary.bpuLabourMtd !== null
+              ? heroSummary.bpuPartsMtd + heroSummary.bpuLabourMtd
+              : null,
+          )}
+          sub={`${formatNumber(kpis.bpuRoMtd)} ROs`}
           hasPreviousUpload={hasPreviousUpload}
-          sparklineValues={bpuRoSeries}
-          pace={pace.bpuRo}
         />
         <RichKpiCard
           icon={<RevenueIcon />}
