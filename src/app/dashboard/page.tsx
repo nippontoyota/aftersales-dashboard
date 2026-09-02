@@ -216,7 +216,15 @@ async function DashboardContent({
           <CollapsibleCard title="Bills — Taxable Value" defaultOpen>
             <div className="space-y-2 p-3">
               {billTotals.map((bt) => (
-                <BillDrilldown key={bt.month} month={bt.month} total={bt.total} count={bt.count} />
+                <BillDrilldown
+                  key={bt.month}
+                  month={bt.month}
+                  total={bt.total}
+                  count={bt.count}
+                  scrapTotal={bt.scrapTotal}
+                  usedOilTotal={bt.usedOilTotal}
+                  untaggedTotal={bt.untaggedTotal}
+                />
               ))}
             </div>
           </CollapsibleCard>

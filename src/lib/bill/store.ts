@@ -30,12 +30,17 @@ export type BillMonthTotal = {
   month: string;
   total: number;
   count: number;
+  /** `total` split by category — scrapTotal + usedOilTotal + untaggedTotal === total. */
+  scrapTotal: number;
+  usedOilTotal: number;
+  untaggedTotal: number;
 };
 
 export type BillListItem = {
   id: number;
   invoiceNumber: string;
   taxableValue: number;
+  category: BillCategory | null;
   sourceFileName: string;
   uploadedAt: string;
 };
@@ -98,41 +103,48 @@ export async function loadBillByInvoiceNumber(invoiceNumber: string): Promise<Bi
 }
 
 export async function loadBillTotalsByMonth(branch?: string): Promise<BillMonthTotal[]> {
+  const select = `select to_char(uploaded_at at time zone 'Asia/Kolkata', 'YYYY-MM') as month,
+              sum(taxable_value) as total,
+              count(*)::int as count,
+              coalesce(sum(taxable_value) filter (where category = 'scrap'), 0)    as scrap_total,
+              coalesce(sum(taxable_value) filter (where category = 'used_oil'), 0) as used_oil_total,
+              coalesce(sum(taxable_value) filter (where category is null), 0)      as untagged_total
+       from bill_uploads`;
   const query = branch
-    ? `select to_char(uploaded_at at time zone 'Asia/Kolkata', 'YYYY-MM') as month,
-              sum(taxable_value) as total,
-              count(*)::int as count
-       from bill_uploads
-       where branch = $1
-       group by month
-       order by month desc`
-    : `select to_char(uploaded_at at time zone 'Asia/Kolkata', 'YYYY-MM') as month,
-              sum(taxable_value) as total,
-              count(*)::int as count
-       from bill_uploads
-       group by month
-       order by month desc`;
+    ? `${select} where branch = $1 group by month order by month desc`
+    : `${select} group by month order by month desc`;
 
-  const { rows } = await pool.query<{ month: string; total: string; count: number }>(
-    query,
-    branch ? [branch] : []
-  );
-  return rows.map((r) => ({ month: r.month, total: Number(r.total), count: r.count }));
+  const { rows } = await pool.query<{
+    month: string;
+    total: string;
+    count: number;
+    scrap_total: string;
+    used_oil_total: string;
+    untagged_total: string;
+  }>(query, branch ? [branch] : []);
+  return rows.map((r) => ({
+    month: r.month,
+    total: Number(r.total),
+    count: r.count,
+    scrapTotal: Number(r.scrap_total),
+    usedOilTotal: Number(r.used_oil_total),
+    untaggedTotal: Number(r.untagged_total),
+  }));
 }
 
 export async function loadBillsForMonth(month: string, branch?: string): Promise<BillListItem[]> {
   const query = branch
-    ? `select id, invoice_number, taxable_value, source_file_name, uploaded_at
+    ? `select id, invoice_number, taxable_value, category, source_file_name, uploaded_at
        from bill_uploads
        where to_char(uploaded_at at time zone 'Asia/Kolkata', 'YYYY-MM') = $1
          and branch = $2
        order by uploaded_at desc`
-    : `select id, invoice_number, taxable_value, source_file_name, uploaded_at
+    : `select id, invoice_number, taxable_value, category, source_file_name, uploaded_at
        from bill_uploads
        where to_char(uploaded_at at time zone 'Asia/Kolkata', 'YYYY-MM') = $1
        order by uploaded_at desc`;
 
-  const { rows } = await pool.query<{ id: string; invoice_number: string; taxable_value: string; source_file_name: string; uploaded_at: string }>(
+  const { rows } = await pool.query<{ id: string; invoice_number: string; taxable_value: string; category: string | null; source_file_name: string; uploaded_at: string }>(
     query,
     branch ? [month, branch] : [month]
   );
@@ -140,6 +152,7 @@ export async function loadBillsForMonth(month: string, branch?: string): Promise
     id: Number(r.id),
     invoiceNumber: r.invoice_number,
     taxableValue: Number(r.taxable_value),
+    category: (r.category as BillCategory | null) ?? null,
     sourceFileName: r.source_file_name,
     uploadedAt: r.uploaded_at,
   }));
