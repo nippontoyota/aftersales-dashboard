@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
-import { getBillById } from "@/lib/bill/store";
-import { getBillPdfSignedUrl } from "@/lib/supabase-storage";
+import { getBillById, getBillPdfData } from "@/lib/bill/store";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getCurrentAdmin();
@@ -24,6 +23,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
-  const signedUrl = await getBillPdfSignedUrl(bill.storagePath);
-  return NextResponse.redirect(signedUrl);
+  const pdfData = await getBillPdfData(billId);
+  if (!pdfData) {
+    return NextResponse.json({ error: "PDF data not found." }, { status: 404 });
+  }
+
+  return new NextResponse(new Uint8Array(pdfData), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="${bill.sourceFileName}"`,
+      "Content-Length": String(pdfData.length),
+    },
+  });
 }

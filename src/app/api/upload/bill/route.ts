@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { parseBillPdf } from "@/lib/bill/parse";
 import { loadBillByInvoiceNumber, saveBillUpload } from "@/lib/bill/store";
-import { uploadBillPdf } from "@/lib/supabase-storage";
 
 type FileResult = {
   fileName: string;
@@ -92,23 +91,12 @@ export async function POST(request: Request) {
       continue;
     }
 
-    let storagePath: string;
-    try {
-      storagePath = await uploadBillPdf(branch, fileName, buffer);
-    } catch (err) {
-      results.push({
-        fileName,
-        error: `Storage upload failed: ${err instanceof Error ? err.message : "unknown error"}`,
-      });
-      continue;
-    }
-
     try {
       await saveBillUpload({
         invoiceNumber,
         branch,
         taxableValue,
-        storagePath,
+        fileData: buffer,
         sourceFileName: fileName,
         uploadedAt: new Date().toISOString(),
         uploadedBy: admin.username,
