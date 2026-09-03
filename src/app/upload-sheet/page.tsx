@@ -28,8 +28,8 @@ export default async function UploadSheetPage({
       <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">Upload Sheet</h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <h1 className="text-lg font-semibold text-fg">Upload Sheet</h1>
+            <p className="mt-1 text-sm text-fg-subtle">
               A fallback for uploading a branch&apos;s report on their behalf — e.g. someone&apos;s on leave, or there&apos;s an
               issue on their side.
             </p>

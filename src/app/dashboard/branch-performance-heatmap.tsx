@@ -16,17 +16,17 @@ const DEFAULT_METRICS: HeatmapMetricConfig[] = [
 ];
 
 const CELL_BG: Record<AchievementTone, string> = {
-  good: "bg-emerald-500 text-white",
-  warn: "bg-amber-400 text-white",
-  critical: "bg-red-500 text-white",
-  neutral: "bg-slate-100 text-slate-400",
+  good: "bg-good-solid text-on-accent",
+  warn: "bg-warn-solid text-on-accent",
+  critical: "bg-bad-solid text-on-accent",
+  neutral: "bg-surface-2 text-fg-faint",
 };
 
 /** A real figure with no target to grade it against (e.g. CO01C's online
  * Offtake) gets its own sky-blue treatment, not the same grey "—" as a
  * genuinely empty cell — otherwise real activity is invisible until someone
  * happens to hover. */
-const NO_TARGET_ACTIVITY_BG = "bg-sky-50 text-sky-700";
+const NO_TARGET_ACTIVITY_BG = "bg-info-soft text-info";
 
 function MetricCell({ actual, target, label, branch }: { actual: number | null; target: number | null; label: string; branch: string }) {
   const ratio = achievementRatio(actual, target);
@@ -85,15 +85,15 @@ export function BranchPerformanceHeatmap({
   };
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Branch Performance Heatmap — Achievement %</h2>
+    <div className="rounded-md border border-border bg-surface p-4">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Branch Performance Heatmap — Achievement %</h2>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[560px] border-separate border-spacing-1 text-xs">
           <thead>
             <tr>
-              <th className="w-24 pb-1 text-left text-[11px] font-medium text-slate-400">Branch</th>
+              <th className="w-24 pb-1 text-left text-[11px] font-medium text-fg-faint">Branch</th>
               {metrics.map((m) => (
-                <th key={m.label} className="pb-1 text-center text-[11px] font-medium text-slate-400">
+                <th key={m.label} className="pb-1 text-center text-[11px] font-medium text-fg-faint">
                   {m.label}
                 </th>
               ))}
@@ -106,12 +106,12 @@ export function BranchPerformanceHeatmap({
               return (
                 <Fragment key={b.branch}>
                   <tr>
-                    <td className="whitespace-nowrap py-0.5 pr-2 text-right font-medium text-slate-700">
+                    <td className="whitespace-nowrap py-0.5 pr-2 text-right font-medium text-fg-muted">
                       {breakdown ? (
                         <button
                           type="button"
                           onClick={() => toggle(b.branch)}
-                          className="inline-flex items-center gap-1 rounded hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+                          className="inline-flex items-center gap-1 rounded hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                           title={`${b.branch} includes ${breakdown.onlineBranchCode} (online store) — click to split Offtake back apart`}
                         >
                           <ExpandIcon open={isOpen} />
@@ -133,7 +133,7 @@ export function BranchPerformanceHeatmap({
                   </tr>
                   {breakdown && isOpen ? (
                     <>
-                      <tr key={`${b.branch}-own`} className="text-[11px] text-slate-400">
+                      <tr key={`${b.branch}-own`} className="text-[11px] text-fg-faint">
                         <td className="whitespace-nowrap py-0.5 pr-2 text-right">└ {b.branch} (physical)</td>
                         {metrics.map((m, i) =>
                           i === offtakeColumnIndex ? (
@@ -142,12 +142,12 @@ export function BranchPerformanceHeatmap({
                             </td>
                           ) : (
                             <td key={m.label} className="p-0">
-                              <div className="flex h-8 items-center justify-center rounded bg-slate-50 text-slate-300">—</div>
+                              <div className="flex h-8 items-center justify-center rounded bg-surface-2 text-fg-faint">—</div>
                             </td>
                           )
                         )}
                       </tr>
-                      <tr key={`${b.branch}-online`} className="text-[11px] text-slate-400">
+                      <tr key={`${b.branch}-online`} className="text-[11px] text-fg-faint">
                         <td className="whitespace-nowrap py-0.5 pr-2 text-right">└ {breakdown.onlineBranchCode} (online)</td>
                         {metrics.map((m, i) =>
                           i === offtakeColumnIndex ? (
@@ -161,7 +161,7 @@ export function BranchPerformanceHeatmap({
                             </td>
                           ) : (
                             <td key={m.label} className="p-0">
-                              <div className="flex h-8 items-center justify-center rounded bg-slate-50 text-slate-300">—</div>
+                              <div className="flex h-8 items-center justify-center rounded bg-surface-2 text-fg-faint">—</div>
                             </td>
                           )
                         )}

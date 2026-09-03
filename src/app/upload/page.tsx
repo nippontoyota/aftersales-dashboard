@@ -62,8 +62,8 @@ export default async function UploadPage() {
           <UploadTabs
             dailyReports={
               <>
-                <h1 className="text-lg font-semibold text-slate-900">Upload BA Tool Report</h1>
-                <p className="mt-1 text-sm text-slate-500">
+                <h1 className="text-lg font-semibold text-fg">Upload BA Tool Report</h1>
+                <p className="mt-1 text-sm text-fg-subtle">
                   Upload the daily BA Tool export. Choose the date this upload represents — it&apos;s used to compute
                   day-over-day figures against the previous upload.
                 </p>
@@ -74,8 +74,8 @@ export default async function UploadPage() {
             }
             bills={
               <>
-                <h1 className="text-lg font-semibold text-slate-900">Upload Bills</h1>
-                <p className="mt-1 text-sm text-slate-500">
+                <h1 className="text-lg font-semibold text-fg">Upload Bills</h1>
+                <p className="mt-1 text-sm text-fg-subtle">
                   Upload PDF tax invoices. The total taxable value and invoice number will be extracted automatically.
                 </p>
                 <div className="mt-4">
@@ -88,9 +88,9 @@ export default async function UploadPage() {
           <UploadTabs
             dailyReports={
               <>
-                <h1 className="text-lg font-semibold text-slate-900">Upload branch reports</h1>
-                <p className="mt-1 text-sm text-slate-500">
-                  Uploading as <span className="font-medium text-slate-700">{admin.branch}</span>. Choose the date each
+                <h1 className="text-lg font-semibold text-fg">Upload branch reports</h1>
+                <p className="mt-1 text-sm text-fg-subtle">
+                  Uploading as <span className="font-medium text-fg-muted">{admin.branch}</span>. Choose the date each
                   upload represents — figures are attributed to your branch automatically. Once a report is uploaded for
                   a date, that section locks — ask HQ (Upload Sheet) for a correction.
                 </p>
@@ -106,9 +106,9 @@ export default async function UploadPage() {
             }
             bills={
               <>
-                <h1 className="text-lg font-semibold text-slate-900">Upload Bills</h1>
-                <p className="mt-1 text-sm text-slate-500">
-                  Uploading as <span className="font-medium text-slate-700">{admin.branch}</span>. Upload PDF tax
+                <h1 className="text-lg font-semibold text-fg">Upload Bills</h1>
+                <p className="mt-1 text-sm text-fg-subtle">
+                  Uploading as <span className="font-medium text-fg-muted">{admin.branch}</span>. Upload PDF tax
                   invoices — the total taxable value and invoice number will be extracted automatically.
                 </p>
                 <div className="mt-4">
@@ -118,7 +118,7 @@ export default async function UploadPage() {
             }
           />
         ) : (
-          <div className="mt-4 rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="mt-4 rounded border border-bad/30 bg-bad-soft p-4 text-sm text-bad">
             Could not determine your account&apos;s role — contact an administrator.
           </div>
         )}

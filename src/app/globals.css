@@ -1,18 +1,101 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #0f172a;
-}
+/* Class-based dark mode: `dark:` variants apply when a `.dark` ancestor
+   exists (set on <html> by the theme script in layout.tsx). */
+@custom-variant dark (&:where(.dark, .dark *));
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+/* Semantic colour tokens — every component uses these (bg-surface, text-fg,
+   border-border, …) instead of raw slate/white, so light⇆dark is a matter
+   of flipping the values under `.dark` below, in one place. */
+@theme {
+  --color-canvas: #f8fafc; /* page background (slate-50) */
+  --color-surface: #ffffff; /* cards, sidebar, header */
+  --color-surface-2: #f1f5f9; /* hover / subtle inset (slate-100) */
+  --color-surface-3: #e2e8f0; /* stronger inset (slate-200) */
+
+  --color-fg: #0f172a; /* primary text (slate-900) */
+  --color-fg-muted: #475569; /* secondary text (slate-600) */
+  --color-fg-subtle: #64748b; /* tertiary text (slate-500) */
+  --color-fg-faint: #94a3b8; /* faint labels (slate-400) */
+
+  --color-border: #e2e8f0; /* default hairline (slate-200) */
+  --color-border-strong: #cbd5e1; /* inputs, dividers (slate-300) */
+  --color-border-subtle: #f1f5f9; /* faint row lines (slate-100) */
+
+  --color-accent: #dc2626; /* brand red — solid fills (buttons, badges); white text reads on this in both themes */
+  --color-accent-hover: #b91c1c; /* fill hover */
+  --color-accent-text: #b91c1c; /* accent as text / icon on the page background */
+  --color-accent-soft: #fef2f2; /* soft accent background (red-50) */
+  --color-on-accent: #ffffff; /* text/icon on an accent fill */
+
+  /* status tones — soft background + readable foreground, per state */
+  --color-good: #047857;
+  --color-good-soft: #ecfdf5;
+  --color-good-solid: #10b981;
+  --color-warn: #b45309;
+  --color-warn-soft: #fffbeb;
+  --color-warn-solid: #f59e0b;
+  --color-bad: #b91c1c;
+  --color-bad-soft: #fef2f2;
+  --color-bad-solid: #ef4444;
+  --color-info: #0369a1;
+  --color-info-soft: #f0f9ff;
+  --color-info-solid: #38bdf8;
+
+  /* categorical hues (regions, chart series) — kept stable across themes,
+     lightly lifted in dark for contrast (see .dark block) */
+  --color-cat-central: #2a78d6;
+  --color-cat-south: #eb6834;
+  --color-cat-north: #1baf7a;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
+@layer base {
+  .dark {
+    --color-canvas: #05070c; /* near-black page ground */
+    --color-surface: #0c1017; /* cards / sidebar — barely lifted off canvas */
+    --color-surface-2: #161b25; /* hover / subtle inset */
+    --color-surface-3: #232b39; /* stronger inset */
+
+    --color-fg: #e9eef5;
+    --color-fg-muted: #b9c2d0;
+    --color-fg-subtle: #8a94a4;
+    --color-fg-faint: #5c6675;
+
+    --color-border: #1b2130;
+    --color-border-strong: #2b3444;
+    --color-border-subtle: #12161f;
+
+    --color-accent: #dc2626;
+    --color-accent-hover: #ef4444;
+    --color-accent-text: #f87171;
+    --color-accent-soft: #24120f;
+    --color-on-accent: #ffffff;
+
+    --color-good: #6ee7b7;
+    --color-good-soft: #04231d;
+    --color-good-solid: #10b981;
+    --color-warn: #fcd34d;
+    --color-warn-soft: #221a06;
+    --color-warn-solid: #f59e0b;
+    --color-bad: #fca5a5;
+    --color-bad-soft: #24120f;
+    --color-bad-solid: #ef4444;
+    --color-info: #7dd3fc;
+    --color-info-soft: #061d29;
+    --color-info-solid: #38bdf8;
+
+    --color-cat-central: #5b9be8;
+    --color-cat-south: #f0885c;
+    --color-cat-north: #3fc79a;
+
+    color-scheme: dark;
+  }
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-canvas);
+  color: var(--color-fg);
 }

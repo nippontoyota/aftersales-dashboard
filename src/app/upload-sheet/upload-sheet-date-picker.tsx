@@ -15,7 +15,7 @@ export function UploadSheetDatePicker({ selected }: { selected: string }) {
           router.push(`/upload-sheet?date=${e.target.value}`);
         }
       }}
-      className="h-8 rounded border border-slate-300 px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+      className="h-8 rounded border border-border-strong px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     />
   );
 }

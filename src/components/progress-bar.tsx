@@ -2,17 +2,17 @@ import { achievementRatio, achievementTone, hasActualWithoutTarget, type Achieve
 import { formatNumber } from "@/lib/format";
 
 const TONE_STYLES: Record<AchievementTone, { bg: string; text: string; fill: string }> = {
-  good: { bg: "bg-emerald-50", text: "text-emerald-700", fill: "bg-emerald-500" },
-  warn: { bg: "bg-amber-50", text: "text-amber-700", fill: "bg-amber-500" },
-  critical: { bg: "bg-red-50", text: "text-red-700", fill: "bg-red-500" },
-  neutral: { bg: "bg-slate-100", text: "text-slate-500", fill: "bg-slate-300" },
+  good: { bg: "bg-good-soft", text: "text-good", fill: "bg-good-solid" },
+  warn: { bg: "bg-warn-soft", text: "text-warn", fill: "bg-warn-solid" },
+  critical: { bg: "bg-bad-soft", text: "text-bad", fill: "bg-bad-solid" },
+  neutral: { bg: "bg-surface-2", text: "text-fg-subtle", fill: "bg-surface-3" },
 };
 
 /** Real activity with no target to grade it against — see
  * lib/aggregate.ts's hasActualWithoutTarget. Same sky-blue treatment as the
  * branch heatmap, so the badge shows the actual figure instead of a bare
  * "—" that reads identically to genuinely no data. */
-const NO_TARGET_ACTIVITY_STYLE = { bg: "bg-sky-50", text: "text-sky-700", fill: "bg-sky-300" };
+const NO_TARGET_ACTIVITY_STYLE = { bg: "bg-info-soft", text: "text-info", fill: "bg-info-solid" };
 
 /**
  * Target-vs-achievement cell, redesigned for a glance-and-read scorecard
@@ -50,10 +50,10 @@ export function ProgressCell({
       <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${styles.bg} ${styles.text}`}>
         {ratio !== null ? `${Math.round(ratio * 100)}%` : activityOnly ? formatValue(actual) : "—"}
       </span>
-      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-slate-100">
+      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface-2">
         <div className={`h-full rounded-full ${styles.fill}`} style={{ width: `${widthPct}%` }} />
       </div>
-      <div className="mt-0.5 text-[10px] tabular-nums text-slate-400">{formatValue(actual)}</div>
+      <div className="mt-0.5 text-[10px] tabular-nums text-fg-faint">{formatValue(actual)}</div>
     </div>
   );
 }

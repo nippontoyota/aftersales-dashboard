@@ -98,7 +98,7 @@ export function BranchRankingChart({
         <select
           value={metricKey}
           onChange={(e) => setMetricKey(e.target.value as MetricKey)}
-          className="h-7 rounded border border-slate-300 px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+          className="h-7 rounded border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {metrics.map((m) => (
             <option key={m.key} value={m.key}>
@@ -114,8 +114,8 @@ export function BranchRankingChart({
               className="flex items-center gap-2"
               title={`${r.branch}${r.region ? ` (${r.region})` : ""} — ${metrics.find((m) => m.key === metricKey)?.label}: ${formatNumber(r.value)}`}
             >
-              <div className="w-16 shrink-0 text-xs font-medium text-slate-700">{r.branch}</div>
-              <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-100">
+              <div className="w-16 shrink-0 text-xs font-medium text-fg-muted">{r.branch}</div>
+              <div className="h-4 flex-1 overflow-hidden rounded-full bg-surface-2">
                 <div
                   className="h-full rounded-full"
                   style={{
@@ -124,12 +124,12 @@ export function BranchRankingChart({
                   }}
                 />
               </div>
-              <div className="w-20 shrink-0 text-right text-xs tabular-nums text-slate-600">{formatNumber(r.value)}</div>
+              <div className="w-20 shrink-0 text-right text-xs tabular-nums text-fg-muted">{formatNumber(r.value)}</div>
             </div>
           ))}
         </div>
 
-        <div className="mt-3 flex items-center gap-3 border-t border-dashed border-slate-200 pt-2 text-[11px] text-slate-500">
+        <div className="mt-3 flex items-center gap-3 border-t border-dashed border-border pt-2 text-[11px] text-fg-subtle">
           {(Object.keys(REGION_COLOR) as RegionName[]).map((region) => (
             <span key={region} className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-sm" style={{ background: REGION_COLOR[region] }} />

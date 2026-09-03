@@ -48,12 +48,12 @@ const COLLAPSED_COUNT = 4;
 type Tab = "critical" | "watch" | "all";
 
 const TONE_ICON_BG: Record<"critical" | "warn", string> = {
-  critical: "bg-red-50 text-red-600",
-  warn: "bg-amber-50 text-amber-600",
+  critical: "bg-bad-soft text-bad",
+  warn: "bg-warn-soft text-warn",
 };
 const TONE_TEXT: Record<"critical" | "warn", string> = {
-  critical: "text-red-600",
-  warn: "text-amber-600",
+  critical: "text-bad",
+  warn: "text-warn",
 };
 
 function computeAlerts(branches: BranchReport[], watched: WatchedMetric[]): Alert[] {
@@ -96,8 +96,8 @@ function BreakdownLine({ label, actual, target }: { label: string; actual: numbe
   const activityOnly = hasActualWithoutTarget(actual, target);
   const display = ratio !== null ? formatPercent(ratio) : activityOnly ? formatCompact(actual) : "—";
   return (
-    <div className="text-[11px] text-slate-400">
-      └ {label} <span className={`font-medium ${activityOnly ? "text-sky-700" : "text-slate-500"}`}>{display}</span>
+    <div className="text-[11px] text-fg-faint">
+      └ {label} <span className={`font-medium ${activityOnly ? "text-info" : "text-fg-subtle"}`}>{display}</span>
     </div>
   );
 }
@@ -123,15 +123,15 @@ function AlertRow({
         title={`${a.branch} — ${a.metric}: ${formatNumber(a.actual)} of ${formatNumber(a.target)} target (${formatPercent(a.ratio)})`}
       >
         <AlertIcon tone={a.tone} />
-        <span className="min-w-0 flex-1 text-slate-700">
-          {showBranch ? <span className="font-medium text-slate-900">{a.branch}</span> : null}
+        <span className="min-w-0 flex-1 text-fg-muted">
+          {showBranch ? <span className="font-medium text-fg">{a.branch}</span> : null}
           {showBranch ? " — " : null}
           {a.metric} at <span className={`font-semibold tabular-nums ${TONE_TEXT[a.tone]}`}>{formatPercent(a.ratio)}</span> of target
           {breakdown ? (
             <button
               type="button"
               onClick={onToggle}
-              className="ml-1.5 inline-flex items-center rounded text-slate-400 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+              className="ml-1.5 inline-flex items-center rounded text-fg-faint hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               title={`${a.branch} includes ${breakdown.onlineBranchCode} (online store) — click to split ${a.metric} back apart`}
             >
               <ExpandIcon open={isOpen} />
@@ -241,7 +241,7 @@ export function AlertsPanel({
       : null;
 
   return (
-    <div className="flex h-full flex-col rounded-md border border-slate-200 bg-white p-4">
+    <div className="flex h-full flex-col rounded-md border border-border bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 text-xs font-semibold">
           {(
@@ -255,8 +255,8 @@ export function AlertsPanel({
               key={key}
               type="button"
               onClick={() => setTab(key)}
-              className={`rounded px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 ${
-                tab === key ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"
+              className={`rounded px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                tab === key ? "bg-accent text-on-accent" : "text-fg-subtle hover:bg-surface-2"
               }`}
             >
               {label}
@@ -264,26 +264,26 @@ export function AlertsPanel({
           ))}
         </div>
         {variant === "preview" && shownAll.length > COLLAPSED_COUNT ? (
-          <Link href={viewAllHref} className="shrink-0 text-[11px] font-medium text-red-600 hover:underline">
+          <Link href={viewAllHref} className="shrink-0 text-[11px] font-medium text-bad hover:underline">
             View all
           </Link>
         ) : null}
       </div>
 
       {shown.length === 0 ? (
-        <div className="mt-3 text-xs text-slate-400">Nothing here — every branch is at or above target for this tab.</div>
+        <div className="mt-3 text-xs text-fg-faint">Nothing here — every branch is at or above target for this tab.</div>
       ) : zoneGroups ? (
         <div className="mt-3 max-h-[520px] space-y-4 overflow-y-auto pr-1">
           {zoneGroups.map(({ region, items }) => (
             <div key={region}>
-              <h3 className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                {region} <span className="font-normal normal-case text-slate-300">({items.length})</span>
+              <h3 className="text-[10px] font-semibold uppercase tracking-wide text-fg-faint">
+                {region} <span className="font-normal normal-case text-fg-faint">({items.length})</span>
               </h3>
               <div className="mt-1.5 space-y-2">
                 {groupByBranchWorstFirst(items).map(({ branch, items: branchItems }) => (
                   <div key={branch}>
-                    <div className="text-[10px] font-semibold text-slate-500">
-                      {branch} <span className="font-normal text-slate-300">({branchItems.length})</span>
+                    <div className="text-[10px] font-semibold text-fg-subtle">
+                      {branch} <span className="font-normal text-fg-faint">({branchItems.length})</span>
                     </div>
                     <ul className="mt-0.5 space-y-1.5 pl-1">
                       {branchItems.map((a) => {

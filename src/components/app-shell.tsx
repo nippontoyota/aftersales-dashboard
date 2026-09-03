@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions";
+import { ThemeToggle } from "./theme-toggle";
 
 // Every branch admin sees the full company-wide dashboard, identical to HQ
 // (2026-08-29's "locked to own branch" reversed 2026-08-31, at the user's
@@ -228,9 +229,9 @@ export function AppShell({
         aria-current={active ? "page" : undefined}
         onClick={() => setMobileOpen(false)}
         title={compact ? item.label : undefined}
-        className={`flex items-center rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 ${
+        className={`flex items-center rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
           compact ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2"
-        } ${active ? "bg-red-50 text-red-700" : "text-slate-600 hover:bg-slate-50"}`}
+        } ${active ? "bg-accent-soft text-accent-text" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
       >
         <Icon />
         {!compact && item.label}
@@ -242,23 +243,23 @@ export function AppShell({
    * collapse/expand toggle so the mobile slide-over never shows it. */
   const renderSidebar = (compact: boolean, desktop: boolean) => (
     <>
-      <div className={`flex h-14 shrink-0 items-center border-b border-slate-100 ${compact ? "justify-center px-2" : "gap-2 px-4"}`}>
+      <div className={`flex h-14 shrink-0 items-center border-b border-border-subtle ${compact ? "justify-center px-2" : "gap-2 px-4"}`}>
         {compact ? (
           <button
             type="button"
             onClick={toggleCollapsed}
             aria-label="Open sidebar"
             title="Open sidebar"
-            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+            className="rounded-md p-1.5 text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <PanelIcon />
           </button>
         ) : (
           <>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-red-600 text-xs font-bold text-white">NT</div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-xs font-bold text-on-accent">NT</div>
             <div className="min-w-0 leading-tight">
-              <div className="truncate text-sm font-semibold text-slate-900">Nippon Toyota</div>
-              <div className="truncate text-[11px] text-slate-400">Aftersales Intelligence</div>
+              <div className="truncate text-sm font-semibold text-fg">Nippon Toyota</div>
+              <div className="truncate text-[11px] text-fg-faint">Aftersales Intelligence</div>
             </div>
             {desktop ? (
               <button
@@ -266,7 +267,7 @@ export function AppShell({
                 onClick={toggleCollapsed}
                 aria-label="Collapse sidebar"
                 title="Collapse sidebar"
-                className="ml-auto shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+                className="ml-auto shrink-0 rounded-md p-1.5 text-fg-faint hover:bg-surface-2 hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <PanelIcon />
               </button>
@@ -278,13 +279,13 @@ export function AppShell({
       <nav className={`flex-1 space-y-0.5 ${compact ? "p-2" : "p-3"}`}>{items.map((item) => navLink(item, compact))}</nav>
 
       {utilityItems.length > 0 ? (
-        <nav className={`space-y-0.5 border-t border-slate-100 ${compact ? "p-2" : "p-3"}`}>
+        <nav className={`space-y-0.5 border-t border-border-subtle ${compact ? "p-2" : "p-3"}`}>
           {utilityItems.map((item) => navLink(item, compact))}
         </nav>
       ) : null}
 
-      <div className={`border-t border-slate-100 ${compact ? "p-2" : "p-3"}`}>
-        {!compact ? <div className="mb-2 truncate px-1 text-[11px] text-slate-400">{identity}</div> : null}
+      <div className={`border-t border-border-subtle ${compact ? "p-2" : "p-3"}`}>
+        {!compact ? <div className="mb-2 truncate px-1 text-[11px] text-fg-faint">{identity}</div> : null}
         <form action={logoutAction}>
           <button
             type="submit"
@@ -292,8 +293,8 @@ export function AppShell({
             aria-label={compact ? "Sign out" : undefined}
             className={
               compact
-                ? "flex w-full items-center justify-center rounded-md border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
-                : "w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+                ? "flex w-full items-center justify-center rounded-md border border-border p-2 text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                : "w-full rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             }
           >
             {compact ? <SignOutIcon /> : "Sign out"}
@@ -304,10 +305,10 @@ export function AppShell({
   );
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-canvas text-fg">
       {/* Desktop sidebar — collapsible to an icon rail */}
       <aside
-        className={`hidden shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200 lg:flex ${
+        className={`hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex ${
           collapsed ? "w-14" : "w-56"
         }`}
       >
@@ -320,26 +321,29 @@ export function AppShell({
           <button
             type="button"
             aria-label="Close menu"
-            className="absolute inset-0 bg-slate-900/30"
+            className="absolute inset-0 bg-black/50"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 flex w-56 flex-col bg-white shadow-lg">{renderSidebar(false, false)}</aside>
+          <aside className="absolute inset-y-0 left-0 flex w-56 flex-col bg-surface shadow-lg">{renderSidebar(false, false)}</aside>
         </div>
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            aria-label="Open menu"
-            className="rounded p-1.5 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
-          >
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
-              <path d="M3 5h14M3 10h14M3 15h14" strokeLinecap="round" />
-            </svg>
-          </button>
-          <span className="text-sm font-semibold text-slate-900">Nippon Toyota</span>
+        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open menu"
+              className="rounded p-1.5 text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
+            >
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
+                <path d="M3 5h14M3 10h14M3 15h14" strokeLinecap="round" />
+              </svg>
+            </button>
+            <span className="text-sm font-semibold text-fg lg:hidden">Nippon Toyota</span>
+          </div>
+          <ThemeToggle />
         </header>
         <main className="flex-1">{children}</main>
       </div>

@@ -15,9 +15,9 @@ const DEFAULT_METRICS: TrendMetricConfig[] = [{ key: "vas", label: "VAS Bill (Rs
 // key doesn't hand useMemo a new array identity on every render.
 const EMPTY_POINTS: TrendPoint[] = [];
 
-const ACCENT = "#dc2626"; // Toyota-red accent, matches the sidebar mark
-const TARGET_COLOR = "#94a3b8"; // slate-400, recessive — target is reference, not the story
-const GRID_COLOR = "#eef2f7";
+const ACCENT = "var(--color-accent)";
+const TARGET_COLOR = "var(--color-fg-faint)";
+const GRID_COLOR = "var(--color-border)";
 
 const WIDTH = 640;
 const HEIGHT = 220;
@@ -115,7 +115,7 @@ function ChartBody({
   const lastActual = points[lastIndex]?.actual;
 
   if (points.length === 0) {
-    return <div className="mt-4 flex h-[180px] items-center justify-center text-xs text-slate-400">No uploads yet this month.</div>;
+    return <div className="mt-4 flex h-[180px] items-center justify-center text-xs text-fg-faint">No uploads yet this month.</div>;
   }
 
   return (
@@ -146,7 +146,7 @@ function ChartBody({
             return (
               <g key={g}>
                 <line x1={PAD.left} x2={WIDTH - PAD.right} y1={y} y2={y} stroke={GRID_COLOR} strokeWidth={1} />
-                <text x={PAD.left - 8} y={y + 3} textAnchor="end" className="fill-slate-400" fontSize={9.5}>
+                <text x={PAD.left - 8} y={y + 3} textAnchor="end" className="fill-fg-faint" fontSize={9.5}>
                   {formatNumber(value)}
                 </text>
               </g>
@@ -158,22 +158,22 @@ function ChartBody({
           {path ? <path d={path} fill="none" stroke={ACCENT} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" /> : null}
 
           {lastActual !== null && lastActual !== undefined ? (
-            <circle cx={scaleX(lastIndex)} cy={scaleY(lastActual)} r={3} fill={ACCENT} stroke="white" strokeWidth={1.5} />
+            <circle cx={scaleX(lastIndex)} cy={scaleY(lastActual)} r={3} fill={ACCENT} stroke="var(--color-surface)" strokeWidth={1.5} />
           ) : null}
 
           {hoverIndex !== null ? (
-            <line x1={scaleX(hoverIndex)} x2={scaleX(hoverIndex)} y1={PAD.top} y2={height - PAD.bottom} stroke="#cbd5e1" strokeWidth={1} />
+            <line x1={scaleX(hoverIndex)} x2={scaleX(hoverIndex)} y1={PAD.top} y2={height - PAD.bottom} stroke="var(--color-border-strong)" strokeWidth={1} />
           ) : null}
           {hovered?.actual !== null && hovered?.actual !== undefined && hoverIndex !== null ? (
-            <circle cx={scaleX(hoverIndex)} cy={scaleY(hovered.actual)} r={4} fill={ACCENT} stroke="white" strokeWidth={1.75} />
+            <circle cx={scaleX(hoverIndex)} cy={scaleY(hovered.actual)} r={4} fill={ACCENT} stroke="var(--color-surface)" strokeWidth={1.75} />
           ) : null}
 
           {points.length > 1 ? (
             <>
-              <text x={PAD.left} y={height - 8} className="fill-slate-400" fontSize={10}>
+              <text x={PAD.left} y={height - 8} className="fill-fg-faint" fontSize={10}>
                 {formatShortDate(points[0].date)}
               </text>
-              <text x={WIDTH - PAD.right} y={height - 8} textAnchor="end" className="fill-slate-400" fontSize={10}>
+              <text x={WIDTH - PAD.right} y={height - 8} textAnchor="end" className="fill-fg-faint" fontSize={10}>
                 {formatShortDate(points[points.length - 1].date)}
               </text>
             </>
@@ -182,17 +182,17 @@ function ChartBody({
 
         {hovered ? (
           <div
-            className="pointer-events-none absolute top-0 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] shadow-md"
+            className="pointer-events-none absolute top-0 rounded-md border border-border bg-surface px-2.5 py-1.5 text-[11px] shadow-md"
             style={{
               left: `${Math.min(78, Math.max(2, (scaleX(hoverIndex!) / WIDTH) * 100))}%`,
             }}
           >
-            <div className="font-medium text-slate-700">{formatShortDate(hovered.date)}</div>
-            <div className="text-slate-500">
-              Actual <span className="font-semibold tabular-nums text-slate-900">{formatNumber(hovered.actual)}</span>
+            <div className="font-medium text-fg-muted">{formatShortDate(hovered.date)}</div>
+            <div className="text-fg-subtle">
+              Actual <span className="font-semibold tabular-nums text-fg">{formatNumber(hovered.actual)}</span>
             </div>
-            <div className="text-slate-500">
-              Target <span className="font-semibold tabular-nums text-slate-900">{formatNumber(hovered.target)}</span>
+            <div className="text-fg-subtle">
+              Target <span className="font-semibold tabular-nums text-fg">{formatNumber(hovered.target)}</span>
             </div>
           </div>
         ) : null}
@@ -284,7 +284,7 @@ export function TrendChart({
   }, [isExpanded]);
 
   const legend = (
-    <div className="mt-3 flex items-center gap-4 text-[11px] text-slate-500">
+    <div className="mt-3 flex items-center gap-4 text-[11px] text-fg-subtle">
       <span className="inline-flex items-center gap-1.5">
         <span className="h-0.5 w-3 rounded-full" style={{ background: ACCENT }} />
         Actual
@@ -304,7 +304,7 @@ export function TrendChart({
           setMetric(e.target.value);
           setHoverIndex(null);
         }}
-        className="h-7 rounded border border-slate-300 px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+        className="h-7 rounded border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         {metrics.map((m) => (
           <option key={m.key} value={m.key}>
@@ -316,15 +316,15 @@ export function TrendChart({
   const titleSuffix = metrics.length === 1 ? ` — ${metrics[0].label}` : "";
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
+    <div className="rounded-md border border-border bg-surface p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">MTD Trend — Actual vs Target{titleSuffix}</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">MTD Trend — Actual vs Target{titleSuffix}</h2>
         <div className="flex items-center gap-1.5">
           {metricSelect}
           <button
             type="button"
             onClick={() => setIsExpanded(true)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-slate-300 text-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border-strong text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             title="Expand chart"
           >
             <ExpandIcon />
@@ -350,7 +350,7 @@ export function TrendChart({
 
       {isExpanded ? (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 p-4"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 p-4"
           onClick={() => setIsExpanded(false)}
         >
           {/* `min-h-full` centers the panel when it fits the viewport, same
@@ -360,20 +360,20 @@ export function TrendChart({
            * its top and bottom clipped off with no way to reach either. */}
           <div className="flex min-h-full items-center justify-center py-8">
             <div
-              className="relative w-full max-w-4xl rounded-lg bg-white p-6 shadow-2xl"
+              className="relative w-full max-w-4xl rounded-lg bg-surface p-6 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <button
                 type="button"
                 onClick={() => setIsExpanded(false)}
-                className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+                className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-fg-faint hover:bg-surface-2 hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 title="Close"
               >
                 <CloseIcon />
               </button>
 
               <div className="flex items-center justify-between pr-10">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">MTD Trend — Actual vs Target{titleSuffix}</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-fg-subtle">MTD Trend — Actual vs Target{titleSuffix}</h2>
                 {metricSelect}
               </div>
 

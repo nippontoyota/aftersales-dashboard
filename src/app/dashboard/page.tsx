@@ -74,8 +74,8 @@ async function DashboardContent({
   if (!data) {
     return (
       <div className="mx-auto w-full max-w-2xl p-6">
-        <h1 className="text-lg font-semibold text-slate-900">Dashboard</h1>
-        <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+        <h1 className="text-lg font-semibold text-fg">Dashboard</h1>
+        <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           {admin.role === "hq"
             ? "No BA Tool reports have been uploaded yet. Go to Upload to add today's file."
             : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
@@ -92,8 +92,8 @@ async function DashboardContent({
     if (!data.report || !branchReport) {
       return (
         <div className="p-6">
-          <h1 className="text-lg font-semibold text-slate-900">Daily Report</h1>
-          <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+          <h1 className="text-lg font-semibold text-fg">Daily Report</h1>
+          <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
             Your uploads are saved. This report fills in once HQ has uploaded the day&apos;s BA Tool file.
           </div>
         </div>
@@ -124,7 +124,7 @@ async function DashboardContent({
   if (!report) {
     return (
       <div className="p-6">
-        <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">Could not load the report for {date}.</div>
+        <div className="rounded border border-bad/30 bg-bad-soft p-4 text-sm text-bad">Could not load the report for {date}.</div>
       </div>
     );
   }
@@ -274,7 +274,7 @@ async function DashboardContent({
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 text-[11px] text-slate-400">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-[11px] text-fg-faint">
         <span>Data as of: {uploadedAtLabel} IST</span>
         <span>Figures rounded for display · full precision on hover</span>
       </div>

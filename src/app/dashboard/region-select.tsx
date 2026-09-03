@@ -27,7 +27,7 @@ export function RegionSelect({
         if (e.target.value !== "All") params.set("region", e.target.value);
         router.push(`${basePath}?${params.toString()}`);
       }}
-      className="h-8 rounded border border-slate-300 px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+      className="h-8 rounded border border-border-strong px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       {options.map((r) => (
         <option key={r} value={r}>

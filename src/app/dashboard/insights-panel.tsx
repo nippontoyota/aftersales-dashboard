@@ -131,17 +131,17 @@ export function InsightsPanel({
   const insights = buildInsights(kpis, branches, date, trackedKpis, perBranchMetrics, regionGapMetric);
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Insights</h2>
-      <p className="mt-0.5 text-[10px] text-slate-400">Generated from all-branch figures, regardless of the region filter above — not a forecast, not AI.</p>
+    <div className="rounded-md border border-border bg-surface p-4">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Insights</h2>
+      <p className="mt-0.5 text-[10px] text-fg-faint">Generated from all-branch figures, regardless of the region filter above — not a forecast, not AI.</p>
 
       {insights.length === 0 ? (
-        <div className="mt-3 text-xs text-slate-400">Nothing notable — every tracked KPI is on or near target.</div>
+        <div className="mt-3 text-xs text-fg-faint">Nothing notable — every tracked KPI is on or near target.</div>
       ) : (
         <ul className="mt-3 space-y-2.5">
           {insights.map((text, i) => (
-            <li key={i} className="flex items-start gap-2.5 text-xs text-slate-700">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+            <li key={i} className="flex items-start gap-2.5 text-xs text-fg-muted">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-info-soft text-info">
                 <LightbulbIcon />
               </span>
               <span className="min-w-0 flex-1">{text}</span>

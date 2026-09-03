@@ -10,17 +10,17 @@ export function PendingUploadsPanel({ summary }: { summary: PendingUploadsSummar
   const allDone = summary.pending.length === 0;
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-5">
+    <div className="rounded-md border border-border bg-surface p-5">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-slate-900">Pending Uploads</h2>
-        <span className="text-xs font-medium tabular-nums text-slate-500">
+        <h2 className="text-sm font-semibold text-fg">Pending Uploads</h2>
+        <span className="text-xs font-medium tabular-nums text-fg-subtle">
           {summary.completeCount} of {summary.totalBranches} branches complete
         </span>
       </div>
-      <p className="mt-0.5 text-xs text-slate-500">For {summary.date} — the report date every branch is currently uploading against.</p>
+      <p className="mt-0.5 text-xs text-fg-subtle">For {summary.date} — the report date every branch is currently uploading against.</p>
 
       {allDone ? (
-        <div className="mt-3 flex items-center gap-2 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+        <div className="mt-3 flex items-center gap-2 rounded border border-good/30 bg-good-soft p-3 text-sm text-good">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0" aria-hidden="true">
             <path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -29,11 +29,11 @@ export function PendingUploadsPanel({ summary }: { summary: PendingUploadsSummar
       ) : (
         <ul className="mt-3 space-y-2">
           {summary.pending.map((b) => (
-            <li key={b.branch} className="rounded border border-amber-200 bg-amber-50 p-2.5">
-              <div className="text-sm font-semibold text-slate-900">{b.branch}</div>
+            <li key={b.branch} className="rounded border border-warn/30 bg-warn-soft p-2.5">
+              <div className="text-sm font-semibold text-fg">{b.branch}</div>
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {b.missing.map((type) => (
-                  <span key={type} className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                  <span key={type} className="rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-medium text-warn">
                     {REPORT_TYPE_LABELS[type]}
                   </span>
                 ))}

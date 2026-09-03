@@ -114,17 +114,17 @@ export function BillUploadForm() {
   return (
     <div className="space-y-4">
       {!manualFile && (
-        <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 rounded-md border border-slate-200 bg-white p-5">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 rounded-md border border-border bg-surface p-5">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">Upload PDF Bills</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <h2 className="text-sm font-semibold text-fg">Upload PDF Bills</h2>
+            <p className="mt-0.5 text-xs text-fg-subtle">
               Upload one or more PDF tax invoices. The invoice number and total taxable value will be extracted
               automatically. If extraction fails, you can enter the values manually.
             </p>
           </div>
 
           <div>
-            <label htmlFor="bill-category" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="bill-category" className="block text-xs font-medium text-fg-muted">
               Revenue type
             </label>
             <select
@@ -133,7 +133,7 @@ export function BillUploadForm() {
               required
               value={category}
               onChange={(e) => setCategory(e.target.value as "" | "scrap" | "used_oil")}
-              className="mt-1 h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm"
+              className="mt-1 h-9 w-full rounded border border-border-strong bg-surface px-2 text-sm"
             >
               <option value="" disabled>
                 Choose Scrap or Used Oil…
@@ -141,24 +141,24 @@ export function BillUploadForm() {
               <option value="scrap">Scrap revenue</option>
               <option value="used_oil">Used oil revenue</option>
             </select>
-            <p className="mt-0.5 text-xs text-slate-400">Applies to every file in this upload. Counts toward Total Revenue Stream (without tax).</p>
+            <p className="mt-0.5 text-xs text-fg-faint">Applies to every file in this upload. Counts toward Total Revenue Stream (without tax).</p>
           </div>
 
           <div>
-            <label htmlFor="bill-file" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="bill-file" className="block text-xs font-medium text-fg-muted">
               Invoice PDF(s)
             </label>
             <input id="bill-file" name="file" type="file" accept=".pdf" multiple required className="mt-1 block w-full text-sm" />
           </div>
 
           {error ? (
-            <p role="alert" aria-live="assertive" className="text-sm text-red-600">{error}</p>
+            <p role="alert" aria-live="assertive" className="text-sm text-bad">{error}</p>
           ) : null}
 
           <button
             type="submit"
             disabled={pending}
-            className="h-9 rounded bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 disabled:opacity-60"
+            className="h-9 rounded bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
           >
             {pending ? "Uploading…" : "Upload"}
           </button>
@@ -166,17 +166,17 @@ export function BillUploadForm() {
       )}
 
       {manualFile && (
-        <form onSubmit={handleManualSubmit} className="space-y-4 rounded-md border border-amber-200 bg-amber-50 p-5">
+        <form onSubmit={handleManualSubmit} className="space-y-4 rounded-md border border-warn/30 bg-warn-soft p-5">
           <div>
-            <h2 className="text-sm font-semibold text-amber-900">Manual entry required</h2>
-            <p className="mt-0.5 text-xs text-amber-700">
+            <h2 className="text-sm font-semibold text-warn">Manual entry required</h2>
+            <p className="mt-0.5 text-xs text-warn">
               Could not auto-extract all fields from <span className="font-medium">{manualFile.name}</span>.
               Please enter the missing values below.
             </p>
           </div>
 
           <div>
-            <label htmlFor="manual-category" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="manual-category" className="block text-xs font-medium text-fg-muted">
               Revenue type
             </label>
             <select
@@ -184,7 +184,7 @@ export function BillUploadForm() {
               required
               value={category}
               onChange={(e) => setCategory(e.target.value as "" | "scrap" | "used_oil")}
-              className="mt-1 h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm"
+              className="mt-1 h-9 w-full rounded border border-border-strong bg-surface px-2 text-sm"
             >
               <option value="" disabled>
                 Choose Scrap or Used Oil…
@@ -195,7 +195,7 @@ export function BillUploadForm() {
           </div>
 
           <div>
-            <label htmlFor="manual-invoice" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="manual-invoice" className="block text-xs font-medium text-fg-muted">
               Invoice Number
             </label>
             <input
@@ -205,15 +205,15 @@ export function BillUploadForm() {
               value={manualInvoice}
               onChange={(e) => setManualInvoice(e.target.value)}
               placeholder="e.g. AA26-01514"
-              className="mt-1 h-9 w-full rounded border border-slate-300 px-3 text-sm"
+              className="mt-1 h-9 w-full rounded border border-border-strong px-3 text-sm"
             />
             {manualPartial?.invoiceNumber && (
-              <p className="mt-0.5 text-xs text-emerald-600">Auto-detected: {manualPartial.invoiceNumber}</p>
+              <p className="mt-0.5 text-xs text-good">Auto-detected: {manualPartial.invoiceNumber}</p>
             )}
           </div>
 
           <div>
-            <label htmlFor="manual-taxable" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="manual-taxable" className="block text-xs font-medium text-fg-muted">
               Total Taxable Value (Rs)
             </label>
             <input
@@ -225,29 +225,29 @@ export function BillUploadForm() {
               value={manualTaxable}
               onChange={(e) => setManualTaxable(e.target.value)}
               placeholder="e.g. 1203.00"
-              className="mt-1 h-9 w-full rounded border border-slate-300 px-3 text-sm"
+              className="mt-1 h-9 w-full rounded border border-border-strong px-3 text-sm"
             />
             {manualPartial?.taxableValue !== null && manualPartial?.taxableValue !== undefined && (
-              <p className="mt-0.5 text-xs text-emerald-600">Auto-detected: {manualPartial.taxableValue}</p>
+              <p className="mt-0.5 text-xs text-good">Auto-detected: {manualPartial.taxableValue}</p>
             )}
           </div>
 
           {error ? (
-            <p role="alert" aria-live="assertive" className="text-sm text-red-600">{error}</p>
+            <p role="alert" aria-live="assertive" className="text-sm text-bad">{error}</p>
           ) : null}
 
           <div className="flex gap-2">
             <button
               type="submit"
               disabled={pending}
-              className="h-9 rounded bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 disabled:opacity-60"
+              className="h-9 rounded bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
             >
               {pending ? "Saving…" : "Save Bill"}
             </button>
             <button
               type="button"
               onClick={() => { setManualFile(null); setManualPartial(null); setResults([]); }}
-              className="h-9 rounded border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="h-9 rounded border border-border-strong px-4 text-sm font-medium text-fg-muted hover:bg-surface-2"
             >
               Cancel
             </button>
@@ -256,13 +256,13 @@ export function BillUploadForm() {
       )}
 
       {successResults.length > 0 && (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4">
-          <p className="text-sm font-medium text-emerald-900">
+        <div className="rounded-md border border-good/30 bg-good-soft p-4">
+          <p className="text-sm font-medium text-good">
             {successResults.length === 1 ? "Bill uploaded successfully" : `${successResults.length} bills uploaded successfully`}
           </p>
           <ul className="mt-2 space-y-1">
             {successResults.map((r) => (
-              <li key={r.fileName} className="text-xs text-emerald-800">
+              <li key={r.fileName} className="text-xs text-good">
                 {r.invoiceNumber} — Rs {Number(r.taxableValue).toLocaleString("en-IN", { minimumFractionDigits: 2 })} — {r.fileName}
               </li>
             ))}
@@ -271,13 +271,13 @@ export function BillUploadForm() {
       )}
 
       {errorResults.length > 0 && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4">
-          <p className="text-sm font-medium text-red-900">
+        <div className="rounded-md border border-bad/30 bg-bad-soft p-4">
+          <p className="text-sm font-medium text-bad">
             {errorResults.length === 1 ? "1 file had an error" : `${errorResults.length} files had errors`}
           </p>
           <ul className="mt-2 space-y-1">
             {errorResults.map((r) => (
-              <li key={r.fileName} className="text-xs text-red-700">
+              <li key={r.fileName} className="text-xs text-bad">
                 {r.fileName}: {r.error}
               </li>
             ))}

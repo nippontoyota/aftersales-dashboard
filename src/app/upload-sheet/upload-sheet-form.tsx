@@ -120,10 +120,10 @@ export function UploadSheetForm() {
   }
 
   return (
-    <div className="space-y-4 rounded-md border border-slate-200 bg-white p-5">
+    <div className="space-y-4 rounded-md border border-border bg-surface p-5">
       <div>
-        <h2 className="text-sm font-semibold text-slate-900">Upload Sheet</h2>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <h2 className="text-sm font-semibold text-fg">Upload Sheet</h2>
+        <p className="mt-0.5 text-xs text-fg-subtle">
           For when a branch can&apos;t upload themselves — pick any Service Information Report, Cost and Sales Report,
           Part Sale Report, or KPI file and the report type is detected automatically. Confirm the branch (and, for
           Service Info / Cost and Sales, the GS or BP variant) before saving — neither is ever guessed.
@@ -131,7 +131,7 @@ export function UploadSheetForm() {
       </div>
 
       <div>
-        <label htmlFor="upload-sheet-date" className="block text-xs font-medium text-slate-600">
+        <label htmlFor="upload-sheet-date" className="block text-xs font-medium text-fg-muted">
           Report date
         </label>
         <input
@@ -140,12 +140,12 @@ export function UploadSheetForm() {
           value={date}
           onChange={(e) => setDate(e.target.value)}
           required
-          className="mt-1 h-9 w-full rounded border border-slate-300 px-3 text-sm"
+          className="mt-1 h-9 w-full rounded border border-border-strong px-3 text-sm"
         />
       </div>
 
       <div>
-        <label htmlFor="upload-sheet-file" className="block text-xs font-medium text-slate-600">
+        <label htmlFor="upload-sheet-file" className="block text-xs font-medium text-fg-muted">
           File (.csv/.xlsx/.xls)
         </label>
         <input
@@ -158,17 +158,17 @@ export function UploadSheetForm() {
         />
       </div>
 
-      {detecting ? <p className="text-xs text-slate-400">Checking this file…</p> : null}
+      {detecting ? <p className="text-xs text-fg-faint">Checking this file…</p> : null}
 
       {detection ? (
-        <div className="space-y-3 rounded border border-dashed border-slate-200 p-3">
-          <div className="text-xs text-slate-600">
-            Detected: <span className="font-semibold text-slate-900">{TYPE_LABEL[detection.type]}</span>
+        <div className="space-y-3 rounded border border-dashed border-border p-3">
+          <div className="text-xs text-fg-muted">
+            Detected: <span className="font-semibold text-fg">{TYPE_LABEL[detection.type]}</span>
           </div>
 
           {HAS_VARIANT[detection.type] ? (
             <div>
-              <label className="block text-xs font-medium text-slate-600">Variant</label>
+              <label className="block text-xs font-medium text-fg-muted">Variant</label>
               <div className="mt-1 flex gap-3 text-sm">
                 <label className="inline-flex items-center gap-1.5">
                   <input type="radio" name="variant" checked={variant === "gs"} onChange={() => setVariant("gs")} />
@@ -183,12 +183,12 @@ export function UploadSheetForm() {
           ) : null}
 
           <div>
-            <label htmlFor="upload-sheet-branch" className="block text-xs font-medium text-slate-600">
+            <label htmlFor="upload-sheet-branch" className="block text-xs font-medium text-fg-muted">
               Branch{" "}
               {detection.suggestedBranch ? (
-                <span className="font-normal text-slate-400">(suggested from the filename — confirm or change it)</span>
+                <span className="font-normal text-fg-faint">(suggested from the filename — confirm or change it)</span>
               ) : (
-                <span className="font-normal text-slate-400">(couldn&apos;t guess this one — pick it)</span>
+                <span className="font-normal text-fg-faint">(couldn&apos;t guess this one — pick it)</span>
               )}
             </label>
             <select
@@ -196,7 +196,7 @@ export function UploadSheetForm() {
               value={branch}
               onChange={(e) => setBranch(e.target.value)}
               required
-              className="mt-1 h-9 w-full rounded border border-slate-300 px-2 text-sm"
+              className="mt-1 h-9 w-full rounded border border-border-strong px-2 text-sm"
             >
               <option value="">Choose a branch…</option>
               {detection.branchCodes.map((code) => (
@@ -211,7 +211,7 @@ export function UploadSheetForm() {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="h-9 rounded bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 disabled:opacity-60"
+            className="h-9 rounded bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
           >
             {saving ? "Saving…" : "Save"}
           </button>
@@ -219,12 +219,12 @@ export function UploadSheetForm() {
       ) : null}
 
       {error ? (
-        <p role="alert" aria-live="assertive" className="text-sm text-red-600">
+        <p role="alert" aria-live="assertive" className="text-sm text-bad">
           {error}
         </p>
       ) : null}
       {success ? (
-        <p role="status" aria-live="polite" className="text-sm text-emerald-600">
+        <p role="status" aria-live="polite" className="text-sm text-good">
           {success}
         </p>
       ) : null}
