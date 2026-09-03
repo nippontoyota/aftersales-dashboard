@@ -188,6 +188,28 @@ export async function loadBillRevenueByBranchForMonth(month: string): Promise<Bi
   }));
 }
 
+/** Same as loadBillRevenueByBranchForMonth but for a single `YYYY-MM-DD` day
+ * (Asia/Kolkata) — the "for the day" scrap / used-oil figure on the branch
+ * daily report. Bills carry only an upload timestamp, so this is "bills
+ * uploaded on that calendar day", not "bills for work done that day". */
+export async function loadBillRevenueByBranchForDate(date: string): Promise<BillBranchRevenue[]> {
+  const { rows } = await pool.query<{ branch: string; scrap: string; used_oil: string }>(
+    `select branch,
+            coalesce(sum(taxable_value) filter (where category = 'scrap'), 0)    as scrap,
+            coalesce(sum(taxable_value) filter (where category = 'used_oil'), 0) as used_oil
+     from bill_uploads
+     where (uploaded_at at time zone 'Asia/Kolkata')::date = $1::date
+       and category is not null
+     group by branch`,
+    [date]
+  );
+  return rows.map((r) => ({
+    branch: r.branch,
+    scrapRevenue: Number(r.scrap),
+    usedOilRevenue: Number(r.used_oil),
+  }));
+}
+
 /** Fetches the raw PDF bytes for a bill — separate from getBillById to avoid
  * loading the (potentially large) bytea column when only metadata is needed. */
 export async function getBillPdfData(id: number): Promise<Buffer | null> {

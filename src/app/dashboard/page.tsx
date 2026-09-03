@@ -9,13 +9,14 @@ import { RichKpiCard } from "@/components/rich-kpi-card";
 import { achievementRatio, computeHeroSummary, computeKpiSummary } from "@/lib/aggregate";
 import { getCurrentAdmin } from "@/lib/auth";
 import type { AdminAccount } from "@/lib/admin-store";
-import { loadDashboardData } from "@/lib/dashboard-data";
+import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computePace } from "@/lib/pace";
 import { computeVasTrendSeries } from "@/lib/trend";
 import { AchievementDonut } from "./achievement-donut";
 import { AlertsPanel } from "./alerts-panel";
 import { BillDrilldown } from "./bill-drilldown";
+import { BranchDailyReport } from "./branch-daily-report";
 import { HeroKpi } from "./hero-kpi";
 import { InsightsPanel } from "./insights-panel";
 import { RegionScorecard } from "./region-scorecard";
@@ -42,9 +43,17 @@ export default async function DashboardPage({
     redirect("/upload");
   }
   const identity = admin.role === "hq" ? "HQ admin" : `${admin.branch} branch`;
+  const nav = await loadNavState(admin);
 
   return (
-    <AppShell current="dashboard" showDashboardLink isHq={admin.role === "hq"} identity={identity}>
+    <AppShell
+      current="dashboard"
+      showDashboardLink
+      isHq={admin.role === "hq"}
+      companyTabs={nav.companyTabs}
+      dashboardLabel={nav.dashboardLabel}
+      identity={identity}
+    >
       <Suspense fallback={<DashboardPageSkeleton heroCards={5} />}>
         <DashboardContent searchParams={searchParams} admin={admin} />
       </Suspense>
@@ -72,6 +81,40 @@ async function DashboardContent({
             : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
         </div>
       </div>
+    );
+  }
+
+  // Branch admin, date not published yet → raw single-branch report instead
+  // of the company-wide dashboard. Once HQ publishes, this branch gets the
+  // full dashboard (see loadDashboardData's showBranchDailyReport).
+  if (data.showBranchDailyReport) {
+    const branchReport = data.filteredBranches[0];
+    if (!data.report || !branchReport) {
+      return (
+        <div className="p-6">
+          <h1 className="text-lg font-semibold text-slate-900">Daily Report</h1>
+          <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+            Your uploads are saved. This report fills in once HQ has uploaded the day&apos;s BA Tool file.
+          </div>
+        </div>
+      );
+    }
+    const uploadedAtLabel = new Date(data.report.uploadedAt).toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "Asia/Kolkata",
+    });
+    return (
+      <BranchDailyReport
+        report={branchReport}
+        branch={branchReport.branch}
+        date={data.date}
+        dates={data.dates}
+        uploadedAtLabel={uploadedAtLabel}
+        daysSincePrevious={data.report.daysSincePrevious}
+      />
     );
   }
 

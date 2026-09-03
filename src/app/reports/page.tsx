@@ -5,19 +5,20 @@ import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import type { AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
-import { loadDashboardData } from "@/lib/dashboard-data";
+import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { ReportTable } from "../dashboard/report-table";
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin?.canViewDashboard) redirect("/upload");
-  // Full company-wide access for everyone (2026-08-29 branch-lock reversed
-  // 2026-08-31, at the user's request) — gated only by publish status,
-  // enforced inside loadDashboardData, not by role here.
+  // Company-wide pages are hidden from a branch admin until their latest
+  // date is published — before that they only get the Daily Report.
+  const nav = await loadNavState(admin);
+  if (!nav.companyTabs) redirect("/dashboard");
   const identity = admin.role === "hq" ? "HQ admin" : `${admin.branch} branch`;
 
   return (
-    <AppShell current="reports" showDashboardLink isHq={admin.role === "hq"} identity={identity}>
+    <AppShell current="reports" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton />}>
         <ReportsContent searchParams={searchParams} admin={admin} />
       </Suspense>

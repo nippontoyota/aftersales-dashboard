@@ -8,7 +8,7 @@ import { RichKpiCard } from "@/components/rich-kpi-card";
 import { computeKpiSummary, TKM_TRACKED_KPIS } from "@/lib/aggregate";
 import type { AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
-import { loadDashboardData } from "@/lib/dashboard-data";
+import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatNumber } from "@/lib/format";
 import { computePace } from "@/lib/pace";
 import { computeTrendSeries } from "@/lib/trend";
@@ -75,10 +75,14 @@ const REGION_GAP_METRIC = { actual: "partsRetailAchievementForTheMonth" as const
 export default async function TkmTargetsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin?.canViewDashboard) redirect("/upload");
+  // Company-wide pages are hidden from a branch admin until their latest
+  // date is published — before that they only get the Daily Report.
+  const nav = await loadNavState(admin);
+  if (!nav.companyTabs) redirect("/dashboard");
   const identity = admin.role === "hq" ? "HQ admin" : `${admin.branch} branch`;
 
   return (
-    <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} identity={identity}>
+    <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton heroCards={5} />}>
         <TkmTargetsContent searchParams={searchParams} admin={admin} />
       </Suspense>

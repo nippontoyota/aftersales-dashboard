@@ -7,6 +7,22 @@ import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./s
 import { loadAllServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
 import { isDatePublished } from "./publish-store";
 
+/** Nav-shell state for the dashboard family of pages — cheap enough to run in
+ * the fast outer shell (before the Suspense'd content). A branch admin whose
+ * latest uploaded date isn't published yet is in "Daily Report" mode: the
+ * /dashboard nav item is relabelled and the company-wide tabs (Reports, TKM
+ * Targets, Alerts, Branches) are hidden. HQ is never restricted. */
+export async function loadNavState(admin: AdminAccount): Promise<{ companyTabs: boolean; dashboardLabel: string }> {
+  if (admin.role === "hq") return { companyTabs: true, dashboardLabel: "Dashboard" };
+  const dates = await listSnapshotDates();
+  const latest = dates.at(-1);
+  const latestPublished = latest ? await isDatePublished(latest) : true;
+  return {
+    companyTabs: latestPublished,
+    dashboardLabel: latestPublished ? "Dashboard" : "Daily Report",
+  };
+}
+
 /** Resolves date/region from searchParams and loads everything the
  * Dashboard, Alerts, Branches, Reports, and TKM Targets pages all need in
  * common — centralized so those pages can't quietly drift out of sync on
@@ -41,6 +57,15 @@ export type DashboardData = {
   /** Only HQ can publish — drives whether the Publish control renders at all. */
   canPublish: boolean;
   billTotals: BillMonthTotal[];
+  /** For a branch admin, true when the current `date` is not published yet —
+   * they get the raw single-branch "Daily Report" instead of the company
+   * dashboard. Always false for HQ. */
+  showBranchDailyReport: boolean;
+  /** Whether the company-wide tabs (Reports, TKM Targets, Alerts, Branches)
+   * are available. HQ: always. Branch admin: only once the latest uploaded
+   * date has been published — until then their world is Daily Report +
+   * Upload. */
+  showCompanyTabs: boolean;
 };
 
 export async function loadDashboardData(searchParams: { date?: string; region?: string }, admin: AdminAccount): Promise<DashboardData | null> {
@@ -48,24 +73,26 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   const allDates = await listSnapshotDates();
   if (allDates.length === 0) return null;
 
-  let dates: string[];
-  let date: string;
-
   // Everyone sees all dates — HQ to review/publish, branch admins to view their
   // own restricted dashboard (only their branch) or the full published dashboard.
-  dates = allDates;
-  date = searchParams.date && dates.includes(searchParams.date) ? searchParams.date : dates.at(-1)!;
+  const dates = allDates;
+  const date = searchParams.date && dates.includes(searchParams.date) ? searchParams.date : dates.at(-1)!;
 
+  const latestDate = allDates.at(-1)!;
   const billBranch = isHq ? undefined : admin.branch;
-  const [report, monthSnapshots, serviceInfoMonthSnapshots, isPublished, billTotals] = await Promise.all([
+  const [report, monthSnapshots, serviceInfoMonthSnapshots, isPublished, billTotals, latestPublished] = await Promise.all([
     buildReport(date),
     loadSnapshotsForMonthUpTo(date),
     loadAllServiceInfoSnapshotsForMonthUpTo(date),
     isDatePublished(date),
     loadBillTotalsByMonth(billBranch),
+    date === latestDate ? Promise.resolve(null) : isDatePublished(latestDate),
   ]);
 
+  const isLatestPublished = latestPublished ?? isPublished;
   const isCompanyScope = isHq || isPublished;
+  const showBranchDailyReport = !isHq && !isPublished;
+  const showCompanyTabs = isHq || isLatestPublished;
   const region: RegionName | "All" = isCompanyScope && searchParams.region && searchParams.region in REGIONS ? (searchParams.region as RegionName) : "All";
 
   let filteredBranches = report ? filterBranchesByRegion(report.branches, region) : [];
@@ -91,5 +118,7 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
     isPublished,
     canPublish: isHq,
     billTotals,
+    showBranchDailyReport,
+    showCompanyTabs,
   };
 }

@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { getCurrentAdmin } from "@/lib/auth";
+import { loadNavState } from "@/lib/dashboard-data";
 import { yesterdayIso } from "@/lib/utils";
 import { loadServiceInfoSnapshot } from "@/lib/service-info/store";
 import { loadPartSaleSnapshot } from "@/lib/part-sale/store";
@@ -19,6 +20,7 @@ import { UploadTabs } from "./upload-tabs";
 export default async function UploadPage() {
   const admin = await getCurrentAdmin();
   const identity = admin?.role === "hq" ? "HQ admin" : admin?.role === "branch" ? `${admin.branch} branch` : "";
+  const nav = admin ? await loadNavState(admin) : { companyTabs: true, dashboardLabel: "Dashboard" };
 
   // Branches upload today for yesterday's report, and every upload form's
   // date picker defaults to yesterdayIso() to match — so the lock-status
@@ -54,7 +56,7 @@ export default async function UploadPage() {
       : null;
 
   return (
-    <AppShell current="upload" showDashboardLink={admin?.canViewDashboard ?? false} isHq={admin?.role === "hq"} identity={identity}>
+    <AppShell current="upload" showDashboardLink={admin?.canViewDashboard ?? false} isHq={admin?.role === "hq"} companyTabs={nav.companyTabs} dashboardLabel={nav.dashboardLabel} identity={identity}>
       <div className="mx-auto w-full max-w-2xl p-6">
         {admin?.role === "hq" ? (
           <UploadTabs

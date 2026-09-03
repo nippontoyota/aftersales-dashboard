@@ -8,7 +8,7 @@ import { loadAllSsrv089SnapshotsForMonthUpTo } from "./ssrv089/store";
 import type { Ssrv089Snapshot } from "./ssrv089/store";
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import type { Scom205Snapshot } from "./scom205/store";
-import { loadBillRevenueByBranchForMonth } from "./bill/store";
+import { loadBillRevenueByBranchForMonth, loadBillRevenueByBranchForDate } from "./bill/store";
 
 const FIXED_TGLOSS_SERVICE_TARGET = 0.38;
 
@@ -121,13 +121,16 @@ export type BranchReport = {
   externalSalesMtd: number | null;
 
   // Scrap and used-oil revenue (Rs, without tax) — sum of PDF bill taxable
-  // values for this branch in the report's calendar month, split by the
-  // category chosen on upload. Always a number (0 when no bills), never
-  // null: bills are optional and their absence means zero, not "unknown".
-  // Attributed to the branch that uploaded the bill; counted by upload
-  // timestamp month, so a published month's figure keeps moving as more
-  // bills come in (2026-09-02, at the user's request).
+  // values for this branch, split by the category chosen on upload. Always a
+  // number (0 when no bills), never null: bills are optional and their
+  // absence means zero, not "unknown". Attributed to the branch that
+  // uploaded the bill; counted by upload timestamp, so a published month's
+  // figure keeps moving as more bills come in (2026-09-02, at the user's
+  // request). ForTheDay = bills uploaded on the report's calendar date —
+  // shown on the branch daily report only.
+  scrapRevenueForTheDay: number;
   scrapRevenueMtd: number;
+  usedOilRevenueForTheDay: number;
   usedOilRevenueMtd: number;
 
   // From the user's real "Revenue Stream" reference sheet — verified against
@@ -262,7 +265,8 @@ function computeBranchReport(
   partSaleMonth: PartSaleSnapshot[],
   ssrv089GeneralMonth: Ssrv089Snapshot[],
   scom205Today: Scom205Snapshot | undefined,
-  billRevenue: { scrapRevenue: number; usedOilRevenue: number }
+  billRevenue: { scrapRevenue: number; usedOilRevenue: number },
+  billRevenueForTheDay: { scrapRevenue: number; usedOilRevenue: number }
 ): BranchReport {
   const y = (key: keyof BaToolBranchRow) => (yesterday ? num(yesterday[key] as number | string | null) : null);
   const t = (key: keyof BaToolBranchRow) => num(today[key] as number | string | null);
@@ -370,7 +374,9 @@ function computeBranchReport(
 
     externalSalesMtd,
 
+    scrapRevenueForTheDay: billRevenueForTheDay.scrapRevenue,
     scrapRevenueMtd: billRevenue.scrapRevenue,
+    usedOilRevenueForTheDay: billRevenueForTheDay.usedOilRevenue,
     usedOilRevenueMtd: billRevenue.usedOilRevenue,
 
     totalRevenueStreamMtd:
@@ -411,6 +417,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     ssrv089GeneralMonthList,
     scom205TodayList,
     billRevenueList,
+    billRevenueDayList,
   ] = await Promise.all([
     loadPreviousSnapshot(date),
     loadAllServiceInfoSnapshotsForDate(date),
@@ -420,6 +427,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     loadAllSsrv089SnapshotsForMonthUpTo(date, "general"),
     loadAllScom205SnapshotsForDate(date),
     loadBillRevenueByBranchForMonth(date.slice(0, 7)),
+    loadBillRevenueByBranchForDate(date),
   ]);
 
   const serviceInfoToday = byBranch(serviceInfoTodayList);
@@ -429,6 +437,7 @@ export async function buildReport(date: string): Promise<Report | null> {
   const ssrv089GeneralMonth = groupByBranch(ssrv089GeneralMonthList);
   const scom205Today = byBranch(scom205TodayList);
   const billRevenue = new Map(billRevenueList.map((r) => [r.branch, r]));
+  const billRevenueDay = new Map(billRevenueDayList.map((r) => [r.branch, r]));
   const NO_BILL_REVENUE = { scrapRevenue: 0, usedOilRevenue: 0 };
 
   const { rows: todayBranches, breakdowns: onlineStoreBreakdowns } = mergeOnlineStoreBranches(excludeDeactivatedBranches(today.branches));
@@ -445,7 +454,8 @@ export async function buildReport(date: string): Promise<Report | null> {
       partSaleMonth.get(branchRow.branch) ?? [],
       ssrv089GeneralMonth.get(branchRow.branch) ?? [],
       scom205Today.get(branchRow.branch),
-      billRevenue.get(branchRow.branch) ?? NO_BILL_REVENUE
+      billRevenue.get(branchRow.branch) ?? NO_BILL_REVENUE,
+      billRevenueDay.get(branchRow.branch) ?? NO_BILL_REVENUE
     );
     const onlineStoreBreakdown = onlineStoreBreakdowns.get(branchRow.branch);
     return onlineStoreBreakdown ? { ...branchReport, onlineStoreBreakdown } : branchReport;

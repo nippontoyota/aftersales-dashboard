@@ -10,12 +10,12 @@ import { logoutAction } from "@/lib/actions";
 // day-to-day is gated by publish status instead (see dashboard-data.ts),
 // not by nav item.
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", key: "dashboard" as const, requiresDashboard: true },
-  { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true },
-  { href: "/alerts", label: "Alerts", key: "alerts" as const, requiresDashboard: true },
-  { href: "/branches", label: "Branches", key: "branches" as const, requiresDashboard: true },
-  { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true },
-  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false },
+  { href: "/dashboard", label: "Dashboard", key: "dashboard" as const, requiresDashboard: true, companyWide: false },
+  { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true, companyWide: true },
+  { href: "/alerts", label: "Alerts", key: "alerts" as const, requiresDashboard: true, companyWide: true },
+  { href: "/branches", label: "Branches", key: "branches" as const, requiresDashboard: true, companyWide: true },
+  { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true },
+  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false },
 ];
 
 /** HQ-only tools, kept apart from the day-to-day nav above — administrative
@@ -128,6 +128,8 @@ export function AppShell({
   current,
   showDashboardLink,
   isHq = false,
+  companyTabs = true,
+  dashboardLabel = "Dashboard",
   identity,
   children,
 }: {
@@ -138,12 +140,21 @@ export function AppShell({
    * every existing call site (branch admins see neither) doesn't need
    * updating just to opt out. */
   isHq?: boolean;
+  /** When false, the company-wide tabs (TKM Targets, Alerts, Branches,
+   * Reports) are hidden — a branch admin whose latest date isn't published
+   * yet only gets Daily Report + Upload. Defaults to true. */
+  companyTabs?: boolean;
+  /** Label for the /dashboard nav item — "Daily Report" for a branch admin
+   * on the pre-publish raw view, "Dashboard" otherwise. */
+  dashboardLabel?: string;
   /** e.g. "CO01B branch" or "HQ admin" — shown under the account area at the bottom of the sidebar. */
   identity: string;
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const items = NAV_ITEMS.filter((item) => !item.requiresDashboard || showDashboardLink);
+  const items = NAV_ITEMS.filter(
+    (item) => (!item.requiresDashboard || showDashboardLink) && (!item.companyWide || companyTabs),
+  ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq ? UTILITY_NAV_ITEMS : [];
 
   const navLink = (item: { href: string; label: string; key: NavKey }) => {
