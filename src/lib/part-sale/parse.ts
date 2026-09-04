@@ -28,12 +28,26 @@ const SYNTHETIC_OIL_PARTS = [
 const BRAKE_CLEANING_SPRAY_PARTS = ["Z-9BCHP-00001"];
 
 /** External Sales: rows billed under an "AA"-prefixed BillNo whose PartNo
- * starts with one of these letters, plus one specific exception below
- * (ADBLUE, an "A-" part not otherwise in this list) — confirmed with the
- * user and verified against real AA-billed rows. */
+ * starts with one of these letters, plus the exact-match SKUs below —
+ * confirmed with the user and verified against real AA-billed rows. */
 const EXTERNAL_SALES_BILL_PREFIX = "AA";
 const EXTERNAL_SALES_PART_PREFIXES = ["D", "L", "Z", "B", "T"];
-const EXTERNAL_SALES_EXTRA_PART = "A-9ADB1-01001"; // ADBLUE — included even though "A" isn't in the prefix list above
+
+/** Exact PartNos that count as External Sales on an AA bill even though
+ * their prefix ("A") isn't in the list above:
+ *   - A-9ADB1-01001                  ADBLUE
+ *   - A-9D101-00001 … A-9D112-00012  the 12 DIY detailing consumables
+ *     (shampoo, tar remover, liquid wax, dashboard/tyre dresser, glass
+ *     cleaner, leather conditioner, microfiber cloth, tissue box, …) —
+ *     added 2026-09-04 at the user's request. External Sales only: they do
+ *     NOT feed the DIY count/revenue breakdown, which stays on the separate
+ *     "D-DIY…" SKU scheme. */
+const EXTERNAL_SALES_EXACT_PARTS = new Set([
+  "A-9ADB1-01001",
+  "A-9D101-00001", "A-9D102-00002", "A-9D103-00003", "A-9D104-00004",
+  "A-9D105-00005", "A-9D106-00006", "A-9D107-00007", "A-9D108-00008",
+  "A-9D109-00009", "A-9D110-00010", "A-9D111-00011", "A-9D112-00012",
+]);
 
 /** DIY — any row whose PartNo starts with "D-DIY" (e.g. "D-DIYRATS053",
  * "D-DIYKLPF001" — rat repellent spray, car perfume, that kind of small
@@ -72,8 +86,67 @@ function toQty(value: unknown): number {
 
 function isExternalSalesRow(billNo: string, partNo: string): boolean {
   if (!billNo.startsWith(EXTERNAL_SALES_BILL_PREFIX)) return false;
-  if (partNo === EXTERNAL_SALES_EXTRA_PART) return true;
+  if (EXTERNAL_SALES_EXACT_PARTS.has(partNo)) return true;
   return EXTERNAL_SALES_PART_PREFIXES.includes(partNo[0]);
+}
+
+/** XLSX (zip) starts with "PK\x03\x04"; legacy XLS (OLE2) with D0 CF 11 E0.
+ * Anything else we treat as text (CSV) so it can be repaired before parse. */
+function looksBinaryWorkbook(buffer: Buffer): boolean {
+  return (
+    (buffer[0] === 0x50 && buffer[1] === 0x4b) ||
+    (buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0)
+  );
+}
+
+/**
+ * The DMS "SPRT014" Part Sale Report CSV export wraps every field in double
+ * quotes but never escapes a literal `"` that appears *inside* a field —
+ * e.g. a part name like `MICROFIBER CLOTH 350GM 16" X 1`. A compliant CSV
+ * reader (SheetJS included) then reads that `"` as the end of the field, so
+ * every later column on the line shifts and the row usually swallows the
+ * next one too. This doubles any such stray quote (`"` → `""`) so the value
+ * survives. A well-formed CSV passes through unchanged; only ever run on
+ * text (CSV) input, never on a real .xlsx/.xls.
+ *
+ * Works on a byte-preserving latin1 view so the buffer's real encoding is
+ * still SheetJS's to detect afterwards — every char this touches (`"`, `,`,
+ * CR, LF) is ASCII, so non-ASCII bytes pass through untouched.
+ */
+function repairCsvQuotes(buffer: Buffer): Buffer {
+  const text = buffer.toString("latin1").replace(/^ï»¿/, ""); // drop UTF-8 BOM
+  let out = "";
+  let inQuoted = false; // inside a "…"-quoted field
+  let atFieldStart = true; // next char begins a fresh field
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (!inQuoted) {
+      if (atFieldStart && ch === '"') {
+        inQuoted = true;
+        atFieldStart = false;
+      } else {
+        atFieldStart = ch === "," || ch === "\r" || ch === "\n";
+      }
+      out += ch;
+      continue;
+    }
+    if (ch !== '"') {
+      out += ch;
+      continue;
+    }
+    const next = text[i + 1];
+    if (next === '"') {
+      out += '""'; // already-escaped pair, keep as-is
+      i++;
+    } else if (next === undefined || next === "," || next === "\r" || next === "\n") {
+      out += '"'; // legitimate closing quote
+      inQuoted = false;
+      atFieldStart = next === ",";
+    } else {
+      out += '""'; // stray literal quote inside the field — escape it
+    }
+  }
+  return Buffer.from(out, "latin1");
 }
 
 export type ParsedPartSale = {
@@ -84,7 +157,7 @@ export type ParsedPartSale = {
 };
 
 export function parsePartSaleWorkbook(buffer: Buffer): ParsedPartSale {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const workbook = XLSX.read(looksBinaryWorkbook(buffer) ? buffer : repairCsvQuotes(buffer), { type: "buffer" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
 
