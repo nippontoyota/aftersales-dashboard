@@ -94,6 +94,10 @@ create table if not exists part_sale_snapshots (
   source_file_name text not null,
   engine_flush numeric not null,
   injector_cleaner numeric not null,
+  -- Litres: sum of the oil SKUs' Sale Qty ÷ 10 (the DMS records these in
+  -- tenths of a litre — confirmed with the user 2026-09-04; parse.ts used
+  -- ÷100 until then, and every pre-existing row was corrected in place with
+  -- `synthetic_oil_ltrs = synthetic_oil_ltrs * 10`).
   synthetic_oil_ltrs numeric not null,
   brake_cleaning_spray numeric not null,
   primary key (date, branch)

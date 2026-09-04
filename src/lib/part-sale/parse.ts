@@ -48,7 +48,9 @@ const DIY_PART_PREFIX = "D-DIY";
 export type PartSaleCounts = {
   engineFlush: number;
   injectorCleaner: number;
-  /** Already divided by 100 — this is litres, not raw Sale Qty. */
+  /** Already divided by 10 — this is litres, not raw Sale Qty. The DMS
+   * records these parts' Sale Qty in tenths of a litre (confirmed with the
+   * user 2026-09-04; was /100 until then). */
   syntheticOilLtrs: number;
   brakeCleaningSpray: number;
   /** Sum of NetAmnt for the AA-bill/PartNo-prefix filter above — the Part Sale Report side of External Sales (added to BA Tool's SPR External, see report.ts). */
@@ -124,7 +126,7 @@ export function parsePartSaleWorkbook(buffer: Buffer): ParsedPartSale {
     counts: {
       engineFlush,
       injectorCleaner,
-      syntheticOilLtrs: syntheticOilRaw / 100,
+      syntheticOilLtrs: syntheticOilRaw / 10,
       brakeCleaningSpray,
       externalSales,
       diyCount,
