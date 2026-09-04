@@ -127,7 +127,13 @@ export const DAILY_REPORT_ROWS: RowDef[] = [
   }),
   m("PM + OC", { today: (b) => b.pmOcForTheDay, mtd: (b) => b.pmOcAchievementForTheMonth, target: (b) => b.pmOcTarget, fmt: num, summable: true }),
   m("T-Gloss Service Penetration", { mtd: (b) => b.penetrationTGlossService, target: (b) => b.targetTGlossService, fmt: pctFmt, summable: false }),
-  m("T-Gloss SPO", { pct: (b) => b.tGlossSpo, fmt: pctFmt, summable: false }),
+  m("T-Gloss SPO (Rs)", {
+    mtd: (b) => b.spoTGloss,
+    target: (b) => b.spoTGlossTarget,
+    pct: (b) => b.tGlossSpo,
+    fmt: rs,
+    summable: false,
+  }),
   m("Engine Flush", { today: (b) => b.engineFlushForTheDay, mtd: (b) => b.engineFlushMtd, fmt: num, summable: true }),
   m("DIY Count", { today: (b) => b.diyCountForTheDay, mtd: (b) => b.diyCountMtd, fmt: num, summable: true }),
 ];
@@ -138,7 +144,8 @@ export type ReportCell = {
   target: number | null;
   /** Achievement ratio, or null when the metric isn't target-graded. */
   ratio: number | null;
-  /** What the cell prints — mtd, or the ratio for a pure-ratio metric (T-Gloss SPO). */
+  /** What the compact single-cell views print — mtd when the metric has one,
+   * otherwise the achievement ratio. */
   display: number | null;
 };
 

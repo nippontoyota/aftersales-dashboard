@@ -38,6 +38,8 @@ export type BranchReport = {
 
   targetTGlossService: number;
   penetrationTGlossService: number | null;
+  spoTGloss: number | null;
+  spoTGlossTarget: number | null;
   tGlossSpo: number | null;
 
   cpuForTheDay: number | null;
@@ -318,6 +320,8 @@ function computeBranchReport(
 
     targetTGlossService: FIXED_TGLOSS_SERVICE_TARGET,
     penetrationTGlossService: t("servicePenetration"),
+    spoTGloss,
+    spoTGlossTarget,
     tGlossSpo: ratio(spoTGloss, spoTGlossTarget),
 
     cpuForTheDay: delta(t("cpus"), y("cpus")),
