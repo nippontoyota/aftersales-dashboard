@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { yesterdayIso } from "@/lib/utils";
 
 function formatUploadedAt(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
+
+type UploadedInfo = { sourceFileName: string; uploadedAt: string };
 
 /**
  * Generic upload widget shared by all report-type uploads (BA Tool,
@@ -41,37 +43,73 @@ export function ReportUploadCard({
    * themselves (2026-08-31, at the user's request); a correction goes
    * through HQ's Upload Sheet instead. Omit entirely for uploads this lock
    * doesn't apply to (HQ's own BA Tool upload). */
-  alreadyUploaded?: { sourceFileName: string; uploadedAt: string } | null;
+  alreadyUploaded?: UploadedInfo | null;
 }) {
-  if (alreadyUploaded) {
-    return (
-      <div className="space-y-2 rounded-md border border-good/30 bg-good-soft p-5">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0 text-good" aria-hidden="true">
-            <path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <h2 className="text-sm font-semibold text-good">
-            {title} — already uploaded{reportDate ? ` for ${reportDate}` : ""}
-          </h2>
-        </div>
-        <p className="text-xs text-good">
-          {alreadyUploaded.sourceFileName} · {formatUploadedAt(alreadyUploaded.uploadedAt)}
-        </p>
-        <p className="text-xs text-good">Need to fix a mistake? Ask HQ to correct it via Upload Sheet.</p>
-      </div>
-    );
-  }
+  // Whether this card participates in the once-per-day lock at all. `null`
+  // (branch, not yet uploaded) still participates; only `undefined` (HQ BA
+  // Tool) opts out and keeps a re-usable form.
+  const participatesInLock = alreadyUploaded !== undefined;
+
+  // A just-completed upload, held client-side so the confirmation survives
+  // the router.refresh() below — without this the server re-render swaps in
+  // its own locked panel and the "it worked" message the branch admin needs
+  // to see never gets painted (they'd see the page jump with no feedback).
+  const [justUploaded, setJustUploaded] = useState<UploadedInfo | null>(null);
+  const [justUploadedMessage, setJustUploadedMessage] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const handleUploaded = useCallback((info: UploadedInfo, message: string) => {
+    setJustUploaded(info);
+    setJustUploadedMessage(message);
+  }, []);
+
+  // Land the branch admin on the confirmation once it renders — the sections
+  // stack tall and router.refresh() (plus the form collapsing to this
+  // shorter panel) used to leave them scrolled somewhere unrelated, with no
+  // visible sign the upload worked. Re-run shortly after too, to win against
+  // the refresh's own scroll settling.
+  useEffect(() => {
+    if (!justUploaded) return;
+    const scroll = () => cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    scroll();
+    const t = setTimeout(scroll, 250);
+    return () => clearTimeout(t);
+  }, [justUploaded]);
+
+  const locked = alreadyUploaded ?? justUploaded;
 
   return (
-    <ReportUploadForm
-      endpoint={endpoint}
-      title={title}
-      description={description}
-      fileLabel={fileLabel}
-      accept={accept}
-      reportDate={reportDate}
-      formatSuccess={formatSuccess}
-    />
+    <div ref={cardRef}>
+      {locked ? (
+        <div className="space-y-2 rounded-md border border-good/30 bg-good-soft p-5">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0 text-good" aria-hidden="true">
+              <path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <h2 className="text-sm font-semibold text-good">
+              {title} — {justUploaded && !alreadyUploaded ? "uploaded" : "already uploaded"}
+              {reportDate ? ` for ${reportDate}` : ""}
+            </h2>
+          </div>
+          {justUploadedMessage && !alreadyUploaded ? <p className="text-xs text-good">{justUploadedMessage}</p> : null}
+          <p className="text-xs text-good">
+            {locked.sourceFileName} · {formatUploadedAt(locked.uploadedAt)}
+          </p>
+          <p className="text-xs text-good">Need to fix a mistake? Ask HQ to correct it via Upload Sheet.</p>
+        </div>
+      ) : (
+        <ReportUploadForm
+          endpoint={endpoint}
+          title={title}
+          description={description}
+          fileLabel={fileLabel}
+          accept={accept}
+          reportDate={reportDate}
+          formatSuccess={formatSuccess}
+          onUploaded={participatesInLock ? handleUploaded : undefined}
+        />
+      )}
+    </div>
   );
 }
 
@@ -83,6 +121,7 @@ function ReportUploadForm({
   accept,
   reportDate,
   formatSuccess,
+  onUploaded,
 }: {
   endpoint: string;
   title: string;
@@ -91,6 +130,10 @@ function ReportUploadForm({
   accept: string;
   reportDate?: string;
   formatSuccess: (data: Record<string, unknown>) => string;
+  /** Called after a successful upload for cards that lock afterwards, so the
+   * parent can show a persistent confirmation. Omitted for HQ's re-usable
+   * BA Tool form, which just shows the inline success line and stays open. */
+  onUploaded?: (info: UploadedInfo, message: string) => void;
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -105,6 +148,8 @@ function ReportUploadForm({
     setSuccess(null);
 
     const formData = new FormData(e.currentTarget);
+    const file = formData.get("file");
+    const fileName = file instanceof File ? file.name : "uploaded file";
     // Branch panel: the date comes from the shared picker above. BA Tool:
     // the in-form field below already put it in the FormData.
     if (reportDate) formData.set("date", reportDate);
@@ -115,8 +160,12 @@ function ReportUploadForm({
         setError(data.error ?? "Upload failed.");
         return;
       }
-      setSuccess(formatSuccess(data));
+      const message = formatSuccess(data);
+      setSuccess(message);
       formRef.current?.reset();
+      if (onUploaded) {
+        onUploaded({ sourceFileName: fileName, uploadedAt: new Date().toISOString() }, message);
+      }
       router.refresh();
     } catch {
       setError("Upload failed — could not reach the server.");
