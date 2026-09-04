@@ -13,6 +13,9 @@ import { PDFParse } from "pdf-parse";
 export type BillParseResult = {
   invoiceNumber: string | null;
   taxableValue: number | null;
+  /** ISO `YYYY-MM-DD`, from the invoice's own date — bill revenue counts in
+   * this month, not the upload month. Null when it can't be read. */
+  invoiceDate: string | null;
 };
 
 export async function parseBillPdf(buffer: Buffer): Promise<BillParseResult> {
@@ -24,22 +27,67 @@ export async function parseBillPdf(buffer: Buffer): Promise<BillParseResult> {
     await parser.destroy();
   } catch (err) {
     console.error("[bill-parse] pdf text extraction failed:", err);
-    return { invoiceNumber: null, taxableValue: null };
+    return { invoiceNumber: null, taxableValue: null, invoiceDate: null };
   }
 
   const invoiceNumber = extractInvoiceNumber(text);
   const taxableValue = extractTaxableValue(text);
+  const invoiceDate = extractInvoiceDate(text);
 
-  if (invoiceNumber === null || taxableValue === null) {
+  if (invoiceNumber === null || taxableValue === null || invoiceDate === null) {
     // Log the raw layout so incomplete extractions can be diagnosed from the
     // Vercel function logs (pdf.js spaces text differently across platforms).
     console.warn(
-      `[bill-parse] incomplete extraction (invoice=${invoiceNumber}, taxable=${taxableValue}). Text:\n` +
+      `[bill-parse] incomplete extraction (invoice=${invoiceNumber}, taxable=${taxableValue}, date=${invoiceDate}). Text:\n` +
         text.slice(0, 4000),
     );
   }
 
-  return { invoiceNumber, taxableValue };
+  return { invoiceNumber, taxableValue, invoiceDate };
+}
+
+/** Reads the invoice's date as ISO `YYYY-MM-DD`. Handles the two Nippon
+ * formats: format 2's "Invoice Date : 29-8-2026" (D-M-YYYY) and format 1's
+ * bare "29/08/2026" (DD/MM/YYYY) near the top of the page. Indian
+ * day-first ordering throughout. */
+export function extractInvoiceDate(text: string): string | null {
+  const labelled = [
+    /Invoice\s*Date\s*:?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
+    /Bill\s*Date\s*:?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
+    /Invoice\s*Date\s*:?\s*(\d{4}-\d{2}-\d{2})/i,
+    /Acknowledgement\s*Date\s*:?\s*(\d{4}-\d{2}-\d{2})/i,
+  ];
+  for (const pat of labelled) {
+    const m = text.match(pat);
+    const iso = m ? toIsoDate(m[1]) : null;
+    if (iso) return iso;
+  }
+
+  // Format 1 has no value beside its "Invoice Date :" label — fall back to
+  // the first DD/MM/YYYY date on the page (it sits on line 2, by the
+  // "Tax Invoice" heading, and again in the payment row).
+  const loose = text.match(/\b(\d{1,2}\/\d{1,2}\/\d{4})\b/);
+  return loose ? toIsoDate(loose[1]) : null;
+}
+
+/** `dd/mm/yyyy`, `d-m-yyyy`, `dd-mm-yy`, or `yyyy-mm-dd` → `yyyy-mm-dd`.
+ * Everything day-first except an already-ISO string. Returns null if the
+ * result isn't a real calendar date. */
+function toIsoDate(raw: string): string | null {
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  let y: number, mo: number, d: number;
+  if (isoMatch) {
+    [, y, mo, d] = isoMatch.map(Number) as [number, number, number, number];
+  } else {
+    const parts = raw.split(/[-/]/).map(Number);
+    if (parts.length !== 3) return null;
+    [d, mo, y] = parts;
+    if (y < 100) y += 2000;
+  }
+  if (!y || !mo || !d || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 export function extractInvoiceNumber(text: string): string | null {

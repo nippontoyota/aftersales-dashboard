@@ -9,6 +9,7 @@ type BillItem = {
   invoiceNumber: string;
   taxableValue: number;
   category: BillCategory | null;
+  invoiceDate: string | null;
   sourceFileName: string;
   uploadedAt: string;
 };
@@ -97,14 +98,18 @@ export function BillDrilldown({
                   <th className="pb-2 font-medium">Invoice No</th>
                   <th className="pb-2 font-medium">Type</th>
                   <th className="pb-2 font-medium text-right">Taxable Value</th>
+                  <th className="pb-2 font-medium">Invoice date</th>
                   <th className="pb-2 font-medium">File</th>
-                  <th className="pb-2 font-medium">Uploaded</th>
                   <th className="pb-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
                 {bills.map((b) => (
-                  <tr key={b.id} className="border-b border-border-subtle last:border-0">
+                  <tr
+                    key={b.id}
+                    className="border-b border-border-subtle last:border-0"
+                    title={`Uploaded ${new Date(b.uploadedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
+                  >
                     <td className="py-1.5 font-medium text-fg">{b.invoiceNumber}</td>
                     <td className={`py-1.5 ${b.category ? "text-fg-muted" : "text-warn"}`}>
                       {b.category ? CATEGORY_LABEL[b.category] : "Untagged"}
@@ -112,16 +117,18 @@ export function BillDrilldown({
                     <td className="py-1.5 text-right text-fg-muted">
                       Rs {b.taxableValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="py-1.5 text-fg-subtle max-w-[120px] truncate">{b.sourceFileName}</td>
                     <td className="py-1.5 text-fg-subtle">
-                      {new Date(b.uploadedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      {b.invoiceDate
+                        ? new Date(`${b.invoiceDate}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                        : "—"}
                     </td>
+                    <td className="py-1.5 text-fg-subtle max-w-[120px] truncate">{b.sourceFileName}</td>
                     <td className="py-1.5">
                       <a
                         href={`/api/bills/${b.id}/pdf`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-bad hover:text-bad hover:underline"
+                        className="text-accent-text hover:text-accent hover:underline"
                       >
                         View PDF
                       </a>

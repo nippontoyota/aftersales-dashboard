@@ -3,15 +3,20 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { parseBillPdf } from "@/lib/bill/parse";
 import { loadBillByInvoiceNumber, saveBillUpload, type BillCategory } from "@/lib/bill/store";
 
+type PartialData = { invoiceNumber: string | null; taxableValue: number | null; invoiceDate: string | null };
+
 type FileResult = {
   fileName: string;
   success?: boolean;
   invoiceNumber?: string;
   taxableValue?: number;
+  invoiceDate?: string;
   error?: string;
   needsManualEntry?: boolean;
-  partialData?: { invoiceNumber: string | null; taxableValue: number | null };
+  partialData?: PartialData;
 };
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -29,6 +34,8 @@ export async function POST(request: Request) {
   const manualInvoiceNumber = String(formData.get("manualInvoiceNumber") ?? "").trim() || null;
   const manualTaxableValueStr = String(formData.get("manualTaxableValue") ?? "").trim();
   const manualTaxableValue = manualTaxableValueStr ? parseFloat(manualTaxableValueStr) : null;
+  const manualInvoiceDateRaw = String(formData.get("manualInvoiceDate") ?? "").trim();
+  const manualInvoiceDate = ISO_DATE.test(manualInvoiceDateRaw) ? manualInvoiceDateRaw : null;
 
   const categoryRaw = String(formData.get("category") ?? "").trim();
   if (categoryRaw !== "scrap" && categoryRaw !== "used_oil") {
@@ -60,16 +67,22 @@ export async function POST(request: Request) {
 
     let invoiceNumber: string | null = null;
     let taxableValue: number | null = null;
+    let invoiceDate: string | null = null;
     let extractionMethod: "auto" | "manual" = "auto";
 
     try {
       const parsed = await parseBillPdf(buffer);
       invoiceNumber = parsed.invoiceNumber;
       taxableValue = parsed.taxableValue;
+      invoiceDate = parsed.invoiceDate;
     } catch {
       // extraction failed — fall through to manual check
     }
 
+    // Invoice number / taxable value can only be corrected one file at a time
+    // (the manual-entry form re-submits a single file). Invoice date also
+    // works as a batch-wide fallback — filled in only where the PDF date
+    // couldn't be read — so a month's bills don't each need manual entry.
     if (files.length === 1 && manualInvoiceNumber) {
       invoiceNumber = manualInvoiceNumber;
       extractionMethod = "manual";
@@ -78,12 +91,16 @@ export async function POST(request: Request) {
       taxableValue = manualTaxableValue;
       extractionMethod = "manual";
     }
+    if (manualInvoiceDate && (files.length === 1 || !invoiceDate)) {
+      invoiceDate = manualInvoiceDate;
+      extractionMethod = "manual";
+    }
 
-    if (!invoiceNumber || taxableValue === null) {
+    if (!invoiceNumber || taxableValue === null || !invoiceDate) {
       results.push({
         fileName,
         needsManualEntry: true,
-        partialData: { invoiceNumber, taxableValue },
+        partialData: { invoiceNumber, taxableValue, invoiceDate },
       });
       continue;
     }
@@ -103,6 +120,7 @@ export async function POST(request: Request) {
         branch,
         taxableValue,
         category,
+        invoiceDate,
         fileData: buffer,
         sourceFileName: fileName,
         uploadedAt: new Date().toISOString(),
@@ -119,7 +137,7 @@ export async function POST(request: Request) {
       continue;
     }
 
-    results.push({ fileName, success: true, invoiceNumber, taxableValue });
+    results.push({ fileName, success: true, invoiceNumber, taxableValue, invoiceDate });
   }
 
   const allSuccess = results.every((r) => r.success);

@@ -3,14 +3,17 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+type PartialData = { invoiceNumber: string | null; taxableValue: number | null; invoiceDate: string | null };
+
 type FileResult = {
   fileName: string;
   success?: boolean;
   invoiceNumber?: string;
   taxableValue?: number;
+  invoiceDate?: string;
   error?: string;
   needsManualEntry?: boolean;
-  partialData?: { invoiceNumber: string | null; taxableValue: number | null };
+  partialData?: PartialData;
 };
 
 export function BillUploadForm() {
@@ -25,7 +28,8 @@ export function BillUploadForm() {
   const [manualFile, setManualFile] = useState<File | null>(null);
   const [manualInvoice, setManualInvoice] = useState("");
   const [manualTaxable, setManualTaxable] = useState("");
-  const [manualPartial, setManualPartial] = useState<{ invoiceNumber: string | null; taxableValue: number | null } | null>(null);
+  const [manualDate, setManualDate] = useState("");
+  const [manualPartial, setManualPartial] = useState<PartialData | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -57,6 +61,7 @@ export function BillUploadForm() {
           setManualPartial(needsManual.partialData ?? null);
           setManualInvoice(needsManual.partialData?.invoiceNumber ?? "");
           setManualTaxable(needsManual.partialData?.taxableValue?.toString() ?? "");
+          setManualDate(needsManual.partialData?.invoiceDate ?? "");
         }
       }
 
@@ -82,6 +87,7 @@ export function BillUploadForm() {
     formData.set("category", category);
     formData.set("manualInvoiceNumber", manualInvoice);
     formData.set("manualTaxableValue", manualTaxable);
+    formData.set("manualInvoiceDate", manualDate);
 
     try {
       const res = await fetch("/api/upload/bill", { method: "POST", body: formData });
@@ -98,6 +104,7 @@ export function BillUploadForm() {
       if (data.allSuccess) {
         setManualFile(null);
         setManualPartial(null);
+        setManualDate("");
         formRef.current?.reset();
         router.refresh();
       }
@@ -118,8 +125,9 @@ export function BillUploadForm() {
           <div>
             <h2 className="text-sm font-semibold text-fg">Upload PDF Bills</h2>
             <p className="mt-0.5 text-xs text-fg-subtle">
-              Upload one or more PDF tax invoices. The invoice number and total taxable value will be extracted
-              automatically. If extraction fails, you can enter the values manually.
+              Upload one or more PDF tax invoices. The invoice number, taxable value and invoice date are extracted
+              automatically. Anything that can&apos;t be read falls to manual entry. Revenue counts in the month the
+              invoice was raised.
             </p>
           </div>
 
@@ -149,6 +157,21 @@ export function BillUploadForm() {
               Invoice PDF(s)
             </label>
             <input id="bill-file" name="file" type="file" accept=".pdf" multiple required className="mt-1 block w-full text-sm" />
+          </div>
+
+          <div>
+            <label htmlFor="bill-fallback-date" className="block text-xs font-medium text-fg-muted">
+              Invoice date <span className="font-normal text-fg-faint">— optional</span>
+            </label>
+            <input
+              id="bill-fallback-date"
+              name="manualInvoiceDate"
+              type="date"
+              className="mt-1 h-9 w-full rounded border border-border-strong bg-surface px-3 text-sm"
+            />
+            <p className="mt-0.5 text-xs text-fg-faint">
+              Used only for files whose date can&apos;t be read from the PDF. Handy when backfilling a whole month.
+            </p>
           </div>
 
           {error ? (
@@ -232,6 +255,23 @@ export function BillUploadForm() {
             )}
           </div>
 
+          <div>
+            <label htmlFor="manual-date" className="block text-xs font-medium text-fg-muted">
+              Invoice Date
+            </label>
+            <input
+              id="manual-date"
+              type="date"
+              required
+              value={manualDate}
+              onChange={(e) => setManualDate(e.target.value)}
+              className="mt-1 h-9 w-full rounded border border-border-strong bg-surface px-3 text-sm"
+            />
+            {manualPartial?.invoiceDate && (
+              <p className="mt-0.5 text-xs text-good">Auto-detected: {manualPartial.invoiceDate}</p>
+            )}
+          </div>
+
           {error ? (
             <p role="alert" aria-live="assertive" className="text-sm text-bad">{error}</p>
           ) : null}
@@ -263,7 +303,8 @@ export function BillUploadForm() {
           <ul className="mt-2 space-y-1">
             {successResults.map((r) => (
               <li key={r.fileName} className="text-xs text-good">
-                {r.invoiceNumber} — Rs {Number(r.taxableValue).toLocaleString("en-IN", { minimumFractionDigits: 2 })} — {r.fileName}
+                {r.invoiceNumber} — Rs {Number(r.taxableValue).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                {r.invoiceDate ? ` — ${r.invoiceDate}` : ""} — {r.fileName}
               </li>
             ))}
           </ul>

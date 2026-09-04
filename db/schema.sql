@@ -262,3 +262,15 @@ alter table bill_uploads add column if not exists category text
   check (category in ('scrap', 'used_oil'));
 create index if not exists idx_bill_uploads_category_uploaded
   on bill_uploads (category, uploaded_at);
+
+-- Bill revenue is attributed to the invoice's own date, not the upload time
+-- (2026-09-04, at the user's request) — so historical invoices backfill into
+-- the right months and a bill always counts in the month it was raised.
+-- Extracted from the PDF; the upload form requires a manual date when
+-- extraction fails. Nullable only for rows saved before this existed —
+-- queries coalesce to the upload day for those.
+alter table bill_uploads add column if not exists invoice_date date;
+create index if not exists idx_bill_uploads_category_invoice_date
+  on bill_uploads (category, invoice_date);
+create index if not exists idx_bill_uploads_branch_invoice_date
+  on bill_uploads (branch, invoice_date);
