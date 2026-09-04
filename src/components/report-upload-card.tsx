@@ -155,7 +155,14 @@ function ReportUploadForm({
         <label htmlFor={fieldId} className="block text-xs font-medium text-fg-muted">
           {fileLabel}
         </label>
-        <input id={fieldId} name="file" type="file" accept={accept} required className="mt-1 block w-full text-sm" />
+        <input
+          id={fieldId}
+          name="file"
+          type="file"
+          accept={accept}
+          required
+          className="mt-1 block w-full text-sm text-fg-subtle file:mr-3 file:cursor-pointer file:rounded file:border file:border-border-strong file:bg-surface-2 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-fg hover:file:bg-surface-3"
+        />
       </div>
 
       {error ? (
