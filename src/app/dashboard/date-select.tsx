@@ -26,7 +26,7 @@ export function DateSelect({
         if (region !== "All") params.set("region", region);
         router.push(`${basePath}?${params.toString()}`);
       }}
-      className="h-8 rounded border border-slate-300 px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+      className="h-8 rounded border border-border-strong px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       {dates.map((d) => (
         <option key={d} value={d}>

@@ -7,6 +7,27 @@ import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./s
 import { loadAllServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
 import { isDatePublished } from "./publish-store";
 
+/** Nav-shell state for the dashboard family of pages — cheap enough to run in
+ * the fast outer shell (before the Suspense'd content). A branch or regional
+ * admin whose latest uploaded date isn't published yet is in raw-report mode:
+ * the /dashboard nav item is relabelled and the company-wide tabs (Reports,
+ * TKM Targets, Alerts, Branches) are hidden. Regional admins never see the
+ * Upload tab. HQ is never restricted. */
+export async function loadNavState(
+  admin: AdminAccount,
+): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean }> {
+  const canUpload = admin.role !== "regional";
+  if (admin.role === "hq") return { companyTabs: true, dashboardLabel: "Dashboard", canUpload };
+  const dates = await listSnapshotDates();
+  const latest = dates.at(-1);
+  const latestPublished = latest ? await isDatePublished(latest) : true;
+  return {
+    companyTabs: latestPublished,
+    dashboardLabel: latestPublished ? "Dashboard" : admin.role === "regional" ? "Regional Report" : "Daily Report",
+    canUpload,
+  };
+}
+
 /** Resolves date/region from searchParams and loads everything the
  * Dashboard, Alerts, Branches, Reports, and TKM Targets pages all need in
  * common — centralized so those pages can't quietly drift out of sync on
@@ -41,6 +62,19 @@ export type DashboardData = {
   /** Only HQ can publish — drives whether the Publish control renders at all. */
   canPublish: boolean;
   billTotals: BillMonthTotal[];
+  /** For a branch admin, true when the current `date` is not published yet —
+   * they get the raw single-branch "Daily Report" instead of the company
+   * dashboard. Always false for HQ. */
+  showBranchDailyReport: boolean;
+  /** For a regional manager, true when the current `date` is not published
+   * yet — they get the raw region-wide comparison table (their branches +
+   * a region total) instead of the company dashboard. Always false for HQ
+   * and branch admins. */
+  showRegionDailyReport: boolean;
+  /** Whether the company-wide tabs (Reports, TKM Targets, Alerts, Branches)
+   * are available. HQ: always. Branch/regional admin: only once the latest
+   * uploaded date has been published. */
+  showCompanyTabs: boolean;
 };
 
 export async function loadDashboardData(searchParams: { date?: string; region?: string }, admin: AdminAccount): Promise<DashboardData | null> {
@@ -48,29 +82,45 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   const allDates = await listSnapshotDates();
   if (allDates.length === 0) return null;
 
-  let dates: string[];
-  let date: string;
-
   // Everyone sees all dates — HQ to review/publish, branch admins to view their
   // own restricted dashboard (only their branch) or the full published dashboard.
-  dates = allDates;
-  date = searchParams.date && dates.includes(searchParams.date) ? searchParams.date : dates.at(-1)!;
+  const dates = allDates;
+  const date = searchParams.date && dates.includes(searchParams.date) ? searchParams.date : dates.at(-1)!;
 
-  const billBranch = isHq ? undefined : admin.branch;
-  const [report, monthSnapshots, serviceInfoMonthSnapshots, isPublished, billTotals] = await Promise.all([
+  const latestDate = allDates.at(-1)!;
+  const billBranch = admin.role === "branch" ? admin.branch : undefined;
+  const [report, monthSnapshots, serviceInfoMonthSnapshots, isPublished, billTotals, latestPublished] = await Promise.all([
     buildReport(date),
     loadSnapshotsForMonthUpTo(date),
     loadAllServiceInfoSnapshotsForMonthUpTo(date),
     isDatePublished(date),
     loadBillTotalsByMonth(billBranch),
+    date === latestDate ? Promise.resolve(null) : isDatePublished(latestDate),
   ]);
 
+  const isLatestPublished = latestPublished ?? isPublished;
   const isCompanyScope = isHq || isPublished;
-  const region: RegionName | "All" = isCompanyScope && searchParams.region && searchParams.region in REGIONS ? (searchParams.region as RegionName) : "All";
+  const showBranchDailyReport = admin.role === "branch" && !isPublished;
+  const showRegionDailyReport = admin.role === "regional" && !isPublished;
+  const showCompanyTabs = isHq || isLatestPublished;
+
+  // Region: a regional manager is locked to their own region until the date
+  // is published; after that (isCompanyScope) they can switch like HQ, but
+  // still default to their own region when no explicit choice is made.
+  const requestedRegion =
+    searchParams.region && searchParams.region in REGIONS ? (searchParams.region as RegionName) : null;
+  let region: RegionName | "All";
+  if (admin.role === "regional" && !isCompanyScope) {
+    region = admin.region;
+  } else if (isCompanyScope) {
+    region = requestedRegion ?? (admin.role === "regional" ? admin.region : "All");
+  } else {
+    region = "All";
+  }
 
   let filteredBranches = report ? filterBranchesByRegion(report.branches, region) : [];
-  if (!isCompanyScope && !isHq) {
-    filteredBranches = filteredBranches.filter(b => b.branch === admin.branch);
+  if (!isCompanyScope && admin.role === "branch") {
+    filteredBranches = filteredBranches.filter((b) => b.branch === admin.branch);
   }
 
   const kpis = computeKpiSummary(filteredBranches);
@@ -91,5 +141,8 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
     isPublished,
     canPublish: isHq,
     billTotals,
+    showBranchDailyReport,
+    showRegionDailyReport,
+    showCompanyTabs,
   };
 }

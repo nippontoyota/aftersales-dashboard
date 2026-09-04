@@ -1,5 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { pool } from "./db";
+import type { RegionName } from "./regions";
 
 /**
  * Admin accounts — Postgres-backed (see db/schema.sql). An "hq" account
@@ -22,28 +23,33 @@ import { pool } from "./db";
  */
 export type AdminAccount =
   | { username: string; passwordHash: string; salt: string; role: "hq"; canViewDashboard: true }
-  | { username: string; passwordHash: string; salt: string; role: "branch"; branch: string; canViewDashboard: true };
+  | { username: string; passwordHash: string; salt: string; role: "branch"; branch: string; canViewDashboard: true }
+  // Read-only regional manager — scoped to `region` before HQ publishes,
+  // full company dashboard after. Never uploads (see upload/page.tsx etc.).
+  | { username: string; passwordHash: string; salt: string; role: "regional"; region: RegionName; canViewDashboard: true };
 
 type AdminRow = {
   username: string;
   password_hash: string;
   salt: string;
-  role: "hq" | "branch";
+  role: "hq" | "branch" | "regional";
   branch: string | null;
+  region: string | null;
 };
 
 function toAccount(row: AdminRow): AdminAccount {
-  if (row.role === "branch") {
-    return {
-      username: row.username,
-      passwordHash: row.password_hash,
-      salt: row.salt,
-      role: "branch",
-      branch: row.branch!,
-      canViewDashboard: true,
-    };
-  }
-  return { username: row.username, passwordHash: row.password_hash, salt: row.salt, role: "hq", canViewDashboard: true };
+  const base = { username: row.username, passwordHash: row.password_hash, salt: row.salt, canViewDashboard: true } as const;
+  if (row.role === "branch") return { ...base, role: "branch", branch: row.branch! };
+  if (row.role === "regional") return { ...base, role: "regional", region: row.region as RegionName };
+  return { ...base, role: "hq" };
+}
+
+/** Human label for the sidebar's account area, e.g. "HQ admin", "CO01B
+ * branch", "North regional manager". */
+export function adminIdentityLabel(admin: AdminAccount): string {
+  if (admin.role === "hq") return "HQ admin";
+  if (admin.role === "regional") return `${admin.region} regional manager`;
+  return `${admin.branch} branch`;
 }
 
 export function hashPassword(password: string, salt: string): string {
@@ -55,9 +61,10 @@ export function newSalt(): string {
 }
 
 export async function findAdmin(username: string): Promise<AdminAccount | null> {
-  const { rows } = await pool.query<AdminRow>("select username, password_hash, salt, role, branch from admins where username = $1", [
-    username,
-  ]);
+  const { rows } = await pool.query<AdminRow>(
+    "select username, password_hash, salt, role, branch, region from admins where username = $1",
+    [username],
+  );
   return rows[0] ? toAccount(rows[0]) : null;
 }
 

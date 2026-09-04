@@ -21,7 +21,7 @@ import { SectionTable, type SectionColumn } from "./section-table";
  */
 function perVehicleCell(revenue: number | null, roCount: number | null) {
   const value = achievementRatio(revenue, roCount);
-  return <div className="w-20 whitespace-nowrap text-sm font-semibold tabular-nums text-slate-900">{formatCompact(value)}</div>;
+  return <div className="w-20 whitespace-nowrap text-sm font-semibold tabular-nums text-fg">{formatCompact(value)}</div>;
 }
 
 const COLUMNS: SectionColumn[] = [

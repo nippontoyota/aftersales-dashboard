@@ -16,7 +16,7 @@ const TONE_HEX: Record<AchievementTone, string> = {
   good: "#10b981",
   warn: "#f59e0b",
   critical: "#ef4444",
-  neutral: "#e2e8f0",
+  neutral: "var(--color-border-strong)",
 };
 
 const TONE_LABEL: Record<AchievementTone, string> = {
@@ -52,8 +52,8 @@ function BreakdownLine({ label, actual, target }: { label: string; actual: numbe
   const activityOnly = hasActualWithoutTarget(actual, target);
   const display = ratio !== null ? formatPercent(ratio) : activityOnly ? formatCompact(actual) : "—";
   return (
-    <div className="pl-3 text-[10px] text-slate-400">
-      └ {label} <span className={`font-medium ${activityOnly ? "text-sky-700" : "text-slate-500"}`}>{display}</span>
+    <div className="pl-3 text-[10px] text-fg-faint">
+      └ {label} <span className={`font-medium ${activityOnly ? "text-info" : "text-fg-subtle"}`}>{display}</span>
     </div>
   );
 }
@@ -95,16 +95,16 @@ export function AchievementDonut({ branches, metrics = DEFAULT_METRICS }: { bran
   );
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
+    <div className="rounded-md border border-border bg-surface p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
           Target Achievement Breakdown{metrics.length === 1 ? ` — ${metrics[0].label}` : ""}
         </h2>
         {metrics.length > 1 ? (
           <select
             value={metric}
             onChange={(e) => setMetric(e.target.value)}
-            className="h-7 rounded border border-slate-300 px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+            className="h-7 rounded border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {metrics.map((m) => (
               <option key={m.key} value={m.key}>
@@ -117,7 +117,7 @@ export function AchievementDonut({ branches, metrics = DEFAULT_METRICS }: { bran
 
       <div className="mt-3 flex items-center gap-4">
         <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE} className="shrink-0 -rotate-90">
-          <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="#f1f5f9" strokeWidth={STROKE} />
+          <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="var(--color-surface-3)" strokeWidth={STROKE} />
           {segments.map((seg) => {
             // A small rounded-cap gap between segments (2026-09-01, at the
             // user's request) — trims a few px off each segment's visible
@@ -144,10 +144,10 @@ export function AchievementDonut({ branches, metrics = DEFAULT_METRICS }: { bran
             );
           })}
           <g transform={`rotate(90 ${SIZE / 2} ${SIZE / 2})`}>
-            <text x={SIZE / 2} y={SIZE / 2 - 4} textAnchor="middle" fontSize={20} fontWeight={700} className="fill-slate-900">
+            <text x={SIZE / 2} y={SIZE / 2 - 4} textAnchor="middle" fontSize={20} fontWeight={700} className="fill-fg">
               {overallPct === null ? "—" : `${Math.round(overallPct)}%`}
             </text>
-            <text x={SIZE / 2} y={SIZE / 2 + 14} textAnchor="middle" fontSize={9} className="fill-slate-400">
+            <text x={SIZE / 2} y={SIZE / 2 + 14} textAnchor="middle" fontSize={9} className="fill-fg-faint">
               Overall
             </text>
             <title>{`Average ${config.label} achievement across branches with a target set`}</title>
@@ -162,28 +162,28 @@ export function AchievementDonut({ branches, metrics = DEFAULT_METRICS }: { bran
                 <button
                   type="button"
                   onClick={() => setOpenTone((t) => (t === tone ? null : tone))}
-                  className="flex w-full items-center gap-2 rounded text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+                  className="flex w-full items-center gap-2 rounded text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   title={`${TONE_LABEL[tone]}: ${branchesByTone[tone].map((b) => b.branch).join(", ")} — click to see branches`}
                 >
                   <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: TONE_HEX[tone] }} />
-                  <span className="min-w-0 flex-1 truncate text-left text-slate-600">{TONE_LABEL[tone]}</span>
-                  <span className="shrink-0 font-medium tabular-nums text-slate-900">
+                  <span className="min-w-0 flex-1 truncate text-left text-fg-muted">{TONE_LABEL[tone]}</span>
+                  <span className="shrink-0 font-medium tabular-nums text-fg">
                     {counts[tone]} ({Math.round((counts[tone] / total) * 100)}%)
                   </span>
-                  <span className="shrink-0 text-slate-400">
+                  <span className="shrink-0 text-fg-faint">
                     <ExpandIcon open={isOpen} />
                   </span>
                 </button>
                 {isOpen ? (
                   <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 pl-4">
                     {branchesByTone[tone].map((b) => (
-                      <span key={b.branch} className="inline-flex items-center text-[10px] text-slate-500">
+                      <span key={b.branch} className="inline-flex items-center text-[10px] text-fg-subtle">
                         {b.branch}
                         {b.onlineStoreBreakdown ? (
                           <button
                             type="button"
                             onClick={() => setOpenBreakdownBranch((br) => (br === b.branch ? null : b.branch))}
-                            className="ml-0.5 inline-flex items-center rounded text-slate-400 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+                            className="ml-0.5 inline-flex items-center rounded text-fg-faint hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                             title={`${b.branch} includes ${b.onlineStoreBreakdown.onlineBranchCode} (online store) — click to split Offtake back apart`}
                           >
                             <ExpandIcon open={openBreakdownBranch === b.branch} />

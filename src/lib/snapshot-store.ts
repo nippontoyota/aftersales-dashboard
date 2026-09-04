@@ -99,10 +99,11 @@ export async function listSnapshotDates(): Promise<string[]> {
   return rows.map((r) => r.date);
 }
 
-/** The most recent snapshot strictly before the given date, if any. */
+/** The most recent snapshot strictly before the given date *in the same calendar month*, if any. This prevents MTD subtraction from crossing month boundaries and producing massive negative numbers on the 1st. */
 export async function loadPreviousSnapshot(date: string): Promise<Snapshot | null> {
+  const monthPrefix = date.slice(0, 7);
   const dates = await listSnapshotDates();
-  const priorDates = dates.filter((d) => d < date).sort();
+  const priorDates = dates.filter((d) => d < date && d.startsWith(monthPrefix)).sort();
   const previousDate = priorDates.at(-1);
   if (!previousDate) return null;
   return loadSnapshot(previousDate);

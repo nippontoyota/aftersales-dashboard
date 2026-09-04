@@ -13,16 +13,16 @@ export type BarsMetricConfig = { key: string; label: string; actual: keyof Branc
 const DEFAULT_METRICS: BarsMetricConfig[] = [{ key: "vas", label: "VAS (Rs)", actual: "vasAchievementForTheMonth", target: "vasBillTarget" }];
 
 const TONE_BAR: Record<AchievementTone, string> = {
-  good: "bg-emerald-500",
-  warn: "bg-amber-500",
-  critical: "bg-red-500",
-  neutral: "bg-slate-300",
+  good: "bg-good-solid",
+  warn: "bg-warn-solid",
+  critical: "bg-bad-solid",
+  neutral: "bg-surface-3",
 };
 const TONE_TEXT: Record<AchievementTone, string> = {
-  good: "text-emerald-700",
-  warn: "text-amber-700",
-  critical: "text-red-700",
-  neutral: "text-slate-400",
+  good: "text-good",
+  warn: "text-warn",
+  critical: "text-bad",
+  neutral: "text-fg-faint",
 };
 
 const COLLAPSED_HEAD = 4;
@@ -53,8 +53,8 @@ function BreakdownLine({ label, actual, target }: { label: string; actual: numbe
   const activityOnly = hasActualWithoutTarget(actual, target);
   const display = ratio !== null ? formatPercent(ratio) : activityOnly ? formatCompact(actual) : "—";
   return (
-    <div className="pl-6 text-[10px] text-slate-400">
-      └ {label} <span className={`font-medium ${activityOnly ? "text-sky-700" : "text-slate-500"}`}>{display}</span>
+    <div className="pl-6 text-[10px] text-fg-faint">
+      └ {label} <span className={`font-medium ${activityOnly ? "text-info" : "text-fg-subtle"}`}>{display}</span>
     </div>
   );
 }
@@ -87,24 +87,24 @@ function BarRow({
   return (
     <div>
       <div className="flex items-center gap-2 text-xs" title={tooltip}>
-        <span className="w-4 shrink-0 text-right text-[11px] tabular-nums text-slate-400">{rank}</span>
-        <span className="flex w-14 shrink-0 items-center gap-0.5 truncate font-medium text-slate-700">
+        <span className="w-4 shrink-0 text-right text-[11px] tabular-nums text-fg-faint">{rank}</span>
+        <span className="flex w-14 shrink-0 items-center gap-0.5 truncate font-medium text-fg-muted">
           {r.branch}
           {breakdown ? (
             <button
               type="button"
               onClick={onToggle}
-              className="shrink-0 rounded text-slate-400 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+              className="shrink-0 rounded text-fg-faint hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               title={`${r.branch} includes ${breakdown.onlineBranchCode} (online store) — click to split ${metricLabel} back apart`}
             >
               <ExpandIcon open={isOpen} />
             </button>
           ) : null}
         </span>
-        <div className="h-3.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-          <div className={`h-full rounded-full ${activityOnly ? "bg-sky-400" : TONE_BAR[tone]}`} style={{ width: `${widthPct}%` }} />
+        <div className="h-3.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+          <div className={`h-full rounded-full ${activityOnly ? "bg-info-solid" : TONE_BAR[tone]}`} style={{ width: `${widthPct}%` }} />
         </div>
-        <span className={`w-11 shrink-0 text-right font-semibold tabular-nums ${activityOnly ? "text-sky-700" : TONE_TEXT[tone]}`}>
+        <span className={`w-11 shrink-0 text-right font-semibold tabular-nums ${activityOnly ? "text-info" : TONE_TEXT[tone]}`}>
           {r.ratio !== null ? formatPercent(r.ratio) : activityOnly ? formatCompact(r.actual) : "—"}
         </span>
       </div>
@@ -177,9 +177,9 @@ export function BranchPerformanceBars({
   const tail = !expanded && ranked.length > COLLAPSED_HEAD && bestIndex >= COLLAPSED_HEAD ? [{ row: ranked[bestIndex], rank: bestIndex + 1 }] : [];
 
   return (
-    <div className="flex h-full flex-col rounded-md border border-slate-200 bg-white p-4">
+    <div className="flex h-full flex-col rounded-md border border-border bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
           Branch Performance (MTD){metrics.length === 1 ? ` — ${metrics[0].label}` : ""}
         </h2>
         <div className="flex items-center gap-2">
@@ -190,7 +190,7 @@ export function BranchPerformanceBars({
                 setMetric(e.target.value);
                 setExpanded(false);
               }}
-              className="h-7 rounded border border-slate-300 px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+              className="h-7 rounded border border-border-strong px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               {metrics.map((m) => (
                 <option key={m.key} value={m.key}>
@@ -203,7 +203,7 @@ export function BranchPerformanceBars({
             <button
               type="button"
               onClick={() => setExpanded((e) => !e)}
-              className="text-[11px] font-medium text-red-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+              className="text-[11px] font-medium text-bad hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               {expanded ? "Show less" : "View all"}
             </button>
@@ -223,7 +223,7 @@ export function BranchPerformanceBars({
             onToggle={() => toggleBreakdown(r.branch)}
           />
         ))}
-        {showEllipsis ? <div className="pl-6 text-[11px] text-slate-300">···</div> : null}
+        {showEllipsis ? <div className="pl-6 text-[11px] text-fg-faint">···</div> : null}
         {tail.map(({ row, rank }) => (
           <BarRow
             key={`${row.branch}-tail`}

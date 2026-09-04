@@ -4,25 +4,27 @@ import type { Pace } from "@/lib/pace";
 import { Sparkline } from "./sparkline";
 
 const TONE_BAR: Record<AchievementTone, string> = {
-  good: "bg-emerald-500",
-  warn: "bg-amber-500",
-  critical: "bg-red-500",
-  neutral: "bg-slate-300",
+  good: "bg-good-solid",
+  warn: "bg-warn-solid",
+  critical: "bg-bad-solid",
+  neutral: "bg-surface-3",
 };
 const TONE_TEXT: Record<AchievementTone, string> = {
-  good: "text-emerald-700",
-  warn: "text-amber-700",
-  critical: "text-red-700",
-  neutral: "text-slate-400",
+  good: "text-good",
+  warn: "text-warn",
+  critical: "text-bad",
+  neutral: "text-fg-faint",
 };
 
+// Decorative icon tint per card — not a status signal, so these map to
+// neutral/brand token pairs rather than the good/warn/bad tones.
 const ICON_BG: Record<string, string> = {
-  red: "bg-red-50 text-red-600",
-  blue: "bg-blue-50 text-blue-600",
-  amber: "bg-amber-50 text-amber-600",
-  emerald: "bg-emerald-50 text-emerald-600",
-  violet: "bg-violet-50 text-violet-600",
-  indigo: "bg-indigo-50 text-indigo-600",
+  red: "bg-accent-soft text-accent-text",
+  blue: "bg-info-soft text-info",
+  amber: "bg-warn-soft text-warn",
+  emerald: "bg-good-soft text-good",
+  violet: "bg-info-soft text-info",
+  indigo: "bg-info-soft text-info",
 };
 
 /** Icon + value + "vs Target" bar — the mockup's KPI-card format, built from
@@ -77,41 +79,41 @@ export function RichKpiCard({
     : `${label}: ${value}${sub ? ` (${sub})` : ""}${hasPreviousUpload === false ? " · first upload" : ""}`;
 
   return (
-    <div className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-white p-4" title={tooltip}>
+    <div className="flex h-full flex-col justify-between rounded-lg border border-border bg-surface p-4" title={tooltip}>
       <div className="flex items-start justify-between">
         <div className="min-w-0">
-          <div className="text-[11px] font-medium text-slate-500">{label}</div>
-          <div className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{value}</div>
+          <div className="text-[11px] font-medium text-fg-subtle">{label}</div>
+          <div className="mt-1 text-xl font-semibold tabular-nums text-fg">{value}</div>
         </div>
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${ICON_BG[color]}`}>{icon}</div>
       </div>
 
       {hasTarget ? (
         <div className="mt-3">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
             <div className={`h-full rounded-full ${TONE_BAR[tone]}`} style={{ width: `${widthPct}%` }} />
           </div>
           <div className={`mt-1 text-[11px] font-medium tabular-nums ${TONE_TEXT[tone]}`}>
             {ratio === null ? "no target set" : `${Math.round(ratio * 100)}% of target`}
           </div>
           {pace ? (
-            <div className="mt-1.5 space-y-0.5 text-[10px] text-slate-400">
+            <div className="mt-1.5 space-y-0.5 text-[10px] text-fg-faint">
               {pace.gap !== null && pace.gap > 0 ? (
                 <div title={`Gap to target: ${formatPaceValue(pace.gap)}`}>
-                  Gap <span className="font-medium text-slate-600">{formatPaceValue(pace.gap)}</span>
+                  Gap <span className="font-medium text-fg-muted">{formatPaceValue(pace.gap)}</span>
                   {pace.requiredRatePerDay !== null ? (
                     <>
                       {" · Required "}
-                      <span className="font-medium text-slate-600">{formatPaceValue(pace.requiredRatePerDay)}/day</span>
+                      <span className="font-medium text-fg-muted">{formatPaceValue(pace.requiredRatePerDay)}/day</span>
                     </>
                   ) : null}
                 </div>
               ) : pace.gap !== null ? (
-                <div className="text-emerald-600">Target already met</div>
+                <div className="text-good">Target already met</div>
               ) : null}
               {pace.runRatePerDay !== null ? (
                 <div title={`Current run rate: ${formatPaceValue(pace.runRatePerDay)} per day`}>
-                  Run rate <span className="font-medium text-slate-600">{formatPaceValue(pace.runRatePerDay)}/day</span>
+                  Run rate <span className="font-medium text-fg-muted">{formatPaceValue(pace.runRatePerDay)}/day</span>
                 </div>
               ) : null}
             </div>
@@ -124,17 +126,17 @@ export function RichKpiCard({
             <Sparkline values={sparklineValues} color={tone === "neutral" ? "#94a3b8" : undefined} />
           ) : null}
           {pace?.runRatePerDay !== null && pace?.runRatePerDay !== undefined ? (
-            <div className={showSparkline ? "mt-0.5 text-[10px] text-slate-400" : "text-[10px] text-slate-400"}>
-              Run rate <span className="font-medium text-slate-600">{formatPaceValue(pace.runRatePerDay)}/day</span>
+            <div className={showSparkline ? "mt-0.5 text-[10px] text-fg-faint" : "text-[10px] text-fg-faint"}>
+              Run rate <span className="font-medium text-fg-muted">{formatPaceValue(pace.runRatePerDay)}/day</span>
             </div>
           ) : null}
         </div>
       ) : sub ? (
-        <div className="mt-3 text-[11px] text-slate-400">{sub}</div>
+        <div className="mt-3 text-[11px] text-fg-faint">{sub}</div>
       ) : null}
 
       {hasPreviousUpload !== undefined ? (
-        <div className="pt-2 text-[10px] text-slate-400">{hasPreviousUpload ? "vs last upload" : "first upload"}</div>
+        <div className="pt-2 text-[10px] text-fg-faint">{hasPreviousUpload ? "vs last upload" : "first upload"}</div>
       ) : null}
     </div>
   );

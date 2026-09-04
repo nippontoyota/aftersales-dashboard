@@ -7,13 +7,13 @@ export function UploadTabs({ dailyReports, bills }: { dailyReports: ReactNode; b
 
   return (
     <>
-      <div className="flex border-b border-slate-200">
+      <div className="flex border-b border-border">
         <button
           onClick={() => setTab("reports")}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
             tab === "reports"
-              ? "border-b-2 border-red-600 text-red-700"
-              : "text-slate-500 hover:text-slate-700"
+              ? "border-b-2 border-bad text-bad"
+              : "text-fg-subtle hover:text-fg-muted"
           }`}
         >
           Daily Reports
@@ -22,8 +22,8 @@ export function UploadTabs({ dailyReports, bills }: { dailyReports: ReactNode; b
           onClick={() => setTab("bills")}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
             tab === "bills"
-              ? "border-b-2 border-red-600 text-red-700"
-              : "text-slate-500 hover:text-slate-700"
+              ? "border-b-2 border-bad text-bad"
+              : "text-fg-subtle hover:text-fg-muted"
           }`}
         >
           Bills

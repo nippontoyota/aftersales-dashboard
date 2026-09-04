@@ -98,7 +98,10 @@ export type HeroSummary = {
   externalSalesMtd: number | null;
   /** Averaged across branches, not summed — same convention as KpiSummary's field of the same name (see avgField). */
   externalSalesPctOfSprInternal: number | null;
-  /** GUS Parts+Labour + BPU Parts+Labour + External Sales, MTD — the single grand-total figure from the user's Revenue Stream reference. */
+  /** Scrap / used-oil bill revenue (Rs, without tax), MTD — summed across branches. Always a number (0 when no bills). */
+  scrapRevenueMtd: number | null;
+  usedOilRevenueMtd: number | null;
+  /** GUS Parts+Labour + BPU Parts+Labour + External Sales + scrap + used oil, MTD — the grand-total figure from the user's Revenue Stream reference, plus bill revenue. */
   totalRevenueStreamMtd: number | null;
 };
 
@@ -114,6 +117,8 @@ export function computeHeroSummary(branches: BranchReport[]): HeroSummary {
     bpuLabourMtd: sumField(branches, "bpuLabourMtd"),
     externalSalesMtd: sumField(branches, "externalSalesMtd"),
     externalSalesPctOfSprInternal: avgField(branches, "externalSalesPctOfSprInternal"),
+    scrapRevenueMtd: sumField(branches, "scrapRevenueMtd"),
+    usedOilRevenueMtd: sumField(branches, "usedOilRevenueMtd"),
     totalRevenueStreamMtd: sumField(branches, "totalRevenueStreamMtd"),
   };
 }

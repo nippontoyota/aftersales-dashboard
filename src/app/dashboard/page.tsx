@@ -8,14 +8,16 @@ import { RevenueIcon, WrenchIcon, TargetIcon, PercentIcon, StorefrontIcon } from
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { achievementRatio, computeHeroSummary, computeKpiSummary } from "@/lib/aggregate";
 import { getCurrentAdmin } from "@/lib/auth";
-import type { AdminAccount } from "@/lib/admin-store";
-import { loadDashboardData } from "@/lib/dashboard-data";
+import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
+import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computePace } from "@/lib/pace";
 import { computeVasTrendSeries } from "@/lib/trend";
 import { AchievementDonut } from "./achievement-donut";
 import { AlertsPanel } from "./alerts-panel";
 import { BillDrilldown } from "./bill-drilldown";
+import { BranchDailyReport } from "./branch-daily-report";
+import { RegionDailyReport } from "./region-daily-report";
 import { HeroKpi } from "./hero-kpi";
 import { InsightsPanel } from "./insights-panel";
 import { RegionScorecard } from "./region-scorecard";
@@ -41,10 +43,19 @@ export default async function DashboardPage({
   if (!admin?.canViewDashboard) {
     redirect("/upload");
   }
-  const identity = admin.role === "hq" ? "HQ admin" : `${admin.branch} branch`;
+  const identity = adminIdentityLabel(admin);
+  const nav = await loadNavState(admin);
 
   return (
-    <AppShell current="dashboard" showDashboardLink isHq={admin.role === "hq"} identity={identity}>
+    <AppShell
+      current="dashboard"
+      showDashboardLink
+      isHq={admin.role === "hq"}
+      companyTabs={nav.companyTabs}
+      canUpload={nav.canUpload}
+      dashboardLabel={nav.dashboardLabel}
+      identity={identity}
+    >
       <Suspense fallback={<DashboardPageSkeleton heroCards={5} />}>
         <DashboardContent searchParams={searchParams} admin={admin} />
       </Suspense>
@@ -65,13 +76,79 @@ async function DashboardContent({
   if (!data) {
     return (
       <div className="mx-auto w-full max-w-2xl p-6">
-        <h1 className="text-lg font-semibold text-slate-900">Dashboard</h1>
-        <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+        <h1 className="text-lg font-semibold text-fg">Dashboard</h1>
+        <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           {admin.role === "hq"
             ? "No BA Tool reports have been uploaded yet. Go to Upload to add today's file."
             : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
         </div>
       </div>
+    );
+  }
+
+  // Branch admin, date not published yet → raw single-branch report instead
+  // of the company-wide dashboard. Once HQ publishes, this branch gets the
+  // full dashboard (see loadDashboardData's showBranchDailyReport).
+  if (data.showBranchDailyReport) {
+    const branchReport = data.filteredBranches[0];
+    if (!data.report || !branchReport) {
+      return (
+        <div className="p-6">
+          <h1 className="text-lg font-semibold text-fg">Daily Report</h1>
+          <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
+            Your uploads are saved. This report fills in once HQ has uploaded the day&apos;s BA Tool file.
+          </div>
+        </div>
+      );
+    }
+    const uploadedAtLabel = new Date(data.report.uploadedAt).toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "Asia/Kolkata",
+    });
+    return (
+      <BranchDailyReport
+        report={branchReport}
+        branch={branchReport.branch}
+        date={data.date}
+        dates={data.dates}
+        uploadedAtLabel={uploadedAtLabel}
+        daysSincePrevious={data.report.daysSincePrevious}
+      />
+    );
+  }
+
+  // Regional manager, date not published yet → wide region comparison table
+  // (their branches + a region total) instead of the company dashboard.
+  if (data.showRegionDailyReport && admin.role === "regional") {
+    if (!data.report || data.filteredBranches.length === 0) {
+      return (
+        <div className="p-6">
+          <h1 className="text-lg font-semibold text-fg">Regional Report — {admin.region}</h1>
+          <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
+            This report fills in once HQ has uploaded the day&apos;s BA Tool file.
+          </div>
+        </div>
+      );
+    }
+    const uploadedAtLabel = new Date(data.report.uploadedAt).toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "Asia/Kolkata",
+    });
+    return (
+      <RegionDailyReport
+        region={admin.region}
+        branches={data.filteredBranches}
+        date={data.date}
+        dates={data.dates}
+        uploadedAtLabel={uploadedAtLabel}
+        daysSincePrevious={data.report.daysSincePrevious}
+      />
     );
   }
 
@@ -81,7 +158,7 @@ async function DashboardContent({
   if (!report) {
     return (
       <div className="p-6">
-        <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">Could not load the report for {date}.</div>
+        <div className="rounded border border-bad/30 bg-bad-soft p-4 text-sm text-bad">Could not load the report for {date}.</div>
       </div>
     );
   }
@@ -216,14 +293,22 @@ async function DashboardContent({
           <CollapsibleCard title="Bills — Taxable Value" defaultOpen>
             <div className="space-y-2 p-3">
               {billTotals.map((bt) => (
-                <BillDrilldown key={bt.month} month={bt.month} total={bt.total} count={bt.count} />
+                <BillDrilldown
+                  key={bt.month}
+                  month={bt.month}
+                  total={bt.total}
+                  count={bt.count}
+                  scrapTotal={bt.scrapTotal}
+                  usedOilTotal={bt.usedOilTotal}
+                  untaggedTotal={bt.untaggedTotal}
+                />
               ))}
             </div>
           </CollapsibleCard>
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 text-[11px] text-slate-400">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-[11px] text-fg-faint">
         <span>Data as of: {uploadedAtLabel} IST</span>
         <span>Figures rounded for display · full precision on hover</span>
       </div>

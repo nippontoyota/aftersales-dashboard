@@ -74,7 +74,7 @@ export function ReportTable({ branches, daysSincePrevious }: { branches: BranchR
           },
           {
             label: "VAS Gentani",
-            render: (r) => <div className="w-20 whitespace-nowrap text-sm font-semibold tabular-nums text-slate-900">{formatCompact(r.vasGentani)}</div>,
+            render: (r) => <div className="w-20 whitespace-nowrap text-sm font-semibold tabular-nums text-fg">{formatCompact(r.vasGentani)}</div>,
           },
         ]}
       />

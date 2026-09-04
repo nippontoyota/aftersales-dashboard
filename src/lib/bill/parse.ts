@@ -1,8 +1,21 @@
+// MUST be imported before "pdf-parse": pdfjs-dist references browser globals
+// (DOMMatrix, Path2D, ImageData) at module-evaluation time. See the file's
+// comment for why an inline polyfill here would run too late.
+import "./pdf-polyfill";
+// pdf-parse's "fake worker" setup does a *dynamic* `import(workerSrc)` that
+// Vercel's file tracing can't follow, so the worker chunk is missing from the
+// deployed function ("Cannot find module '.../pdf.worker.mjs'"). Importing it
+// statically here gets it bundled AND sets `globalThis.pdfjsWorker`, which
+// pdf-parse checks first — so the dynamic import is never reached.
+import "pdfjs-dist/legacy/build/pdf.worker.mjs";
 import { PDFParse } from "pdf-parse";
 
 export type BillParseResult = {
   invoiceNumber: string | null;
   taxableValue: number | null;
+  /** ISO `YYYY-MM-DD`, from the invoice's own date — bill revenue counts in
+   * this month, not the upload month. Null when it can't be read. */
+  invoiceDate: string | null;
 };
 
 export async function parseBillPdf(buffer: Buffer): Promise<BillParseResult> {
@@ -12,18 +25,76 @@ export async function parseBillPdf(buffer: Buffer): Promise<BillParseResult> {
     const result = await parser.getText();
     text = result.text;
     await parser.destroy();
-  } catch {
-    return { invoiceNumber: null, taxableValue: null };
+  } catch (err) {
+    console.error("[bill-parse] pdf text extraction failed:", err);
+    return { invoiceNumber: null, taxableValue: null, invoiceDate: null };
   }
 
-  return {
-    invoiceNumber: extractInvoiceNumber(text),
-    taxableValue: extractTaxableValue(text),
-  };
+  const invoiceNumber = extractInvoiceNumber(text);
+  const taxableValue = extractTaxableValue(text);
+  const invoiceDate = extractInvoiceDate(text);
+
+  if (invoiceNumber === null || taxableValue === null || invoiceDate === null) {
+    // Log the raw layout so incomplete extractions can be diagnosed from the
+    // Vercel function logs (pdf.js spaces text differently across platforms).
+    console.warn(
+      `[bill-parse] incomplete extraction (invoice=${invoiceNumber}, taxable=${taxableValue}, date=${invoiceDate}). Text:\n` +
+        text.slice(0, 4000),
+    );
+  }
+
+  return { invoiceNumber, taxableValue, invoiceDate };
 }
 
-function extractInvoiceNumber(text: string): string | null {
+/** Reads the invoice's date as ISO `YYYY-MM-DD`. Handles the two Nippon
+ * formats: format 2's "Invoice Date : 29-8-2026" (D-M-YYYY) and format 1's
+ * bare "29/08/2026" (DD/MM/YYYY) near the top of the page. Indian
+ * day-first ordering throughout. */
+export function extractInvoiceDate(text: string): string | null {
+  const labelled = [
+    /Invoice\s*Date\s*:?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
+    /Bill\s*Date\s*:?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
+    /Invoice\s*Date\s*:?\s*(\d{4}-\d{2}-\d{2})/i,
+    /Acknowledgement\s*Date\s*:?\s*(\d{4}-\d{2}-\d{2})/i,
+  ];
+  for (const pat of labelled) {
+    const m = text.match(pat);
+    const iso = m ? toIsoDate(m[1]) : null;
+    if (iso) return iso;
+  }
+
+  // Format 1 has no value beside its "Invoice Date :" label — fall back to
+  // the first DD/MM/YYYY date on the page (it sits on line 2, by the
+  // "Tax Invoice" heading, and again in the payment row).
+  const loose = text.match(/\b(\d{1,2}\/\d{1,2}\/\d{4})\b/);
+  return loose ? toIsoDate(loose[1]) : null;
+}
+
+/** `dd/mm/yyyy`, `d-m-yyyy`, `dd-mm-yy`, or `yyyy-mm-dd` → `yyyy-mm-dd`.
+ * Everything day-first except an already-ISO string. Returns null if the
+ * result isn't a real calendar date. */
+function toIsoDate(raw: string): string | null {
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  let y: number, mo: number, d: number;
+  if (isoMatch) {
+    [, y, mo, d] = isoMatch.map(Number) as [number, number, number, number];
+  } else {
+    const parts = raw.split(/[-/]/).map(Number);
+    if (parts.length !== 3) return null;
+    [d, mo, y] = parts;
+    if (y < 100) y += 2000;
+  }
+  if (!y || !mo || !d || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+export function extractInvoiceNumber(text: string): string | null {
   const patterns = [
+    // Format 2 (GST e-invoice): "Invoice Serial Number : BSA/26-27/013"
+    /Invoice\s*Serial\s*(?:No\.?|Number)?\s*:?\s*([A-Za-z0-9][\w\-\/]{3,25})/i,
+    // Format 1 (Tax Invoice (Cash)): a bare "AA26-01514" token
     /Invoice\s*No\.?\s*:?\s*\n?\s*([A-Z]{2}\d{2}-\d{4,6})/i,
     /\n([A-Z]{2}\d{2}-\d{4,6})\n/,
     /(?:^|\s)([A-Z]{2}\d{2}-\d{4,6})(?:\s|$)/,
@@ -35,9 +106,252 @@ function extractInvoiceNumber(text: string): string | null {
 
   for (const pat of patterns) {
     const m = text.match(pat);
-    if (m) return m[1].trim();
+    if (m) {
+      const candidate = m[1].trim();
+      // Guard against capturing a stray word like "Date" when the label has
+      // no value on the same line.
+      if (/\d/.test(candidate) && candidate.toLowerCase() !== "date") return candidate;
+    }
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Taxable value
+//
+// These invoices come in two layouts. Rather than one fragile heuristic we try
+// a series of label-anchored strategies (whitespace-tolerant) and fall back to
+// the older column/math heuristics only if none match.
+// ---------------------------------------------------------------------------
+
+export function extractTaxableValue(text: string): number | null {
+  const strategies = [
+    fromLineTotalRow, // Format 2: "Line Total: ₹ 22,903.68 ₹ 2,061.33 ..."
+    fromGstRate, // Format 1: CGST amount ÷ its rate = taxable base
+    fromTotalsRow, // Format 1: "<afterTax> <tax> <taxable> <disc> <total>" row
+    fromGrandTotalMinusGst, // generic: grand total − all GST amounts
+    fromMathHeuristic, // legacy: scan every line for a self-consistent set
+    fromDirectLabel, // legacy: "Taxable Value: 1,234.00" etc.
+  ];
+
+  for (const strategy of strategies) {
+    const val = strategy(text);
+    if (val !== null && val > 0) return round2(val);
+  }
+  return null;
+}
+
+/** Format 2 — the GST e-invoice footer row. */
+function fromLineTotalRow(text: string): number | null {
+  const m = text.match(/Line\s*Total\s*:?[^\n]*/i);
+  if (!m) return null;
+
+  const nums = moneyTokens(m[0]);
+  if (nums.length === 0) return null;
+
+  // Column order on this row is: Taxable Value, CGST, SGST, IGST.
+  const taxable = nums[0];
+  if (taxable <= 0) return null;
+
+  // Confirm against the invoice grand total when we can see it:
+  // taxable + CGST + SGST + IGST ≈ grand total.
+  const grand = grandTotalWithPaise(text);
+  if (grand !== null && nums.length >= 2) {
+    const sum = nums.reduce((a, b) => a + b, 0);
+    if (Math.abs(sum - grand) > 1) {
+      // Row didn't line up — let another strategy try.
+      return null;
+    }
+  }
+  return taxable;
+}
+
+/**
+ * Format 1 — "Central GST for Parts @ 9% : 108.27". The taxable base is the GST
+ * amount divided by its rate. CGST and SGST share the same base, so we sum the
+ * per-line bases of one jurisdiction (plus any IGST lines).
+ */
+function fromGstRate(text: string): number | null {
+  const re = /\b(Central|State|Integrated|C|S|I)\s*GST\s+(?:for\s+\w+\s+)?@?\s*([\d.]+)\s*%\s*:?\s*(?:Rs\.?|₹)?\s*([\d,]+\.\d{2})/gi;
+
+  let centralBase = 0;
+  let integratedBase = 0;
+  let sawCentral = false;
+  let sawIntegrated = false;
+
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const rate = parseFloat(m[2]) / 100;
+    const amount = parseIndianNumber(m[3]);
+    if (!rate || amount === null || amount <= 0) continue;
+    const base = amount / rate;
+
+    const kind = m[1].toLowerCase();
+    if (kind.startsWith("c")) {
+      centralBase += base;
+      sawCentral = true;
+    } else if (kind.startsWith("i")) {
+      integratedBase += base;
+      sawIntegrated = true;
+    }
+    // "State"/"S" mirrors the central base — ignore to avoid double counting.
+  }
+
+  if (!sawCentral && !sawIntegrated) return null;
+
+  const taxable = centralBase + integratedBase;
+  if (taxable <= 0) return null;
+
+  // Sanity-check against the grand total if present.
+  const grand = grandTotalWithPaise(text) ?? grandTotalRounded(text);
+  if (grand !== null) {
+    const gstTotal = totalGstAmount(text);
+    if (gstTotal !== null && Math.abs(taxable + gstTotal - grand) > 1.5) return null;
+  }
+  return taxable;
+}
+
+/**
+ * Format 1 — the single summary row, e.g. "1,419.54  216.54  1,203.00  0.00
+ * 1,203.00" = amount-after-tax, tax, taxable, discount, total. We identify it
+ * structurally: amount-after-tax ≈ tax + taxable, and it matches the grand
+ * total (± rounding).
+ */
+function fromTotalsRow(text: string): number | null {
+  const grand = grandTotalRounded(text) ?? grandTotalWithPaise(text);
+
+  for (const line of text.split("\n")) {
+    const nums = moneyTokens(line);
+    if (nums.length < 3 || nums.length > 6) continue;
+
+    const [afterTax, tax, taxable] = nums;
+    if (afterTax <= 0 || tax <= 0 || taxable <= 0) continue;
+    if (Math.abs(afterTax - (tax + taxable)) > 0.05) continue;
+    if (grand !== null && Math.abs(afterTax - grand) > 1) continue;
+
+    return taxable;
+  }
+  return null;
+}
+
+/** Generic — grand total minus every GST amount on the document. */
+function fromGrandTotalMinusGst(text: string): number | null {
+  const grand = grandTotalWithPaise(text);
+  const gst = totalGstAmount(text);
+  if (grand === null || gst === null || gst <= 0) return null;
+
+  const taxable = grand - gst;
+  if (taxable <= 0 || taxable >= grand) return null;
+  return taxable;
+}
+
+/** Legacy column/math heuristic — kept as a fallback for unseen layouts. */
+function fromMathHeuristic(text: string): number | null {
+  const lines = text.split("\n");
+  let maxTotal = 0;
+  let bestTaxable: number | null = null;
+
+  for (const line of lines) {
+    const numbers = legacyNumbers(line);
+    if (numbers.length >= 2 && numbers.length <= 20) {
+      const mathResult = findTaxableFromMath(numbers);
+      if (mathResult && mathResult.total > maxTotal) {
+        maxTotal = mathResult.total;
+        bestTaxable = mathResult.taxable;
+      }
+    }
+  }
+  return bestTaxable;
+}
+
+/** Legacy direct labels. */
+function fromDirectLabel(text: string): number | null {
+  const directPatterns = [
+    /Total\s+Taxable\s+(?:Value|Amount)\s*:?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+    /Taxable\s+(?:Value|Amount)\s*:?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+    /Net\s+Taxable\s*:?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+    /Sub\s*Total\s*:?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+  ];
+  for (const pat of directPatterns) {
+    const m = text.match(pat);
+    if (m) {
+      const val = parseIndianNumber(m[1]);
+      if (val !== null && val > 0) return val;
+    }
+  }
+  return null;
+}
+
+// --- shared helpers -------------------------------------------------------
+
+/** All "1,234.56" style money amounts on a string, in order, commas stripped. */
+function moneyTokens(s: string): number[] {
+  const matches = s.match(/\d[\d,]*\.\d{2}/g) ?? [];
+  return matches
+    .map(parseIndianNumber)
+    .filter((n): n is number => n !== null);
+}
+
+/** Grand total including paise: "Total ₹ 27,026.34" / "Grand Total : 1,420.00". */
+function grandTotalWithPaise(text: string): number | null {
+  const patterns = [
+    /\bGrand\s*Total\s*:?\s*(?:Rs\.?|₹)?\s*([\d,]+\.\d{2})/i,
+    /Invoice\s*Value[^\n]*\bTotal\s+(?:Rs\.?|₹)?\s*([\d,]+\.\d{2})/i,
+    /(?:^|\n)[^\n]*?\bTotal\s+₹\s*([\d,]+\.\d{2})/,
+  ];
+  for (const pat of patterns) {
+    const m = text.match(pat);
+    if (m) {
+      const v = parseIndianNumber(m[1]);
+      if (v !== null && v > 0) return v;
+    }
+  }
+  return null;
+}
+
+/** Grand total rounded to the rupee, when the paise value isn't distinct. */
+function grandTotalRounded(text: string): number | null {
+  const m =
+    text.match(/\bGrand\s*Total\s*:?\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ??
+    text.match(/Invoice\s*Total\s*(?:Rs\.?|₹)?\s*([\d,]+(?:\.\d{2})?)/i);
+  if (!m) return null;
+  const v = parseIndianNumber(m[1]);
+  return v !== null && v > 0 ? v : null;
+}
+
+/** Sum of every GST amount: "@ 9% : 108.27" and "9.0% ₹ 923.51" style cells. */
+function totalGstAmount(text: string): number | null {
+  let total = 0;
+  let saw = false;
+
+  const labelled = /@\s*[\d.]+\s*%\s*:?\s*(?:Rs\.?|₹)?\s*([\d,]+\.\d{2})/g;
+  const tabular = /\b\d{1,2}(?:\.\d)?\s*%\s*(?:Rs\.?|₹)?\s*([\d,]+\.\d{2})/g;
+
+  let m: RegExpExecArray | null;
+  while ((m = labelled.exec(text)) !== null) {
+    const v = parseIndianNumber(m[1]);
+    if (v !== null) {
+      total += v;
+      saw = true;
+    }
+  }
+  if (saw) return total;
+
+  while ((m = tabular.exec(text)) !== null) {
+    const v = parseIndianNumber(m[1]);
+    if (v !== null) {
+      total += v;
+      saw = true;
+    }
+  }
+  return saw ? total : null;
+}
+
+function legacyNumbers(line: string): number[] {
+  const matches = line.match(/[\d,]+\.\d{1,2}/g) ?? [];
+  return matches
+    .map(parseIndianNumber)
+    .filter((n): n is number => n !== null && n > 0);
 }
 
 function findTaxableFromMath(numbers: number[]): { total: number; taxable: number } | null {
@@ -77,83 +391,12 @@ function findTaxableFromMath(numbers: number[]): { total: number; taxable: numbe
   return null;
 }
 
-function extractTaxableValue(text: string): number | null {
-  const lines = text.split("\n");
-
-  let maxTotal = 0;
-  let bestTaxable: number | null = null;
-
-  for (const line of lines) {
-    const numbers = extractNumbers(line);
-    if (numbers.length >= 2 && numbers.length <= 20) {
-      const mathResult = findTaxableFromMath(numbers);
-      if (mathResult) {
-        if (mathResult.total > maxTotal) {
-          maxTotal = mathResult.total;
-          bestTaxable = mathResult.taxable;
-        }
-      }
-    }
-  }
-
-  if (bestTaxable !== null) {
-    return bestTaxable;
-  }
-
-  for (let i = 0; i < lines.length; i++) {
-    if (!/^\s*Total\s*$/i.test(lines[i]) && !/\bGrand\s+Total\b/i.test(lines[i])) continue;
-
-    const window = lines.slice(i, Math.min(i + 6, lines.length));
-    for (const line of window) {
-      const numbers = extractNumbers(line);
-      if (numbers.length >= 3) {
-        const sorted = [...numbers].sort((a, b) => b - a);
-        const grandTotal = sorted[0];
-        for (const n of sorted.slice(1)) {
-          if (n > 0 && n < grandTotal && n >= grandTotal * 0.5) return n;
-        }
-      }
-    }
-  }
-
-  for (const line of lines) {
-    if (/\bTotal\b/i.test(line)) {
-      const numbers = extractNumbers(line);
-      if (numbers.length >= 2) {
-        const sorted = [...numbers].sort((a, b) => b - a);
-        const largest = sorted[0];
-        for (const n of sorted.slice(1)) {
-          if (n > 0 && n < largest && n >= largest * 0.5) return n;
-        }
-      }
-    }
-  }
-
-  const directPatterns = [
-    /Total\s+Taxable\s+(?:Value|Amount)\s*:?\s*(?:Rs\.?\s*)?([\d,]+(?:\.\d{1,2})?)/i,
-    /Taxable\s+(?:Value|Amount)\s*:?\s*(?:Rs\.?\s*)?([\d,]+(?:\.\d{1,2})?)/i,
-    /Net\s+Taxable\s*:?\s*(?:Rs\.?\s*)?([\d,]+(?:\.\d{1,2})?)/i,
-    /Sub\s*Total\s*:?\s*(?:Rs\.?\s*)?([\d,]+(?:\.\d{1,2})?)/i,
-  ];
-
-  for (const pat of directPatterns) {
-    const m = text.match(pat);
-    if (m) {
-      const val = parseIndianNumber(m[1]);
-      if (val !== null && val > 0) return val;
-    }
-  }
-
-  return null;
-}
-
-function extractNumbers(line: string): number[] {
-  const matches = line.match(/[\d,]+\.\d{1,2}/g) ?? [];
-  return matches.map(parseIndianNumber).filter((n): n is number => n !== null && n > 0);
-}
-
 function parseIndianNumber(s: string): number | null {
   const cleaned = s.replace(/,/g, "");
   const val = parseFloat(cleaned);
   return isNaN(val) ? null : val;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }

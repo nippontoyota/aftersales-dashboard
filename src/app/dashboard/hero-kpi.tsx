@@ -7,7 +7,7 @@ import type { BranchReport } from "@/lib/report";
 import { REGIONS, type RegionName } from "@/lib/regions";
 
 const SCOPE_ACCENT: Record<"All" | RegionName, string> = {
-  All: "#0f172a",
+  All: "var(--color-fg)",
   Central: "#2a78d6",
   South: "#eb6834",
   North: "#1baf7a",
@@ -15,26 +15,26 @@ const SCOPE_ACCENT: Record<"All" | RegionName, string> = {
 /** A specific branch pulled in via the "compare a branch" dropdown isn't one
  * of the four fixed scopes, so it gets its own neutral accent rather than
  * borrowing a region's color. */
-const BRANCH_ACCENT = "#475569";
+const BRANCH_ACCENT = "var(--color-fg-muted)";
 
 type ScopeSummary = { label: string; summary: HeroSummary; accent: string };
 
 function ScopeBanner({ label, value, accent, compact }: { label: string; value: string; accent: string; compact?: boolean }) {
   return (
     <div
-      className={`min-w-0 rounded-md border border-slate-200 bg-white ${compact ? "px-2.5 py-2" : "px-3.5 py-3"}`}
+      className={`min-w-0 rounded-md border border-border bg-surface ${compact ? "px-2.5 py-2" : "px-3.5 py-3"}`}
       title={`${label} — Total Revenue Stream MTD: ${value}`}
     >
       <div className={`flex items-center gap-1.5 truncate font-medium ${compact ? "text-[10px]" : "text-[11px]"}`} style={{ color: accent }}>
         <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: accent }} />
         <span className="truncate">{label}</span>
       </div>
-      <div className={`mt-0.5 truncate font-semibold tabular-nums text-slate-900 ${compact ? "text-sm" : "text-lg"}`}>{value}</div>
+      <div className={`mt-0.5 truncate font-semibold tabular-nums text-fg ${compact ? "text-sm" : "text-lg"}`}>{value}</div>
     </div>
   );
 }
 
-type MetricGroup = "GUS" | "BPU" | "External Sales" | "Total";
+type MetricGroup = "GUS" | "BPU" | "External Sales" | "Scrap & Used Oil" | "Total";
 
 // Rs-denominated rows use formatCompact (whole numbers) instead of the
 // default formatNumber (up to 2 decimals) — at these magnitudes, paise-level
@@ -51,6 +51,8 @@ const METRIC_ROWS: { label: string; key: keyof HeroSummary; group: MetricGroup; 
   { label: "Labour MTD (Rs)", key: "bpuLabourMtd", group: "BPU", formatValue: formatCompact },
   { label: "External Sales MTD (Rs)", key: "externalSalesMtd", group: "External Sales", formatValue: formatCompact },
   { label: "% on SPR I", key: "externalSalesPctOfSprInternal", group: "External Sales", formatValue: formatPercent },
+  { label: "Scrap MTD (Rs)", key: "scrapRevenueMtd", group: "Scrap & Used Oil", formatValue: formatCompact },
+  { label: "Used Oil MTD (Rs)", key: "usedOilRevenueMtd", group: "Scrap & Used Oil", formatValue: formatCompact },
   { label: "Total MTD (Rs)", key: "totalRevenueStreamMtd", group: "Total", formatValue: formatCompact },
 ];
 
@@ -70,12 +72,12 @@ function ScopeComparisonTable({ scopes }: { scopes: ScopeSummary[] }) {
         isTotal ? (
           <tr key={`${row.group}-header`}>
             <td colSpan={scopes.length + 1} className="pt-2">
-              <div className="border-t-2 border-slate-300" />
+              <div className="border-t-2 border-border-strong" />
             </td>
           </tr>
         ) : (
           <tr key={`${row.group}-header`}>
-            <td colSpan={scopes.length + 1} className="pb-0.5 pt-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            <td colSpan={scopes.length + 1} className="pb-0.5 pt-3 text-[10px] font-semibold uppercase tracking-wide text-fg-faint">
               {row.group}
             </td>
           </tr>
@@ -84,12 +86,12 @@ function ScopeComparisonTable({ scopes }: { scopes: ScopeSummary[] }) {
     }
     const formatValue = row.formatValue ?? formatNumber;
     rows.push(
-      <tr key={`${row.group}-${row.label}`} className={isTotal ? "" : "border-t border-slate-100"}>
-        <td className={`whitespace-nowrap py-1.5 pr-3 ${isTotal ? "font-semibold text-slate-900" : "text-slate-500"}`}>{row.label}</td>
+      <tr key={`${row.group}-${row.label}`} className={isTotal ? "" : "border-t border-border-subtle"}>
+        <td className={`whitespace-nowrap py-1.5 pr-3 ${isTotal ? "font-semibold text-fg" : "text-fg-subtle"}`}>{row.label}</td>
         {scopes.map((s) => (
           <td
             key={s.label}
-            className={`whitespace-nowrap py-1.5 pl-3 text-right tabular-nums ${isTotal ? "font-bold text-slate-900" : "font-medium text-slate-900"}`}
+            className={`whitespace-nowrap py-1.5 pl-3 text-right tabular-nums ${isTotal ? "font-bold text-fg" : "font-medium text-fg"}`}
             title={`${s.label} — ${row.group} ${row.label}: ${formatValue(s.summary[row.key])}`}
           >
             {formatValue(s.summary[row.key])}
@@ -104,7 +106,7 @@ function ScopeComparisonTable({ scopes }: { scopes: ScopeSummary[] }) {
       <table className="w-full min-w-[560px] border-separate border-spacing-0 text-[11px]">
         <thead>
           <tr>
-            <th className="pb-1 pr-3 text-left text-[10px] font-medium text-slate-400"> </th>
+            <th className="pb-1 pr-3 text-left text-[10px] font-medium text-fg-faint"> </th>
             {scopes.map((s) => (
               <th
                 key={s.label}
@@ -160,14 +162,14 @@ export function HeroKpi({ branches, compact, lockedBranch }: { branches: BranchR
   }, [branches, selectedBranch, lockedBranch]);
 
   return (
-    <div className={`rounded-lg border border-slate-200 bg-gradient-to-b from-slate-50/80 to-white shadow-sm ${compact ? "p-3" : "p-4 sm:p-5"}`}>
+    <div className={`rounded-lg border border-border bg-gradient-to-b from-canvas to-surface shadow-sm ${compact ? "p-3" : "p-4 sm:p-5"}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className={compact ? "text-xs font-semibold text-slate-900" : "text-sm font-semibold text-slate-900"}>Total Revenue Stream — MTD (Rs)</h2>
+        <h2 className={compact ? "text-xs font-semibold text-fg" : "text-sm font-semibold text-fg"}>Total Revenue Stream — MTD (Rs)</h2>
         {!lockedBranch ? (
           <select
             value={selectedBranch}
             onChange={(e) => setSelectedBranch(e.target.value)}
-            className="h-6 shrink-0 rounded border border-slate-300 px-1 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+            className="h-6 shrink-0 rounded border border-border-strong px-1 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <option value="__none__">+ Compare a branch</option>
             {branches.map((b) => (
@@ -185,8 +187,8 @@ export function HeroKpi({ branches, compact, lockedBranch }: { branches: BranchR
         ))}
       </div>
 
-      <div className={`flex items-baseline justify-between border-t border-dashed border-slate-200 ${compact ? "mt-3 pt-2" : "mt-4 pt-3"}`}>
-        <h3 className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Revenue stream breakdown</h3>
+      <div className={`flex items-baseline justify-between border-t border-dashed border-border ${compact ? "mt-3 pt-2" : "mt-4 pt-3"}`}>
+        <h3 className="text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">Revenue stream breakdown</h3>
       </div>
       <div className="mt-2">
         <ScopeComparisonTable scopes={scopes} />

@@ -6,9 +6,9 @@ import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { TargetIcon, WrenchIcon, StorefrontIcon } from "@/components/dashboard-icons";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { computeKpiSummary, TKM_TRACKED_KPIS } from "@/lib/aggregate";
-import type { AdminAccount } from "@/lib/admin-store";
+import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
-import { loadDashboardData } from "@/lib/dashboard-data";
+import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatNumber } from "@/lib/format";
 import { computePace } from "@/lib/pace";
 import { computeTrendSeries } from "@/lib/trend";
@@ -75,10 +75,14 @@ const REGION_GAP_METRIC = { actual: "partsRetailAchievementForTheMonth" as const
 export default async function TkmTargetsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin?.canViewDashboard) redirect("/upload");
-  const identity = admin.role === "hq" ? "HQ admin" : `${admin.branch} branch`;
+  // Company-wide pages are hidden from a branch admin until their latest
+  // date is published — before that they only get the Daily Report.
+  const nav = await loadNavState(admin);
+  if (!nav.companyTabs) redirect("/dashboard");
+  const identity = adminIdentityLabel(admin);
 
   return (
-    <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} identity={identity}>
+    <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton heroCards={5} />}>
         <TkmTargetsContent searchParams={searchParams} admin={admin} />
       </Suspense>
@@ -99,8 +103,8 @@ async function TkmTargetsContent({
   if (!data || !data.report) {
     return (
       <div className="p-6">
-        <h1 className="text-lg font-semibold text-slate-900">TKM Targets</h1>
-        <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+        <h1 className="text-lg font-semibold text-fg">TKM Targets</h1>
+        <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
         </div>
       </div>

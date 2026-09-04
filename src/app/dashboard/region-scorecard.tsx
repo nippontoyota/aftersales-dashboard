@@ -32,10 +32,10 @@ const DEFAULT_METRICS: RegionMetricConfig[] = [
 
 const REGION_ACCENT: Record<RegionName, string> = { Central: "#2a78d6", South: "#eb6834", North: "#1baf7a" };
 const TONE_TEXT: Record<AchievementTone, string> = {
-  good: "text-emerald-700",
-  warn: "text-amber-700",
-  critical: "text-red-700",
-  neutral: "text-slate-400",
+  good: "text-good",
+  warn: "text-warn",
+  critical: "text-bad",
+  neutral: "text-fg-faint",
 };
 
 function ExpandIcon({ open }: { open: boolean }) {
@@ -54,8 +54,8 @@ function BreakdownLine({ label, actual, target }: { label: string; actual: numbe
   const activityOnly = hasActualWithoutTarget(actual, target);
   const display = ratio !== null ? formatPercent(ratio) : activityOnly ? formatCompact(actual) : "—";
   return (
-    <div className="pl-3 text-[10px] text-slate-400">
-      └ {label} <span className={`font-medium ${activityOnly ? "text-sky-700" : "text-slate-500"}`}>{display}</span>
+    <div className="pl-3 text-[10px] text-fg-faint">
+      └ {label} <span className={`font-medium ${activityOnly ? "text-info" : "text-fg-subtle"}`}>{display}</span>
     </div>
   );
 }
@@ -102,7 +102,7 @@ function RegionCard({
   const weakestBreakdown = isOfftakeMetric ? regionBranches.find((b) => b.branch === weakest?.branch)?.onlineStoreBreakdown : undefined;
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-3.5">
+    <div className="rounded-md border border-border bg-surface p-3.5">
       <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: REGION_ACCENT[region] }}>
         <span className="h-2 w-2 rounded-full" style={{ background: REGION_ACCENT[region] }} />
         {region}
@@ -112,37 +112,37 @@ function RegionCard({
 
       {series.length >= 2 ? <div className="mt-2"><Sparkline values={series.map((p) => p.actual)} color={REGION_ACCENT[region]} /></div> : null}
 
-      <div className="mt-2 space-y-0.5 text-[10px] text-slate-400">
+      <div className="mt-2 space-y-0.5 text-[10px] text-fg-faint">
         {pace.gap !== null && pace.gap > 0 ? (
           <div>
-            Gap <span className="font-medium text-slate-600">{formatValue(pace.gap)}</span>
+            Gap <span className="font-medium text-fg-muted">{formatValue(pace.gap)}</span>
           </div>
         ) : pace.gap !== null ? (
-          <div className="text-emerald-600">Target already met</div>
+          <div className="text-good">Target already met</div>
         ) : null}
         {pace.runRatePerDay !== null ? (
           <div>
-            Run rate <span className="font-medium text-slate-600">{formatValue(pace.runRatePerDay)}/day</span>
+            Run rate <span className="font-medium text-fg-muted">{formatValue(pace.runRatePerDay)}/day</span>
           </div>
         ) : null}
         {pace.gap !== null && pace.gap > 0 && pace.requiredRatePerDay !== null ? (
           <div>
-            Required <span className="font-medium text-slate-600">{formatValue(pace.requiredRatePerDay)}/day</span>
+            Required <span className="font-medium text-fg-muted">{formatValue(pace.requiredRatePerDay)}/day</span>
           </div>
         ) : null}
       </div>
 
-      <div className="mt-2 space-y-0.5 border-t border-dashed border-slate-200 pt-2 text-[10px]">
+      <div className="mt-2 space-y-0.5 border-t border-dashed border-border pt-2 text-[10px]">
         {best ? (
           <div>
-            <div className="text-slate-500">
-              Best branch <span className="font-medium text-emerald-700">{best.branch}</span>{" "}
-              <span className="text-slate-400">({formatPercent(best.ratio)})</span>
+            <div className="text-fg-subtle">
+              Best branch <span className="font-medium text-good">{best.branch}</span>{" "}
+              <span className="text-fg-faint">({formatPercent(best.ratio)})</span>
               {bestBreakdown ? (
                 <button
                   type="button"
                   onClick={() => setOpenRole((r) => (r === "best" ? null : "best"))}
-                  className="ml-1 inline-flex items-center rounded text-slate-400 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+                  className="ml-1 inline-flex items-center rounded text-fg-faint hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   title={`${best.branch} includes ${bestBreakdown.onlineBranchCode} (online store) — click to split Offtake back apart`}
                 >
                   <ExpandIcon open={openRole === "best"} />
@@ -159,14 +159,14 @@ function RegionCard({
         ) : null}
         {weakest && weakest.branch !== best?.branch ? (
           <div>
-            <div className="text-slate-500">
-              Weakest branch <span className="font-medium text-red-700">{weakest.branch}</span>{" "}
-              <span className="text-slate-400">({formatPercent(weakest.ratio)})</span>
+            <div className="text-fg-subtle">
+              Weakest branch <span className="font-medium text-bad">{weakest.branch}</span>{" "}
+              <span className="text-fg-faint">({formatPercent(weakest.ratio)})</span>
               {weakestBreakdown ? (
                 <button
                   type="button"
                   onClick={() => setOpenRole((r) => (r === "weakest" ? null : "weakest"))}
-                  className="ml-1 inline-flex items-center rounded text-slate-400 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+                  className="ml-1 inline-flex items-center rounded text-fg-faint hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   title={`${weakest.branch} includes ${weakestBreakdown.onlineBranchCode} (online store) — click to split Offtake back apart`}
                 >
                   <ExpandIcon open={openRole === "weakest"} />
@@ -208,16 +208,16 @@ export function RegionScorecard({
   const config = metrics.find((m) => m.key === metric) ?? metrics[0];
 
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
+    <div className="rounded-md border border-border bg-surface p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
           Region Scorecard — MTD{metrics.length === 1 ? ` — ${metrics[0].label}` : ""}
         </h2>
         {metrics.length > 1 ? (
           <select
             value={metric}
             onChange={(e) => setMetric(e.target.value)}
-            className="h-7 rounded border border-slate-300 px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+            className="h-7 rounded border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {metrics.map((m) => (
               <option key={m.key} value={m.key}>

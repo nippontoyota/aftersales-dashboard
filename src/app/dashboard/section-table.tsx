@@ -40,9 +40,9 @@ export function SectionTable({
     <CollapsibleCard title={title} subtitle={subtitle}>
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
-          <thead className="bg-slate-50 text-left text-slate-500">
+          <thead className="bg-surface-2 text-left text-fg-subtle">
             <tr>
-              <th className="sticky left-0 whitespace-nowrap bg-slate-50 px-3 py-2">Branch</th>
+              <th className="sticky left-0 whitespace-nowrap bg-surface-2 px-3 py-2">Branch</th>
               {columns.map((c) => (
                 <th key={c.label} className="whitespace-nowrap px-3 py-2">
                   {c.label}
@@ -52,8 +52,8 @@ export function SectionTable({
           </thead>
           <tbody>
             {branches.map((row) => (
-              <tr key={row.branch} className="border-t border-slate-100 hover:bg-slate-50/70">
-                <td className="sticky left-0 whitespace-nowrap bg-white px-3 py-2 font-medium text-slate-900">{row.branch}</td>
+              <tr key={row.branch} className="border-t border-border-subtle hover:bg-surface-2/70">
+                <td className="sticky left-0 whitespace-nowrap bg-surface px-3 py-2 font-medium text-fg">{row.branch}</td>
                 {columns.map((c) => (
                   <td key={c.label} className="px-3 py-2 align-top">
                     {c.render(row)}
@@ -83,7 +83,7 @@ export function DayMonthPair({
 }) {
   const title = daysSincePrevious === null ? "First upload — no prior figure to compare" : `Today: ${format(day)}`;
   return (
-    <div className="w-20 whitespace-nowrap text-sm font-semibold tabular-nums text-slate-900" title={title}>
+    <div className="w-20 whitespace-nowrap text-sm font-semibold tabular-nums text-fg" title={title}>
       {format(month)}
     </div>
   );
