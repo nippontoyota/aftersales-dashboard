@@ -6,7 +6,7 @@ import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { TargetIcon, WrenchIcon, StorefrontIcon } from "@/components/dashboard-icons";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { computeKpiSummary, TKM_TRACKED_KPIS } from "@/lib/aggregate";
-import type { AdminAccount } from "@/lib/admin-store";
+import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatNumber } from "@/lib/format";
@@ -79,10 +79,10 @@ export default async function TkmTargetsPage({ searchParams }: { searchParams: P
   // date is published — before that they only get the Daily Report.
   const nav = await loadNavState(admin);
   if (!nav.companyTabs) redirect("/dashboard");
-  const identity = admin.role === "hq" ? "HQ admin" : `${admin.branch} branch`;
+  const identity = adminIdentityLabel(admin);
 
   return (
-    <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} identity={identity}>
+    <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton heroCards={5} />}>
         <TkmTargetsContent searchParams={searchParams} admin={admin} />
       </Suspense>

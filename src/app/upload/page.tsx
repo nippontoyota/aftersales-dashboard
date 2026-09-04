@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { adminIdentityLabel } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadNavState } from "@/lib/dashboard-data";
 import { yesterdayIso } from "@/lib/utils";
@@ -19,8 +21,10 @@ import { UploadTabs } from "./upload-tabs";
 
 export default async function UploadPage() {
   const admin = await getCurrentAdmin();
-  const identity = admin?.role === "hq" ? "HQ admin" : admin?.role === "branch" ? `${admin.branch} branch` : "";
-  const nav = admin ? await loadNavState(admin) : { companyTabs: true, dashboardLabel: "Dashboard" };
+  // Regional managers are read-only — no upload surface at all.
+  if (admin?.role === "regional") redirect("/dashboard");
+  const identity = admin ? adminIdentityLabel(admin) : "";
+  const nav = admin ? await loadNavState(admin) : { companyTabs: true, dashboardLabel: "Dashboard", canUpload: true };
 
   // Branches upload today for yesterday's report, and every upload form's
   // date picker defaults to yesterdayIso() to match — so the lock-status

@@ -8,7 +8,7 @@ import { RevenueIcon, WrenchIcon, TargetIcon, PercentIcon, StorefrontIcon } from
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { achievementRatio, computeHeroSummary, computeKpiSummary } from "@/lib/aggregate";
 import { getCurrentAdmin } from "@/lib/auth";
-import type { AdminAccount } from "@/lib/admin-store";
+import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computePace } from "@/lib/pace";
@@ -17,6 +17,7 @@ import { AchievementDonut } from "./achievement-donut";
 import { AlertsPanel } from "./alerts-panel";
 import { BillDrilldown } from "./bill-drilldown";
 import { BranchDailyReport } from "./branch-daily-report";
+import { RegionDailyReport } from "./region-daily-report";
 import { HeroKpi } from "./hero-kpi";
 import { InsightsPanel } from "./insights-panel";
 import { RegionScorecard } from "./region-scorecard";
@@ -42,7 +43,7 @@ export default async function DashboardPage({
   if (!admin?.canViewDashboard) {
     redirect("/upload");
   }
-  const identity = admin.role === "hq" ? "HQ admin" : `${admin.branch} branch`;
+  const identity = adminIdentityLabel(admin);
   const nav = await loadNavState(admin);
 
   return (
@@ -51,6 +52,7 @@ export default async function DashboardPage({
       showDashboardLink
       isHq={admin.role === "hq"}
       companyTabs={nav.companyTabs}
+      canUpload={nav.canUpload}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
     >
@@ -110,6 +112,38 @@ async function DashboardContent({
       <BranchDailyReport
         report={branchReport}
         branch={branchReport.branch}
+        date={data.date}
+        dates={data.dates}
+        uploadedAtLabel={uploadedAtLabel}
+        daysSincePrevious={data.report.daysSincePrevious}
+      />
+    );
+  }
+
+  // Regional manager, date not published yet → wide region comparison table
+  // (their branches + a region total) instead of the company dashboard.
+  if (data.showRegionDailyReport && admin.role === "regional") {
+    if (!data.report || data.filteredBranches.length === 0) {
+      return (
+        <div className="p-6">
+          <h1 className="text-lg font-semibold text-fg">Regional Report — {admin.region}</h1>
+          <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
+            This report fills in once HQ has uploaded the day&apos;s BA Tool file.
+          </div>
+        </div>
+      );
+    }
+    const uploadedAtLabel = new Date(data.report.uploadedAt).toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "Asia/Kolkata",
+    });
+    return (
+      <RegionDailyReport
+        region={admin.region}
+        branches={data.filteredBranches}
         date={data.date}
         dates={data.dates}
         uploadedAtLabel={uploadedAtLabel}

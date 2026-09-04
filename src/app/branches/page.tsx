@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
-import type { AdminAccount } from "@/lib/admin-store";
+import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
@@ -17,10 +17,10 @@ export default async function BranchesPage({ searchParams }: { searchParams: Pro
   // date is published — before that they only get the Daily Report.
   const nav = await loadNavState(admin);
   if (!nav.companyTabs) redirect("/dashboard");
-  const identity = admin.role === "hq" ? "HQ admin" : `${admin.branch} branch`;
+  const identity = adminIdentityLabel(admin);
 
   return (
-    <AppShell current="branches" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} identity={identity}>
+    <AppShell current="branches" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton />}>
         <BranchesContent searchParams={searchParams} admin={admin} />
       </Suspense>

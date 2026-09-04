@@ -9,8 +9,13 @@ create table if not exists admins (
   username text primary key,
   password_hash text not null,
   salt text not null,
-  role text not null check (role in ('hq', 'branch')),
+  -- 'hq' uploads + publishes; 'branch' uploads its own reports; 'regional'
+  -- is read-only, scoped to one region (see `region` below).
+  role text not null,
   branch text,
+  -- Set only for role='regional' — the region (North/Central/South) whose
+  -- branches this account can see before HQ publishes. See dashboard-data.ts.
+  region text,
   -- Dashboard visibility, independent of role: hq always has it (see
   -- getCurrentAdmin() usage in dashboard/page.tsx — computed as
   -- role='hq' OR dashboard_access), branch admins default to false and can
@@ -18,9 +23,23 @@ create table if not exists admins (
   -- Every branch admin can still upload regardless of this flag — it only
   -- gates the dashboard page.
   dashboard_access boolean not null default false,
-  constraint branch_role_consistency check (
-    (role = 'branch' and branch is not null) or (role = 'hq' and branch is null)
+  constraint admins_role_check check (role in ('hq', 'branch', 'regional')),
+  constraint admins_role_scope_consistency check (
+    (role = 'branch'   and branch is not null and region is null) or
+    (role = 'hq'       and branch is null     and region is null) or
+    (role = 'regional' and branch is null     and region in ('North', 'Central', 'South'))
   )
+);
+-- Upgrade an existing database:
+alter table admins add column if not exists region text;
+alter table admins drop constraint if exists branch_role_consistency;
+alter table admins drop constraint if exists admins_role_check;
+alter table admins add constraint admins_role_check check (role in ('hq', 'branch', 'regional'));
+alter table admins drop constraint if exists admins_role_scope_consistency;
+alter table admins add constraint admins_role_scope_consistency check (
+  (role = 'branch'   and branch is not null and region is null) or
+  (role = 'hq'       and branch is null     and region is null) or
+  (role = 'regional' and branch is null     and region in ('North', 'Central', 'South'))
 );
 
 -- One row per branch per date — mirrors data/uploads/{date}.json's `branches` array.

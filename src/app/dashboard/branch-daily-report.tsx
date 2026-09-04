@@ -1,7 +1,8 @@
-import { achievementRatio, achievementTone, type AchievementTone } from "@/lib/aggregate";
-import { formatCompact, formatNumber, formatPercent } from "@/lib/format";
+import { achievementTone, type AchievementTone } from "@/lib/aggregate";
+import { formatPercent } from "@/lib/format";
 import type { BranchReport } from "@/lib/report";
 import { DateSelect } from "./date-select";
+import { DAILY_REPORT_ROWS, branchCell, type ValueFmt } from "./daily-report-rows";
 
 /**
  * Branch admin's pre-publish view: their own branch's raw numbers as a plain
@@ -16,25 +17,6 @@ import { DateSelect } from "./date-select";
  * Rows fed by HQ's BA Tool file are simply blank until that file lands.
  */
 
-type NumFormatter = (n: number | null) => string;
-
-type MetricRow = {
-  kind: "metric";
-  label: string;
-  today?: number | null;
-  mtd?: number | null;
-  target?: number | null;
-  /** Pre-computed achievement ratio (actual / target). When omitted it's
-   * derived from mtd / target. Pass `null` to force a blank % cell. */
-  pct?: number | null;
-  fmt: NumFormatter;
-  strong?: boolean;
-};
-
-type GroupRow = { kind: "group"; label: string };
-
-type Row = MetricRow | GroupRow;
-
 const TONE_TEXT: Record<AchievementTone, string> = {
   good: "text-good",
   warn: "text-warn",
@@ -42,69 +24,10 @@ const TONE_TEXT: Record<AchievementTone, string> = {
   neutral: "text-fg-faint",
 };
 
-// Order matches the branch's own "Revenue Stream" reference sheet (2026-09-02,
-// at the user's request); everything else in the data model is appended under
-// "Other KPIs" at the end.
-function buildRows(b: BranchReport): Row[] {
-  const num = formatNumber;
-  const rs = formatCompact;
-  const pct = formatPercent;
-
-  return [
-    { kind: "group", label: "GUS" },
-    { kind: "metric", label: "GUS RO", today: b.gusRoBilledForTheDay, mtd: b.gusRoMtd, fmt: num },
-    { kind: "metric", label: "GUS Parts MTD (Rs)", mtd: b.gusPartsMtd, fmt: rs },
-    { kind: "metric", label: "GUS Labour MTD (Rs)", mtd: b.gusLabourMtd, fmt: rs },
-
-    { kind: "group", label: "BPU" },
-    { kind: "metric", label: "BPU RO", today: b.bpuRoBilledForTheDay, mtd: b.bpuRoMtd, fmt: num },
-    { kind: "metric", label: "BPU Parts MTD (Rs)", mtd: b.bpuPartsMtd, fmt: rs },
-    { kind: "metric", label: "BPU Labour MTD (Rs)", mtd: b.bpuLabourMtd, fmt: rs },
-
-    { kind: "group", label: "Revenue Stream" },
-    { kind: "metric", label: "External Sales MTD (Rs)", mtd: b.externalSalesMtd, fmt: rs },
-    { kind: "metric", label: "% on SPR I", mtd: b.externalSalesPctOfSprInternal, pct: null, fmt: pct },
-
-    { kind: "group", label: "VAS Bill" },
-    { kind: "metric", label: "VAS Bill", today: b.vasAchievementForTheDay, mtd: b.vasAchievementForTheMonth, target: b.vasBillTarget, pct: b.vasAchievementPercent, fmt: rs },
-    { kind: "metric", label: "VAS Gentani (Rs/RO)", mtd: b.vasGentani, fmt: rs },
-
-    { kind: "group", label: "Value-Added Services" },
-    { kind: "metric", label: "Wheel Balancing", today: b.wheelBalancingForTheDay, mtd: b.wheelBalancingMtd, fmt: num },
-    { kind: "metric", label: "Wheel Alignment", today: b.wheelAlignmentForTheDay, mtd: b.wheelAlignmentMtd, fmt: num },
-    { kind: "metric", label: "Brake Skimming", today: b.brakeSkimmingForTheDay, mtd: b.brakeSkimmingMtd, fmt: num },
-    { kind: "metric", label: "Evaporator Cleaning", today: b.evaporatorCleaningForTheDay, mtd: b.evaporatorCleaningMtd, fmt: num },
-    { kind: "metric", label: "DIY Revenue (Rs)", today: b.diyRevenueForTheDay, mtd: b.diyRevenueMtd, fmt: rs },
-    { kind: "metric", label: "Injector Cleaner (Diesel/Petrol)", today: b.injectorCleanerForTheDay, mtd: b.injectorCleanerMtd, fmt: num },
-    { kind: "metric", label: "Synthetic Oil (Ltrs)", today: b.syntheticOilForTheDay, mtd: b.syntheticOilMtd, fmt: num },
-    { kind: "metric", label: "Brake Cleaning Spray", today: b.brakeCleaningSprayForTheDay, mtd: b.brakeCleaningSprayMtd, fmt: num },
-
-    { kind: "group", label: "Tyre & Battery" },
-    { kind: "metric", label: "Tyre", today: b.tireSales, mtd: b.tireSalesForTheMonth, target: b.tireTarget, fmt: num },
-    { kind: "metric", label: "Battery", today: b.batterySales, mtd: b.batterySalesForTheMonth, target: b.batteryTarget, fmt: num },
-
-    { kind: "group", label: "Scrap & Used Oil" },
-    { kind: "metric", label: "Scrap Revenue (without tax)", today: b.scrapRevenueForTheDay, mtd: b.scrapRevenueMtd, fmt: rs },
-    { kind: "metric", label: "Used Oil Revenue (without tax)", today: b.usedOilRevenueForTheDay, mtd: b.usedOilRevenueMtd, fmt: rs },
-    { kind: "metric", label: "Total MTD (Rs)", mtd: b.totalRevenueStreamMtd, fmt: rs, strong: true },
-
-    { kind: "group", label: "Other KPIs" },
-    { kind: "metric", label: "CPU", today: b.cpuForTheDay, mtd: b.cpuAchievementForTheMonth, fmt: num },
-    { kind: "metric", label: "BPU (vs target)", today: b.bpuForTheDay, mtd: b.bpuAchievementForTheMonth, target: b.bpuTarget, fmt: num },
-    { kind: "metric", label: "Offtake (Rs)", today: b.offtakeForThePreviousDay, mtd: b.offtakeAchievementForTheMonth, target: b.offtakeTarget, fmt: rs },
-    { kind: "metric", label: "Parts Retail (Rs)", today: b.partsRetailForTheDay, mtd: b.partsRetailAchievementForTheMonth, target: b.partsRetailTarget, fmt: rs },
-    { kind: "metric", label: "PM + OC", today: b.pmOcForTheDay, mtd: b.pmOcAchievementForTheMonth, target: b.pmOcTarget, fmt: num },
-    { kind: "metric", label: "T-Gloss Service Penetration", mtd: b.penetrationTGlossService, target: b.targetTGlossService, fmt: pct },
-    { kind: "metric", label: "T-Gloss SPO", pct: b.tGlossSpo, fmt: pct },
-    { kind: "metric", label: "Engine Flush", today: b.engineFlushForTheDay, mtd: b.engineFlushMtd, fmt: num },
-    { kind: "metric", label: "DIY Count", today: b.diyCountForTheDay, mtd: b.diyCountMtd, fmt: num },
-  ];
-}
-
-function Cell({ value, fmt, className = "" }: { value: number | null | undefined; fmt: NumFormatter; className?: string }) {
+function Cell({ value, fmt, className = "" }: { value: number | null; fmt: ValueFmt; className?: string }) {
   return (
     <td className={`whitespace-nowrap py-1.5 pl-4 text-right tabular-nums ${className}`}>
-      {value === undefined || value === null ? <span className="text-fg-faint">—</span> : fmt(value)}
+      {value === null ? <span className="text-fg-faint">—</span> : fmt(value)}
     </td>
   );
 }
@@ -124,9 +47,7 @@ export function BranchDailyReport({
   uploadedAtLabel: string;
   daysSincePrevious: number | null;
 }) {
-  const rows = buildRows(report);
-  const todayHeader =
-    daysSincePrevious === null ? "Today" : daysSincePrevious === 1 ? "Today" : `Last ${daysSincePrevious} days`;
+  const todayHeader = daysSincePrevious === null || daysSincePrevious === 1 ? "Today" : `Last ${daysSincePrevious} days`;
 
   return (
     <div className="p-6">
@@ -153,7 +74,7 @@ export function BranchDailyReport({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => {
+            {DAILY_REPORT_ROWS.map((row, i) => {
               if (row.kind === "group") {
                 return (
                   <tr key={`g-${i}`}>
@@ -167,24 +88,23 @@ export function BranchDailyReport({
                 );
               }
 
-              const ratio =
-                row.pct !== undefined
-                  ? row.pct
-                  : row.mtd != null && row.target != null
-                    ? achievementRatio(row.mtd, row.target)
-                    : null;
-              const tone = achievementTone(ratio);
+              const cell = branchCell(row, report);
+              const tone = achievementTone(cell.ratio);
 
               return (
                 <tr key={`m-${i}`} className="border-t border-border-subtle">
                   <td className={`whitespace-nowrap py-1.5 pl-4 pr-3 ${row.strong ? "font-semibold text-fg" : "text-fg-muted"}`}>
                     {row.label}
                   </td>
-                  <Cell value={row.today} fmt={row.fmt} className="text-fg-subtle" />
-                  <Cell value={row.mtd} fmt={row.fmt} className={row.strong ? "font-semibold text-fg" : "text-fg"} />
-                  <Cell value={row.target} fmt={row.fmt} className="text-fg-subtle" />
-                  <td className={`whitespace-nowrap py-1.5 pl-4 pr-4 text-right font-medium tabular-nums ${ratio == null ? "text-fg-faint" : TONE_TEXT[tone]}`}>
-                    {ratio == null ? "—" : formatPercent(ratio)}
+                  <Cell value={cell.today} fmt={row.fmt} className="text-fg-subtle" />
+                  <Cell value={cell.mtd} fmt={row.fmt} className={row.strong ? "font-semibold text-fg" : "text-fg"} />
+                  <Cell value={cell.target} fmt={row.fmt} className="text-fg-subtle" />
+                  <td
+                    className={`whitespace-nowrap py-1.5 pl-4 pr-4 text-right font-medium tabular-nums ${
+                      cell.ratio == null ? "text-fg-faint" : TONE_TEXT[tone]
+                    }`}
+                  >
+                    {cell.ratio == null ? "—" : formatPercent(cell.ratio)}
                   </td>
                 </tr>
               );

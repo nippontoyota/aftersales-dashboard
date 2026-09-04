@@ -11,12 +11,12 @@ import { ThemeToggle } from "./theme-toggle";
 // day-to-day is gated by publish status instead (see dashboard-data.ts),
 // not by nav item.
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", key: "dashboard" as const, requiresDashboard: true, companyWide: false },
-  { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true, companyWide: true },
-  { href: "/alerts", label: "Alerts", key: "alerts" as const, requiresDashboard: true, companyWide: true },
-  { href: "/branches", label: "Branches", key: "branches" as const, requiresDashboard: true, companyWide: true },
-  { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true },
-  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false },
+  { href: "/dashboard", label: "Dashboard", key: "dashboard" as const, requiresDashboard: true, companyWide: false, uploadOnly: false },
+  { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
+  { href: "/alerts", label: "Alerts", key: "alerts" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
+  { href: "/branches", label: "Branches", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
+  { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
+  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true },
 ];
 
 /** HQ-only tools, kept apart from the day-to-day nav above — administrative
@@ -186,6 +186,7 @@ export function AppShell({
   showDashboardLink,
   isHq = false,
   companyTabs = true,
+  canUpload = true,
   dashboardLabel = "Dashboard",
   identity,
   children,
@@ -201,8 +202,11 @@ export function AppShell({
    * Reports) are hidden — a branch admin whose latest date isn't published
    * yet only gets Daily Report + Upload. Defaults to true. */
   companyTabs?: boolean;
-  /** Label for the /dashboard nav item — "Daily Report" for a branch admin
-   * on the pre-publish raw view, "Dashboard" otherwise. */
+  /** When false, the Upload nav item is hidden — regional managers never
+   * upload. Defaults to true. */
+  canUpload?: boolean;
+  /** Label for the /dashboard nav item — "Daily Report" / "Regional Report"
+   * for a pre-publish raw view, "Dashboard" otherwise. */
   dashboardLabel?: string;
   /** e.g. "CO01B branch" or "HQ admin" — shown under the account area at the bottom of the sidebar. */
   identity: string;
@@ -215,7 +219,10 @@ export function AppShell({
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
 
   const items = NAV_ITEMS.filter(
-    (item) => (!item.requiresDashboard || showDashboardLink) && (!item.companyWide || companyTabs),
+    (item) =>
+      (!item.requiresDashboard || showDashboardLink) &&
+      (!item.companyWide || companyTabs) &&
+      (!item.uploadOnly || canUpload),
   ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq ? UTILITY_NAV_ITEMS : [];
 
