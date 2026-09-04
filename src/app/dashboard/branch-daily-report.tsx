@@ -62,10 +62,10 @@ export function BranchDailyReport({
         uploaded. Pick an earlier, published date to see the full company dashboard. Data as of {uploadedAtLabel} IST.
       </p>
 
-      <div className="mt-4 overflow-x-auto rounded-md border border-border bg-surface">
+      <div className="mt-4 max-h-[calc(100dvh-11rem)] overflow-auto rounded-md border border-border bg-surface">
         <table className="w-full min-w-[560px] border-separate border-spacing-0 text-[13px]">
           <thead>
-            <tr className="text-[11px] uppercase tracking-wide text-fg-faint">
+            <tr className="text-[11px] uppercase tracking-wide text-fg-faint [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:border-b [&>th]:border-border [&>th]:bg-surface">
               <th className="py-2 pl-4 pr-3 text-left font-medium">Metric</th>
               <th className="py-2 pl-4 text-right font-medium">{todayHeader}</th>
               <th className="py-2 pl-4 text-right font-medium">MTD</th>
