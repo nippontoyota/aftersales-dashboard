@@ -143,6 +143,35 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Thin, theme-tinted scrollbars for the many scroll panels (sticky-header
+   tables, the Alerts list, wide report tables). The transparent border +
+   background-clip trick gives the thumb padding so it reads as a slim pill
+   rather than a chunky bar. Firefox gets the two-property version. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-strong);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-fg-faint);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Respect reduced-motion for the transitions added across the dashboard
    (card hovers, expand/collapse, selector changes). */
 @media (prefers-reduced-motion: reduce) {

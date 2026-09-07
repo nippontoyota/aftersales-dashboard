@@ -38,9 +38,9 @@ export function SectionTable({
 }) {
   return (
     <CollapsibleCard title={title} subtitle={subtitle}>
-      <div className="overflow-x-auto">
+      <div className="max-h-[calc(100dvh-15rem)] overflow-auto">
         <table className="min-w-full text-xs">
-          <thead className="bg-surface-2 text-left text-fg-subtle">
+          <thead className="text-left text-fg-subtle [&>tr>th]:sticky [&>tr>th]:top-0 [&>tr>th]:z-10 [&>tr>th]:bg-surface-2 [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border)]">
             <tr>
               <th className="sticky left-0 whitespace-nowrap bg-surface-2 px-3 py-2">Branch</th>
               {columns.map((c) => (
