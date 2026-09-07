@@ -93,6 +93,19 @@
 
     color-scheme: dark;
   }
+
+  /* Native <select> drop-downs: without an explicit background/colour the
+     option list renders light-on-light in dark mode on Windows/Linux Chrome
+     (color-scheme alone doesn't restyle the popup there). Pin both to theme
+     tokens so the list is readable in either theme. */
+  select {
+    background-color: var(--color-surface);
+    color: var(--color-fg);
+  }
+  option {
+    background-color: var(--color-surface);
+    color: var(--color-fg);
+  }
 }
 
 body {

@@ -109,6 +109,33 @@ export async function loadPreviousSnapshot(date: string): Promise<Snapshot | nul
   return loadSnapshot(previousDate);
 }
 
+/** The most recent row for one branch in the same calendar month as `date`
+ * but strictly before it. Used to give the online-store code — which only
+ * appears in the BA Tool on days it transacts — a correct previous-day
+ * baseline for "for the day" deltas, instead of treating its whole standing
+ * MTD balance as a single day's movement the first time it reappears after a
+ * gap. Null if that branch never appeared earlier this month. */
+export async function loadLatestBranchRowInMonthBefore(
+  date: string,
+  branch: string
+): Promise<BaToolBranchRow | null> {
+  const columns = NUMERIC_KEYS.map((k) => COLUMN_NAME[k]);
+  const { rows } = await pool.query(
+    `select ${columns.join(", ")} from ba_tool_snapshots
+      where branch = $1 and date < $2::date and date >= date_trunc('month', $2::date)
+      order by date desc limit 1`,
+    [branch, date]
+  );
+  if (rows.length === 0) return null;
+
+  const entry: BaToolBranchRow = { branch };
+  for (const key of NUMERIC_KEYS) {
+    const raw = rows[0][COLUMN_NAME[key]];
+    entry[key] = raw === null ? null : Number(raw);
+  }
+  return entry;
+}
+
 /** All snapshots in the same calendar month as `date`, up to and including it — used for MTD accumulation of non-cumulative columns (Tyre/Battery). */
 export async function loadSnapshotsForMonthUpTo(date: string): Promise<Snapshot[]> {
   const monthPrefix = date.slice(0, 7); // YYYY-MM

@@ -1,5 +1,5 @@
 import type { BaToolBranchRow } from "./ba-tool/parse";
-import { loadSnapshot, loadPreviousSnapshot } from "./snapshot-store";
+import { loadSnapshot, loadPreviousSnapshot, loadLatestBranchRowInMonthBefore } from "./snapshot-store";
 import { loadAllServiceInfoSnapshotsForDate, loadAllServiceInfoSnapshotsForMonthUpTo } from "./service-info/store";
 import type { ServiceInfoSnapshot } from "./service-info/store";
 import { loadAllPartSaleSnapshotsForDate, loadAllPartSaleSnapshotsForMonthUpTo } from "./part-sale/store";
@@ -38,6 +38,8 @@ export type BranchReport = {
 
   targetTGlossService: number;
   penetrationTGlossService: number | null;
+  spoTGloss: number | null;
+  spoTGlossTarget: number | null;
   tGlossSpo: number | null;
 
   cpuForTheDay: number | null;
@@ -318,6 +320,8 @@ function computeBranchReport(
 
     targetTGlossService: FIXED_TGLOSS_SERVICE_TARGET,
     penetrationTGlossService: t("servicePenetration"),
+    spoTGloss,
+    spoTGlossTarget,
     tGlossSpo: ratio(spoTGloss, spoTGlossTarget),
 
     cpuForTheDay: delta(t("cpus"), y("cpus")),
@@ -441,7 +445,27 @@ export async function buildReport(date: string): Promise<Report | null> {
   const NO_BILL_REVENUE = { scrapRevenue: 0, usedOilRevenue: 0 };
 
   const { rows: todayBranches, breakdowns: onlineStoreBreakdowns } = mergeOnlineStoreBranches(excludeDeactivatedBranches(today.branches));
-  const previousBranches = previous ? mergeOnlineStoreBranches(excludeDeactivatedBranches(previous.branches)).rows : undefined;
+
+  // The online store (ONLINE_STORE_PARENT_BRANCH) only appears in the BA Tool
+  // on days it transacts. When it's in today's file but not the previous
+  // snapshot, diffing merged-vs-merged would dump its whole standing MTD
+  // balance onto the parent's "for the day" figure. Give it a real baseline:
+  // the most recent same-month snapshot that did carry it (its balance can't
+  // have moved while it was absent — no row means no transaction).
+  let previousBranchRows = previous?.branches;
+  if (previous && previousBranchRows) {
+    for (const onlineCode of Object.keys(ONLINE_STORE_PARENT_BRANCH)) {
+      const inToday = today.branches.some((b) => b.branch === onlineCode);
+      const inPrevious = previousBranchRows.some((b) => b.branch === onlineCode);
+      if (!inToday || inPrevious) continue;
+      const carried = await loadLatestBranchRowInMonthBefore(date, onlineCode);
+      if (carried) previousBranchRows = [...previousBranchRows, carried];
+    }
+  }
+
+  const previousBranches = previousBranchRows
+    ? mergeOnlineStoreBranches(excludeDeactivatedBranches(previousBranchRows)).rows
+    : undefined;
 
   const branches = todayBranches.map((branchRow) => {
     const yesterdayRow = previousBranches?.find((b) => b.branch === branchRow.branch);
