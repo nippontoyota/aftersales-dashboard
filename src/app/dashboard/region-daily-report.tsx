@@ -100,17 +100,17 @@ export function RegionDailyReport({
         <DateSelect dates={dates} selected={date} region="All" />
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface shadow-card">
+      <div className="mt-4 max-h-[calc(100dvh-11rem)] overflow-auto rounded-lg border border-border bg-surface shadow-card">
         <table className="border-separate border-spacing-0 text-[13px]">
           <thead>
-            <tr className="text-[11px] uppercase tracking-[0.07em] text-fg-faint">
-              <th className="sticky left-0 z-10 bg-surface py-2 pl-4 pr-3 text-left font-medium">Metric</th>
+            <tr className="text-[11px] uppercase tracking-[0.07em] text-fg-faint [&>th]:sticky [&>th]:top-0 [&>th]:border-b [&>th]:border-border">
+              <th className="sticky left-0 z-30 bg-surface py-2 pl-4 pr-3 text-left font-medium">Metric</th>
               {branchCodes.map((code) => (
-                <th key={code} className="whitespace-nowrap px-3 py-2 text-right font-medium">
+                <th key={code} className="z-20 whitespace-nowrap bg-surface px-3 py-2 text-right font-medium">
                   {code}
                 </th>
               ))}
-              <th className="whitespace-nowrap bg-surface-2 px-3 py-2 text-right font-semibold text-fg-subtle">Region</th>
+              <th className="z-20 whitespace-nowrap bg-surface-2 px-3 py-2 text-right font-semibold text-fg-subtle">Region</th>
             </tr>
           </thead>
           <tbody>
