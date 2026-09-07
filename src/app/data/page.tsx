@@ -69,11 +69,11 @@ export default async function DataPage() {
                           name="name"
                           placeholder="Add a name"
                           required
-                          className="h-8 min-w-0 flex-1 rounded border border-border-strong px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          className="h-8 min-w-0 flex-1 rounded-md border border-border-strong px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         />
                         <button
                           type="submit"
-                          className="h-8 shrink-0 rounded bg-accent px-2.5 text-xs font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          className="h-8 shrink-0 rounded-md bg-accent px-2.5 text-xs font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         >
                           Add
                         </button>

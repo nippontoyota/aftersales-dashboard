@@ -195,7 +195,7 @@ function ReportUploadForm({
             type="date"
             required
             defaultValue={yesterdayIso()}
-            className="mt-1 h-9 w-full rounded border border-border-strong px-3 text-sm"
+            className="mt-1 h-9 w-full rounded-md border border-border-strong px-3 text-sm"
           />
         </div>
       )}
@@ -228,7 +228,7 @@ function ReportUploadForm({
       <button
         type="submit"
         disabled={pending}
-        className="h-9 rounded bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
+        className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
       >
         {pending ? "Uploading…" : "Upload"}
       </button>

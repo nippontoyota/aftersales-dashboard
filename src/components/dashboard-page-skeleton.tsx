@@ -7,16 +7,16 @@
  * dashboard query, so the nav stays live and clickable the whole time. */
 export function DashboardPageSkeleton({ heroCards = 0 }: { heroCards?: number }) {
   return (
-    <div className="p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-[1600px] p-6">
+      <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
-          <div className="h-5 w-48 animate-pulse rounded bg-surface-3" />
+          <div className="h-6 w-52 animate-pulse rounded bg-surface-3" />
           <div className="h-3.5 w-72 animate-pulse rounded bg-surface-2" />
         </div>
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-24 animate-pulse rounded bg-surface-2" />
-          <div className="h-8 w-28 animate-pulse rounded bg-surface-2" />
-          <div className="h-8 w-8 animate-pulse rounded bg-surface-2" />
+        <div className="flex items-center gap-1.5">
+          <div className="h-8 w-24 animate-pulse rounded-md bg-surface-2" />
+          <div className="h-8 w-28 animate-pulse rounded-md bg-surface-2" />
+          <div className="h-8 w-8 animate-pulse rounded-md bg-surface-2" />
         </div>
       </div>
 
@@ -29,11 +29,11 @@ export function DashboardPageSkeleton({ heroCards = 0 }: { heroCards?: number })
       ) : null}
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="h-64 animate-pulse rounded-md border border-border bg-surface-2" />
-        <div className="h-64 animate-pulse rounded-md border border-border bg-surface-2" />
+        <div className="h-64 animate-pulse rounded-lg border border-border bg-surface-2" />
+        <div className="h-64 animate-pulse rounded-lg border border-border bg-surface-2" />
       </div>
 
-      <div className="mt-4 h-40 animate-pulse rounded-md border border-border bg-surface-2" />
+      <div className="mt-4 h-40 animate-pulse rounded-lg border border-border bg-surface-2" />
     </div>
   );
 }

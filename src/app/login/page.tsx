@@ -29,7 +29,7 @@ export default function LoginPage() {
               type="text"
               required
               autoComplete="username"
-              className="mt-1 h-9 w-full rounded border border-border-strong bg-surface px-3 text-sm text-fg focus:border-accent focus:outline-none"
+              className="mt-1 h-9 w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             />
           </div>
           <div>
@@ -42,7 +42,7 @@ export default function LoginPage() {
               type="password"
               required
               autoComplete="current-password"
-              className="mt-1 h-9 w-full rounded border border-border-strong bg-surface px-3 text-sm text-fg focus:border-accent focus:outline-none"
+              className="mt-1 h-9 w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             />
           </div>
 
@@ -55,7 +55,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={pending}
-            className="h-9 w-full rounded bg-accent text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
+            className="h-9 w-full rounded-md bg-accent text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
           >
             {pending ? "Signing in..." : "Sign in"}
           </button>

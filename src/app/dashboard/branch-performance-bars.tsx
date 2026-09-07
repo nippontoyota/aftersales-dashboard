@@ -190,7 +190,7 @@ export function BranchPerformanceBars({
                 setMetric(e.target.value);
                 setExpanded(false);
               }}
-              className="h-7 rounded border border-border-strong px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="h-7 rounded-md border border-border-strong px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               {metrics.map((m) => (
                 <option key={m.key} value={m.key}>

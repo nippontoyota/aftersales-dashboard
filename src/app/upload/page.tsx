@@ -142,7 +142,7 @@ export default async function UploadPage({
             }
           />
         ) : (
-          <div className="mt-4 rounded border border-bad/30 bg-bad-soft p-4 text-sm text-bad">
+          <div className="mt-4 rounded-lg border border-bad/30 bg-bad-soft p-4 text-sm text-bad">
             Could not determine your account&apos;s role — contact an administrator.
           </div>
         )}

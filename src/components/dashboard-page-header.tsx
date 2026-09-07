@@ -56,7 +56,7 @@ export function DashboardPageHeader({
           <h1 className="text-xl font-semibold tracking-tight text-fg">{title}</h1>
           {!isCompanyScope && (
             <span
-              className="flex items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-fg-subtle"
+              className="flex items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-fg-subtle"
               title="Unpublished view: showing only your branch"
             >
               <svg viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3" aria-hidden="true">
@@ -78,7 +78,7 @@ export function DashboardPageHeader({
         {canPublish ? (
           isPublished ? (
             <span
-              className="flex h-8 items-center gap-1 rounded border border-good/30 bg-good-soft px-2.5 text-xs font-medium text-good"
+              className="flex h-8 items-center gap-1 rounded-md border border-good/30 bg-good-soft px-2.5 text-xs font-medium text-good"
               title={`Branch admins can see the dashboard for ${date}`}
             >
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5" aria-hidden="true">
@@ -93,7 +93,7 @@ export function DashboardPageHeader({
               <button
                 type="submit"
                 title={`Make ${date}'s dashboard visible to branch admins`}
-                className="h-8 rounded bg-accent px-3 text-xs font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
+                className="h-8 rounded-md bg-accent px-3 text-xs font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
               >
                 Publish {date}
               </button>
@@ -105,7 +105,7 @@ export function DashboardPageHeader({
         <Link
           href={currentHref}
           aria-label="Refresh"
-          className="flex h-8 w-8 items-center justify-center rounded border border-border-strong text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-border-strong text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
             <path d="M4 10a6 6 0 0 1 10.5-3.9M16 10a6 6 0 0 1-10.5 3.9" strokeLinecap="round" />

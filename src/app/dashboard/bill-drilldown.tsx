@@ -61,7 +61,7 @@ export function BillDrilldown({
   const monthLabel = formatMonth(month);
 
   return (
-    <div className="rounded border border-border bg-surface">
+    <div className="rounded-md border border-border bg-surface">
       <button
         onClick={toggle}
         className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-surface-2 transition-colors"

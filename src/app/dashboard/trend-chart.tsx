@@ -315,7 +315,7 @@ export function TrendChart({
           setMetric(e.target.value);
           setHoverIndex(null);
         }}
-        className="h-7 rounded border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="h-7 rounded-md border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         {metrics.map((m) => (
           <option key={m.key} value={m.key}>
@@ -335,7 +335,7 @@ export function TrendChart({
           <button
             type="button"
             onClick={() => setIsExpanded(true)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border-strong text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border-strong text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             title="Expand chart"
           >
             <ExpandIcon />

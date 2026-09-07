@@ -21,7 +21,7 @@ export function ReportDatePicker({ selected }: { selected: string }) {
           router.push(`/upload?date=${e.target.value}`);
         }
       }}
-      className="h-9 rounded border border-border-strong px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="h-9 rounded-md border border-border-strong px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     />
   );
 }

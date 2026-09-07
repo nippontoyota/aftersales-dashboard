@@ -20,7 +20,7 @@ export function PendingUploadsPanel({ summary }: { summary: PendingUploadsSummar
       <p className="mt-0.5 text-xs text-fg-subtle">For {summary.date} — the report date every branch is currently uploading against.</p>
 
       {allDone ? (
-        <div className="mt-3 flex items-center gap-2 rounded border border-good/30 bg-good-soft p-3 text-sm text-good">
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-good/30 bg-good-soft p-3 text-sm text-good">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0" aria-hidden="true">
             <path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -29,7 +29,7 @@ export function PendingUploadsPanel({ summary }: { summary: PendingUploadsSummar
       ) : (
         <ul className="mt-3 space-y-2">
           {summary.pending.map((b) => (
-            <li key={b.branch} className="rounded border border-warn/30 bg-warn-soft p-2.5">
+            <li key={b.branch} className="rounded-lg border border-warn/30 bg-warn-soft p-2.5">
               <div className="text-sm font-semibold text-fg">{b.branch}</div>
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {b.missing.map((type) => (

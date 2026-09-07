@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { control } from "@/lib/ui";
 
 export function DateSelect({
   dates,
@@ -26,7 +27,7 @@ export function DateSelect({
         if (region !== "All") params.set("region", region);
         router.push(`${basePath}?${params.toString()}`);
       }}
-      className="h-8 rounded border border-border-strong px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className={`${control} px-2`}
     >
       {dates.map((d) => (
         <option key={d} value={d}>

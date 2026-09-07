@@ -105,7 +105,7 @@ export function AchievementDonut({ branches, metrics = DEFAULT_METRICS }: { bran
           <select
             value={metric}
             onChange={(e) => setMetric(e.target.value)}
-            className="h-7 rounded border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="h-7 rounded-md border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {metrics.map((m) => (
               <option key={m.key} value={m.key}>
