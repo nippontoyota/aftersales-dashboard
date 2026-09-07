@@ -6,6 +6,7 @@ import { formatCompactCurrency, formatNumber } from "@/lib/format";
 import { computePace } from "@/lib/pace";
 import { REGIONS, type RegionName } from "@/lib/regions";
 import type { BranchReport } from "@/lib/report";
+import { eyebrow } from "@/lib/ui";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { RevenueIcon, StorefrontIcon, WrenchIcon } from "@/components/dashboard-icons";
 
@@ -92,66 +93,67 @@ export function HeroKpiStrip({
 
   return (
     <div>
-      <div className="mb-2 flex items-center gap-1.5">
-        <span className="mr-1 text-xs font-medium text-fg-subtle">Hero figures for</span>
-        <button
-          type="button"
-          aria-label="Previous scope"
-          disabled={idx <= 0}
-          onClick={() => setScope(options[idx - 1].value)}
-          className="flex h-8 w-8 items-center justify-center rounded border border-border-strong text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40 disabled:hover:bg-transparent"
-        >
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
-            <path d="M12 5l-5 5 5 5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <select
-          value={scope}
-          onChange={(e) => setScope(e.target.value)}
-          className="h-8 rounded border border-border-strong px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <option value="All">All branches</option>
-          {(Object.keys(REGIONS) as RegionName[]).map((region) => {
-            const items = grouped.byRegion.get(region);
-            if (!items || items.length === 0) return null;
-            return (
-              <optgroup key={region} label={region}>
-                {items.map((o) => (
+      <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <span className={eyebrow}>Hero figures for</span>
+        <div className="inline-flex items-center overflow-hidden rounded-md border border-border-strong bg-surface">
+          <button
+            type="button"
+            aria-label="Previous scope"
+            disabled={idx <= 0}
+            onClick={() => setScope(options[idx - 1].value)}
+            className="flex h-8 w-8 items-center justify-center text-fg-subtle hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent disabled:opacity-35 disabled:hover:bg-transparent"
+          >
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
+              <path d="M12 5l-5 5 5 5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <select
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+            aria-label="Hero card scope"
+            className="h-8 border-x border-border-strong bg-surface px-2 text-sm font-medium text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+          >
+            <option value="All">All branches</option>
+            {(Object.keys(REGIONS) as RegionName[]).map((region) => {
+              const items = grouped.byRegion.get(region);
+              if (!items || items.length === 0) return null;
+              return (
+                <optgroup key={region} label={region}>
+                  {items.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
+            {grouped.loose.length > 0 ? (
+              <optgroup label="Other">
+                {grouped.loose.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
                 ))}
               </optgroup>
-            );
-          })}
-          {grouped.loose.length > 0 ? (
-            <optgroup label="Other">
-              {grouped.loose.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
-        </select>
-        <button
-          type="button"
-          aria-label="Next scope"
-          disabled={idx >= options.length - 1}
-          onClick={() => setScope(options[idx + 1].value)}
-          className="flex h-8 w-8 items-center justify-center rounded border border-border-strong text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-40 disabled:hover:bg-transparent"
-        >
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
-            <path d="M8 5l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        {current?.kind === "branch" ? (
-          <span className="text-xs text-fg-faint">single branch</span>
-        ) : (
-          <span className="text-xs text-fg-faint">
-            {scoped.length} branch{scoped.length === 1 ? "" : "es"}
-          </span>
-        )}
+            ) : null}
+          </select>
+          <button
+            type="button"
+            aria-label="Next scope"
+            disabled={idx >= options.length - 1}
+            onClick={() => setScope(options[idx + 1].value)}
+            className="flex h-8 w-8 items-center justify-center text-fg-subtle hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent disabled:opacity-35 disabled:hover:bg-transparent"
+          >
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
+              <path d="M8 5l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+        <span className="text-[11px] text-fg-faint">
+          {current?.kind === "branch"
+            ? "single branch"
+            : `${scoped.length} branch${scoped.length === 1 ? "" : "es"}`}
+        </span>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

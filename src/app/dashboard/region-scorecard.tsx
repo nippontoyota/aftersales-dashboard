@@ -103,7 +103,7 @@ function RegionCard({
   const weakestBreakdown = isOfftakeMetric ? regionBranches.find((b) => b.branch === weakest?.branch)?.onlineStoreBreakdown : undefined;
 
   return (
-    <div className="rounded-md border border-border bg-surface p-3.5">
+    <div className="rounded-lg border border-border bg-surface p-3.5 shadow-card">
       <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: REGION_ACCENT[region] }}>
         <span className="h-2 w-2 rounded-full" style={{ background: REGION_ACCENT[region] }} />
         {region}
@@ -209,9 +209,9 @@ export function RegionScorecard({
   const config = metrics.find((m) => m.key === metric) ?? metrics[0];
 
   return (
-    <div className="rounded-md border border-border bg-surface p-4">
+    <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">
           Region Scorecard — MTD{metrics.length === 1 ? ` — ${metrics[0].label}` : ""}
         </h2>
         {metrics.length > 1 ? (

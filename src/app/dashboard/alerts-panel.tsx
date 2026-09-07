@@ -241,7 +241,7 @@ export function AlertsPanel({
       : null;
 
   return (
-    <div className="flex h-full flex-col rounded-md border border-border bg-surface p-4">
+    <div className="flex h-full flex-col rounded-lg border border-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 text-xs font-semibold">
           {(

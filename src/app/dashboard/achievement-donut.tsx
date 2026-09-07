@@ -96,9 +96,9 @@ export function AchievementDonut({ branches, metrics = DEFAULT_METRICS }: { bran
   );
 
   return (
-    <div className="rounded-md border border-border bg-surface p-4">
+    <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">
           Target Achievement Breakdown{metrics.length === 1 ? ` — ${metrics[0].label}` : ""}
         </h2>
         {metrics.length > 1 ? (

@@ -50,10 +50,10 @@ export function DashboardPageHeader({
   const currentHref = `${basePath}?date=${date}${isCompanyScope && region !== "All" ? `&region=${region}` : ""}${extraQuery}`;
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold text-fg">{title}</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">{title}</h1>
           {!isCompanyScope && (
             <span
               className="flex items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-fg-subtle"
@@ -66,7 +66,7 @@ export function DashboardPageHeader({
             </span>
           )}
         </div>
-        <p className="mt-1 text-sm text-fg-subtle">
+        <p className="mt-1 text-[13px] text-fg-subtle">
           MTD as of {date} · {branchCount} branch{branchCount === 1 ? "" : "es"}
           {region !== "All" ? ` in ${region}` : ""}
           {hasPreviousUpload
@@ -74,7 +74,7 @@ export function DashboardPageHeader({
             : " · first upload"}
         </p>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-shrink-0 items-center gap-1.5">
         {canPublish ? (
           isPublished ? (
             <span

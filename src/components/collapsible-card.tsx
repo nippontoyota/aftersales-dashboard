@@ -24,7 +24,7 @@ export function CollapsibleCard({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-surface">
+    <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-card">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -32,7 +32,7 @@ export function CollapsibleCard({
         className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
       >
         <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">{title}</span>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">{title}</span>
           {subtitle ? <span className="text-[11px] font-normal normal-case text-fg-faint">{subtitle}</span> : null}
         </span>
         <svg

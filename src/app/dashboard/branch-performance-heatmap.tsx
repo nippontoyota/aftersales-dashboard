@@ -85,8 +85,8 @@ export function BranchPerformanceHeatmap({
   };
 
   return (
-    <div className="rounded-md border border-border bg-surface p-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Branch Performance Heatmap — Achievement %</h2>
+    <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch Performance Heatmap — Achievement %</h2>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[560px] border-separate border-spacing-1 text-xs">
           <thead>

@@ -93,7 +93,7 @@ async function DashboardContent({
     const branchReport = data.filteredBranches[0];
     if (!data.report || !branchReport) {
       return (
-        <div className="p-6">
+        <div className="mx-auto max-w-[1600px] p-6">
           <h1 className="text-lg font-semibold text-fg">Daily Report</h1>
           <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
             Your uploads are saved. This report fills in once HQ has uploaded the day&apos;s BA Tool file.
@@ -125,7 +125,7 @@ async function DashboardContent({
   if (data.showRegionDailyReport && admin.role === "regional") {
     if (!data.report || data.filteredBranches.length === 0) {
       return (
-        <div className="p-6">
+        <div className="mx-auto max-w-[1600px] p-6">
           <h1 className="text-lg font-semibold text-fg">Regional Report — {admin.region}</h1>
           <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
             This report fills in once HQ has uploaded the day&apos;s BA Tool file.
@@ -157,7 +157,7 @@ async function DashboardContent({
 
   if (!report) {
     return (
-      <div className="p-6">
+      <div className="mx-auto max-w-[1600px] p-6">
         <div className="rounded border border-bad/30 bg-bad-soft p-4 text-sm text-bad">Could not load the report for {date}.</div>
       </div>
     );
@@ -189,7 +189,7 @@ async function DashboardContent({
   });
 
   return (
-    <div className="p-6">
+    <div className="mx-auto max-w-[1600px] p-6">
       <DashboardPageHeader
         title="Executive Overview"
         basePath="/dashboard"

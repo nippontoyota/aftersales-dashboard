@@ -327,9 +327,9 @@ export function TrendChart({
   const titleSuffix = metrics.length === 1 ? ` — ${metrics[0].label}` : "";
 
   return (
-    <div className="rounded-md border border-border bg-surface p-4">
+    <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">MTD Trend — Actual vs Target{titleSuffix}</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">MTD Trend — Actual vs Target{titleSuffix}</h2>
         <div className="flex items-center gap-1.5">
           {metricSelect}
           <button

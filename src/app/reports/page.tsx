@@ -38,7 +38,7 @@ async function ReportsContent({
 
   if (!data || !data.report) {
     return (
-      <div className="p-6">
+      <div className="mx-auto max-w-[1600px] p-6">
         <h1 className="text-lg font-semibold text-fg">Reports</h1>
         <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
@@ -48,7 +48,7 @@ async function ReportsContent({
   }
 
   return (
-    <div className="p-6">
+    <div className="mx-auto max-w-[1600px] p-6">
       <DashboardPageHeader
         title="Reports"
         basePath="/reports"

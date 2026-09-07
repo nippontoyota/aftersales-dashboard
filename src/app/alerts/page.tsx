@@ -43,7 +43,7 @@ async function AlertsContent({
 
   if (!data) {
     return (
-      <div className="p-6">
+      <div className="mx-auto max-w-[1600px] p-6">
         <h1 className="text-lg font-semibold text-fg">Alerts</h1>
         <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
@@ -53,7 +53,7 @@ async function AlertsContent({
   }
 
   return (
-    <div className="p-6">
+    <div className="mx-auto max-w-[1600px] p-6">
       <DashboardPageHeader
         title="Alerts"
         basePath="/alerts"
@@ -69,8 +69,8 @@ async function AlertsContent({
         isCompanyScope={data.isCompanyScope}
         extraParams={isTkm ? { watched: "tkm" } : undefined}
       />
-      <p className="mt-1 text-xs text-fg-faint">Watching: {isTkm ? "BPU, Offtake, Parts Retail, PM+OC (TKM Targets)" : "VAS (Dashboard)"}</p>
-      <div className="mt-4">
+      <p className="mt-3 text-xs text-fg-faint">Watching: {isTkm ? "BPU, Offtake, Parts Retail, PM+OC (TKM Targets)" : "VAS (Dashboard)"}</p>
+      <div className="mt-3">
         <AlertsPanel branches={data.filteredBranches} variant="full" watched={isTkm ? TKM_WATCHED : undefined} />
       </div>
     </div>
