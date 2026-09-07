@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions";
 import { ThemeToggle } from "./theme-toggle";
@@ -185,6 +185,20 @@ function useSidebarCollapsed(): [boolean, () => void] {
   return [collapsed, toggle];
 }
 
+/** Spinner shown on a nav item while its (dynamic) route loads — the
+ * dashboard pages Suspend on a slow query, so a click can otherwise sit with
+ * no feedback for a beat. Must render inside a <Link> for useLinkStatus. */
+function NavPending() {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return (
+    <svg className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
+      <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const ICONS: Record<NavKey, () => React.ReactElement> = {
   dashboard: DashboardIcon,
   "tkm-targets": TkmTargetsIcon,
@@ -258,6 +272,7 @@ export function AppShell({
       >
         <Icon />
         {!compact && item.label}
+        {!compact ? <NavPending /> : null}
       </Link>
     );
   };
