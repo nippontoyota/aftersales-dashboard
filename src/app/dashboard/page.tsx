@@ -4,14 +4,13 @@ import { AppShell } from "@/components/app-shell";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { CollapsibleCard } from "@/components/collapsible-card";
-import { RevenueIcon, WrenchIcon, TargetIcon, PercentIcon, StorefrontIcon } from "@/components/dashboard-icons";
+import { TargetIcon, PercentIcon } from "@/components/dashboard-icons";
 import { RichKpiCard } from "@/components/rich-kpi-card";
-import { achievementRatio, computeHeroSummary, computeKpiSummary } from "@/lib/aggregate";
+import { achievementRatio, computeKpiSummary } from "@/lib/aggregate";
 import { getCurrentAdmin } from "@/lib/auth";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
-import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
-import { computePace } from "@/lib/pace";
+import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { computeVasTrendSeries } from "@/lib/trend";
 import { AchievementDonut } from "./achievement-donut";
 import { AlertsPanel } from "./alerts-panel";
@@ -19,6 +18,7 @@ import { BillDrilldown } from "./bill-drilldown";
 import { BranchDailyReport } from "./branch-daily-report";
 import { RegionDailyReport } from "./region-daily-report";
 import { HeroKpi } from "./hero-kpi";
+import { HeroKpiStrip } from "./hero-kpi-strip";
 import { InsightsPanel } from "./insights-panel";
 import { RegionScorecard } from "./region-scorecard";
 import { TrendChart } from "./trend-chart";
@@ -164,14 +164,15 @@ async function DashboardContent({
   }
 
   const allKpis = computeKpiSummary(report.branches);
-  const heroSummary = computeHeroSummary(filteredBranches);
 
   const trendSeriesByMetric = { vas: computeVasTrendSeries(monthSnapshots, serviceInfoMonthSnapshots, region) };
-  const pace = {
-    vas: computePace(date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget),
-  };
 
   const vasGentani = achievementRatio(kpis.vasAchievementForTheMonth, kpis.gusRoMtd);
+
+  // The hero strip switches scope on its own (branch admin → own branch,
+  // everyone → All/region + step through branches) and only affects those
+  // five cards — the rest of the page still follows the header region filter.
+  const heroDefaultScope = admin.role === "branch" ? admin.branch : region;
 
   // Same date/region preservation as tkm-targets/page.tsx's alertsHref — no
   // `watched` param needed here since VAS is already /alerts' own default.
@@ -204,55 +205,12 @@ async function DashboardContent({
         isCompanyScope={isCompanyScope}
       />
 
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <RichKpiCard
-          icon={<RevenueIcon />}
-          color="indigo"
-          label="Total Revenue Stream MTD"
-          value={formatCompactCurrency(heroSummary.totalRevenueStreamMtd)}
+      <div className="mt-4">
+        <HeroKpiStrip
+          branches={report.branches}
+          date={date}
           hasPreviousUpload={hasPreviousUpload}
-        />
-        <RichKpiCard
-          icon={<RevenueIcon />}
-          color="red"
-          label="GUS RO — MTD"
-          value={formatCompactCurrency(
-            heroSummary.gusPartsMtd !== null && heroSummary.gusLabourMtd !== null
-              ? heroSummary.gusPartsMtd + heroSummary.gusLabourMtd
-              : null,
-          )}
-          sub={`${formatNumber(kpis.gusRoMtd)} ROs`}
-          hasPreviousUpload={hasPreviousUpload}
-        />
-        <RichKpiCard
-          icon={<WrenchIcon />}
-          color="blue"
-          label="BPU RO — MTD"
-          value={formatCompactCurrency(
-            heroSummary.bpuPartsMtd !== null && heroSummary.bpuLabourMtd !== null
-              ? heroSummary.bpuPartsMtd + heroSummary.bpuLabourMtd
-              : null,
-          )}
-          sub={`${formatNumber(kpis.bpuRoMtd)} ROs`}
-          hasPreviousUpload={hasPreviousUpload}
-        />
-        <RichKpiCard
-          icon={<RevenueIcon />}
-          color="amber"
-          label="External Sales MTD"
-          value={formatCompactCurrency(kpis.externalSalesMtd)}
-          hasPreviousUpload={hasPreviousUpload}
-        />
-        <RichKpiCard
-          icon={<StorefrontIcon />}
-          color="indigo"
-          label="VAS Achievement"
-          value={formatCompactCurrency(kpis.vasAchievementForTheMonth)}
-          actual={kpis.vasAchievementForTheMonth}
-          target={kpis.vasBillTarget}
-          hasPreviousUpload={hasPreviousUpload}
-          pace={pace.vas}
-          formatPaceValue={formatCompactCurrency}
+          defaultScope={heroDefaultScope}
         />
       </div>
 
