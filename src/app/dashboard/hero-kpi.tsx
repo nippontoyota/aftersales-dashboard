@@ -8,9 +8,9 @@ import { REGIONS, type RegionName } from "@/lib/regions";
 
 const SCOPE_ACCENT: Record<"All" | RegionName, string> = {
   All: "var(--color-fg)",
-  Central: "#2a78d6",
-  South: "#eb6834",
-  North: "#1baf7a",
+  Central: "var(--color-cat-central)",
+  South: "var(--color-cat-south)",
+  North: "var(--color-cat-north)",
 };
 /** A specific branch pulled in via the "compare a branch" dropdown isn't one
  * of the four fixed scopes, so it gets its own neutral accent rather than

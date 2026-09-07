@@ -14,9 +14,9 @@ export type DonutMetricConfig = { key: string; label: string; actual: keyof Bran
 const DEFAULT_METRICS: DonutMetricConfig[] = [{ key: "vas", label: "VAS", actual: "vasAchievementForTheMonth", target: "vasBillTarget" }];
 
 const TONE_HEX: Record<AchievementTone, string> = {
-  good: "#10b981",
-  warn: "#f59e0b",
-  critical: "#ef4444",
+  good: "var(--color-good-solid)",
+  warn: "var(--color-warn-solid)",
+  critical: "var(--color-bad-solid)",
   neutral: "var(--color-border-strong)",
 };
 

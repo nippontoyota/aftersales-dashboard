@@ -31,7 +31,14 @@ const DEFAULT_METRICS: RegionMetricConfig[] = [
   { key: "vas", label: "VAS (Rs)", actual: "vasAchievementForTheMonth", target: "vasBillTarget", isCurrency: true },
 ];
 
-const REGION_ACCENT: Record<RegionName, string> = { Central: "#2a78d6", South: "#eb6834", North: "#1baf7a" };
+// Theme tokens, not raw hex — the dark palette lifts these for contrast on
+// the near-black canvas (see globals.css). var() resolves fine in inline
+// styles and SVG stroke/fill (same as trend-chart.tsx).
+const REGION_ACCENT: Record<RegionName, string> = {
+  Central: "var(--color-cat-central)",
+  South: "var(--color-cat-south)",
+  North: "var(--color-cat-north)",
+};
 const TONE_TEXT: Record<AchievementTone, string> = {
   good: "text-good",
   warn: "text-warn",

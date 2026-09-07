@@ -68,11 +68,12 @@ export const TKM_RANKING_METRICS: RankingMetricConfig[] = [
   { key: "pmOcAchievementForTheMonth", label: "PM+OC Achievement MTD" },
 ];
 
-// Same validated categorical hues used for the region grouping everywhere else.
+// Same validated categorical hues used for the region grouping everywhere
+// else — theme tokens so the dark palette's lifted variants kick in.
 const REGION_COLOR: Record<RegionName, string> = {
-  Central: "#2a78d6",
-  South: "#eb6834",
-  North: "#1baf7a",
+  Central: "var(--color-cat-central)",
+  South: "var(--color-cat-south)",
+  North: "var(--color-cat-north)",
 };
 
 export function BranchRankingChart({
@@ -120,7 +121,7 @@ export function BranchRankingChart({
                   className="h-full rounded-full"
                   style={{
                     width: `${(r.value / max) * 100}%`,
-                    backgroundColor: r.region ? REGION_COLOR[r.region] : "#94a3b8",
+                    backgroundColor: r.region ? REGION_COLOR[r.region] : "var(--color-fg-faint)",
                   }}
                 />
               </div>
