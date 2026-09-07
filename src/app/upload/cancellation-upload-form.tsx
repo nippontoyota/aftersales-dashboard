@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Saved = { branch: string; month: string; count: number; beforeTaxTotal: number; afterTaxTotal: number };
-type FileResult = { fileName: string; saved: Saved[]; error?: string };
+type FileResult = { fileName: string; saved: Saved[]; error?: string; warnings?: string[] };
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const monthLabel = (m: string) => {
@@ -57,7 +57,8 @@ export function CancellationUploadForm() {
           className="block w-full text-sm text-fg-muted file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-accent-text hover:file:bg-accent-soft/80"
         />
         <p className="text-xs text-fg-subtle">
-          The branch and month are read from each file&apos;s header. Re-uploading a month replaces that month&apos;s rows.
+          Upload the report each time a new cancellation comes in — run it for the full month, it replaces that
+          month&apos;s list each time. The month is read from the report.
         </p>
         <button
           type="submit"
@@ -78,14 +79,21 @@ export function CancellationUploadForm() {
           {r.error ? (
             <div className="mt-1 text-bad">{r.error}</div>
           ) : (
-            <ul className="mt-1 space-y-0.5 text-fg-muted">
-              {r.saved.map((s) => (
-                <li key={`${s.branch}-${s.month}`}>
-                  <span className="font-medium text-fg">{s.branch}</span> · {monthLabel(s.month)} — {s.count} cancellations,{" "}
-                  {inr(s.beforeTaxTotal)} before tax ({inr(s.afterTaxTotal)} incl.)
-                </li>
+            <>
+              <ul className="mt-1 space-y-0.5 text-fg-muted">
+                {r.saved.map((s) => (
+                  <li key={`${s.branch}-${s.month}`}>
+                    <span className="font-medium text-fg">{s.branch}</span> · {monthLabel(s.month)} — {s.count} cancellations,{" "}
+                    {inr(s.beforeTaxTotal)} before tax ({inr(s.afterTaxTotal)} incl.)
+                  </li>
+                ))}
+              </ul>
+              {r.warnings?.map((w) => (
+                <div key={w} className="mt-1 text-xs text-warn">
+                  {w}
+                </div>
               ))}
-            </ul>
+            </>
           )}
         </div>
       ))}

@@ -15,10 +15,13 @@ export { CANCELLATION_REASONS } from "./parse-tables";
 
 /** Reads the DMS Tax Invoice Cancellation Report PDF. Extraction is
  * pdf-parse's `getTable()` (this file); the layout parsing lives in
- * parse-tables.ts so it can be tested without pdfjs. */
+ * parse-tables.ts so it can be tested without pdfjs. `fallbackBranch` is the
+ * uploader's own branch — used when the PDF header's branch token can't be
+ * matched. */
 export async function parseCancellationReport(
   buffer: Buffer,
   knownBranches: string[],
+  fallbackBranch?: string,
 ): Promise<ParsedCancellationReport> {
   let pages: CancellationPage[];
   try {
@@ -31,7 +34,8 @@ export async function parseCancellationReport(
       blocks: [],
       printedTotals: null,
       errors: [`Could not read the PDF: ${err instanceof Error ? err.message : "unknown error"}`],
+      warnings: [],
     };
   }
-  return parseCancellationTables(pages, knownBranches);
+  return parseCancellationTables(pages, knownBranches, fallbackBranch);
 }

@@ -157,6 +157,22 @@ export default async function UploadPage({
                 </div>
               </>
             }
+            cancellations={
+              <>
+                <h1 className="text-lg font-semibold text-fg">Upload Cancellation Report</h1>
+                <p className="mt-1 text-sm text-fg-subtle">
+                  Uploading as <span className="font-medium text-fg-muted">{admin.branch}</span>. Upload the DMS Tax Invoice
+                  Cancellation Report (PDF) whenever a new cancellation comes in — see it at{" "}
+                  <a href="/cancellations" className="text-accent-text underline">
+                    Cancellations
+                  </a>
+                  . It never changes a revenue figure.
+                </p>
+                <div className="mt-4">
+                  <CancellationUploadForm />
+                </div>
+              </>
+            }
           />
         ) : (
           <div className="mt-4 rounded-lg border border-bad/30 bg-bad-soft p-4 text-sm text-bad">

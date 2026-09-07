@@ -4,18 +4,18 @@ import { listBranchCodes } from "@/lib/admin-store";
 import { parseCancellationReport } from "@/lib/cancellation/parse";
 import { saveCancellationReport } from "@/lib/cancellation/store";
 
-type FileResult = {
-  fileName: string;
-  saved: { branch: string; month: string; count: number; beforeTaxTotal: number; afterTaxTotal: number }[];
-  error?: string;
-};
+type Saved = { branch: string; month: string; count: number; beforeTaxTotal: number; afterTaxTotal: number };
+type FileResult = { fileName: string; saved: Saved[]; error?: string; warnings?: string[] };
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-  if (admin.role !== "hq") {
-    return NextResponse.json({ error: "Only an HQ account can upload the Cancellation Report." }, { status: 403 });
+  if (admin.role === "regional") {
+    return NextResponse.json({ error: "Regional accounts are read-only." }, { status: 403 });
   }
+  // A branch account uploads its own; HQ can upload for any branch (the
+  // branch is taken from the report header).
+  const ownBranch = admin.role === "branch" ? admin.branch : null;
 
   const formData = await request.formData();
   const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       continue;
     }
 
-    const parsed = await parseCancellationReport(buffer, knownBranches);
+    const parsed = await parseCancellationReport(buffer, knownBranches, ownBranch ?? undefined);
     if (parsed.errors.length > 0) {
       results.push({ fileName, saved: [], error: parsed.errors.slice(0, 5).join(" ") });
       continue;
@@ -51,8 +51,19 @@ export async function POST(request: Request) {
       continue;
     }
 
+    // A branch account may only upload its own branch's report.
+    const wrongBranch = ownBranch ? parsed.blocks.find((b) => b.branch !== ownBranch) : undefined;
+    if (wrongBranch) {
+      results.push({
+        fileName,
+        saved: [],
+        error: `This report is for ${wrongBranch.branch}, but you're signed in as ${ownBranch}.`,
+      });
+      continue;
+    }
+
     const uploadedAt = new Date().toISOString();
-    const saved: FileResult["saved"] = [];
+    const saved: Saved[] = [];
     let failed: string | undefined;
 
     for (const block of parsed.blocks) {
@@ -79,7 +90,7 @@ export async function POST(request: Request) {
       }
     }
 
-    results.push({ fileName, saved, error: failed });
+    results.push({ fileName, saved, error: failed, warnings: parsed.warnings.length ? parsed.warnings : undefined });
   }
 
   const allOk = results.every((r) => !r.error && r.saved.length > 0);

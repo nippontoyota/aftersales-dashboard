@@ -51,6 +51,9 @@ export type ParsedCancellationReport = {
    * date, before+tax≠after). The route rejects the upload if this is
    * non-empty rather than saving a partial month. */
   errors: string[];
+  /** Non-fatal notes shown to the uploader — e.g. the report's date range
+   * doesn't start on the 1st, so a month re-upload would drop earlier rows. */
+  warnings: string[];
 };
 
 /** pdf-parse's `getTable()` shape, pared to what this parser reads. */
@@ -78,13 +81,18 @@ const CANONICAL_REASONS: Record<string, string> = {
 export function parseCancellationTables(
   pages: CancellationPage[],
   knownBranches: string[],
+  /** Used when the header's branch token can't be recognised — a branch
+   * upload knows its own branch even if the PDF header is garbled. */
+  fallbackBranch?: string,
 ): ParsedCancellationReport {
   const branchSet = new Set(knownBranches.map((b) => b.toUpperCase()));
   const errors: string[] = [];
+  const warnings: string[] = [];
   const blocksByKey = new Map<string, CancellationBranchBlock>();
   let printedTotals: ParsedCancellationReport["printedTotals"] = null;
 
-  let current: { branch: string; month: string } | null = null;
+  let currentBranch: string | null = fallbackBranch ? fallbackBranch.toUpperCase() : null;
+  let currentMonth: string | null = null;
   let sawCancellationHeading = false;
 
   for (const page of pages ?? []) {
@@ -97,11 +105,19 @@ export function parseCancellationTables(
 
         if (/Cancellation\s+Report/i.test(joined)) sawCancellationHeading = true;
 
-        // Header block — carries the branch + the reporting month.
-        const headerBranch = detectBranch(joined, branchSet);
-        const headerMonth = detectMonth(joined);
-        if (headerBranch && headerMonth) {
-          current = { branch: headerBranch, month: headerMonth };
+        // Header block — carries the branch and the report's date range.
+        const range = detectRange(joined);
+        if (range) {
+          currentMonth = range.month;
+          const headerBranch = detectBranch(joined, branchSet);
+          if (headerBranch) currentBranch = headerBranch;
+          else if (fallbackBranch) currentBranch = fallbackBranch.toUpperCase();
+          if (range.fromDay > 1) {
+            warnings.push(
+              `The report covers ${range.from} to ${range.to}, not the whole of ${range.month} — ` +
+                `re-uploading replaces the month, so cancellations before ${range.from} would be dropped.`,
+            );
+          }
           continue;
         }
 
@@ -124,10 +140,6 @@ export function parseCancellationTables(
           errors.push(`Row ${row[0]}: reached a data row before the column header — unexpected layout.`);
           continue;
         }
-        if (!current) {
-          errors.push(`Row ${row[0]}: no branch/month header seen before this row — is this a Cancellation Report?`);
-          continue;
-        }
 
         const parsed = parseDataRow(row, columnIndex);
         if (typeof parsed === "string") {
@@ -135,10 +147,19 @@ export function parseCancellationTables(
           continue;
         }
 
-        const key = `${current.branch}|${current.month}`;
+        const branch = currentBranch;
+        // A row's month comes from its own cancel date, not the header range —
+        // robust to a report that spans a month boundary.
+        const month = currentMonth ?? parsed.cancelDate.slice(0, 7);
+        if (!branch) {
+          errors.push(`Row ${row[0]} (${parsed.docNo}): couldn't tell which branch this report is for.`);
+          continue;
+        }
+
+        const key = `${branch}|${month}`;
         let block = blocksByKey.get(key);
         if (!block) {
-          block = { branch: current.branch, month: current.month, rows: [] };
+          block = { branch, month, rows: [] };
           blocksByKey.set(key, block);
         }
         block.rows.push(parsed);
@@ -155,7 +176,7 @@ export function parseCancellationTables(
     );
   }
 
-  return { blocks, printedTotals, errors };
+  return { blocks, printedTotals, errors, warnings: [...new Set(warnings)] };
 }
 
 // --- row parsing --------------------------------------------------------
@@ -256,13 +277,18 @@ function detectBranch(text: string, branchSet: Set<string>): string | null {
   return null;
 }
 
-function detectMonth(text: string): string | null {
-  // "01082026 31082026 All Cancellation Date" — the From date is DDMMYYYY.
-  const m = text.match(/\b(\d{2})(\d{2})(\d{4})\s+\d{8}\b/);
+function detectRange(text: string): { month: string; from: string; to: string; fromDay: number } | null {
+  // "01082026 31082026 All Cancellation Date" — From then To, both DDMMYYYY.
+  const m = text.match(/\b(\d{2})(\d{2})(\d{4})\s+(\d{2})(\d{2})(\d{4})\b/);
   if (!m) return null;
-  const [, , mm, yyyy] = m;
-  if (Number(mm) < 1 || Number(mm) > 12) return null;
-  return `${yyyy}-${mm}`;
+  const [, fd, fm, fy, td, tm, ty] = m;
+  if (Number(fm) < 1 || Number(fm) > 12) return null;
+  return {
+    month: `${fy}-${fm}`,
+    from: `${fy}-${fm}-${fd}`,
+    to: `${ty}-${tm}-${td}`,
+    fromDay: Number(fd),
+  };
 }
 
 // --- primitives -----------------------------------------------------
