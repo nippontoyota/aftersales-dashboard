@@ -14,11 +14,18 @@ export default function LoginPage() {
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
-      <div className="w-full max-w-sm rounded-md border border-border bg-surface p-6">
-        <h1 className="text-base font-semibold text-fg">Aftersales Admin Portal</h1>
-        <p className="mt-1 text-sm text-fg-subtle">Nippon Toyota internal system.</p>
+      <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-6 shadow-card">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent text-xs font-bold text-on-accent">
+            NT
+          </div>
+          <div className="leading-tight">
+            <h1 className="text-base font-semibold tracking-tight text-fg">Aftersales Admin Portal</h1>
+            <p className="text-xs text-fg-faint">Nippon Toyota internal system</p>
+          </div>
+        </div>
 
-        <form action={formAction} className="mt-5 space-y-3">
+        <form action={formAction} className="mt-6 space-y-3">
           <div>
             <label htmlFor="username" className="block text-xs font-medium text-fg-muted">
               Username

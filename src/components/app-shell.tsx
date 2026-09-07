@@ -358,7 +358,7 @@ export function AppShell({
               type="button"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
-              className="rounded p-1.5 text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
+              className="rounded-md p-1.5 text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
             >
               <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
                 <path d="M3 5h14M3 10h14M3 15h14" strokeLinecap="round" />

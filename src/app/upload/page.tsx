@@ -75,7 +75,7 @@ export default async function UploadPage({
           <UploadTabs
             dailyReports={
               <>
-                <h1 className="text-lg font-semibold text-fg">Upload BA Tool Report</h1>
+                <h1 className="text-xl font-semibold tracking-tight text-fg">Upload BA Tool Report</h1>
                 <p className="mt-1 text-sm text-fg-subtle">
                   Upload the daily BA Tool export. Choose the date this upload represents — it&apos;s used to compute
                   day-over-day figures against the previous upload.
@@ -87,7 +87,7 @@ export default async function UploadPage({
             }
             bills={
               <>
-                <h1 className="text-lg font-semibold text-fg">Upload Bills</h1>
+                <h1 className="text-xl font-semibold tracking-tight text-fg">Upload Bills</h1>
                 <p className="mt-1 text-sm text-fg-subtle">
                   Upload PDF tax invoices. The total taxable value and invoice number will be extracted automatically.
                 </p>
@@ -98,7 +98,7 @@ export default async function UploadPage({
             }
             cancellations={
               <>
-                <h1 className="text-lg font-semibold text-fg">Upload Cancellation Report</h1>
+                <h1 className="text-xl font-semibold tracking-tight text-fg">Upload Cancellation Report</h1>
                 <p className="mt-1 text-sm text-fg-subtle">
                   The monthly DMS Tax Invoice Cancellation Report (PDF), one or more branches. Used for reconciliation and
                   the data-quality view at{" "}
@@ -117,13 +117,13 @@ export default async function UploadPage({
           <UploadTabs
             dailyReports={
               <>
-                <h1 className="text-lg font-semibold text-fg">Upload branch reports</h1>
+                <h1 className="text-xl font-semibold tracking-tight text-fg">Upload branch reports</h1>
                 <p className="mt-1 text-sm text-fg-subtle">
                   Uploading as <span className="font-medium text-fg-muted">{admin.branch}</span>. Figures are attributed
                   to your branch automatically. Once a report is uploaded for a date, that section locks — ask HQ
                   (Upload Sheet) for a correction.
                 </p>
-                <div className="mt-4 rounded-md border border-border bg-surface p-4">
+                <div className="mt-4 rounded-lg border border-border bg-surface p-4 shadow-card">
                   <label htmlFor="report-date" className="block text-xs font-medium text-fg-muted">
                     Report date
                   </label>
@@ -147,7 +147,7 @@ export default async function UploadPage({
             }
             bills={
               <>
-                <h1 className="text-lg font-semibold text-fg">Upload Bills</h1>
+                <h1 className="text-xl font-semibold tracking-tight text-fg">Upload Bills</h1>
                 <p className="mt-1 text-sm text-fg-subtle">
                   Uploading as <span className="font-medium text-fg-muted">{admin.branch}</span>. Upload PDF tax
                   invoices — the total taxable value and invoice number will be extracted automatically.
@@ -159,7 +159,7 @@ export default async function UploadPage({
             }
             cancellations={
               <>
-                <h1 className="text-lg font-semibold text-fg">Upload Cancellation Report</h1>
+                <h1 className="text-xl font-semibold tracking-tight text-fg">Upload Cancellation Report</h1>
                 <p className="mt-1 text-sm text-fg-subtle">
                   Uploading as <span className="font-medium text-fg-muted">{admin.branch}</span>. Upload the DMS Tax Invoice
                   Cancellation Report (PDF) whenever a new cancellation comes in — see it at{" "}

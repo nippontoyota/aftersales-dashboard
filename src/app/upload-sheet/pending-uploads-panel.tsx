@@ -10,7 +10,7 @@ export function PendingUploadsPanel({ summary }: { summary: PendingUploadsSummar
   const allDone = summary.pending.length === 0;
 
   return (
-    <div className="rounded-md border border-border bg-surface p-5">
+    <div className="rounded-lg border border-border bg-surface p-5 shadow-card">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold text-fg">Pending Uploads</h2>
         <span className="text-xs font-medium tabular-nums text-fg-subtle">

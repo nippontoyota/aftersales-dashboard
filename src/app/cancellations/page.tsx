@@ -63,8 +63,8 @@ export default async function CancellationsPage({
   if (!month) {
     return shell(
       <>
-        <h1 className="text-lg font-semibold text-fg">Cancellations</h1>
-        <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
+        <h1 className="text-xl font-semibold tracking-tight text-fg">Cancellations</h1>
+        <div className="mt-4 rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           No Cancellation Reports have been uploaded yet.
           {admin.role !== "regional" ? " Upload the DMS report from the Upload page." : ""}
         </div>
@@ -93,14 +93,14 @@ export default async function CancellationsPage({
 
   return shell(
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div>
-          <h1 className="text-lg font-semibold text-fg">Cancellations</h1>
-          <p className="mt-0.5 text-sm text-fg-subtle">
+          <h1 className="text-xl font-semibold tracking-tight text-fg">Cancellations</h1>
+          <p className="mt-1 text-[13px] text-fg-subtle">
             Tax invoices cancelled in {monthLabel(month)}. A control view — nothing here changes a revenue figure.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-shrink-0 items-center gap-1.5">
           <MonthSelect months={months} selected={month} branch={branchFilter} />
           {admin.role === "hq" && branchOptions.length > 1 ? (
             <BranchSelect branches={branchOptions} selected={branchFilter ?? "All"} month={month} />
@@ -163,7 +163,7 @@ export default async function CancellationsPage({
           <div className={eyebrow}>By branch</div>
           <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {kpis.map((k) => (
-              <div key={k.branch} className="rounded-md border border-border bg-surface p-3.5">
+              <div key={k.branch} className="rounded-lg border border-border bg-surface p-3.5 shadow-card">
                 <div className="flex items-baseline justify-between">
                   <div className="text-sm font-semibold text-fg">{k.branch}</div>
                   <div className="text-xs text-fg-subtle">{formatCompactCurrency(k.beforeTaxTotal)}</div>
@@ -176,7 +176,7 @@ export default async function CancellationsPage({
                   {Object.entries(k.byReason)
                     .sort((a, b) => b[1] - a[1])
                     .map(([reason, n]) => (
-                      <span key={reason} className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-fg-muted">
+                      <span key={reason} className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[11px] text-fg-muted">
                         {reason} {n}
                       </span>
                     ))}
@@ -197,7 +197,7 @@ export default async function CancellationsPage({
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-border bg-surface p-3">
+    <div className="rounded-lg border border-border bg-surface p-3 shadow-card">
       <div className="text-[11px] uppercase tracking-wide text-fg-faint">{label}</div>
       <div className="mt-1 text-xl font-semibold text-fg">{value}</div>
     </div>

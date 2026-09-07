@@ -32,7 +32,7 @@ export function UploadTabs({
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`px-4 py-2 text-sm font-medium transition-colors ${
-                tab === t.key ? "border-b-2 border-bad text-bad" : "text-fg-subtle hover:text-fg-muted"
+                tab === t.key ? "border-b-2 border-accent text-accent-text" : "text-fg-subtle hover:text-fg-muted"
               }`}
             >
               {t.label}

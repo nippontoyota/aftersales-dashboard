@@ -178,7 +178,7 @@ function ReportUploadForm({
   const dateId = `date-${endpoint.replace(/\W+/g, "-")}`;
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 rounded-md border border-border bg-surface p-5">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border bg-surface p-5 shadow-card">
       <div>
         <h2 className="text-sm font-semibold text-fg">{title}</h2>
         {description ? <p className="mt-0.5 text-xs text-fg-subtle">{description}</p> : null}
