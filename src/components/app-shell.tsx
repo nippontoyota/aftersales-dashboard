@@ -11,10 +11,13 @@ import { ThemeToggle } from "./theme-toggle";
 // day-to-day is gated by publish status instead (see dashboard-data.ts),
 // not by nav item.
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", key: "dashboard" as const, requiresDashboard: true, companyWide: false, uploadOnly: false },
+  // `label` here is a fallback only — AppShell always overrides the dashboard
+  // item's label with the `dashboardLabel` prop ("Executive Overview", or the
+  // pre-publish "Daily Report" / "Regional Report").
+  { href: "/dashboard", label: "Executive Overview", key: "dashboard" as const, requiresDashboard: true, companyWide: false, uploadOnly: false },
   { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
   { href: "/alerts", label: "Alerts", key: "alerts" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
-  { href: "/branches", label: "Branches", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
+  { href: "/branches", label: "Branch Performance", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
   { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true },
 ];
@@ -187,7 +190,7 @@ export function AppShell({
   isHq = false,
   companyTabs = true,
   canUpload = true,
-  dashboardLabel = "Dashboard",
+  dashboardLabel = "Executive Overview",
   identity,
   children,
 }: {
@@ -206,7 +209,7 @@ export function AppShell({
    * upload. Defaults to true. */
   canUpload?: boolean;
   /** Label for the /dashboard nav item — "Daily Report" / "Regional Report"
-   * for a pre-publish raw view, "Dashboard" otherwise. */
+   * for a pre-publish raw view, "Executive Overview" otherwise. */
   dashboardLabel?: string;
   /** e.g. "CO01B branch" or "HQ admin" — shown under the account area at the bottom of the sidebar. */
   identity: string;

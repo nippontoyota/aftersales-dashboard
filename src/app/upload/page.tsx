@@ -29,7 +29,7 @@ export default async function UploadPage({
   // Regional managers are read-only — no upload surface at all.
   if (admin?.role === "regional") redirect("/dashboard");
   const identity = admin ? adminIdentityLabel(admin) : "";
-  const nav = admin ? await loadNavState(admin) : { companyTabs: true, dashboardLabel: "Dashboard", canUpload: true };
+  const nav = admin ? await loadNavState(admin) : { companyTabs: true, dashboardLabel: "Executive Overview", canUpload: true };
 
   // Branches upload today for yesterday's report, so the date picker (and
   // this lock-status check) default to yesterdayIso(). A branch catching up

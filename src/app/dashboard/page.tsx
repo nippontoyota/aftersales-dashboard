@@ -76,7 +76,7 @@ async function DashboardContent({
   if (!data) {
     return (
       <div className="mx-auto w-full max-w-2xl p-6">
-        <h1 className="text-lg font-semibold text-fg">Dashboard</h1>
+        <h1 className="text-lg font-semibold text-fg">Executive Overview</h1>
         <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           {admin.role === "hq"
             ? "No BA Tool reports have been uploaded yet. Go to Upload to add today's file."
