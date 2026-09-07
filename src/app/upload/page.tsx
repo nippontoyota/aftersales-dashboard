@@ -12,6 +12,7 @@ import { loadRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { BaToolUploadForm } from "./ba-tool-upload-form";
 import { ReportDatePicker } from "./report-date-picker";
 import { BillUploadForm } from "./bill-upload-form";
+import { CancellationUploadForm } from "./cancellation-upload-form";
 import { PartSaleUploadForm } from "./part-sale-upload-form";
 import { Scom205UploadForm } from "./scom205-upload-form";
 import { ServiceInfoUploadForm } from "./service-info-upload-form";
@@ -92,6 +93,22 @@ export default async function UploadPage({
                 </p>
                 <div className="mt-4">
                   <BillUploadForm />
+                </div>
+              </>
+            }
+            cancellations={
+              <>
+                <h1 className="text-lg font-semibold text-fg">Upload Cancellation Report</h1>
+                <p className="mt-1 text-sm text-fg-subtle">
+                  The monthly DMS Tax Invoice Cancellation Report (PDF), one or more branches. Used for reconciliation and
+                  the data-quality view at{" "}
+                  <a href="/cancellations" className="text-accent-text underline">
+                    Cancellations
+                  </a>
+                  — it never changes a revenue figure.
+                </p>
+                <div className="mt-4">
+                  <CancellationUploadForm />
                 </div>
               </>
             }

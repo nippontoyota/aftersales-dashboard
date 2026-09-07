@@ -2,35 +2,45 @@
 
 import { useState, type ReactNode } from "react";
 
-export function UploadTabs({ dailyReports, bills }: { dailyReports: ReactNode; bills: ReactNode }) {
-  const [tab, setTab] = useState<"reports" | "bills">("reports");
+type TabKey = "reports" | "bills" | "cancellations";
+
+export function UploadTabs({
+  dailyReports,
+  bills,
+  cancellations,
+}: {
+  dailyReports: ReactNode;
+  bills: ReactNode;
+  /** HQ-only — omitted for branch accounts. */
+  cancellations?: ReactNode;
+}) {
+  const [tab, setTab] = useState<TabKey>("reports");
+
+  const tabs: { key: TabKey; label: string; show: boolean }[] = [
+    { key: "reports", label: "Daily Reports", show: true },
+    { key: "bills", label: "Bills", show: true },
+    { key: "cancellations", label: "Cancellations", show: cancellations != null },
+  ];
 
   return (
     <>
       <div className="flex border-b border-border">
-        <button
-          onClick={() => setTab("reports")}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === "reports"
-              ? "border-b-2 border-bad text-bad"
-              : "text-fg-subtle hover:text-fg-muted"
-          }`}
-        >
-          Daily Reports
-        </button>
-        <button
-          onClick={() => setTab("bills")}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            tab === "bills"
-              ? "border-b-2 border-bad text-bad"
-              : "text-fg-subtle hover:text-fg-muted"
-          }`}
-        >
-          Bills
-        </button>
+        {tabs
+          .filter((t) => t.show)
+          .map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                tab === t.key ? "border-b-2 border-bad text-bad" : "text-fg-subtle hover:text-fg-muted"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
       </div>
       <div className="mt-4">
-        {tab === "reports" ? dailyReports : bills}
+        {tab === "reports" ? dailyReports : tab === "bills" ? bills : cancellations}
       </div>
     </>
   );

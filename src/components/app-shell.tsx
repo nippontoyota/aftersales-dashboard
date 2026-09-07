@@ -19,6 +19,9 @@ const NAV_ITEMS = [
   { href: "/alerts", label: "Alerts", key: "alerts" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
   { href: "/branches", label: "Branch Performance", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
   { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
+  // Not gated by publish (companyWide:false) — a branch admin should always be
+  // able to see its own cancellations; the page scopes rows to the account.
+  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false },
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true },
 ];
 
@@ -94,6 +97,15 @@ function ReportsIcon() {
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
       <path d="M5 3.5h7l3 3v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z" strokeLinejoin="round" />
       <path d="M7 10h6M7 13h6M7 7h2.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CancellationsIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <circle cx="10" cy="10" r="7" />
+      <path d="M5.5 5.5l9 9" strokeLinecap="round" />
     </svg>
   );
 }
@@ -179,6 +191,7 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   alerts: AlertsIcon,
   branches: BranchesIcon,
   reports: ReportsIcon,
+  cancellations: CancellationsIcon,
   upload: UploadIcon,
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,

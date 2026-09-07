@@ -7,6 +7,7 @@ import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { AlertsPanel, TKM_WATCHED } from "../dashboard/alerts-panel";
+import { CancellationFlag } from "../cancellations/cancellation-flag";
 
 export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string; watched?: string }> }) {
   const admin = await getCurrentAdmin();
@@ -70,6 +71,9 @@ async function AlertsContent({
         extraParams={isTkm ? { watched: "tkm" } : undefined}
       />
       <p className="mt-3 text-xs text-fg-faint">Watching: {isTkm ? "BPU, Offtake, Parts Retail, PM+OC (TKM Targets)" : "VAS (Dashboard)"}</p>
+      <Suspense fallback={null}>
+        <CancellationFlag admin={admin} />
+      </Suspense>
       <div className="mt-3">
         <AlertsPanel branches={data.filteredBranches} variant="full" watched={isTkm ? TKM_WATCHED : undefined} />
       </div>
