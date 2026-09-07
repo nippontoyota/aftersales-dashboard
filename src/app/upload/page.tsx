@@ -100,8 +100,9 @@ export default async function UploadPage({
               <>
                 <h1 className="text-xl font-semibold tracking-tight text-fg">Upload Cancellation Report</h1>
                 <p className="mt-1 text-sm text-fg-subtle">
-                  The monthly DMS Tax Invoice Cancellation Report (PDF), one or more branches. Used for reconciliation and
-                  the data-quality view at{" "}
+                  The DMS Tax Invoice Cancellation Report (PDF) — run it for a day, a range, or a whole month, one or more
+                  branches. Rows merge by invoice number; nothing is removed. Feeds the reconciliation and data-quality
+                  view at{" "}
                   <a href="/cancellations" className="text-accent-text underline">
                     Cancellations
                   </a>

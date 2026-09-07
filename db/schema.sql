@@ -284,28 +284,28 @@ create index if not exists idx_bill_uploads_branch_invoice_date
   on bill_uploads (branch, invoice_date);
 
 -- Tax Invoice Cancellation Report (2026-09-07, at the user's request) — the
--- per-branch PDF export from the DMS listing every tax invoice cancelled in
--- a month, with the reason and the RO it belonged to. Each BRANCH uploads
--- its own, re-running the month-to-date report whenever a new cancellation
--- comes in (HQ can also upload — the branch is taken from the report
--- header). One row per cancelled invoice, keyed by its DocNo. This is a
--- CONTROL / AUDIT feed only — it never touches any revenue figure. scom205
--- (the Total Revenue source) already excludes cancelled invoices as of its
--- own run time (confirmed with the user), so the value is (a) reconciliation
--- — catching a cancellation that landed after a closed month's last scom205
--- pull and is therefore still in that frozen figure — and (b) a branch
--- data-quality metric (how many invoices got cancelled, why, how much). See
--- src/lib/cancellation/.
+-- per-branch PDF export from the DMS listing cancelled tax invoices, with
+-- the reason and the RO each belonged to. Each BRANCH uploads its own,
+-- whenever a cancellation comes in — the report can be run for a single
+-- day, a date range, or a whole month (HQ can also upload — the branch is
+-- taken from the report header). One row per cancelled invoice, keyed by
+-- its DocNo. This is a CONTROL / AUDIT feed only — it never touches any
+-- revenue figure. scom205 (the Total Revenue source) already excludes
+-- cancelled invoices as of its own run time (confirmed with the user), so
+-- the value is (a) reconciliation — catching a cancellation that landed
+-- after a closed month's last scom205 pull and is therefore still in that
+-- frozen figure — and (b) a branch data-quality metric (how many invoices
+-- got cancelled, why, how much). See src/lib/cancellation/.
 --
--- Re-upload semantics: each upload is the full month-to-date report, so a
--- new file for a (branch, month) atomically replaces every row for that
--- pair (delete + insert) — the latest upload wins. The upload screen warns
--- if the report's date range doesn't start on the 1st (a narrowed range
--- would drop earlier rows on replace).
+-- Upload semantics: each upload UPSERTs the rows it carries, keyed by DocNo,
+-- and removes nothing — a cancellation is terminal (it never un-cancels),
+-- so a partial-range upload accumulates and a re-upload just refreshes.
+-- `month` is each row's own cancel-date month. invoice_cancellation_files
+-- keeps the latest uploaded PDF per (branch, month).
 create table if not exists invoice_cancellations (
   doc_no          text        primary key,           -- the cancelled invoice number (TXA…/BSA…/INA…/ASA…)
   branch          text        not null,
-  month           text        not null,              -- 'YYYY-MM', from the report header's date range
+  month           text        not null,              -- 'YYYY-MM' of cancel_date — the month this cancellation is grouped under
   cancel_date     date        not null,
   -- Full "Cancel Date/Time" from the report (IST), e.g. 2026-08-31 12:44+05:30.
   -- Used by the reconciliation check to compare against when the branch's

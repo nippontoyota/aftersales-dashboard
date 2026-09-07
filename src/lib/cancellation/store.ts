@@ -37,7 +37,13 @@ export type CancellationKpi = {
   cancelledForWarranty: number;
 };
 
-/** Atomically replace one branch-month's rows and file. */
+/**
+ * Merges one branch-month's cancellations by DocNo and keeps its latest
+ * source file. The report can be uploaded any time a cancellation comes in
+ * — a single day, a range, or a whole month — so each upload UPSERTs the
+ * rows it carries and removes nothing (a cancellation is terminal; it never
+ * un-cancels). A re-upload of the same DocNo refreshes its values.
+ */
 export async function saveCancellationReport(params: {
   branch: string;
   month: string;
@@ -51,22 +57,23 @@ export async function saveCancellationReport(params: {
   try {
     await client.query("begin");
 
-    // A cancelled DocNo is globally unique but the primary key is doc_no, so
-    // clear this branch-month's existing rows before re-inserting. Also clear
-    // any row that would collide on doc_no from a different (branch, month) —
-    // shouldn't happen, but a re-upload must not fail on a stray duplicate.
-    await client.query("delete from invoice_cancellations where branch = $1 and month = $2", [params.branch, params.month]);
-    if (params.rows.length > 0) {
-      await client.query("delete from invoice_cancellations where doc_no = any($1::text[])", [params.rows.map((r) => r.docNo)]);
-    }
-
     for (const r of params.rows) {
       await client.query(
         `insert into invoice_cancellations
            (doc_no, branch, month, cancel_date, cancel_at, cancel_reason, ref_doc_no, reg_no,
             owner_code, owner_name, doc_customer, issue_date, before_tax, tax, after_tax,
             cancelled_by, source_file_name, uploaded_at, uploaded_by)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         on conflict (doc_no) do update set
+           branch = excluded.branch, month = excluded.month,
+           cancel_date = excluded.cancel_date, cancel_at = excluded.cancel_at,
+           cancel_reason = excluded.cancel_reason, ref_doc_no = excluded.ref_doc_no,
+           reg_no = excluded.reg_no, owner_code = excluded.owner_code,
+           owner_name = excluded.owner_name, doc_customer = excluded.doc_customer,
+           issue_date = excluded.issue_date, before_tax = excluded.before_tax,
+           tax = excluded.tax, after_tax = excluded.after_tax,
+           cancelled_by = excluded.cancelled_by, source_file_name = excluded.source_file_name,
+           uploaded_at = excluded.uploaded_at, uploaded_by = excluded.uploaded_by`,
         [
           r.docNo, params.branch, params.month, r.cancelDate, r.cancelAt, r.cancelReason, r.refDocNo, r.regNo,
           r.ownerCode, r.ownerName, r.docCustomer, r.issueDate, r.beforeTax, r.tax, r.afterTax,

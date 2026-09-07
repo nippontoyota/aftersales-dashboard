@@ -57,8 +57,8 @@ export function CancellationUploadForm() {
           className="block w-full text-sm text-fg-muted file:mr-3 file:rounded-md file:border-0 file:bg-accent-soft file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-accent-text hover:file:bg-accent-soft/80"
         />
         <p className="text-xs text-fg-subtle">
-          Upload the report each time a new cancellation comes in — run it for the full month, it replaces that
-          month&apos;s list each time. The month is read from the report.
+          Upload it whenever a cancellation comes in — a single day, a range, or a whole month. Rows merge by invoice
+          number and land in the month they were cancelled; re-uploading just refreshes them, nothing is removed.
         </p>
         <button
           type="submit"
@@ -88,11 +88,6 @@ export function CancellationUploadForm() {
                   </li>
                 ))}
               </ul>
-              {r.warnings?.map((w) => (
-                <div key={w} className="mt-1 text-xs text-warn">
-                  {w}
-                </div>
-              ))}
             </>
           )}
         </div>

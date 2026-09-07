@@ -9,11 +9,13 @@
  *   | Owner/Code Name | Doc.Customer | RegNo. | Total Sales Before Tax | Tax
  *   | Tot Sales After Tax | Cancel By | Cancel Reason
  *
- * The branch and the month aren't per-row — they come from the header block
- * the report prints once at the top ("CO01B NIPPON TOYOTA", "01082026
- * 31082026 ..."). A file is normally one branch; the parser still tracks the
- * "current" branch from the most recent header block so a multi-branch
- * export (each branch its own section) would fall out the same way.
+ * The branch comes from the header block the report prints at the top
+ * ("CO01B NIPPON TOYOTA"); a file is normally one branch, but the parser
+ * tracks the "current" branch from the most recent header block so a
+ * multi-branch export (each branch its own section) falls out the same way.
+ * Each row's month comes from its own cancel date — the report can be run
+ * for a day, a range, or a whole month, and rows land in the right month
+ * either way.
  */
 
 export type CancellationRow = {
@@ -90,12 +92,10 @@ export function parseCancellationTables(
 ): ParsedCancellationReport {
   const branchSet = new Set(knownBranches.map((b) => b.toUpperCase()));
   const errors: string[] = [];
-  const warnings: string[] = [];
   const blocksByKey = new Map<string, CancellationBranchBlock>();
   let printedTotals: ParsedCancellationReport["printedTotals"] = null;
 
   let currentBranch: string | null = fallbackBranch ? fallbackBranch.toUpperCase() : null;
-  let currentMonth: string | null = null;
   let sawCancellationHeading = false;
 
   for (const page of pages ?? []) {
@@ -108,19 +108,11 @@ export function parseCancellationTables(
 
         if (/Cancellation\s+Report/i.test(joined)) sawCancellationHeading = true;
 
-        // Header block — carries the branch and the report's date range.
-        const range = detectRange(joined);
-        if (range) {
-          currentMonth = range.month;
+        // Header block — a "<from> <to>" DDMMYYYY pair marks it; carries the branch.
+        if (hasDateRange(joined)) {
           const headerBranch = detectBranch(joined, branchSet);
           if (headerBranch) currentBranch = headerBranch;
           else if (fallbackBranch) currentBranch = fallbackBranch.toUpperCase();
-          if (range.fromDay > 1) {
-            warnings.push(
-              `The report covers ${range.from} to ${range.to}, not the whole of ${range.month} — ` +
-                `re-uploading replaces the month, so cancellations before ${range.from} would be dropped.`,
-            );
-          }
           continue;
         }
 
@@ -151,9 +143,7 @@ export function parseCancellationTables(
         }
 
         const branch = currentBranch;
-        // A row's month comes from its own cancel date, not the header range —
-        // robust to a report that spans a month boundary.
-        const month = currentMonth ?? parsed.cancelDate.slice(0, 7);
+        const month = parsed.cancelDate.slice(0, 7);
         if (!branch) {
           errors.push(`Row ${row[0]} (${parsed.docNo}): couldn't tell which branch this report is for.`);
           continue;
@@ -179,7 +169,7 @@ export function parseCancellationTables(
     );
   }
 
-  return { blocks, printedTotals, errors, warnings: [...new Set(warnings)] };
+  return { blocks, printedTotals, errors, warnings: [] };
 }
 
 // --- row parsing --------------------------------------------------------
@@ -283,18 +273,13 @@ function detectBranch(text: string, branchSet: Set<string>): string | null {
   return null;
 }
 
-function detectRange(text: string): { month: string; from: string; to: string; fromDay: number } | null {
-  // "01082026 31082026 All Cancellation Date" — From then To, both DDMMYYYY.
-  const m = text.match(/\b(\d{2})(\d{2})(\d{4})\s+(\d{2})(\d{2})(\d{4})\b/);
-  if (!m) return null;
-  const [, fd, fm, fy, td, tm, ty] = m;
-  if (Number(fm) < 1 || Number(fm) > 12) return null;
-  return {
-    month: `${fy}-${fm}`,
-    from: `${fy}-${fm}-${fd}`,
-    to: `${ty}-${tm}-${td}`,
-    fromDay: Number(fd),
-  };
+/** The report header carries a "<from> <to>" pair of DDMMYYYY tokens
+ * ("01082026 31082026 All Cancellation Date") — that pattern is how a header
+ * block is told apart from a data row. The range itself is unused: each
+ * row's month comes from its own cancel date. */
+function hasDateRange(text: string): boolean {
+  const m = text.match(/\b(\d{2})(\d{2})(\d{4})\s+\d{2}\d{2}\d{4}\b/);
+  return m !== null && Number(m[2]) >= 1 && Number(m[2]) <= 12;
 }
 
 // --- primitives -----------------------------------------------------
