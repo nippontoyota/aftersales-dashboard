@@ -84,6 +84,8 @@ create table if not exists service_info_snapshots (
   -- Distinct repair orders with a brake-skimming line that day (per-RO, not
   -- per-line — see service-info/parse.ts; changed from per-line 2026-09-07).
   brake_skimming integer not null,
+  -- Front-evaporator T-Gloss treatment rows only (rear + "Front and Rear"
+  -- excluded 2026-09-07 — see service-info/parse.ts).
   evaporator_cleaning integer not null,
   primary key (date, branch)
 );
