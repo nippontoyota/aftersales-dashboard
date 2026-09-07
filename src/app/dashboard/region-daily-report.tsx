@@ -4,6 +4,14 @@ import type { RegionName } from "@/lib/regions";
 import { DateSelect } from "./date-select";
 import { DAILY_REPORT_ROWS, branchCell, regionTotalCell, type MetricDef, type ReportCell } from "./daily-report-rows";
 
+// Same categorical hues as the rest of the dashboard — theme tokens so the
+// dark palette's lifted variants apply.
+const REGION_ACCENT: Record<RegionName, string> = {
+  Central: "var(--color-cat-central)",
+  South: "var(--color-cat-south)",
+  North: "var(--color-cat-north)",
+};
+
 /**
  * Regional manager's pre-publish view: every branch in their region as a
  * column, metrics down the rows, plus a Region total column. Each cell is the
@@ -76,23 +84,26 @@ export function RegionDailyReport({
   const branchCodes = branches.map((b) => b.branch);
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h1 className="text-lg font-semibold text-fg">
-          Regional Report — <span className="tabular-nums">{region}</span>
-        </h1>
+    <div className="mx-auto max-w-[1600px] p-6">
+      <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">
+            Regional Report — <span className="tabular-nums" style={{ color: REGION_ACCENT[region] }}>{region}</span>
+          </h1>
+          <p className="mt-1 max-w-2xl text-xs text-fg-faint">
+            {region} branches for this date, not yet published by HQ. Cells show the month-to-date figure ({asOf}&apos;s
+            movement and target in the tooltip); coloured where there&apos;s a target. Rows from HQ&apos;s BA Tool file stay
+            blank until it&apos;s uploaded. Pick an earlier, published date to see the full company dashboard. Data as of{" "}
+            {uploadedAtLabel} IST.
+          </p>
+        </div>
         <DateSelect dates={dates} selected={date} region="All" />
       </div>
-      <p className="mt-1 text-xs text-fg-faint">
-        {region} branches for this date, not yet published by HQ. Cells show the month-to-date figure ({asOf}&apos;s movement
-        and target in the tooltip); coloured where there&apos;s a target. Rows from HQ&apos;s BA Tool file stay blank until it&apos;s
-        uploaded. Pick an earlier, published date to see the full company dashboard. Data as of {uploadedAtLabel} IST.
-      </p>
 
-      <div className="mt-4 overflow-x-auto rounded-md border border-border bg-surface">
+      <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface shadow-card">
         <table className="border-separate border-spacing-0 text-[13px]">
           <thead>
-            <tr className="text-[11px] uppercase tracking-wide text-fg-faint">
+            <tr className="text-[11px] uppercase tracking-[0.07em] text-fg-faint">
               <th className="sticky left-0 z-10 bg-surface py-2 pl-4 pr-3 text-left font-medium">Metric</th>
               {branchCodes.map((code) => (
                 <th key={code} className="whitespace-nowrap px-3 py-2 text-right font-medium">
@@ -109,7 +120,7 @@ export function RegionDailyReport({
                   <tr key={`g-${i}`}>
                     <td
                       colSpan={branchCodes.length + 2}
-                      className="border-t border-border bg-surface-2 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle"
+                      className="border-t border-border bg-surface-2 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-subtle"
                     >
                       {row.label}
                     </td>
