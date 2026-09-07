@@ -6,11 +6,7 @@ import { loadNavState } from "@/lib/dashboard-data";
 import { REGIONS } from "@/lib/regions";
 import { eyebrow } from "@/lib/ui";
 import { formatCompactCurrency } from "@/lib/format";
-import {
-  loadCancellationMonths,
-  loadCancellationKpis,
-  loadCancellationsForMonth,
-} from "@/lib/cancellation/store";
+import { loadCancellationMonths, loadCancellationKpis, loadCancellationMonthSummaries } from "@/lib/cancellation/store";
 import { reconcileCancellations, type ReconcileStatus } from "@/lib/cancellation/reconcile";
 import { MonthSelect, BranchSelect } from "./month-select";
 
@@ -41,17 +37,16 @@ export default async function CancellationsPage({
   // regional manager sees its region's branches.
   const scopeBranches =
     admin.role === "branch" ? [admin.branch] : admin.role === "regional" ? [...REGIONS[admin.region]] : null;
+  const scopeSet = scopeBranches ? new Set(scopeBranches) : null;
 
   const months = await loadCancellationMonths(scopeBranches?.length === 1 ? scopeBranches[0] : undefined);
   const month = params.month && /^\d{4}-\d{2}$/.test(params.month) ? params.month : months[0];
 
   let branchFilter =
     admin.role === "branch" ? admin.branch : params.branch && /^[A-Z0-9]{3,8}$/.test(params.branch) ? params.branch : undefined;
-  if (branchFilter && scopeBranches && !scopeBranches.includes(branchFilter)) branchFilter = undefined;
+  if (branchFilter && scopeSet && !scopeSet.has(branchFilter)) branchFilter = undefined;
 
-  const shell = (
-    body: React.ReactNode,
-  ) => (
+  const shell = (body: React.ReactNode) => (
     <AppShell
       current="cancellations"
       showDashboardLink={admin.canViewDashboard}
@@ -61,7 +56,7 @@ export default async function CancellationsPage({
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
     >
-      <div className="mx-auto w-full max-w-[1200px] p-6">{body}</div>
+      <div className="mx-auto w-full max-w-[1100px] p-6">{body}</div>
     </AppShell>
   );
 
@@ -71,23 +66,20 @@ export default async function CancellationsPage({
         <h1 className="text-lg font-semibold text-fg">Cancellations</h1>
         <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           No Cancellation Reports have been uploaded yet.
-          {admin.role === "hq" ? " Upload the monthly DMS report from the Upload page." : ""}
+          {admin.role !== "regional" ? " Upload the DMS report from the Upload page." : ""}
         </div>
       </>,
     );
   }
 
-  const perBranchFilter = branchFilter ? [branchFilter] : scopeBranches ?? undefined;
-  const [kpis, reconcile, rows] = await Promise.all([
-    loadCancellationKpis(month, perBranchFilter),
+  const [kpis, reconcile, summaries] = await Promise.all([
+    loadCancellationKpis(month, branchFilter ? [branchFilter] : scopeBranches ?? undefined),
     reconcileCancellations(month, branchFilter),
-    loadCancellationsForMonth(month, branchFilter),
+    loadCancellationMonthSummaries(scopeBranches?.length === 1 ? scopeBranches[0] : undefined),
   ]);
 
-  // Regional/HQ reconcile is unscoped by branch — trim to scope here.
-  const reconcileRows = scopeBranches ? reconcile.rows.filter((r) => scopeBranches.includes(r.branch)) : reconcile.rows;
-  const visibleRows = scopeBranches ? rows.filter((r) => scopeBranches.includes(r.branch)) : rows;
-  const flagged = reconcileRows.filter((r) => r.flagged);
+  const monthSummaries = summaries.filter((s) => s.month === month && (!scopeSet || scopeSet.has(s.branch)));
+  const flagged = reconcile.rows.filter((r) => r.flagged && (!scopeSet || scopeSet.has(r.branch)));
   const flaggedValue = flagged.reduce((s, r) => s + r.beforeTax, 0);
 
   const totalCount = kpis.reduce((s, k) => s + k.count, 0);
@@ -95,7 +87,9 @@ export default async function CancellationsPage({
   const totalDataEntry = kpis.reduce((s, k) => s + k.dataEntryMistakes, 0);
   const totalWarranty = kpis.reduce((s, k) => s + k.cancelledForWarranty, 0);
 
-  const branchOptions = admin.role === "hq" ? [...new Set(rows.map((r) => r.branch))].sort() : scopeBranches ?? [];
+  const branchOptions = [...new Set(monthSummaries.map((s) => s.branch))].sort();
+  const soloBranch = branchFilter ?? (branchOptions.length === 1 ? branchOptions[0] : undefined);
+  const pdfHref = (b: string) => `/api/cancellations/${b}/${month}/pdf`;
 
   return shell(
     <>
@@ -118,9 +112,22 @@ export default async function CancellationsPage({
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Tile label="Cancellations" value={String(totalCount)} />
         <Tile label="Value (before tax)" value={formatCompactCurrency(totalValue)} />
-        <Tile label="Data-entry mistakes" value={`${totalDataEntry}${totalCount ? ` · ${Math.round((totalDataEntry / totalCount) * 100)}%` : ""}`} />
+        <Tile
+          label="Data-entry mistakes"
+          value={`${totalDataEntry}${totalCount ? ` · ${Math.round((totalDataEntry / totalCount) * 100)}%` : ""}`}
+        />
         <Tile label="Cancelled for warranty" value={String(totalWarranty)} />
       </div>
+
+      {soloBranch ? (
+        <a href={pdfHref(soloBranch)} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-sm text-accent-text hover:underline">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+            <path d="M10 3v9M6.5 8.5 10 12l3.5-3.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 14v1.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V14" strokeLinecap="round" />
+          </svg>
+          Open the {soloBranch} report (PDF) — the full per-invoice detail is there
+        </a>
+      ) : null}
 
       {/* Reconciliation flag */}
       <div className="mt-6">
@@ -150,7 +157,7 @@ export default async function CancellationsPage({
         )}
       </div>
 
-      {/* Per-branch data quality */}
+      {/* Per-branch summary */}
       {kpis.length > 1 ? (
         <div className="mt-6">
           <div className={eyebrow}>By branch</div>
@@ -174,48 +181,16 @@ export default async function CancellationsPage({
                       </span>
                     ))}
                 </div>
+                {monthSummaries.some((s) => s.branch === k.branch) ? (
+                  <a href={pdfHref(k.branch)} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-accent-text hover:underline">
+                    Open report (PDF)
+                  </a>
+                ) : null}
               </div>
             ))}
           </div>
         </div>
       ) : null}
-
-      {/* Full list */}
-      <div className="mt-6">
-        <div className={eyebrow}>All cancellations · {visibleRows.length}</div>
-        <div className="mt-2 overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-2 text-left text-xs text-fg-subtle">
-                <th className="px-3 py-2 font-medium">Branch</th>
-                <th className="px-3 py-2 font-medium">Cancel date</th>
-                <th className="px-3 py-2 font-medium">DocNo</th>
-                <th className="px-3 py-2 font-medium">RO</th>
-                <th className="px-3 py-2 font-medium">Vehicle</th>
-                <th className="px-3 py-2 font-medium">Customer</th>
-                <th className="px-3 py-2 font-medium">Reason</th>
-                <th className="px-3 py-2 text-right font-medium">Before tax</th>
-                <th className="px-3 py-2 font-medium">Cancelled by</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((r) => (
-                <tr key={r.docNo} className="border-b border-border-subtle last:border-0">
-                  <td className="px-3 py-2 text-fg-muted">{r.branch}</td>
-                  <td className="px-3 py-2 text-fg-muted">{r.cancelDate}</td>
-                  <td className="px-3 py-2 font-medium text-fg">{r.docNo}</td>
-                  <td className="px-3 py-2 text-fg-muted">{r.refDocNo ?? "—"}</td>
-                  <td className="px-3 py-2 text-fg-muted">{r.regNo ?? "—"}</td>
-                  <td className="px-3 py-2 text-fg-muted">{r.docCustomer ?? r.ownerName ?? "—"}</td>
-                  <td className="px-3 py-2 text-fg-muted">{r.cancelReason}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{inr(r.beforeTax)}</td>
-                  <td className="px-3 py-2 text-fg-muted">{r.cancelledBy ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </>,
   );
 }
