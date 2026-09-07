@@ -16,8 +16,9 @@ GUS Parts  MTD = scom205 GUS SP  Rev MTD  −  Σ daily SSRV089 accessories part
 Fixes land by re-upload through **HQ → Upload Sheet**. Send a corrected file to have it applied
 directly (as was done for CO01B — see `scripts/fix-co01b-sep2-ssrv089.mjs`).
 
-Source: pipeline audit of `raw_upload_rows` vs `scom205_snapshots` / `ssrv089_snapshots`, run 2026-09-04.
-Figures are ₹, MTD as of 3 Sep 2026. Status key: ☐ open · ⏳ chasing branch · 📥 file received · ✅ resolved.
+Source: pipeline audit of `raw_upload_rows` vs `scom205_snapshots` / `ssrv089_snapshots`, run 2026-09-04,
+re-checked for the 4–6 Sep uploads 2026-09-07.
+Figures are ₹. Status key: ☐ open · ⏳ chasing branch · 📥 file received · ✅ resolved.
 
 ---
 
@@ -43,7 +44,7 @@ complete; only the per-day split and the branch Daily Report view are off.
 
 | ☐ | Branch | Problem | Fix | Impact |
 |---|--------|---------|-----|--------|
-| ☐ | **IR01A** | Single 3 Sep upload contains 1–4 Sep invoices (incl. some dated 4 Sep) | Leave unless per-day accuracy needed; watch the 4 Sep rows vs a 3 Sep "as of" | MTD total OK · per-day view wrong |
+| ☐ | **IR01A** | 3 Sep upload contains all of 1–3 Sep. Still owes **real Sept 4 and Sept 6** data (only holiday-week re-pulls of the 1–3 cumulative came in). | Branch uploads 4 Sep + 6 Sep | 1–3 Sep MTD OK once the 6-Sep duplicate is gone (see Resolved); 4–6 Sep missing |
 | ☐ | **KL01A** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
 | ☐ | **TI01A** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
 | ☐ | **TI01B** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
@@ -53,6 +54,24 @@ complete; only the per-day split and the branch Daily Report view are off.
 | ☐ | Branch | Problem | Fix | Impact |
 |---|--------|---------|-----|--------|
 | ☐ | **CO01A** | scom205 (Monthly KPI) for 3 Sep is identical to 2 Sep — the 2 Sep KPI file looks re-uploaded for the 3rd, not refreshed | Re-upload the correct 3 Sep scom205 KPI file | CO01A GUS + BPU MTD frozen at 2 Sep values |
+
+## September · 4–6 Sep holiday uploads  →  MTD OK, daily dates off
+
+5 & 6 Sep were a holiday (5th: no uploads; 6th: a small trickle of jobs). These branches folded the
+4th's working day + the 6th's trickle into **one upload under a single date** — one upload, so no
+double-count and MTD is correct; only the per-day snapshot dates and any today-vs-yesterday delta are
+wrong for those branches on the 4th/6th. Re-upload split by day only if per-day accuracy matters.
+
+| ☐ | Branch | The single upload holds | Filed under |
+|---|--------|------------------------|-------------|
+| ☐ | **CO01A** | 4th + 6th | 6 Sep |
+| ☐ | **KY01A** | 4th + 6th | 6 Sep |
+| ☐ | **TI01C** | 4th + 5th + 6th | 6 Sep |
+| ☐ | **TL01A** | 4th + 6th | 4 Sep |
+| ☐ | **TI01A** | 5th + 6th (its 4 Sep upload is separate and correct) | 6 Sep |
+
+Clean for 4–6 Sep: **CO01B** (two proper separate uploads — 4th full day, 6th small), PH01A, TR01A, TR01B, TR01C.
+BA Tool: 3 Sep (uploaded 4th) then 6 Sep (uploaded 7th), 4th & 5th skipped — normal, it's MTD-cumulative.
 
 ## August · double-counted  →  GUS Labour / Parts MTD read **low** (closed month)
 
@@ -69,6 +88,7 @@ A cumulative export plus daily exports means some job orders are summed 2–3× 
 | ✅ | Branch | Problem | Fix | Impact |
 |---|--------|---------|-----|--------|
 | ✅ | **CO01B** | 2 Sep upload was a partial export (19 rows, 4 advisors, no Accessories staff) | Re-parsed the correct 201-row file; snapshot + raw rows replaced 2026-09-04 (`scripts/fix-co01b-sep2-ssrv089.mjs`) | Acc. labour 0 → ₹51,813 · GUS Labour MTD 14,95,336 → **14,43,523** · GUS Parts MTD 28,92,970 → **28,39,440** |
+| ✅ | **IR01A** | The 1–3 Sep cumulative "SEP 2026" export was uploaded a 2nd time filed as 6 Sep, on top of the existing 3 Sep snapshot — Sept 1–3 counted twice for `service_info` VAS counts and the `ssrv089` accessories deduction | Deleted the 6 Sep `part_sale` / `service_info` / `ssrv089` snapshots + raw rows 2026-09-07 (`scom205` left — read straight, harmless) | IR01A Sept 1–3 no longer doubled; still owes real Sept 4 + 6 (above) |
 
 ---
 
