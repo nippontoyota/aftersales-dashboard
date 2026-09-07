@@ -81,6 +81,8 @@ create table if not exists service_info_snapshots (
   source_file_name text not null,
   wheel_balancing integer not null,
   wheel_alignment integer not null,
+  -- Distinct repair orders with a brake-skimming line that day (per-RO, not
+  -- per-line — see service-info/parse.ts; changed from per-line 2026-09-07).
   brake_skimming integer not null,
   evaporator_cleaning integer not null,
   primary key (date, branch)
