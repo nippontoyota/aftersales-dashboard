@@ -149,7 +149,9 @@ export default async function CancellationsPage({
                   <span className="font-medium text-fg">{r.branch}</span> · {r.docNo}
                   {r.refDocNo ? ` (RO ${r.refDocNo})` : ""} · {inr(r.beforeTax)} · {r.cancelReason} ·{" "}
                   <span className="text-fg-subtle">{STATUS_LABEL[r.status]}</span>
-                  {r.status === "after_kpi_cutoff" && r.lastKpiDate ? ` — cancelled ${r.cancelDate}, last KPI ${r.lastKpiDate}` : ""}
+                  {r.status === "after_kpi_cutoff" && r.lastKpiCutoff
+                    ? ` — cancelled ${r.cancelDate}, KPI last refreshed ${new Date(r.lastKpiCutoff).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}`
+                    : ""}
                 </li>
               ))}
             </ul>

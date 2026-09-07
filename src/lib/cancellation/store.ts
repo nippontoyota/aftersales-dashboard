@@ -63,12 +63,12 @@ export async function saveCancellationReport(params: {
     for (const r of params.rows) {
       await client.query(
         `insert into invoice_cancellations
-           (doc_no, branch, month, cancel_date, cancel_reason, ref_doc_no, reg_no,
+           (doc_no, branch, month, cancel_date, cancel_at, cancel_reason, ref_doc_no, reg_no,
             owner_code, owner_name, doc_customer, issue_date, before_tax, tax, after_tax,
             cancelled_by, source_file_name, uploaded_at, uploaded_by)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [
-          r.docNo, params.branch, params.month, r.cancelDate, r.cancelReason, r.refDocNo, r.regNo,
+          r.docNo, params.branch, params.month, r.cancelDate, r.cancelAt, r.cancelReason, r.refDocNo, r.regNo,
           r.ownerCode, r.ownerName, r.docCustomer, r.issueDate, r.beforeTax, r.tax, r.afterTax,
           r.cancelledBy, params.sourceFileName, params.uploadedAt, params.uploadedBy,
         ],
@@ -136,7 +136,7 @@ export async function loadCancellationMonths(branch?: string): Promise<string[]>
 
 export async function loadCancellationsForMonth(month: string, branch?: string): Promise<CancellationRecord[]> {
   const { rows } = await pool.query(
-    `select doc_no, branch, month, cancel_date::text as cancel_date, cancel_reason, ref_doc_no, reg_no,
+    `select doc_no, branch, month, cancel_date::text as cancel_date, cancel_at, cancel_reason, ref_doc_no, reg_no,
             owner_code, owner_name, doc_customer, issue_date::text as issue_date,
             before_tax, tax, after_tax, cancelled_by, source_file_name, uploaded_at
      from invoice_cancellations
@@ -149,6 +149,7 @@ export async function loadCancellationsForMonth(month: string, branch?: string):
     branch: r.branch,
     month: r.month,
     cancelDate: r.cancel_date,
+    cancelAt: r.cancel_at ? new Date(r.cancel_at).toISOString() : null,
     cancelReason: r.cancel_reason,
     refDocNo: r.ref_doc_no,
     regNo: r.reg_no,

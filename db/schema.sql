@@ -307,6 +307,11 @@ create table if not exists invoice_cancellations (
   branch          text        not null,
   month           text        not null,              -- 'YYYY-MM', from the report header's date range
   cancel_date     date        not null,
+  -- Full "Cancel Date/Time" from the report (IST), e.g. 2026-08-31 12:44+05:30.
+  -- Used by the reconciliation check to compare against when the branch's
+  -- scom205 was last pulled/uploaded. Null on rows saved before this column
+  -- existed — the check falls back to cancel_date for those.
+  cancel_at       timestamptz,
   cancel_reason   text        not null,              -- normalized: 'Data Entry Mistake' | 'Cancelled for Warranty' | 'Wrong Tax Calculation' | 'Others - Dealer' | 'Others - Customer' | 'Customer Mind Change' | other (verbatim)
   ref_doc_no      text,                              -- the RO / job order (GSJ…/BPE…) — the join key to SSRV089; null if the report omitted it
   reg_no          text,
@@ -326,6 +331,8 @@ create index if not exists idx_invoice_cancellations_branch_month
   on invoice_cancellations (branch, month);
 create index if not exists idx_invoice_cancellations_ref_doc
   on invoice_cancellations (ref_doc_no);
+-- Added after the table already existed in production.
+alter table invoice_cancellations add column if not exists cancel_at timestamptz;
 
 -- Retains the uploaded PDF bytes, one per (branch, month), so the source is
 -- there to look at later — same pattern as raw_report_uploads. Kept in its

@@ -38,7 +38,9 @@ export type ReconcileRow = {
   status: ReconcileStatus;
   /** true when the value is likely still counted — the "needs a look" set. */
   flagged: boolean;
-  lastKpiDate: string | null;
+  /** ISO timestamp — the freshest scom205 read for the branch this month
+   * (latest report date vs. last upload). Null when no scom205 on file. */
+  lastKpiCutoff: string | null;
 };
 
 export type ReconcileResult = {
@@ -59,7 +61,7 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
     owner_name: string | null;
     before_tax: string;
     after_tax: string;
-    last_kpi_date: string | null;
+    last_kpi_cutoff: string | null;
     after_last_kpi: boolean | null;
     has_replacement: boolean;
     still_present: boolean;
@@ -68,6 +70,12 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
     `
     with canc as (
       select doc_no, branch, ref_doc_no, cancel_date, cancel_reason, reg_no, owner_name, before_tax, after_tax,
+             coalesce(cancel_at, cancel_date::timestamptz) as cancel_moment,
+             -- The invoice's revenue counts in the month it was RAISED, so
+             -- that's the scom205 whose refresh time matters — not the month
+             -- it was cancelled in (an invoice raised in July, cancelled in
+             -- August, is a concern for July's figure).
+             coalesce(to_char(issue_date, 'YYYY-MM'), month) as revenue_month,
              replace(doc_no, '-', '') as doc_key
       from invoice_cancellations
       where month = $1 ${branch ? "and branch = $2" : ""}
@@ -80,21 +88,28 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
       where r.report_type = 'ssrv089'
         and to_char(r.date, 'YYYY-MM') = $1
     ),
+    -- The branch's freshest Monthly-KPI (scom205) read per month: the row
+    -- for the latest report date, and when we actually uploaded it. The DMS
+    -- builds scom205 net of cancellations as of its own pull time, so a
+    -- cancellation is only a concern if it happened after BOTH that report's
+    -- as-of date and when we last uploaded a scom205 for that month (which
+    -- catches a late re-pull filed under an earlier date).
     last_kpi as (
-      select branch, max(date) as last_date
+      select distinct on (branch, to_char(date, 'YYYY-MM'))
+             branch, to_char(date, 'YYYY-MM') as kmonth,
+             date as last_date, uploaded_at as last_uploaded
       from scom205_snapshots
-      where to_char(date, 'YYYY-MM') = $1
-      group by branch
+      order by branch, to_char(date, 'YYYY-MM'), date desc, uploaded_at desc
     )
     select c.doc_no, c.branch, c.ref_doc_no, c.cancel_date::text as cancel_date, c.cancel_reason,
            c.reg_no, c.owner_name, c.before_tax, c.after_tax,
-           lk.last_date::text as last_kpi_date,
-           (lk.last_date is not null and c.cancel_date > lk.last_date) as after_last_kpi,
+           greatest(lk.last_uploaded, lk.last_date::timestamptz)::text as last_kpi_cutoff,
+           (lk.branch is not null and c.cancel_moment > greatest(lk.last_uploaded, lk.last_date::timestamptz)) as after_last_kpi,
            exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.inv <> c.doc_key and s.ro is not null and s.ro <> '') as has_replacement,
            exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.inv = c.doc_key) as still_present,
            exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.ro is not null and s.ro <> '') as ro_in_ssrv
     from canc c
-    left join last_kpi lk on lk.branch = c.branch
+    left join last_kpi lk on lk.branch = c.branch and lk.kmonth = c.revenue_month
     order by c.branch, c.cancel_date, c.doc_no
     `,
     branch ? [month, branch] : [month],
@@ -119,7 +134,7 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
       afterTax: Number(r.after_tax),
       status,
       flagged: status === "stale" || status === "after_kpi_cutoff",
-      lastKpiDate: r.last_kpi_date,
+      lastKpiCutoff: r.last_kpi_cutoff ? new Date(r.last_kpi_cutoff).toISOString() : null,
     };
   });
 

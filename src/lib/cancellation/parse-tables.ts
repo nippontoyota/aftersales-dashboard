@@ -20,6 +20,9 @@ export type CancellationRow = {
   docNo: string;
   /** ISO `YYYY-MM-DD`. */
   cancelDate: string;
+  /** Full cancel timestamp with IST offset (`2026-08-31T12:44:00+05:30`), or
+   * null if the report row had no time. */
+  cancelAt: string | null;
   /** Normalized to a known label where possible, else the printed text. */
   cancelReason: string;
   refDocNo: string | null;
@@ -187,8 +190,10 @@ function parseDataRow(row: string[], col: Record<string, number>): CancellationR
   const docNo = cell("docno").replace(/\s+/g, "");
   if (!docNo) return "no DocNo.";
 
-  const cancelDate = toIsoDate(firstDate(cell("cancel")));
-  if (!cancelDate) return `unreadable Cancel Date "${cell("cancel")}".`;
+  const cancelCell = cell("cancel");
+  const cancelDate = toIsoDate(firstDate(cancelCell));
+  if (!cancelDate) return `unreadable Cancel Date "${cancelCell}".`;
+  const cancelAt = toIsoDateTime(cancelCell);
 
   const beforeTax = toNumber(firstMoney(cell("before")));
   const tax = toNumber(firstMoney(cell("tax")));
@@ -214,6 +219,7 @@ function parseDataRow(row: string[], col: Record<string, number>): CancellationR
   return {
     docNo,
     cancelDate,
+    cancelAt,
     cancelReason: normalizeReason(cell("reason")),
     refDocNo: cell("refdoc").replace(/\s+/g, "") || null,
     regNo: cell("regno").replace(/\s+/g, "") || null,
@@ -322,6 +328,21 @@ function toIsoDate(raw: string | null): string | null {
   const dt = new Date(Date.UTC(y, mo - 1, d));
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
   return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/** `DD/MM/YYYY HH:MM` → ISO with IST offset (`2026-08-31T12:44:00+05:30`).
+ * Null if the date part is unreadable; time defaults to 00:00 when absent.
+ * Tolerates the stray space getTable() leaves around the wrapped colon
+ * ("12:\n44" → "12: 44"). */
+function toIsoDateTime(raw: string): string | null {
+  const m = raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2})\s*:\s*(\d{2}))?/);
+  if (!m) return null;
+  const iso = toIsoDate(`${m[1]}/${m[2]}/${m[3]}`);
+  if (!iso) return null;
+  const hh = m[4] ? Number(m[4]) : 0;
+  const mi = m[5] ? Number(m[5]) : 0;
+  if (hh > 23 || mi > 59) return `${iso}T00:00:00+05:30`;
+  return `${iso}T${String(hh).padStart(2, "0")}:${String(mi).padStart(2, "0")}:00+05:30`;
 }
 
 function normalizeReason(raw: string): string {
