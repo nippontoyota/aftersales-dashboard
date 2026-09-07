@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { BranchReport, OnlineStoreBreakdown } from "@/lib/report";
 import { achievementRatio, achievementTone, hasActualWithoutTarget, type AchievementTone } from "@/lib/aggregate";
 import { formatCompact, formatPercent } from "@/lib/format";
+import { useSyncedMetric } from "./metric-sync";
 
 export type DonutMetricConfig = { key: string; label: string; actual: keyof BranchReport; target: keyof BranchReport };
 
@@ -59,7 +60,7 @@ function BreakdownLine({ label, actual, target }: { label: string; actual: numbe
 }
 
 export function AchievementDonut({ branches, metrics = DEFAULT_METRICS }: { branches: BranchReport[]; metrics?: DonutMetricConfig[] }) {
-  const [metric, setMetric] = useState<string>(metrics[0]?.key ?? "");
+  const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
   const [openTone, setOpenTone] = useState<AchievementTone | null>(null);
   const [openBreakdownBranch, setOpenBreakdownBranch] = useState<string | null>(null);
   const config = metrics.find((m) => m.key === metric) ?? metrics[0];

@@ -10,6 +10,7 @@ import { REGIONS, type RegionName } from "@/lib/regions";
 import type { Snapshot } from "@/lib/snapshot-store";
 import type { ServiceInfoSnapshot } from "@/lib/service-info/store";
 import { Sparkline } from "@/components/sparkline";
+import { useSyncedMetric } from "./metric-sync";
 
 export type RegionMetricConfig = {
   key: string;
@@ -204,7 +205,7 @@ export function RegionScorecard({
   /** Defaults to the main dashboard's own set (VAS only); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics instead. */
   metrics?: RegionMetricConfig[];
 }) {
-  const [metric, setMetric] = useState<string>(metrics[0]?.key ?? "");
+  const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
   const config = metrics.find((m) => m.key === metric) ?? metrics[0];
 
   return (

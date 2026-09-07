@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TrendPoint } from "@/lib/trend";
 import { formatNumber } from "@/lib/format";
+import { useSyncedMetric } from "./metric-sync";
 
 export type TrendMetricConfig = { key: string; label: string };
 
@@ -209,9 +210,19 @@ export function TrendChart({
   /** Defaults to the main dashboard's own set (VAS only); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics and series instead. */
   metrics?: TrendMetricConfig[];
 }) {
-  const [metric, setMetric] = useState<string>(metrics[0]?.key ?? "");
+  const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Drop a stale hover marker when the metric changes under it — e.g. a
+  // sibling card (Achievement Donut / Region Scorecard) switched the shared
+  // selection while the pointer was still over this chart. (Changing this
+  // chart's own dropdown also clears it, in the select's onChange.)
+  const [hoverMetric, setHoverMetric] = useState(metric);
+  if (metric !== hoverMetric) {
+    setHoverMetric(metric);
+    setHoverIndex(null);
+  }
 
   const points = seriesByMetric[metric] ?? EMPTY_POINTS;
 
