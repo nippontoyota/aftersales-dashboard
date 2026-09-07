@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { yesterdayIso } from "@/lib/utils";
 
@@ -51,6 +51,19 @@ export function UploadSheetForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const successRef = useRef<HTMLParagraphElement>(null);
+
+  // On save, the detected-type block (branch picker + Save) collapses and
+  // router.refresh() re-renders the page — same "scrolled away, no visible
+  // confirmation" problem the branch upload cards had. Land HQ on the
+  // "Saved …" line once it renders.
+  useEffect(() => {
+    if (!success) return;
+    const scroll = () => successRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    scroll();
+    const t = setTimeout(scroll, 250);
+    return () => clearTimeout(t);
+  }, [success]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0] ?? null;
@@ -224,7 +237,7 @@ export function UploadSheetForm() {
         </p>
       ) : null}
       {success ? (
-        <p role="status" aria-live="polite" className="text-sm text-good">
+        <p ref={successRef} role="status" aria-live="polite" className="text-sm text-good">
           {success}
         </p>
       ) : null}
