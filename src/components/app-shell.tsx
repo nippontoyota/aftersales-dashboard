@@ -353,6 +353,13 @@ export function AppShell({
         )}
       </div>
 
+      {!compact ? (
+        <div className="shrink-0 border-b border-border-subtle bg-accent-soft/50 px-4 py-2">
+          <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-fg-faint">Signed in as</div>
+          <div className="truncate text-sm font-bold text-accent-text">{identity}</div>
+        </div>
+      ) : null}
+
       <nav className={`flex-1 space-y-0.5 ${compact ? "p-2" : "p-3"}`}>{items.map((item) => navLink(item, compact))}</nav>
 
       {utilityItems.length > 0 ? (
@@ -362,7 +369,6 @@ export function AppShell({
       ) : null}
 
       <div className={`border-t border-border-subtle ${compact ? "p-2" : "p-3"}`}>
-        {!compact ? <div className="mb-2 truncate px-1 text-[11px] text-fg-faint">{identity}</div> : null}
         <form action={logoutAction}>
           <button
             type="submit"
