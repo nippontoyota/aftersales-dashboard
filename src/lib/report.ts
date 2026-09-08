@@ -201,6 +201,17 @@ function excludeDeactivatedBranches(rows: BaToolBranchRow[]): BaToolBranchRow[] 
   return rows.filter((row) => !DEACTIVATED_BRANCHES.has(row.branch));
 }
 
+/** Body & Paint-only branches — no General Service desk, so they don't
+ * upload SSRV089-General or (mostly) the Part Sale Report. Without this the
+ * null-guards on the GUS accessories deduction and the Part-Sale external
+ * component leave their Total Revenue Stream MTD null even though their BPU
+ * revenue is real. For these branches GUS Parts/Labour MTD is 0 (there is no
+ * general service) and the Part-Sale external component defaults to 0 when
+ * absent — so Total Revenue = BPU Parts + BPU Labour + SPR External + scrap
+ * + used-oil. Confirmed with the user 2026-09-08. Revisit if any of them
+ * adds a service desk (its scom205 GUS revenue would then be non-zero). */
+const BODY_PAINT_ONLY_BRANCHES = new Set<string>(["CO01E", "KL01B", "TR01B"]);
+
 /** Branch codes that aren't real physical branches — their BA Tool row folds
  * into a parent branch's row and the code itself never appears downstream
  * as its own branch. CO01C is Nippon Toyota's online-store sales channel;
@@ -286,14 +297,26 @@ function computeBranchReport(
   const vasBillTarget = gusRoMtd !== null ? gusRoMtd * VAS_BILL_TARGET_RO_SHARE * VAS_BILL_TARGET_PER_RO : null;
   const vasAchievementForTheMonth = sumBy(serviceInfoMonth, (s) => s.counts.vasRevenue);
 
-  const gusPartsMtd =
-    scom205Today && accessoriesPartSaleMtd !== null ? scom205Today.totals.gusSpRevMtd - accessoriesPartSaleMtd : null;
-  const gusLabourMtd =
-    scom205Today && accessoriesLabourSaleMtd !== null ? scom205Today.totals.gusLabRevMtd - accessoriesLabourSaleMtd : null;
+  // A Body & Paint-only branch has no general service, so its GUS Parts/
+  // Labour is 0 (not "unknown"), and it never files the SSRV089-General /
+  // Part Sale reports the normal null-guards wait for.
+  const bodyPaintOnly = BODY_PAINT_ONLY_BRANCHES.has(today.branch);
+
+  const gusPartsMtd = bodyPaintOnly
+    ? 0
+    : scom205Today && accessoriesPartSaleMtd !== null
+      ? scom205Today.totals.gusSpRevMtd - accessoriesPartSaleMtd
+      : null;
+  const gusLabourMtd = bodyPaintOnly
+    ? 0
+    : scom205Today && accessoriesLabourSaleMtd !== null
+      ? scom205Today.totals.gusLabRevMtd - accessoriesLabourSaleMtd
+      : null;
   const bpuPartsMtd = scom205Today?.totals.bpuSpRevMtd ?? null;
   const bpuLabourMtd = scom205Today?.totals.bpuLabRevMtd ?? null;
+  const externalSalesFromParts = externalSalesFromPartsMtd ?? (bodyPaintOnly ? 0 : null);
   const externalSalesMtd =
-    sprExternal !== null && externalSalesFromPartsMtd !== null ? sprExternal + externalSalesFromPartsMtd : null;
+    sprExternal !== null && externalSalesFromParts !== null ? sprExternal + externalSalesFromParts : null;
 
   return {
     branch: today.branch,
