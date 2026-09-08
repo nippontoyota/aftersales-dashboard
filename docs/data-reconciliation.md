@@ -36,7 +36,27 @@ SSRV089-General for one or more days isn't on file, so those days' Accessories s
 | ☐ | **MV01A** | No September SSRV089-General uploaded at all | Upload full month-to-date SSRV089-General | whole-month deduction missing · scom205 GUS labour ₹2.55 L |
 | ☐ | **TI01C** | No September SSRV089-General uploaded at all | Upload full month-to-date SSRV089-General | whole-month deduction missing · scom205 GUS labour ₹1.22 L |
 
-**PH01A** — was on this list ("no Sept SSRV089"); the branch has since uploaded 1–4 + 7 Sep. Separate issue found 2026-09-08: roster listed **"Santhosh V M"** but the DMS names him **"Santhosh M"** — no match, so his Accessories sales (Sept: ₹21,893 parts, ₹37 labour) weren't deducted; the 3 Sep file read 0/0 because it was Santhosh-only. Roster corrected to "Santhosh M". Snapshot recompute pending — `node scripts/fix-ph01a-sept-ssrv089-roster.mjs --commit` (GUS Parts MTD −₹21,893, GUS Labour MTD −₹37). Still owes 6 Sep if any Accessories jobs closed that holiday day.
+## Accessories roster name mismatches  →  GUS Parts / Labour MTD **overstated**
+
+The roster (`/data`) matches DMS `Close SA Name` exactly (whitespace + case
+normalised only). A middle initial the DMS drops = no match = that person's
+Accessories sales never subtracted. Cross-check run 2026-09-08.
+
+Recompute after a roster fix: `node scripts/recompute-ssrv089-accessories.mjs <BRANCH> [--commit]`
+(re-derives the deduction from raw rows already on file — no re-upload).
+
+| Status | Branch | Roster → DMS | Sept impact (deduction that was missing) | Action |
+|---|--------|-------------|------------------------------------------|--------|
+| ✅ done | **PH01A** | `Santhosh V M` → `Santhosh M` | parts ₹21,893 · labour ₹37 | roster fixed + recomputed 2026-09-08 (3 Sep file was Santhosh-only, read 0/0) |
+| ✅ done | **TI01A** | `Anoop P M` → `Anoop M` (confirmed same person) | parts **₹1,25,424** · labour **₹69,254** | roster fixed + recomputed 2026-09-08 |
+| ✅ done | **KT01A** | `Prasanth R Shenoy` → `Prasanth Shenoy` (same person, still employed) | none yet — hasn't billed since Aug | roster fixed 2026-09-08; no recompute needed |
+| — no fix | **TR01A** | `Ratheeshkumar M T` vs `Ratheesh S` | — | branch confirms **different people**; roster entry `Ratheeshkumar M T` has no DMS match — verify still employed |
+| ☐ note | **CO01B** | `Sijo M Joy` vs `Sijo Joy` | Aug only (4 rows, 28 Aug) — closed month | branch confirms **left the company**; remove from roster (Aug figures were slightly overstated, not correcting a closed month) |
+
+### Roster names with no DMS match anywhere — verify still Accessories staff, else remove from `/data`
+- **CO01B**: `Aneesh K.P.`, `Ansal C K`
+- **IR01A**: `Denny A B`
+- **KL01A**: `Hari S Nampoothiri`, `Vipin V P`
 
 ## September · verify  →  MTD total likely OK, per-day split wrong
 
