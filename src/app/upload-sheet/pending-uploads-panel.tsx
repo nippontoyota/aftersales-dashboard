@@ -2,10 +2,12 @@ import type { PendingUploadsSummary } from "@/lib/pending-uploads";
 import { REPORT_TYPE_LABELS } from "@/lib/pending-uploads";
 
 /** What HQ checks each morning (by ~11am, at the user's request) to see
- * which branches still need chasing — cross-references all 20 branches
- * against all 6 required daily report types for the day. Sits above the
- * Upload Sheet form itself: seeing what's missing and fixing it (on a
- * branch's behalf, right below) are the same workflow. */
+ * which branches still need chasing — cross-references every branch against
+ * its required daily report types for the day (6 normally; 4 for the Body &
+ * Paint-only branches, which get no GS-variant files — see
+ * pending-uploads.ts). Sits above the Upload Sheet form itself: seeing
+ * what's missing and fixing it (on a branch's behalf, right below) are the
+ * same workflow. */
 export function PendingUploadsPanel({ summary }: { summary: PendingUploadsSummary }) {
   const allDone = summary.pending.length === 0;
 
@@ -24,7 +26,7 @@ export function PendingUploadsPanel({ summary }: { summary: PendingUploadsSummar
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4 shrink-0" aria-hidden="true">
             <path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          Every branch has uploaded all 6 reports for {summary.date}.
+          Every branch has uploaded all its required reports for {summary.date}.
         </div>
       ) : (
         <ul className="mt-3 space-y-2">

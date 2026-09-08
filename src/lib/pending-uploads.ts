@@ -4,11 +4,16 @@ import { loadAllPartSaleSnapshotsForDate } from "./part-sale/store";
 import { loadAllSsrv089SnapshotsForDate } from "./ssrv089/store";
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import { loadAllRawReportUploadsForDate } from "./raw-report-uploads/store";
+import { isBodyPaintOnly } from "./report";
 
 /** The 6 report types every branch uploads daily, in the same order they
  * appear on /upload — used here so "what's missing" reads in that order
  * too, not an arbitrary one. */
 export type ReportTypeKey = "serviceInfoGs" | "serviceInfoBp" | "ssrv089Gs" | "ssrv089Bp" | "partSale" | "scom205";
+
+/** The GS-variant reports a Body & Paint-only branch (CO01E/KL01B/TR01B)
+ * never receives — dropped from its required set, so it's "complete" on 4. */
+const GS_ONLY_TYPES: ReadonlySet<ReportTypeKey> = new Set(["serviceInfoGs", "ssrv089Gs"]);
 
 export const REPORT_TYPE_LABELS: Record<ReportTypeKey, string> = {
   serviceInfoGs: "Service Information Report - GS",
@@ -63,7 +68,10 @@ export async function loadPendingUploadsSummary(date: string): Promise<PendingUp
 
   const pending: BranchUploadStatus[] = [];
   for (const branch of [...branches].sort()) {
-    const missing = REPORT_TYPE_ORDER.filter((type) => !done[type].has(branch));
+    const required = isBodyPaintOnly(branch)
+      ? REPORT_TYPE_ORDER.filter((type) => !GS_ONLY_TYPES.has(type))
+      : REPORT_TYPE_ORDER;
+    const missing = required.filter((type) => !done[type].has(branch));
     if (missing.length > 0) pending.push({ branch, missing });
   }
 

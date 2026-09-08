@@ -9,6 +9,7 @@ import { loadPartSaleSnapshot } from "@/lib/part-sale/store";
 import { loadSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { loadScom205Snapshot } from "@/lib/scom205/store";
 import { loadRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { isBodyPaintOnly } from "@/lib/report";
 import { BaToolUploadForm } from "./ba-tool-upload-form";
 import { ReportDatePicker } from "./report-date-picker";
 import { BillUploadForm } from "./bill-upload-form";
@@ -40,6 +41,10 @@ export default async function UploadPage({
   // guard keeps a junk param from reaching the snapshot loads.
   const params = await searchParams;
   const reportDate = /^\d{4}-\d{2}-\d{2}$/.test(params.date ?? "") ? params.date! : yesterdayIso();
+  // Body & Paint-only branches have no general-service desk, so their DMS
+  // never produces the GS-variant Service Info / Cost & Sales files — don't
+  // offer those two forms (and pending-uploads.ts drops them too).
+  const bpOnly = admin?.role === "branch" && isBodyPaintOnly(admin.branch);
   const alreadyUploaded =
     admin?.role === "branch"
       ? await (async () => {
@@ -137,9 +142,13 @@ export default async function UploadPage({
                   </p>
                 </div>
                 <div className="mt-4 space-y-4">
-                  <ServiceInfoUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.serviceInfo} />
+                  {!bpOnly && (
+                    <ServiceInfoUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.serviceInfo} />
+                  )}
                   <ServiceInfoBpUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.serviceInfoBp} />
-                  <Ssrv089GeneralUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.ssrvGeneral} />
+                  {!bpOnly && (
+                    <Ssrv089GeneralUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.ssrvGeneral} />
+                  )}
                   <Ssrv089BpUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.ssrvBp} />
                   <PartSaleUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.partSale} />
                   <Scom205UploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.scom205} />

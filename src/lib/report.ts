@@ -209,8 +209,17 @@ function excludeDeactivatedBranches(rows: BaToolBranchRow[]): BaToolBranchRow[] 
  * general service) and the Part-Sale external component defaults to 0 when
  * absent — so Total Revenue = BPU Parts + BPU Labour + SPR External + scrap
  * + used-oil. Confirmed with the user 2026-09-08. Revisit if any of them
- * adds a service desk (its scom205 GUS revenue would then be non-zero). */
-const BODY_PAINT_ONLY_BRANCHES = new Set<string>(["CO01E", "KL01B", "TR01B"]);
+ * adds a service desk (its scom205 GUS revenue would then be non-zero).
+ *
+ * Exported so the upload surface stays in step: these branches never get the
+ * GS-variant Service Info / Cost & Sales files, so the /upload page hides
+ * those two forms for them and pending-uploads.ts drops them from the
+ * required set (a BP-only branch is "complete" on 4 reports, not 6). */
+export const BODY_PAINT_ONLY_BRANCHES: ReadonlySet<string> = new Set(["CO01E", "KL01B", "TR01B"]);
+
+export function isBodyPaintOnly(branch: string): boolean {
+  return BODY_PAINT_ONLY_BRANCHES.has(branch);
+}
 
 /** Branch codes that aren't real physical branches — their BA Tool row folds
  * into a parent branch's row and the code itself never appears downstream
