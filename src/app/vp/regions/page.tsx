@@ -90,6 +90,17 @@ async function Regions({
 
   const chosen: VpRegionRollup | null = selectedRegion ? data.regions.find((r) => r.region === selectedRegion) ?? null : null;
 
+  const groupMetricValue = metric.get(data.group);
+  const regionSummaries = data.regions.map((r) => {
+    const v = metric.get(r);
+    return {
+      region: r.region,
+      display: fmt(v, metric.fmt),
+      share: metric.fmt === "pct" || !groupMetricValue ? null : (v ?? 0) / groupMetricValue,
+      branches: r.branches.length,
+    };
+  });
+
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-8">
       <VpHeader
@@ -103,58 +114,28 @@ async function Regions({
         flagHref={`/vp/regions?date=${data.date}&metric=${metricKey}${selectedRegion ? `&fregion=${selectedRegion}` : ""}&flag=1`}
       />
 
-      <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="lg:w-[300px] lg:shrink-0">
-          <KeralaMap pins={pins} metricLabel={metric.label} date={data.date} selectedRegion={selectedRegion} />
+      <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
+        <div className="lg:w-[320px] lg:shrink-0">
+          <KeralaMap
+            pins={pins}
+            regionSummaries={regionSummaries}
+            metricLabel={metric.label}
+            metricControl={
+              <MetricSelect basePath="/vp/regions" options={METRICS.map((m) => ({ key: m.key, label: m.label }))} selected={metricKey} />
+            }
+            date={data.date}
+            selectedRegion={selectedRegion}
+          />
         </div>
 
-        <div className="flex flex-1 flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">Region totals</span>
-            <MetricSelect basePath="/vp/regions" options={METRICS.map((m) => ({ key: m.key, label: m.label }))} selected={metricKey} />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {data.regions.map((r) => {
-              const v = metric.get(r);
-              const active = selectedRegion === r.region;
-              const share = metric.get(data.group) ? (v ?? 0) / (metric.get(data.group) as number) : null;
-              return (
-                <a
-                  key={r.region}
-                  href={`/vp/regions?date=${data.date}&metric=${metricKey}&region=${r.region}`}
-                  className={`rounded-xl border p-4 transition-colors ${
-                    active ? "border-accent bg-accent-soft/40" : "border-border bg-surface hover:bg-surface-2/40"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: REGION_COLOR[r.region] }} />
-                    <span className="text-sm font-semibold text-fg">{r.region}</span>
-                    <span className="ml-auto text-[11px] text-fg-faint">{r.branches.length} branches</span>
-                  </div>
-                  <div className="mt-2 text-xl font-semibold tabular-nums tracking-tight text-fg">{fmt(v, metric.fmt)}</div>
-                  <div className="text-[11px] uppercase tracking-[0.06em] text-fg-faint">{metric.label}</div>
-                  {share != null && metric.fmt !== "pct" ? (
-                    <div className="mt-2.5">
-                      <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
-                        <div className="h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, background: REGION_COLOR[r.region] }} />
-                      </div>
-                      <div className="mt-1 text-[10px] text-fg-faint">{Math.round(share * 100)}% of group</div>
-                    </div>
-                  ) : null}
-                </a>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {chosen ? (
-        <div className="mt-8">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-fg">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: REGION_COLOR[chosen.region] }} />
-            {chosen.region} — {chosen.branches.length} branches
-          </h2>
-          <div className="mt-3 max-h-[calc(100dvh-16rem)] overflow-auto rounded-xl border border-border bg-surface shadow-card">
+        <div className="min-w-0 flex-1">
+          {chosen ? (
+            <>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-fg">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: REGION_COLOR[chosen.region] }} />
+                {chosen.region} — {chosen.branches.length} branches
+              </h2>
+              <div className="mt-3 max-h-[calc(100dvh-14rem)] overflow-auto rounded-xl border border-border bg-surface shadow-card">
             <table className="border-separate border-spacing-0 text-[13px]">
               <thead>
                 <tr className="[&>th]:sticky [&>th]:top-0 [&>th]:z-20 [&>th]:border-b [&>th]:border-border">
@@ -215,18 +196,20 @@ async function Regions({
               </tbody>
             </table>
           </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-sm font-semibold text-fg">All branches</h2>
+                <span className="text-[11px] text-fg-faint">ranked by total revenue · pick a region above</span>
+              </div>
+              <div className="mt-3">
+                <BranchLeaderboard branches={data.report.branches} date={data.date} />
+              </div>
+            </>
+          )}
         </div>
-      ) : (
-        <div className="mt-8">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold text-fg">All branches</h2>
-            <span className="text-[11px] text-fg-faint">ranked by total revenue · pick a region to compare</span>
-          </div>
-          <div className="mt-3">
-            <BranchLeaderboard branches={data.report.branches} date={data.date} />
-          </div>
-        </div>
-      )}
+      </div>
 
       <div className="mt-6 rounded-xl border border-dashed border-border-strong bg-surface p-5">
         <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">VAS business — 3M vs Db outlets</div>

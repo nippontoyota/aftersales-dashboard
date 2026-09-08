@@ -1,14 +1,15 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { RegionName } from "@/lib/regions";
 
 /**
- * Kerala, with every branch as a pin at its town and sized by the selected
- * metric. Pin colour is the *business* region (North / Central / South) —
- * which doesn't always track geography (a Kottayam branch is in the
- * company's "North"), so it's captioned. Click a pin to open that branch;
- * click a region pill to drill into it.
+ * Kerala, with every branch as a pin at its town, sized by the selected
+ * metric. Pin colour is the *business* region — which doesn't always track
+ * geography (a Kottayam branch is in the company's "North"), so it's
+ * captioned. Below the map, each region's total for the same metric, doubling
+ * as the region selector: click to drill in, click again to clear.
  */
 
 const REGION_COLOR: Record<RegionName, string> = {
@@ -16,6 +17,8 @@ const REGION_COLOR: Record<RegionName, string> = {
   South: "var(--color-cat-south)",
   North: "var(--color-cat-north)",
 };
+
+const REGION_ORDER: RegionName[] = ["North", "Central", "South"];
 
 // Hand-placed on the viewBox below — town positions, nudged apart where a
 // town has more than one branch.
@@ -43,41 +46,45 @@ export type BranchPin = {
   display: string;
 };
 
+export type RegionSummary = {
+  region: RegionName;
+  display: string;
+  /** 0–1 share of the group total; null for ratio-type metrics. */
+  share: number | null;
+  branches: number;
+};
+
 export function KeralaMap({
   pins,
+  regionSummaries,
   metricLabel,
+  metricControl,
   date,
   selectedRegion,
 }: {
   pins: BranchPin[];
+  regionSummaries: RegionSummary[];
   metricLabel: string;
+  metricControl?: ReactNode;
   date: string;
   selectedRegion: RegionName | null;
 }) {
   const router = useRouter();
   const max = Math.max(1, ...pins.map((p) => p.value ?? 0));
   const radius = (v: number | null) => (v == null || v <= 0 ? 3.5 : 4 + Math.sqrt(v / max) * 13);
-
   const go = (href: string) => router.push(href);
+  const byRegion = new Map(regionSummaries.map((s) => [s.region, s]));
 
   return (
     <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
-      <div className="flex flex-wrap gap-1.5">
-        <RegionPill label="All Kerala" active={selectedRegion === null} onClick={() => go(`/vp/regions?date=${date}`)} />
-        {(["North", "Central", "South"] as RegionName[]).map((r) => (
-          <RegionPill
-            key={r}
-            label={r}
-            color={REGION_COLOR[r]}
-            active={selectedRegion === r}
-            onClick={() => go(`/vp/regions?date=${date}&region=${r}`)}
-          />
-        ))}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">Regions</span>
+        {metricControl}
       </div>
-      <div className="mt-2 text-center text-[10px] uppercase tracking-[0.08em] text-fg-faint">bubble size · {metricLabel}</div>
+      <div className="mt-1 text-[10px] uppercase tracking-[0.08em] text-fg-faint">bubble size · {metricLabel}</div>
 
       <div className="mt-1 flex justify-center">
-        <svg viewBox="0 0 220 620" className="h-[520px] w-auto" role="img" aria-label={`Kerala map, branches sized by ${metricLabel}`}>
+        <svg viewBox="0 0 220 620" className="h-[440px] w-auto" role="img" aria-label={`Kerala map, branches sized by ${metricLabel}`}>
           <defs>
             <filter id="pinShadow" x="-40%" y="-40%" width="180%" height="180%">
               <feDropShadow dx="0" dy="1" stdDeviation="1.4" floodOpacity="0.35" />
@@ -114,40 +121,41 @@ export function KeralaMap({
         </svg>
       </div>
 
-      <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-fg-subtle">
-        {(["North", "Central", "South"] as RegionName[]).map((r) => (
-          <span key={r} className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: REGION_COLOR[r] }} />
-            {r}
-          </span>
-        ))}
+      <div className="mt-1 space-y-1.5">
+        {REGION_ORDER.map((r) => {
+          const s = byRegion.get(r);
+          const active = selectedRegion === r;
+          return (
+            <button
+              key={r}
+              type="button"
+              onClick={() => go(active ? `/vp/regions?date=${date}` : `/vp/regions?date=${date}&region=${r}`)}
+              className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                active ? "border-accent bg-accent-soft/50" : "border-border hover:bg-surface-2/60"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: REGION_COLOR[r] }} />
+                <span className="text-[13px] font-semibold text-fg">{r}</span>
+                <span className="text-[10px] text-fg-faint">· {s?.branches ?? 0}</span>
+                <span className="ml-auto text-[13px] font-semibold tabular-nums text-fg">{s?.display ?? "—"}</span>
+              </div>
+              {s && s.share != null ? (
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+                    <span className="block h-full rounded-full" style={{ width: `${Math.round(s.share * 100)}%`, background: REGION_COLOR[r] }} />
+                  </span>
+                  <span className="w-10 text-right text-[10px] text-fg-faint">{Math.round(s.share * 100)}%</span>
+                </div>
+              ) : null}
+            </button>
+          );
+        })}
       </div>
-      <p className="mt-1.5 text-center text-[10px] text-fg-faint">Pins at branch towns · click a pin for that branch</p>
-    </div>
-  );
-}
 
-function RegionPill({
-  label,
-  color,
-  active,
-  onClick,
-}: {
-  label: string;
-  color?: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-        active ? "border-accent bg-accent-soft text-accent-text" : "border-border text-fg-muted hover:bg-surface-2"
-      }`}
-    >
-      {color ? <span className="h-2 w-2 rounded-full" style={{ background: color }} /> : null}
-      {label}
-    </button>
+      <p className="mt-2 text-center text-[10px] text-fg-faint">
+        Pins at branch towns · colour = business region · click a pin for that branch
+      </p>
+    </div>
   );
 }
