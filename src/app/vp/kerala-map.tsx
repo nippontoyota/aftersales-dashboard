@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import type { RegionName } from "@/lib/regions";
 
 /**
- * Kerala, drawn from a simplified real outline (equirectangular projection
- * of ~50 boundary points), with every branch as a pin at its town, sized by
- * the selected metric. Pin colour is the *business* region — which doesn't
- * always track geography (a Kottayam branch is in the company's "North"),
- * so it's captioned. Below the map, each region's total for the same metric
- * doubles as the region selector.
+ * Kerala — a long, thin NW→SE ribbon: smooth Arabian-Sea coast on the west,
+ * the jagged Western Ghats on the east that bulge out around Wayanad,
+ * Palakkad and Idukki, tapering to points north (Kasaragod) and south
+ * (Parassala). Branch pins sit at their town, sized by the selected metric
+ * and coloured by *business* region (which doesn't always track geography —
+ * a Kottayam branch is in the company's "North" — hence the caption). Below
+ * the map, each region's total for that metric doubles as the selector.
  */
 
 const REGION_COLOR: Record<RegionName, string> = {
@@ -20,54 +21,41 @@ const REGION_COLOR: Record<RegionName, string> = {
 };
 const REGION_ORDER: RegionName[] = ["North", "Central", "South"];
 
-// --- projection ---------------------------------------------------------
-const LON0 = 74.82;
-const LAT_TOP = 12.85;
-const S = 70; // px per degree (lat≈lon in km at 10°N, so a single scale)
-const PAD = 10;
-const px = (lon: number) => PAD + (lon - LON0) * S;
-const py = (lat: number) => PAD + (LAT_TOP - lat) * S;
-const VB_W = Math.ceil(PAD * 2 + (77.6 - LON0) * S);
-const VB_H = Math.ceil(PAD * 2 + (LAT_TOP - 8.1) * S);
+const VIEWBOX = "62 8 134 612";
 
-// Kerala boundary, clockwise from the north tip: down the west (coast),
-// then up the east (Western Ghats). [lon, lat].
-const KERALA: [number, number][] = [
-  [74.9, 12.79], [74.99, 12.47], [75.12, 12.16], [75.29, 11.94], [75.46, 11.74],
-  [75.61, 11.57], [75.74, 11.41], [75.8, 11.23], [75.85, 11.06], [75.94, 10.83],
-  [76.01, 10.53], [76.04, 10.26], [76.02, 10.03], [76.19, 9.91], [76.28, 9.94],
-  [76.31, 9.7], [76.35, 9.46], [76.42, 9.26], [76.5, 9.04], [76.58, 8.86],
-  [76.7, 8.7], [76.85, 8.53], [77.0, 8.4], [77.12, 8.28], [77.2, 8.2],
-  [77.29, 8.34], [77.25, 8.62], [77.3, 8.96], [77.22, 9.26], [77.3, 9.5],
-  [77.44, 9.66], [77.31, 9.92], [77.2, 10.15], [77.04, 10.32], [77.11, 10.52],
-  [76.93, 10.72], [76.78, 10.92], [76.6, 11.1], [76.5, 11.29], [76.54, 11.46],
-  [76.4, 11.6], [76.18, 11.72], [76.02, 11.91], [75.82, 12.12], [75.56, 12.34],
-  [75.26, 12.57], [75.02, 12.71],
+// Perimeter, clockwise from the northern tip: down the Western Ghats (east),
+// round the southern point, up the coast (west).
+const KERALA_POLY: [number, number][] = [
+  [86, 22], [96, 38], [106, 58], [118, 82], [130, 105], [138, 128], [150, 150], [164, 165],
+  [158, 188], [168, 210], [162, 235], [170, 258], [182, 278], [172, 300], [178, 325], [170, 350],
+  [176, 375], [184, 400], [178, 420], [166, 445], [172, 470], [162, 505], [160, 550], [148, 592],
+  [140, 600], [128, 540], [112, 470], [104, 430], [92, 360], [86, 300], [78, 250], [74, 175],
+  [78, 118], [80, 70], [82, 40],
 ];
 
-/** Closed Catmull-Rom → cubic-bezier path for a smooth coastline. */
+/** Closed Catmull-Rom → cubic-bezier for a natural coastline. */
 function smoothClosed(pts: [number, number][]): string {
   const n = pts.length;
   const p = (i: number) => pts[((i % n) + n) % n];
-  let d = `M ${px(p(0)[0]).toFixed(1)} ${py(p(0)[1]).toFixed(1)}`;
+  const f = (v: number) => v.toFixed(1);
+  let d = `M ${f(p(0)[0])} ${f(p(0)[1])}`;
   for (let i = 0; i < n; i++) {
     const a = p(i - 1), b = p(i), c = p(i + 1), e = p(i + 2);
-    const c1x = px(b[0]) + (px(c[0]) - px(a[0])) / 6;
-    const c1y = py(b[1]) + (py(c[1]) - py(a[1])) / 6;
-    const c2x = px(c[0]) - (px(e[0]) - px(b[0])) / 6;
-    const c2y = py(c[1]) - (py(e[1]) - py(b[1])) / 6;
-    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${px(c[0]).toFixed(1)} ${py(c[1]).toFixed(1)}`;
+    d +=
+      ` C ${f(b[0] + (c[0] - a[0]) / 6)} ${f(b[1] + (c[1] - a[1]) / 6)},` +
+      ` ${f(c[0] - (e[0] - b[0]) / 6)} ${f(c[1] - (e[1] - b[1]) / 6)},` +
+      ` ${f(c[0])} ${f(c[1])}`;
   }
   return `${d} Z`;
 }
-const KERALA_PATH = smoothClosed(KERALA);
+const KERALA_PATH = smoothClosed(KERALA_POLY);
 
-// --- branch towns ------------------------------------------------------
+// --- branch towns (same coordinate space) ----------------------------
 const TOWN: Record<string, [number, number]> = {
-  thrissur: [76.25, 10.52], chalakudy: [76.33, 10.31], irinjalakuda: [76.24, 10.34],
-  kochi: [76.32, 10.0], muvattupuzha: [76.58, 9.99], kottayam: [76.53, 9.59],
-  pala: [76.68, 9.72], thiruvalla: [76.57, 9.38], pathanamthitta: [76.79, 9.26],
-  kayamkulam: [76.5, 9.18], kollam: [76.63, 8.89], trivandrum: [76.95, 8.52],
+  thrissur: [108, 278], chalakudy: [104, 298], irinjalakuda: [96, 302],
+  kochi: [92, 308], muvattupuzha: [128, 300], kottayam: [114, 350],
+  pala: [132, 340], thiruvalla: [118, 378], pathanamthitta: [134, 380],
+  kayamkulam: [104, 402], kollam: [110, 432], trivandrum: [130, 528],
 };
 const BRANCH_TOWN: Record<string, keyof typeof TOWN> = {
   TI01A: "thrissur", TI01B: "thrissur", TI01C: "chalakudy", IR01A: "irinjalakuda",
@@ -100,7 +88,7 @@ export function KeralaMap({
   const byRegion = new Map(regionSummaries.map((s) => [s.region, s]));
 
   const max = Math.max(1, ...pins.map((p) => p.value ?? 0));
-  const radius = (v: number | null) => (v == null || v <= 0 ? 2.8 : 3.5 + Math.sqrt(Math.max(0, v) / max) * 9);
+  const radius = (v: number | null) => (v == null || v <= 0 ? 3 : 3.5 + Math.sqrt(Math.max(0, v) / max) * 9);
 
   // Fan co-located branches out horizontally around their town.
   const byTown = new Map<string, BranchPin[]>();
@@ -112,12 +100,11 @@ export function KeralaMap({
     else byTown.set(t, [p]);
   }
   const placed = [...byTown.entries()].flatMap(([town, list]) => {
-    const [lon, lat] = TOWN[town];
-    const cx0 = px(lon), cy0 = py(lat);
+    const [x0, y0] = TOWN[town];
     return list.map((p, i) => ({
       pin: p,
-      cx: cx0 + (i - (list.length - 1) / 2) * 11,
-      cy: cy0 + (i % 2 === 0 ? 0 : 4),
+      cx: x0 + (i - (list.length - 1) / 2) * 10,
+      cy: y0 + (i % 2 === 0 ? 0 : 4),
     }));
   });
   placed.sort((a, b) => radius(b.pin.value) - radius(a.pin.value));
@@ -131,29 +118,18 @@ export function KeralaMap({
       <div className="mt-1 text-[10px] uppercase tracking-[0.08em] text-fg-faint">bubble size · {metricLabel}</div>
 
       <div className="mt-2 flex justify-center">
-        <svg
-          viewBox={`0 0 ${VB_W} ${VB_H}`}
-          className="h-[440px] w-auto max-w-full"
-          role="img"
-          aria-label={`Kerala, branch locations sized by ${metricLabel}`}
-        >
+        <svg viewBox={VIEWBOX} className="h-[470px] w-auto max-w-full" role="img" aria-label={`Kerala, branch locations sized by ${metricLabel}`}>
           <defs>
             <linearGradient id="keralaFill" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0" stopColor="var(--color-surface-2)" />
               <stop offset="1" stopColor="var(--color-surface-3)" />
             </linearGradient>
             <filter id="pinShadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="1" stdDeviation="1.2" floodOpacity="0.35" />
+              <feDropShadow dx="0" dy="1" stdDeviation="1.1" floodOpacity="0.35" />
             </filter>
           </defs>
 
-          <path
-            d={KERALA_PATH}
-            fill="url(#keralaFill)"
-            stroke="var(--color-border-strong)"
-            strokeWidth="1.4"
-            strokeLinejoin="round"
-          />
+          <path d={KERALA_PATH} fill="url(#keralaFill)" stroke="var(--color-border-strong)" strokeWidth="1.3" strokeLinejoin="round" />
 
           {placed.map(({ pin, cx, cy }) => {
             const dim = selectedRegion !== null && pin.region !== selectedRegion;
@@ -166,7 +142,7 @@ export function KeralaMap({
                 fill={REGION_COLOR[pin.region]}
                 fillOpacity={dim ? 0.16 : 0.92}
                 stroke="var(--color-surface)"
-                strokeWidth="1.4"
+                strokeWidth="1.3"
                 filter={dim ? undefined : "url(#pinShadow)"}
                 className="cursor-pointer transition-[fill-opacity]"
                 onClick={() => go(`/vp/branches?date=${date}&branch=${pin.branch}`)}
