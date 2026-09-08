@@ -34,8 +34,9 @@ SSRV089-General for one or more days isn't on file, so those days' Accessories s
 | ☐ | **TR01A** | Only the 3 Sep file uploaded — 1–2 Sep missing | Branch uploads 1–2 Sep | ≈2 days' accessories not deducted |
 | ☐ | **TR01C** | Only the 3 Sep file uploaded — 1–2 Sep missing | Branch uploads 1–2 Sep | ≈2 days' accessories not deducted |
 | ☐ | **MV01A** | No September SSRV089-General uploaded at all | Upload full month-to-date SSRV089-General | whole-month deduction missing · scom205 GUS labour ₹2.55 L |
-| ☐ | **PH01A** | No September SSRV089-General uploaded at all | Upload full month-to-date SSRV089-General | whole-month deduction missing · scom205 GUS labour ₹1.52 L |
 | ☐ | **TI01C** | No September SSRV089-General uploaded at all | Upload full month-to-date SSRV089-General | whole-month deduction missing · scom205 GUS labour ₹1.22 L |
+
+**PH01A** — was on this list ("no Sept SSRV089"); the branch has since uploaded 1–4 + 7 Sep. Separate issue found 2026-09-08: roster listed **"Santhosh V M"** but the DMS names him **"Santhosh M"** — no match, so his Accessories sales (Sept: ₹21,893 parts, ₹37 labour) weren't deducted; the 3 Sep file read 0/0 because it was Santhosh-only. Roster corrected to "Santhosh M". Snapshot recompute pending — `node scripts/fix-ph01a-sept-ssrv089-roster.mjs --commit` (GUS Parts MTD −₹21,893, GUS Labour MTD −₹37). Still owes 6 Sep if any Accessories jobs closed that holiday day.
 
 ## September · verify  →  MTD total likely OK, per-day split wrong
 
