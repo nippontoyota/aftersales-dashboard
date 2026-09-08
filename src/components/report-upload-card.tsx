@@ -178,7 +178,7 @@ function ReportUploadForm({
   const dateId = `date-${endpoint.replace(/\W+/g, "-")}`;
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 rounded-md border border-border bg-surface p-5">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border bg-surface p-5 shadow-card">
       <div>
         <h2 className="text-sm font-semibold text-fg">{title}</h2>
         {description ? <p className="mt-0.5 text-xs text-fg-subtle">{description}</p> : null}
@@ -195,7 +195,7 @@ function ReportUploadForm({
             type="date"
             required
             defaultValue={yesterdayIso()}
-            className="mt-1 h-9 w-full rounded border border-border-strong px-3 text-sm"
+            className="mt-1 h-9 w-full rounded-md border border-border-strong px-3 text-sm"
           />
         </div>
       )}
@@ -228,7 +228,7 @@ function ReportUploadForm({
       <button
         type="submit"
         disabled={pending}
-        className="h-9 rounded bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
+        className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
       >
         {pending ? "Uploading…" : "Upload"}
       </button>

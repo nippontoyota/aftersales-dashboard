@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { REGIONS } from "@/lib/regions";
+import { control } from "@/lib/ui";
 
 export function RegionSelect({
   selected,
@@ -27,7 +28,7 @@ export function RegionSelect({
         if (e.target.value !== "All") params.set("region", e.target.value);
         router.push(`${basePath}?${params.toString()}`);
       }}
-      className="h-8 rounded border border-border-strong px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className={`${control} px-2`}
     >
       {options.map((r) => (
         <option key={r} value={r}>

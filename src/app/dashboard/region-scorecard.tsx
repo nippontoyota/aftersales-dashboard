@@ -10,6 +10,7 @@ import { REGIONS, type RegionName } from "@/lib/regions";
 import type { Snapshot } from "@/lib/snapshot-store";
 import type { ServiceInfoSnapshot } from "@/lib/service-info/store";
 import { Sparkline } from "@/components/sparkline";
+import { useSyncedMetric } from "./metric-sync";
 
 export type RegionMetricConfig = {
   key: string;
@@ -30,7 +31,14 @@ const DEFAULT_METRICS: RegionMetricConfig[] = [
   { key: "vas", label: "VAS (Rs)", actual: "vasAchievementForTheMonth", target: "vasBillTarget", isCurrency: true },
 ];
 
-const REGION_ACCENT: Record<RegionName, string> = { Central: "#2a78d6", South: "#eb6834", North: "#1baf7a" };
+// Theme tokens, not raw hex — the dark palette lifts these for contrast on
+// the near-black canvas (see globals.css). var() resolves fine in inline
+// styles and SVG stroke/fill (same as trend-chart.tsx).
+const REGION_ACCENT: Record<RegionName, string> = {
+  Central: "var(--color-cat-central)",
+  South: "var(--color-cat-south)",
+  North: "var(--color-cat-north)",
+};
 const TONE_TEXT: Record<AchievementTone, string> = {
   good: "text-good",
   warn: "text-warn",
@@ -102,7 +110,7 @@ function RegionCard({
   const weakestBreakdown = isOfftakeMetric ? regionBranches.find((b) => b.branch === weakest?.branch)?.onlineStoreBreakdown : undefined;
 
   return (
-    <div className="rounded-md border border-border bg-surface p-3.5">
+    <div className="rounded-lg border border-border bg-surface p-3.5 shadow-card">
       <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: REGION_ACCENT[region] }}>
         <span className="h-2 w-2 rounded-full" style={{ background: REGION_ACCENT[region] }} />
         {region}
@@ -204,20 +212,20 @@ export function RegionScorecard({
   /** Defaults to the main dashboard's own set (VAS only); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics instead. */
   metrics?: RegionMetricConfig[];
 }) {
-  const [metric, setMetric] = useState<string>(metrics[0]?.key ?? "");
+  const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
   const config = metrics.find((m) => m.key === metric) ?? metrics[0];
 
   return (
-    <div className="rounded-md border border-border bg-surface p-4">
+    <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">
           Region Scorecard — MTD{metrics.length === 1 ? ` — ${metrics[0].label}` : ""}
         </h2>
         {metrics.length > 1 ? (
           <select
             value={metric}
             onChange={(e) => setMetric(e.target.value)}
-            className="h-7 rounded border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="h-7 rounded-md border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {metrics.map((m) => (
               <option key={m.key} value={m.key}>

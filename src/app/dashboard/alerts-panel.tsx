@@ -47,6 +47,14 @@ const COLLAPSED_COUNT = 4;
 
 type Tab = "critical" | "watch" | "all";
 
+// Same categorical hues as the Region Scorecard / Branch Ranking — theme
+// tokens so the dark palette's lifted variants apply.
+const REGION_ACCENT: Record<RegionName, string> = {
+  Central: "var(--color-cat-central)",
+  South: "var(--color-cat-south)",
+  North: "var(--color-cat-north)",
+};
+
 const TONE_ICON_BG: Record<"critical" | "warn", string> = {
   critical: "bg-bad-soft text-bad",
   warn: "bg-warn-soft text-warn",
@@ -241,7 +249,7 @@ export function AlertsPanel({
       : null;
 
   return (
-    <div className="flex h-full flex-col rounded-md border border-border bg-surface p-4">
+    <div className="flex h-full flex-col rounded-lg border border-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 text-xs font-semibold">
           {(
@@ -276,8 +284,10 @@ export function AlertsPanel({
         <div className="mt-3 max-h-[520px] space-y-4 overflow-y-auto pr-1">
           {zoneGroups.map(({ region, items }) => (
             <div key={region}>
-              <h3 className="text-[10px] font-semibold uppercase tracking-wide text-fg-faint">
-                {region} <span className="font-normal normal-case text-fg-faint">({items.length})</span>
+              <h3 className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.07em]">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: REGION_ACCENT[region] }} aria-hidden="true" />
+                <span style={{ color: REGION_ACCENT[region] }}>{region}</span>
+                <span className="font-normal normal-case text-fg-faint">({items.length})</span>
               </h3>
               <div className="mt-1.5 space-y-2">
                 {groupByBranchWorstFirst(items).map(({ branch, items: branchItems }) => (

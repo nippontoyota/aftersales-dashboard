@@ -8,9 +8,9 @@ import { REGIONS, type RegionName } from "@/lib/regions";
 
 const SCOPE_ACCENT: Record<"All" | RegionName, string> = {
   All: "var(--color-fg)",
-  Central: "#2a78d6",
-  South: "#eb6834",
-  North: "#1baf7a",
+  Central: "var(--color-cat-central)",
+  South: "var(--color-cat-south)",
+  North: "var(--color-cat-north)",
 };
 /** A specific branch pulled in via the "compare a branch" dropdown isn't one
  * of the four fixed scopes, so it gets its own neutral accent rather than
@@ -162,14 +162,14 @@ export function HeroKpi({ branches, compact, lockedBranch }: { branches: BranchR
   }, [branches, selectedBranch, lockedBranch]);
 
   return (
-    <div className={`rounded-lg border border-border bg-gradient-to-b from-canvas to-surface shadow-sm ${compact ? "p-3" : "p-4 sm:p-5"}`}>
+    <div className={`rounded-lg border border-border bg-gradient-to-b from-canvas to-surface shadow-card ${compact ? "p-3.5" : "p-4 sm:p-5"}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className={compact ? "text-xs font-semibold text-fg" : "text-sm font-semibold text-fg"}>Total Revenue Stream — MTD (Rs)</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Total Revenue Stream — MTD (Rs)</h2>
         {!lockedBranch ? (
           <select
             value={selectedBranch}
             onChange={(e) => setSelectedBranch(e.target.value)}
-            className="h-6 shrink-0 rounded border border-border-strong px-1 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="h-7 shrink-0 rounded-md border border-border-strong px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <option value="__none__">+ Compare a branch</option>
             {branches.map((b) => (

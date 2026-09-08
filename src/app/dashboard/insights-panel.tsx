@@ -131,8 +131,8 @@ export function InsightsPanel({
   const insights = buildInsights(kpis, branches, date, trackedKpis, perBranchMetrics, regionGapMetric);
 
   return (
-    <div className="rounded-md border border-border bg-surface p-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Insights</h2>
+    <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Insights</h2>
       <p className="mt-0.5 text-[10px] text-fg-faint">Generated from all-branch figures, regardless of the region filter above — not a forecast, not AI.</p>
 
       {insights.length === 0 ? (

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TrendPoint } from "@/lib/trend";
 import { formatNumber } from "@/lib/format";
+import { useSyncedMetric } from "./metric-sync";
 
 export type TrendMetricConfig = { key: string; label: string };
 
@@ -209,9 +210,19 @@ export function TrendChart({
   /** Defaults to the main dashboard's own set (VAS only); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics and series instead. */
   metrics?: TrendMetricConfig[];
 }) {
-  const [metric, setMetric] = useState<string>(metrics[0]?.key ?? "");
+  const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Drop a stale hover marker when the metric changes under it — e.g. a
+  // sibling card (Achievement Donut / Region Scorecard) switched the shared
+  // selection while the pointer was still over this chart. (Changing this
+  // chart's own dropdown also clears it, in the select's onChange.)
+  const [hoverMetric, setHoverMetric] = useState(metric);
+  if (metric !== hoverMetric) {
+    setHoverMetric(metric);
+    setHoverIndex(null);
+  }
 
   const points = seriesByMetric[metric] ?? EMPTY_POINTS;
 
@@ -304,7 +315,7 @@ export function TrendChart({
           setMetric(e.target.value);
           setHoverIndex(null);
         }}
-        className="h-7 rounded border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="h-7 rounded-md border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         {metrics.map((m) => (
           <option key={m.key} value={m.key}>
@@ -316,15 +327,15 @@ export function TrendChart({
   const titleSuffix = metrics.length === 1 ? ` — ${metrics[0].label}` : "";
 
   return (
-    <div className="rounded-md border border-border bg-surface p-4">
+    <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">MTD Trend — Actual vs Target{titleSuffix}</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">MTD Trend — Actual vs Target{titleSuffix}</h2>
         <div className="flex items-center gap-1.5">
           {metricSelect}
           <button
             type="button"
             onClick={() => setIsExpanded(true)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border-strong text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border-strong text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             title="Expand chart"
           >
             <ExpandIcon />

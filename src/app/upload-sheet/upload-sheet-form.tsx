@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { yesterdayIso } from "@/lib/utils";
 
@@ -51,6 +51,19 @@ export function UploadSheetForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const successRef = useRef<HTMLParagraphElement>(null);
+
+  // On save, the detected-type block (branch picker + Save) collapses and
+  // router.refresh() re-renders the page — same "scrolled away, no visible
+  // confirmation" problem the branch upload cards had. Land HQ on the
+  // "Saved …" line once it renders.
+  useEffect(() => {
+    if (!success) return;
+    const scroll = () => successRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    scroll();
+    const t = setTimeout(scroll, 250);
+    return () => clearTimeout(t);
+  }, [success]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0] ?? null;
@@ -120,7 +133,7 @@ export function UploadSheetForm() {
   }
 
   return (
-    <div className="space-y-4 rounded-md border border-border bg-surface p-5">
+    <div className="space-y-4 rounded-lg border border-border bg-surface p-5 shadow-card">
       <div>
         <h2 className="text-sm font-semibold text-fg">Upload Sheet</h2>
         <p className="mt-0.5 text-xs text-fg-subtle">
@@ -140,7 +153,7 @@ export function UploadSheetForm() {
           value={date}
           onChange={(e) => setDate(e.target.value)}
           required
-          className="mt-1 h-9 w-full rounded border border-border-strong px-3 text-sm"
+          className="mt-1 h-9 w-full rounded-md border border-border-strong px-3 text-sm"
         />
       </div>
 
@@ -196,7 +209,7 @@ export function UploadSheetForm() {
               value={branch}
               onChange={(e) => setBranch(e.target.value)}
               required
-              className="mt-1 h-9 w-full rounded border border-border-strong px-2 text-sm"
+              className="mt-1 h-9 w-full rounded-md border border-border-strong px-2 text-sm"
             >
               <option value="">Choose a branch…</option>
               {detection.branchCodes.map((code) => (
@@ -211,7 +224,7 @@ export function UploadSheetForm() {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="h-9 rounded bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
+            className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
           >
             {saving ? "Saving…" : "Save"}
           </button>
@@ -224,7 +237,7 @@ export function UploadSheetForm() {
         </p>
       ) : null}
       {success ? (
-        <p role="status" aria-live="polite" className="text-sm text-good">
+        <p ref={successRef} role="status" aria-live="polite" className="text-sm text-good">
           {success}
         </p>
       ) : null}

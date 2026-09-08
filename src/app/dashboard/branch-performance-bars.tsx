@@ -177,9 +177,9 @@ export function BranchPerformanceBars({
   const tail = !expanded && ranked.length > COLLAPSED_HEAD && bestIndex >= COLLAPSED_HEAD ? [{ row: ranked[bestIndex], rank: bestIndex + 1 }] : [];
 
   return (
-    <div className="flex h-full flex-col rounded-md border border-border bg-surface p-4">
+    <div className="flex h-full flex-col rounded-lg border border-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">
           Branch Performance (MTD){metrics.length === 1 ? ` — ${metrics[0].label}` : ""}
         </h2>
         <div className="flex items-center gap-2">
@@ -190,7 +190,7 @@ export function BranchPerformanceBars({
                 setMetric(e.target.value);
                 setExpanded(false);
               }}
-              className="h-7 rounded border border-border-strong px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="h-7 rounded-md border border-border-strong px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               {metrics.map((m) => (
                 <option key={m.key} value={m.key}>

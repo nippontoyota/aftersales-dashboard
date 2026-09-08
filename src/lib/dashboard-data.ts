@@ -17,13 +17,13 @@ export async function loadNavState(
   admin: AdminAccount,
 ): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean }> {
   const canUpload = admin.role !== "regional";
-  if (admin.role === "hq") return { companyTabs: true, dashboardLabel: "Dashboard", canUpload };
+  if (admin.role === "hq") return { companyTabs: true, dashboardLabel: "Executive Overview", canUpload };
   const dates = await listSnapshotDates();
   const latest = dates.at(-1);
   const latestPublished = latest ? await isDatePublished(latest) : true;
   return {
     companyTabs: latestPublished,
-    dashboardLabel: latestPublished ? "Dashboard" : admin.role === "regional" ? "Regional Report" : "Daily Report",
+    dashboardLabel: latestPublished ? "Executive Overview" : admin.role === "regional" ? "Regional Report" : "Daily Report",
     canUpload,
   };
 }

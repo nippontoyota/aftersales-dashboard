@@ -7,6 +7,7 @@ import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { AlertsPanel, TKM_WATCHED } from "../dashboard/alerts-panel";
+import { CancellationFlag } from "../cancellations/cancellation-flag";
 
 export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string; watched?: string }> }) {
   const admin = await getCurrentAdmin();
@@ -43,9 +44,9 @@ async function AlertsContent({
 
   if (!data) {
     return (
-      <div className="p-6">
+      <div className="mx-auto max-w-[1600px] p-6">
         <h1 className="text-lg font-semibold text-fg">Alerts</h1>
-        <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
+        <div className="mt-4 rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
         </div>
       </div>
@@ -53,7 +54,7 @@ async function AlertsContent({
   }
 
   return (
-    <div className="p-6">
+    <div className="mx-auto max-w-[1600px] p-6">
       <DashboardPageHeader
         title="Alerts"
         basePath="/alerts"
@@ -69,8 +70,11 @@ async function AlertsContent({
         isCompanyScope={data.isCompanyScope}
         extraParams={isTkm ? { watched: "tkm" } : undefined}
       />
-      <p className="mt-1 text-xs text-fg-faint">Watching: {isTkm ? "BPU, Offtake, Parts Retail, PM+OC (TKM Targets)" : "VAS (Dashboard)"}</p>
-      <div className="mt-4">
+      <p className="mt-3 text-xs text-fg-faint">Watching: {isTkm ? "BPU, Offtake, Parts Retail, PM+OC (TKM Targets)" : "VAS (Dashboard)"}</p>
+      <Suspense fallback={null}>
+        <CancellationFlag admin={admin} />
+      </Suspense>
+      <div className="mt-3">
         <AlertsPanel branches={data.filteredBranches} variant="full" watched={isTkm ? TKM_WATCHED : undefined} />
       </div>
     </div>

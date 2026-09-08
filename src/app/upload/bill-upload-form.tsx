@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type PartialData = { invoiceNumber: string | null; taxableValue: number | null; invoiceDate: string | null };
@@ -118,6 +118,21 @@ export function BillUploadForm() {
   const successResults = results.filter((r) => r.success);
   const errorResults = results.filter((r) => r.error);
 
+  // After a successful upload the form resets and router.refresh() re-renders
+  // the page; without this the HQ user can be left scrolled away from the
+  // green "uploaded" summary with no visible sign it worked (same issue the
+  // branch upload cards had).
+  const outcomeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Not while a file still needs manual entry — the warn form below the
+    // main form is where the user needs to be then, not past it.
+    if (results.length === 0 || manualFile) return;
+    const scroll = () => outcomeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    scroll();
+    const t = setTimeout(scroll, 250);
+    return () => clearTimeout(t);
+  }, [results, manualFile]);
+
   return (
     <div className="space-y-4">
       {!manualFile && (
@@ -141,7 +156,7 @@ export function BillUploadForm() {
               required
               value={category}
               onChange={(e) => setCategory(e.target.value as "" | "scrap" | "used_oil")}
-              className="mt-1 h-9 w-full rounded border border-border-strong bg-surface px-2 text-sm"
+              className="mt-1 h-9 w-full rounded-md border border-border-strong bg-surface px-2 text-sm"
             >
               <option value="" disabled>
                 Choose Scrap or Used Oil…
@@ -167,7 +182,7 @@ export function BillUploadForm() {
               id="bill-fallback-date"
               name="manualInvoiceDate"
               type="date"
-              className="mt-1 h-9 w-full rounded border border-border-strong bg-surface px-3 text-sm"
+              className="mt-1 h-9 w-full rounded-md border border-border-strong bg-surface px-3 text-sm"
             />
             <p className="mt-0.5 text-xs text-fg-faint">
               Used only for files whose date can&apos;t be read from the PDF. Handy when backfilling a whole month.
@@ -181,7 +196,7 @@ export function BillUploadForm() {
           <button
             type="submit"
             disabled={pending}
-            className="h-9 rounded bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
+            className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
           >
             {pending ? "Uploading…" : "Upload"}
           </button>
@@ -207,7 +222,7 @@ export function BillUploadForm() {
               required
               value={category}
               onChange={(e) => setCategory(e.target.value as "" | "scrap" | "used_oil")}
-              className="mt-1 h-9 w-full rounded border border-border-strong bg-surface px-2 text-sm"
+              className="mt-1 h-9 w-full rounded-md border border-border-strong bg-surface px-2 text-sm"
             >
               <option value="" disabled>
                 Choose Scrap or Used Oil…
@@ -228,7 +243,7 @@ export function BillUploadForm() {
               value={manualInvoice}
               onChange={(e) => setManualInvoice(e.target.value)}
               placeholder="e.g. AA26-01514"
-              className="mt-1 h-9 w-full rounded border border-border-strong px-3 text-sm"
+              className="mt-1 h-9 w-full rounded-md border border-border-strong px-3 text-sm"
             />
             {manualPartial?.invoiceNumber && (
               <p className="mt-0.5 text-xs text-good">Auto-detected: {manualPartial.invoiceNumber}</p>
@@ -248,7 +263,7 @@ export function BillUploadForm() {
               value={manualTaxable}
               onChange={(e) => setManualTaxable(e.target.value)}
               placeholder="e.g. 1203.00"
-              className="mt-1 h-9 w-full rounded border border-border-strong px-3 text-sm"
+              className="mt-1 h-9 w-full rounded-md border border-border-strong px-3 text-sm"
             />
             {manualPartial?.taxableValue !== null && manualPartial?.taxableValue !== undefined && (
               <p className="mt-0.5 text-xs text-good">Auto-detected: {manualPartial.taxableValue}</p>
@@ -265,7 +280,7 @@ export function BillUploadForm() {
               required
               value={manualDate}
               onChange={(e) => setManualDate(e.target.value)}
-              className="mt-1 h-9 w-full rounded border border-border-strong bg-surface px-3 text-sm"
+              className="mt-1 h-9 w-full rounded-md border border-border-strong bg-surface px-3 text-sm"
             />
             {manualPartial?.invoiceDate && (
               <p className="mt-0.5 text-xs text-good">Auto-detected: {manualPartial.invoiceDate}</p>
@@ -280,14 +295,14 @@ export function BillUploadForm() {
             <button
               type="submit"
               disabled={pending}
-              className="h-9 rounded bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
+              className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
             >
               {pending ? "Saving…" : "Save Bill"}
             </button>
             <button
               type="button"
               onClick={() => { setManualFile(null); setManualPartial(null); setResults([]); }}
-              className="h-9 rounded border border-border-strong px-4 text-sm font-medium text-fg-muted hover:bg-surface-2"
+              className="h-9 rounded-md border border-border-strong px-4 text-sm font-medium text-fg-muted hover:bg-surface-2"
             >
               Cancel
             </button>
@@ -295,36 +310,38 @@ export function BillUploadForm() {
         </form>
       )}
 
-      {successResults.length > 0 && (
-        <div className="rounded-md border border-good/30 bg-good-soft p-4">
-          <p className="text-sm font-medium text-good">
-            {successResults.length === 1 ? "Bill uploaded successfully" : `${successResults.length} bills uploaded successfully`}
-          </p>
-          <ul className="mt-2 space-y-1">
-            {successResults.map((r) => (
-              <li key={r.fileName} className="text-xs text-good">
-                {r.invoiceNumber} — Rs {Number(r.taxableValue).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                {r.invoiceDate ? ` — ${r.invoiceDate}` : ""} — {r.fileName}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <div ref={outcomeRef} className="space-y-4">
+        {successResults.length > 0 && (
+          <div className="rounded-md border border-good/30 bg-good-soft p-4">
+            <p className="text-sm font-medium text-good">
+              {successResults.length === 1 ? "Bill uploaded successfully" : `${successResults.length} bills uploaded successfully`}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {successResults.map((r) => (
+                <li key={r.fileName} className="text-xs text-good">
+                  {r.invoiceNumber} — Rs {Number(r.taxableValue).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  {r.invoiceDate ? ` — ${r.invoiceDate}` : ""} — {r.fileName}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-      {errorResults.length > 0 && (
-        <div className="rounded-md border border-bad/30 bg-bad-soft p-4">
-          <p className="text-sm font-medium text-bad">
-            {errorResults.length === 1 ? "1 file had an error" : `${errorResults.length} files had errors`}
-          </p>
-          <ul className="mt-2 space-y-1">
-            {errorResults.map((r) => (
-              <li key={r.fileName} className="text-xs text-bad">
-                {r.fileName}: {r.error}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {errorResults.length > 0 && (
+          <div className="rounded-md border border-bad/30 bg-bad-soft p-4">
+            <p className="text-sm font-medium text-bad">
+              {errorResults.length === 1 ? "1 file had an error" : `${errorResults.length} files had errors`}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {errorResults.map((r) => (
+                <li key={r.fileName} className="text-xs text-bad">
+                  {r.fileName}: {r.error}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

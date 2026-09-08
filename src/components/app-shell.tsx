@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions";
 import { ThemeToggle } from "./theme-toggle";
@@ -11,11 +11,17 @@ import { ThemeToggle } from "./theme-toggle";
 // day-to-day is gated by publish status instead (see dashboard-data.ts),
 // not by nav item.
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", key: "dashboard" as const, requiresDashboard: true, companyWide: false, uploadOnly: false },
+  // `label` here is a fallback only — AppShell always overrides the dashboard
+  // item's label with the `dashboardLabel` prop ("Executive Overview", or the
+  // pre-publish "Daily Report" / "Regional Report").
+  { href: "/dashboard", label: "Executive Overview", key: "dashboard" as const, requiresDashboard: true, companyWide: false, uploadOnly: false },
   { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
   { href: "/alerts", label: "Alerts", key: "alerts" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
-  { href: "/branches", label: "Branches", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
+  { href: "/branches", label: "Branch Performance", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
   { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
+  // Not gated by publish (companyWide:false) — a branch admin should always be
+  // able to see its own cancellations; the page scopes rows to the account.
+  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false },
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true },
 ];
 
@@ -95,6 +101,15 @@ function ReportsIcon() {
   );
 }
 
+function CancellationsIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <circle cx="10" cy="10" r="7" />
+      <path d="M5.5 5.5l9 9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function DataIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
@@ -170,12 +185,27 @@ function useSidebarCollapsed(): [boolean, () => void] {
   return [collapsed, toggle];
 }
 
+/** Spinner shown on a nav item while its (dynamic) route loads — the
+ * dashboard pages Suspend on a slow query, so a click can otherwise sit with
+ * no feedback for a beat. Must render inside a <Link> for useLinkStatus. */
+function NavPending() {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return (
+    <svg className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
+      <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const ICONS: Record<NavKey, () => React.ReactElement> = {
   dashboard: DashboardIcon,
   "tkm-targets": TkmTargetsIcon,
   alerts: AlertsIcon,
   branches: BranchesIcon,
   reports: ReportsIcon,
+  cancellations: CancellationsIcon,
   upload: UploadIcon,
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,
@@ -187,7 +217,7 @@ export function AppShell({
   isHq = false,
   companyTabs = true,
   canUpload = true,
-  dashboardLabel = "Dashboard",
+  dashboardLabel = "Executive Overview",
   identity,
   children,
 }: {
@@ -206,7 +236,7 @@ export function AppShell({
    * upload. Defaults to true. */
   canUpload?: boolean;
   /** Label for the /dashboard nav item — "Daily Report" / "Regional Report"
-   * for a pre-publish raw view, "Dashboard" otherwise. */
+   * for a pre-publish raw view, "Executive Overview" otherwise. */
   dashboardLabel?: string;
   /** e.g. "CO01B branch" or "HQ admin" — shown under the account area at the bottom of the sidebar. */
   identity: string;
@@ -242,6 +272,7 @@ export function AppShell({
       >
         <Icon />
         {!compact && item.label}
+        {!compact ? <NavPending /> : null}
       </Link>
     );
   };
@@ -342,7 +373,7 @@ export function AppShell({
               type="button"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
-              className="rounded p-1.5 text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
+              className="rounded-md p-1.5 text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:hidden"
             >
               <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
                 <path d="M3 5h14M3 10h14M3 15h14" strokeLinecap="round" />

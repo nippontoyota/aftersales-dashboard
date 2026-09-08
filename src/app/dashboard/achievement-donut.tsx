@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { BranchReport, OnlineStoreBreakdown } from "@/lib/report";
 import { achievementRatio, achievementTone, hasActualWithoutTarget, type AchievementTone } from "@/lib/aggregate";
 import { formatCompact, formatPercent } from "@/lib/format";
+import { useSyncedMetric } from "./metric-sync";
 
 export type DonutMetricConfig = { key: string; label: string; actual: keyof BranchReport; target: keyof BranchReport };
 
@@ -13,9 +14,9 @@ export type DonutMetricConfig = { key: string; label: string; actual: keyof Bran
 const DEFAULT_METRICS: DonutMetricConfig[] = [{ key: "vas", label: "VAS", actual: "vasAchievementForTheMonth", target: "vasBillTarget" }];
 
 const TONE_HEX: Record<AchievementTone, string> = {
-  good: "#10b981",
-  warn: "#f59e0b",
-  critical: "#ef4444",
+  good: "var(--color-good-solid)",
+  warn: "var(--color-warn-solid)",
+  critical: "var(--color-bad-solid)",
   neutral: "var(--color-border-strong)",
 };
 
@@ -59,7 +60,7 @@ function BreakdownLine({ label, actual, target }: { label: string; actual: numbe
 }
 
 export function AchievementDonut({ branches, metrics = DEFAULT_METRICS }: { branches: BranchReport[]; metrics?: DonutMetricConfig[] }) {
-  const [metric, setMetric] = useState<string>(metrics[0]?.key ?? "");
+  const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
   const [openTone, setOpenTone] = useState<AchievementTone | null>(null);
   const [openBreakdownBranch, setOpenBreakdownBranch] = useState<string | null>(null);
   const config = metrics.find((m) => m.key === metric) ?? metrics[0];
@@ -95,16 +96,16 @@ export function AchievementDonut({ branches, metrics = DEFAULT_METRICS }: { bran
   );
 
   return (
-    <div className="rounded-md border border-border bg-surface p-4">
+    <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">
           Target Achievement Breakdown{metrics.length === 1 ? ` — ${metrics[0].label}` : ""}
         </h2>
         {metrics.length > 1 ? (
           <select
             value={metric}
             onChange={(e) => setMetric(e.target.value)}
-            className="h-7 rounded border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="h-7 rounded-md border border-border-strong px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {metrics.map((m) => (
               <option key={m.key} value={m.key}>

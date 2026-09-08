@@ -18,6 +18,7 @@ import { BranchPerformanceBars, type BarsMetricConfig } from "../dashboard/branc
 import { BranchPerformanceHeatmap, type HeatmapMetricConfig } from "../dashboard/branch-performance-heatmap";
 import { BranchRankingChart, TKM_RANKING_METRICS } from "../dashboard/branch-ranking-chart";
 import { InsightsPanel } from "../dashboard/insights-panel";
+import { MetricSyncProvider } from "../dashboard/metric-sync";
 import { RegionScorecard, type RegionMetricConfig } from "../dashboard/region-scorecard";
 import { TkmReportTable } from "../dashboard/tkm-report-table";
 import { TrendChart, type TrendMetricConfig } from "../dashboard/trend-chart";
@@ -102,9 +103,9 @@ async function TkmTargetsContent({
 
   if (!data || !data.report) {
     return (
-      <div className="p-6">
+      <div className="mx-auto max-w-[1600px] p-6">
         <h1 className="text-lg font-semibold text-fg">TKM Targets</h1>
-        <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
+        <div className="mt-4 rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
         </div>
       </div>
@@ -139,7 +140,7 @@ async function TkmTargetsContent({
   const alertsHref = `/alerts?${alertsHrefParams.toString()}`;
 
   return (
-    <div className="p-6">
+    <div className="mx-auto max-w-[1600px] p-6">
       <DashboardPageHeader
         title="TKM Targets"
         basePath="/tkm-targets"
@@ -201,14 +202,18 @@ async function TkmTargetsContent({
         />
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TrendChart seriesByMetric={trendSeriesByMetric} metrics={TREND_METRICS} />
-        <AchievementDonut branches={filteredBranches} metrics={DONUT_METRICS} />
-      </div>
+      {/* Trend / Achievement / Region Scorecard share one metric selection —
+          pick BPU (etc.) in any of the three dropdowns and all three switch. */}
+      <MetricSyncProvider initialMetric={TREND_METRICS[0].key}>
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <TrendChart seriesByMetric={trendSeriesByMetric} metrics={TREND_METRICS} />
+          <AchievementDonut branches={filteredBranches} metrics={DONUT_METRICS} />
+        </div>
 
-      <div className="mt-4">
-        <RegionScorecard branches={report.branches} monthSnapshots={monthSnapshots} date={date} metrics={REGION_METRICS} />
-      </div>
+        <div className="mt-4">
+          <RegionScorecard branches={report.branches} monthSnapshots={monthSnapshots} date={date} metrics={REGION_METRICS} />
+        </div>
+      </MetricSyncProvider>
 
       <div className="mt-4 space-y-4">
         <BranchPerformanceHeatmap branches={report.branches} metrics={HEATMAP_METRICS} />

@@ -50,22 +50,24 @@ export function BranchDailyReport({
   const todayHeader = daysSincePrevious === null || daysSincePrevious === 1 ? "Today" : `Last ${daysSincePrevious} days`;
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <h1 className="text-lg font-semibold text-fg">
-          Daily Report — <span className="tabular-nums">{branch}</span>
-        </h1>
+    <div className="mx-auto max-w-[1600px] p-6">
+      <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-fg">
+            Daily Report — <span className="tabular-nums">{branch}</span>
+          </h1>
+          <p className="mt-1 max-w-2xl text-xs text-fg-faint">
+            Your branch&apos;s figures for this date, not yet published by HQ. Rows from HQ&apos;s BA Tool file stay blank until
+            it&apos;s uploaded. Pick an earlier, published date to see the full company dashboard. Data as of {uploadedAtLabel} IST.
+          </p>
+        </div>
         <DateSelect dates={dates} selected={date} region="All" />
       </div>
-      <p className="mt-1 text-xs text-fg-faint">
-        Your branch&apos;s figures for this date, not yet published by HQ. Rows from HQ&apos;s BA Tool file stay blank until it&apos;s
-        uploaded. Pick an earlier, published date to see the full company dashboard. Data as of {uploadedAtLabel} IST.
-      </p>
 
-      <div className="mt-4 max-h-[calc(100dvh-11rem)] overflow-auto rounded-md border border-border bg-surface">
+      <div className="mt-4 max-h-[calc(100dvh-11rem)] overflow-auto rounded-lg border border-border bg-surface shadow-card">
         <table className="w-full min-w-[560px] border-separate border-spacing-0 text-[13px]">
           <thead>
-            <tr className="text-[11px] uppercase tracking-wide text-fg-faint [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:border-b [&>th]:border-border [&>th]:bg-surface">
+            <tr className="text-[11px] uppercase tracking-[0.07em] text-fg-faint [&>th]:sticky [&>th]:top-0 [&>th]:z-10 [&>th]:border-b [&>th]:border-border [&>th]:bg-surface">
               <th className="py-2 pl-4 pr-3 text-left font-medium">Metric</th>
               <th className="py-2 pl-4 text-right font-medium">{todayHeader}</th>
               <th className="py-2 pl-4 text-right font-medium">MTD</th>
@@ -80,7 +82,7 @@ export function BranchDailyReport({
                   <tr key={`g-${i}`}>
                     <td
                       colSpan={5}
-                      className="border-t border-border bg-surface-2 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle"
+                      className="border-t border-border bg-surface-2 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-subtle"
                     >
                       {row.label}
                     </td>

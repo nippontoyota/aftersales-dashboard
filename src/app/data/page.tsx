@@ -22,7 +22,7 @@ export default async function DataPage() {
   return (
     <AppShell current="data" showDashboardLink={admin.canViewDashboard} isHq identity="HQ admin">
       <div className="mx-auto w-full max-w-3xl p-6">
-        <h1 className="text-lg font-semibold text-fg">Accessories Staff</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-fg">Accessories Staff</h1>
         <p className="mt-1 text-sm text-fg-subtle">
           Who counts as Accessories-department staff, per branch — used to identify Accessories sales in each branch&apos;s
           SSRV089 report (matched against &quot;Close SA Name&quot;, see the GUS Parts/Labour MTD formula). Add or remove a
@@ -32,12 +32,12 @@ export default async function DataPage() {
         <div className="mt-6 space-y-6">
           {(Object.keys(REGIONS) as RegionName[]).map((region) => (
             <div key={region}>
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-faint">{region}</h2>
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-faint">{region}</h2>
               <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {REGIONS[region].map((branch) => {
                   const staff = staffByBranch.get(branch) ?? [];
                   return (
-                    <div key={branch} className="rounded-md border border-border bg-surface p-3.5">
+                    <div key={branch} className="rounded-lg border border-border bg-surface p-3.5 shadow-card">
                       <div className="text-sm font-semibold text-fg">{branch}</div>
 
                       {staff.length === 0 ? (
@@ -69,11 +69,11 @@ export default async function DataPage() {
                           name="name"
                           placeholder="Add a name"
                           required
-                          className="h-8 min-w-0 flex-1 rounded border border-border-strong px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          className="h-8 min-w-0 flex-1 rounded-md border border-border-strong px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         />
                         <button
                           type="submit"
-                          className="h-8 shrink-0 rounded bg-accent px-2.5 text-xs font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          className="h-8 shrink-0 rounded-md bg-accent px-2.5 text-xs font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         >
                           Add
                         </button>

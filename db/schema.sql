@@ -282,3 +282,68 @@ create index if not exists idx_bill_uploads_category_invoice_date
   on bill_uploads (category, invoice_date);
 create index if not exists idx_bill_uploads_branch_invoice_date
   on bill_uploads (branch, invoice_date);
+
+-- Tax Invoice Cancellation Report (2026-09-07, at the user's request) — the
+-- per-branch PDF export from the DMS listing cancelled tax invoices, with
+-- the reason and the RO each belonged to. Each BRANCH uploads its own,
+-- whenever a cancellation comes in — the report can be run for a single
+-- day, a date range, or a whole month (HQ can also upload — the branch is
+-- taken from the report header). One row per cancelled invoice, keyed by
+-- its DocNo. This is a CONTROL / AUDIT feed only — it never touches any
+-- revenue figure. scom205 (the Total Revenue source) already excludes
+-- cancelled invoices as of its own run time (confirmed with the user), so
+-- the value is (a) reconciliation — catching a cancellation that landed
+-- after a closed month's last scom205 pull and is therefore still in that
+-- frozen figure — and (b) a branch data-quality metric (how many invoices
+-- got cancelled, why, how much). See src/lib/cancellation/.
+--
+-- Upload semantics: each upload UPSERTs the rows it carries, keyed by DocNo,
+-- and removes nothing — a cancellation is terminal (it never un-cancels),
+-- so a partial-range upload accumulates and a re-upload just refreshes.
+-- `month` is each row's own cancel-date month. invoice_cancellation_files
+-- keeps the latest uploaded PDF per (branch, month).
+create table if not exists invoice_cancellations (
+  doc_no          text        primary key,           -- the cancelled invoice number (TXA…/BSA…/INA…/ASA…)
+  branch          text        not null,
+  month           text        not null,              -- 'YYYY-MM' of cancel_date — the month this cancellation is grouped under
+  cancel_date     date        not null,
+  -- Full "Cancel Date/Time" from the report (IST), e.g. 2026-08-31 12:44+05:30.
+  -- Used by the reconciliation check to compare against when the branch's
+  -- scom205 was last pulled/uploaded. Null on rows saved before this column
+  -- existed — the check falls back to cancel_date for those.
+  cancel_at       timestamptz,
+  cancel_reason   text        not null,              -- normalized: 'Data Entry Mistake' | 'Cancelled for Warranty' | 'Wrong Tax Calculation' | 'Others - Dealer' | 'Others - Customer' | 'Customer Mind Change' | other (verbatim)
+  ref_doc_no      text,                              -- the RO / job order (GSJ…/BPE…) — the join key to SSRV089; null if the report omitted it
+  reg_no          text,
+  owner_code      text,
+  owner_name      text,
+  doc_customer    text,                              -- billed-to party (can differ from owner — e.g. an insurer)
+  issue_date      date,
+  before_tax      numeric     not null,
+  tax             numeric     not null,
+  after_tax       numeric     not null,
+  cancelled_by    text,
+  source_file_name text       not null,
+  uploaded_at     timestamptz not null,
+  uploaded_by     text        not null
+);
+create index if not exists idx_invoice_cancellations_branch_month
+  on invoice_cancellations (branch, month);
+create index if not exists idx_invoice_cancellations_ref_doc
+  on invoice_cancellations (ref_doc_no);
+-- Added after the table already existed in production.
+alter table invoice_cancellations add column if not exists cancel_at timestamptz;
+
+-- Retains the uploaded PDF bytes, one per (branch, month), so the source is
+-- there to look at later — same pattern as raw_report_uploads. Kept in its
+-- own table rather than a bytea column on invoice_cancellations because that
+-- table has one row PER cancelled invoice, not one per file.
+create table if not exists invoice_cancellation_files (
+  branch           text        not null,
+  month            text        not null,
+  uploaded_at      timestamptz not null,
+  uploaded_by      text        not null,
+  source_file_name text        not null,
+  file_data        bytea       not null,
+  primary key (branch, month)
+);

@@ -8,6 +8,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
 import { BranchRankingChart } from "../dashboard/branch-ranking-chart";
+import { RevenuePerCarLeaderboard } from "../dashboard/revenue-per-car-leaderboard";
 import { RevenuePerVehicleTable } from "../dashboard/revenue-per-vehicle-table";
 
 export default async function BranchesPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
@@ -40,9 +41,9 @@ async function BranchesContent({
 
   if (!data) {
     return (
-      <div className="p-6">
-        <h1 className="text-lg font-semibold text-fg">Branches</h1>
-        <div className="mt-4 rounded border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
+      <div className="mx-auto max-w-[1600px] p-6">
+        <h1 className="text-lg font-semibold text-fg">Branch Performance</h1>
+        <div className="mt-4 rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           {admin.role === "hq" ? "No BA Tool reports have been uploaded yet." : "No BA Tool reports have been uploaded yet — check back once HQ uploads a day's data."}
         </div>
       </div>
@@ -50,9 +51,9 @@ async function BranchesContent({
   }
 
   return (
-    <div className="p-6">
+    <div className="mx-auto max-w-[1600px] p-6">
       <DashboardPageHeader
-        title="Branches"
+        title="Branch Performance"
         basePath="/branches"
         date={data.date}
         region={data.region}
@@ -66,6 +67,10 @@ async function BranchesContent({
         isCompanyScope={data.isCompanyScope}
       />
       <div className="mt-4 space-y-4">
+        <RevenuePerCarLeaderboard
+          branches={data.filteredBranches}
+          highlightBranch={admin.role === "branch" ? admin.branch : null}
+        />
         <BranchPerformanceHeatmap branches={data.filteredBranches} />
         <BranchRankingChart branches={data.filteredBranches} defaultOpen />
         <RevenuePerVehicleTable branches={data.filteredBranches} />

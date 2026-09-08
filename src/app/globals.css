@@ -48,25 +48,45 @@
   --color-cat-south: #eb6834;
   --color-cat-north: #1baf7a;
 
+  /* KPI-card identity hues — a soft tint for the icon chip + a solid for the
+     hairline accent on top of each card. Distinct enough to tell five cards
+     apart at a glance; muted enough not to shout. Lifted in dark (see below). */
+  --color-violet-soft: #f5f3ff;
+  --color-violet: #7c3aed;
+  --color-indigo-soft: #eef2ff;
+  --color-indigo: #4f46e5;
+  --color-teal-soft: #f0fdfa;
+  --color-teal: #0d9488;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Panel elevation — a whisper of depth so cards lift off the canvas
+     without a hard shadow. Barely visible on the near-black dark canvas
+     (where the border does the separating instead), stronger in light. */
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-card-hover: 0 2px 4px rgb(15 23 42 / 0.06), 0 4px 12px rgb(15 23 42 / 0.08);
+  --shadow-pop: 0 4px 12px rgb(15 23 42 / 0.1), 0 12px 32px rgb(15 23 42 / 0.12);
 }
 
 @layer base {
   .dark {
     --color-canvas: #05070c; /* near-black page ground */
-    --color-surface: #0c1017; /* cards / sidebar — barely lifted off canvas */
-    --color-surface-2: #161b25; /* hover / subtle inset */
-    --color-surface-3: #232b39; /* stronger inset */
+    --color-surface: #0e131d; /* cards / sidebar — lifted just enough to read as a panel */
+    --color-surface-2: #191f2b; /* hover / subtle inset */
+    --color-surface-3: #252d3c; /* stronger inset */
 
     --color-fg: #e9eef5;
     --color-fg-muted: #b9c2d0;
     --color-fg-subtle: #8a94a4;
     --color-fg-faint: #5c6675;
 
-    --color-border: #1b2130;
-    --color-border-strong: #2b3444;
-    --color-border-subtle: #12161f;
+    /* Borders carry the card-vs-canvas separation in dark (shadows don't
+       show on near-black), so they run a touch warmer/brighter than the
+       old hairline. */
+    --color-border: #262d3d;
+    --color-border-strong: #38435a;
+    --color-border-subtle: #171d29;
 
     --color-accent: #dc2626;
     --color-accent-hover: #ef4444;
@@ -91,6 +111,13 @@
     --color-cat-south: #f0885c;
     --color-cat-north: #3fc79a;
 
+    --color-violet-soft: #1e1633;
+    --color-violet: #a78bfa;
+    --color-indigo-soft: #171a37;
+    --color-indigo: #818cf8;
+    --color-teal-soft: #06231f;
+    --color-teal: #2dd4bf;
+
     color-scheme: dark;
   }
 
@@ -111,4 +138,47 @@
 body {
   background: var(--color-canvas);
   color: var(--color-fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Thin, theme-tinted scrollbars for the many scroll panels (sticky-header
+   tables, the Alerts list, wide report tables). The transparent border +
+   background-clip trick gives the thumb padding so it reads as a slim pill
+   rather than a chunky bar. Firefox gets the two-property version. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-strong);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-fg-faint);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Respect reduced-motion for the transitions added across the dashboard
+   (card hovers, expand/collapse, selector changes). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
