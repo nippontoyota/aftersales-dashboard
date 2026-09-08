@@ -26,13 +26,17 @@ export type AdminAccount =
   | { username: string; passwordHash: string; salt: string; role: "branch"; branch: string; canViewDashboard: true }
   // Read-only regional manager — scoped to `region` before HQ publishes,
   // full company dashboard after. Never uploads (see upload/page.tsx etc.).
-  | { username: string; passwordHash: string; salt: string; role: "regional"; region: RegionName; canViewDashboard: true };
+  | { username: string; passwordHash: string; salt: string; role: "regional"; region: RegionName; canViewDashboard: true }
+  // Read-only VP Service — its own executive view at /vp: company-wide
+  // always, no branch/region/publish gate, no uploads, no HQ tools. Can
+  // raise query flags to HQ (see vp-flags/store.ts).
+  | { username: string; passwordHash: string; salt: string; role: "vp_service"; canViewDashboard: true };
 
 type AdminRow = {
   username: string;
   password_hash: string;
   salt: string;
-  role: "hq" | "branch" | "regional";
+  role: "hq" | "branch" | "regional" | "vp_service";
   branch: string | null;
   region: string | null;
 };
@@ -41,6 +45,7 @@ function toAccount(row: AdminRow): AdminAccount {
   const base = { username: row.username, passwordHash: row.password_hash, salt: row.salt, canViewDashboard: true } as const;
   if (row.role === "branch") return { ...base, role: "branch", branch: row.branch! };
   if (row.role === "regional") return { ...base, role: "regional", region: row.region as RegionName };
+  if (row.role === "vp_service") return { ...base, role: "vp_service" };
   return { ...base, role: "hq" };
 }
 
@@ -49,6 +54,7 @@ function toAccount(row: AdminRow): AdminAccount {
 export function adminIdentityLabel(admin: AdminAccount): string {
   if (admin.role === "hq") return "HQ admin";
   if (admin.role === "regional") return `${admin.region} regional manager`;
+  if (admin.role === "vp_service") return "VP Service";
   return `${admin.branch} branch`;
 }
 

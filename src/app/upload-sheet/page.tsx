@@ -13,6 +13,7 @@ export default async function UploadSheetPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const admin = await getCurrentAdmin();
+  if (admin?.role === "vp_service") redirect("/vp");
   if (!admin || admin.role !== "hq") {
     redirect("/upload");
   }
