@@ -51,7 +51,7 @@ Recompute after a roster fix: `node scripts/recompute-ssrv089-accessories.mjs <B
 | ✅ done | **TI01A** | `Anoop P M` → `Anoop M` (confirmed same person) | parts **₹1,25,424** · labour **₹69,254** | roster fixed + recomputed 2026-09-08 |
 | ✅ done | **KT01A** | `Prasanth R Shenoy` → `Prasanth Shenoy` (same person, still employed) | none yet — hasn't billed since Aug | roster fixed 2026-09-08; no recompute needed |
 | — no fix | **TR01A** | `Ratheeshkumar M T` vs `Ratheesh S` | — | branch confirms **different people**; roster entry `Ratheeshkumar M T` has no DMS match — verify still employed |
-| ☐ note | **CO01B** | `Sijo M Joy` vs `Sijo Joy` | Aug only (4 rows, 28 Aug) — closed month | branch confirms **left the company**; remove from roster (Aug figures were slightly overstated, not correcting a closed month) |
+| ✅ done | **CO01B** | `Sijo M Joy` — left the company | Aug only (4 rows, 28 Aug) — closed month, not corrected | removed from roster 2026-09-08 |
 
 ### Roster names with no DMS match anywhere — verify still Accessories staff, else remove from `/data`
 - **CO01B**: `Aneesh K.P.`, `Ansal C K`
