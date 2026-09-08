@@ -114,6 +114,12 @@ A cumulative export plus daily exports means some job orders are summed 2–3× 
 
 ---
 
+## Resolved · Part Sale — External Sales filter
+
+| ✅ | Branch | Problem | Fix | Impact |
+|---|--------|---------|-----|--------|
+| ✅ | **all except CO01B** | The External Sales filter matched a literal `BillNo` prefix `"AA"`. A BillNo is `[type][branch-letter]…` — `A` = external for every branch, but the branch letter varies (`AL` IR01A, `AF` KL01A, `AD` TI01A, …), so only CO01B's `AA` ever matched. Every other branch's external part sales scored ₹0. | Parser now matches first letter `A` = external, any branch; `C`/`I`/`D`/`E` types don't count (confirmed 2026-09-08). All 28 changed September part_sale snapshots re-derived from raw rows (`scripts/backfill-part-sale-external.mts`). | Adds the Part Sale side of External Sales for ~13 branches — e.g. PH01A +₹19 K, TR01C +₹23 K, TI01A +₹8 K MTD so far. Feeds "External Sales MTD" and "% on SPR I". |
+
 ## Resolved · scom205 parser
 
 | ✅ | Branch | Problem | Fix | Impact |

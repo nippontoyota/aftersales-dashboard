@@ -117,8 +117,8 @@ export type BranchReport = {
 
   // External Sales MTD (Rs) = BA Tool's SPR External (already cumulative)
   // plus the branch's cumulative Part Sale Report "External Sales" filter
-  // (AA-billed rows, PartNo prefix match — see part-sale/parse.ts). Null
-  // whenever Part Sale Report hasn't been uploaded for this branch this
+  // (external-type-bill rows, PartNo prefix match — see part-sale/parse.ts).
+  // Null whenever Part Sale Report hasn't been uploaded for this branch this
   // month, same conservative rule as GUS Parts MTD above.
   externalSalesMtd: number | null;
 
