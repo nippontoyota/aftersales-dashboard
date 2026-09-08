@@ -113,6 +113,14 @@ A cumulative export plus daily exports means some job orders are summed 2–3× 
 
 ---
 
+## Resolved · scom205 parser
+
+| ✅ | Branch | Problem | Fix | Impact |
+|---|--------|---------|-----|--------|
+| ✅ | **TR01B** | Export changed format ~3 Sep (`.xls` → `.xlsx`) and stopped filling the "Total" column group — parser read blanks, saved 0. Only TR01B affected. | Parser now falls back to the branch-specific column group when Total is blank (a single-branch export's branch total *is* the total). Snapshots 3/4/7 Sep re-derived from raw rows 2026-09-08 (`scripts/backfill-scom205.mjs`). | BPU Parts MTD 0 → **₹9.01 L**, BPU Labour MTD 0 → **₹3.72 L** as of 7 Sep |
+
+---
+
 ## Related open items · Part Sale
 
 Same clean-up effort, different report — carried here so they don't get lost.
