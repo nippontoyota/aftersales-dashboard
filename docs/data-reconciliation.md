@@ -65,7 +65,7 @@ complete; only the per-day split and the branch Daily Report view are off.
 
 | ☐ | Branch | Problem | Fix | Impact |
 |---|--------|---------|-----|--------|
-| ☐ | **IR01A** | 3 Sep upload contains all of 1–3 Sep. Still owes **real Sept 4 and Sept 6** data (only holiday-week re-pulls of the 1–3 cumulative came in). | Branch uploads 4 Sep + 6 Sep | 1–3 Sep MTD OK once the 6-Sep duplicate is gone (see Resolved); 4–6 Sep missing |
+| ☐ | **IR01A** | 3 Sep upload contains all of 1–3 Sep. 7 Sep was fixed 2026-09-08 (see Resolved). Still owes **real Sept 4, 5 and 6** data. | Branch uploads 4 + 5 + 6 Sep as separate daily files | 1–3 Sep and 7 Sep OK; 4–6 Sep missing (VAS/volume/accessories under-counted for those 3 days) |
 | ☐ | **KL01A** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
 | ☐ | **TI01A** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
 | ☐ | **TI01B** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
@@ -110,6 +110,7 @@ A cumulative export plus daily exports means some job orders are summed 2–3× 
 |---|--------|---------|-----|--------|
 | ✅ | **CO01B** | 2 Sep upload was a partial export (19 rows, 4 advisors, no Accessories staff) | Re-parsed the correct 201-row file; snapshot + raw rows replaced 2026-09-04 (`scripts/fix-co01b-sep2-ssrv089.mjs`) | Acc. labour 0 → ₹51,813 · GUS Labour MTD 14,95,336 → **14,43,523** · GUS Parts MTD 28,92,970 → **28,39,440** |
 | ✅ | **IR01A** | The 1–3 Sep cumulative "SEP 2026" export was uploaded a 2nd time filed as 6 Sep, on top of the existing 3 Sep snapshot — Sept 1–3 counted twice for `service_info` VAS counts and the `ssrv089` accessories deduction | Deleted the 6 Sep `part_sale` / `service_info` / `ssrv089` snapshots + raw rows 2026-09-07 (`scom205` left — read straight, harmless) | IR01A Sept 1–3 no longer doubled; still owes real Sept 4 + 6 (above) |
+| ✅ | **IR01A** | Repeat of the above on **7 Sep** — the "SEP 2026" cumulative uploaded again, filed as 7 Sep, across service_info / ssrv089-GS / part_sale / scom205. Double-counted Sept 1–3 again; scom205 frozen at 3 Sep. | Branch had the correct single-day "SEP 07" files. Replaced the 7 Sep snapshots + raw rows from those (`scripts/fix-ir01a-sep7.mts`), added the BP raw uploads, deleted the phantom 6 Sep scom205. 2026-09-08. | 7 Sep now real: wheel bal/align 2/2, VAS ₹10,423, accessories ₹22,153/₹9,440; scom205 GUS MTD ₹19.39 L/₹7.74 L, BPU ₹2.07 L/₹1.21 L. |
 
 ---
 
