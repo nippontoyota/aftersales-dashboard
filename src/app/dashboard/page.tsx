@@ -41,6 +41,7 @@ export default async function DashboardPage({
   searchParams: Promise<{ date?: string; region?: string }>;
 }) {
   const admin = await getCurrentAdmin();
+  if (admin?.role === "vp_service") redirect("/vp");
   if (!admin?.canViewDashboard) {
     redirect("/upload");
   }

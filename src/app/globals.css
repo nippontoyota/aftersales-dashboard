@@ -182,3 +182,13 @@ body {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* Print / "Export to PDF" — the VP Overview prints to a clean sheet. The
+   app chrome carries `print:hidden`; here we flatten cards and force a
+   light ground so the export reads on paper regardless of theme. */
+@media print {
+  :root { --color-canvas: #ffffff; --color-surface: #ffffff; --color-surface-2: #f4f4f5; }
+  body { background: #fff; }
+  .shadow-card, [class*="shadow-"] { box-shadow: none !important; }
+  main { overflow: visible !important; }
+}

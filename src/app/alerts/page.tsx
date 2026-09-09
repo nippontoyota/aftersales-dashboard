@@ -8,9 +8,11 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { AlertsPanel, TKM_WATCHED } from "../dashboard/alerts-panel";
 import { CancellationFlag } from "../cancellations/cancellation-flag";
+import { VpFlagsPanel } from "@/components/vp-flags-panel";
 
 export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string; watched?: string }> }) {
   const admin = await getCurrentAdmin();
+  if (admin?.role === "vp_service") redirect("/vp");
   if (!admin?.canViewDashboard) redirect("/upload");
   // Company-wide pages are hidden from a branch admin until their latest
   // date is published — before that they only get the Daily Report.
@@ -73,6 +75,9 @@ async function AlertsContent({
       <p className="mt-3 text-xs text-fg-faint">Watching: {isTkm ? "BPU, Offtake, Parts Retail, PM+OC (TKM Targets)" : "VAS (Dashboard)"}</p>
       <Suspense fallback={null}>
         <CancellationFlag admin={admin} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <VpFlagsPanel admin={admin} />
       </Suspense>
       <div className="mt-3">
         <AlertsPanel branches={data.filteredBranches} variant="full" watched={isTkm ? TKM_WATCHED : undefined} />

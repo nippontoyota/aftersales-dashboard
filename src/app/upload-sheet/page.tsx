@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadPendingUploadsSummary } from "@/lib/pending-uploads";
-import { yesterdayIso } from "@/lib/utils";
+import { reportingDate } from "@/lib/reporting-date";
+import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { PendingUploadsPanel } from "./pending-uploads-panel";
 import { UploadSheetForm } from "./upload-sheet-form";
 import { UploadSheetDatePicker } from "./upload-sheet-date-picker";
@@ -13,13 +14,16 @@ export default async function UploadSheetPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const admin = await getCurrentAdmin();
+  if (admin?.role === "vp_service") redirect("/vp");
   if (!admin || admin.role !== "hq") {
     redirect("/upload");
   }
 
   const params = await searchParams;
-  // Use the requested date, defaulting to yesterday if none provided.
-  const targetDate = params.date ?? yesterdayIso();
+  // Defaults to the current computed report date (what branches are
+  // uploading for right now); HQ can pick any date here for a catch-up or
+  // correction.
+  const targetDate = params.date ?? reportingDate(await loadReportHolidaySet());
 
   const summary = await loadPendingUploadsSummary(targetDate);
 

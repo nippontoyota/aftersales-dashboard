@@ -23,24 +23,53 @@ create table if not exists admins (
   -- Every branch admin can still upload regardless of this flag — it only
   -- gates the dashboard page.
   dashboard_access boolean not null default false,
-  constraint admins_role_check check (role in ('hq', 'branch', 'regional')),
+  -- 'vp_service' is read-only and company-wide (no branch/region/publish
+  -- gate) — the VP Service executive view at /vp. See src/app/vp/*.
+  constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service')),
   constraint admins_role_scope_consistency check (
-    (role = 'branch'   and branch is not null and region is null) or
-    (role = 'hq'       and branch is null     and region is null) or
-    (role = 'regional' and branch is null     and region in ('North', 'Central', 'South'))
+    (role = 'branch'     and branch is not null and region is null) or
+    (role = 'hq'         and branch is null     and region is null) or
+    (role = 'regional'   and branch is null     and region in ('North', 'Central', 'South')) or
+    (role = 'vp_service' and branch is null     and region is null)
   )
 );
 -- Upgrade an existing database:
 alter table admins add column if not exists region text;
 alter table admins drop constraint if exists branch_role_consistency;
 alter table admins drop constraint if exists admins_role_check;
-alter table admins add constraint admins_role_check check (role in ('hq', 'branch', 'regional'));
+alter table admins add constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service'));
 alter table admins drop constraint if exists admins_role_scope_consistency;
 alter table admins add constraint admins_role_scope_consistency check (
-  (role = 'branch'   and branch is not null and region is null) or
-  (role = 'hq'       and branch is null     and region is null) or
-  (role = 'regional' and branch is null     and region in ('North', 'Central', 'South'))
+  (role = 'branch'     and branch is not null and region is null) or
+  (role = 'hq'         and branch is null     and region is null) or
+  (role = 'regional'   and branch is null     and region in ('North', 'Central', 'South')) or
+  (role = 'vp_service' and branch is null     and region is null)
 );
+
+-- VP Service → HQ query/flag threads. The VP pins a flag to whatever they
+-- were looking at (page + date + optional region/branch/metric/value); HQ
+-- replies in-app; the relevant regional manager sees flags touching their
+-- branches. See src/lib/vp-flags/store.ts.
+create table if not exists vp_flags (
+  id bigint generated always as identity primary key,
+  created_by text not null references admins(username),
+  created_at timestamptz not null default now(),
+  context_page text not null,
+  context_date date,
+  context_region text,
+  context_branch text,
+  context_metric text,
+  context_value text,
+  note text not null,
+  status text not null default 'open',
+  hq_reply text,
+  replied_by text references admins(username),
+  replied_at timestamptz,
+  constraint vp_flags_status_check check (status in ('open', 'answered', 'closed')),
+  constraint vp_flags_page_check check (context_page in ('overview', 'region', 'branch'))
+);
+create index if not exists vp_flags_status_idx on vp_flags (status, created_at desc);
+create index if not exists vp_flags_branch_idx on vp_flags (context_branch) where context_branch is not null;
 
 -- One row per branch per date — mirrors data/uploads/{date}.json's `branches` array.
 create table if not exists ba_tool_snapshots (
@@ -346,4 +375,18 @@ create table if not exists invoice_cancellation_files (
   source_file_name text        not null,
   file_data        bytea       not null,
   primary key (branch, month)
+);
+
+-- Report holidays (2026-09-09, at the user's request). HQ flags a date as a
+-- non-working day; the branch upload page then computes ONE report date for
+-- everyone — the most recent day before today that is neither a Saturday nor
+-- a holiday — so branches can't each file the same round under a different
+-- date. See src/lib/reporting-date.ts. Saturdays are skipped by rule (they
+-- work, but the data only reaches us Monday folded in with Sunday);
+-- Sundays count as normal report dates.
+create table if not exists report_holidays (
+  date        date        primary key,
+  note        text,
+  created_by  text        not null,
+  created_at  timestamptz not null default now()
 );

@@ -75,6 +75,7 @@ const REGION_GAP_METRIC = { actual: "partsRetailAchievementForTheMonth" as const
 
 export default async function TkmTargetsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
   const admin = await getCurrentAdmin();
+  if (admin?.role === "vp_service") redirect("/vp");
   if (!admin?.canViewDashboard) redirect("/upload");
   // Company-wide pages are hidden from a branch admin until their latest
   // date is published — before that they only get the Daily Report.

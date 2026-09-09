@@ -42,21 +42,23 @@ The roster (`/data`) matches DMS `Close SA Name` exactly (whitespace + case
 normalised only). A middle initial the DMS drops = no match = that person's
 Accessories sales never subtracted. Cross-check run 2026-09-08.
 
-Recompute after a roster fix: `node scripts/recompute-ssrv089-accessories.mjs <BRANCH> [--commit]`
-(re-derives the deduction from raw rows already on file — no re-upload).
+A roster fix touches **two** stored figures — recompute both from raw rows on file (no re-upload):
+- `node scripts/recompute-ssrv089-accessories.mjs <BRANCH> [--commit]` — the GUS Parts/Labour deduction
+- `npx tsx scripts/recompute-service-info-vas.mts <BRANCH> [--commit]` — VAS bill revenue (accessories-staff T-Gloss rows are excluded from it too)
 
 | Status | Branch | Roster → DMS | Sept impact (deduction that was missing) | Action |
 |---|--------|-------------|------------------------------------------|--------|
-| ✅ done | **PH01A** | `Santhosh V M` → `Santhosh M` | parts ₹21,893 · labour ₹37 | roster fixed + recomputed 2026-09-08 (3 Sep file was Santhosh-only, read 0/0) |
-| ✅ done | **TI01A** | `Anoop P M` → `Anoop M` (confirmed same person) | parts **₹1,25,424** · labour **₹69,254** | roster fixed + recomputed 2026-09-08 |
-| ✅ done | **KT01A** | `Prasanth R Shenoy` → `Prasanth Shenoy` (same person, still employed) | none yet — hasn't billed since Aug | roster fixed 2026-09-08; no recompute needed |
+| ✅ done | **PH01A** | `Santhosh V M` → `Santhosh M` | parts ₹21,893 · labour ₹37 · VAS ₹0 (snapshots already excluded him) | roster fixed + SSRV089 recomputed 2026-09-08 (3 Sep file was Santhosh-only, read 0/0); VAS checked 2026-09-09, no change |
+| ✅ done | **TI01A** | `Anoop P M` → `Anoop M` (confirmed same person) | parts **₹1,25,424** · labour **₹69,254** · **VAS ₹73,799** (3, 4, 7 Sep snapshots) | roster fixed + SSRV089 recomputed 2026-09-08; VAS recomputed 2026-09-09 (`recompute-service-info-vas.mts`) |
+| ✅ done | **KT01A** | `Prasanth R Shenoy` → `Prasanth Shenoy` (same person, still employed) | none yet — hasn't billed since Aug | roster fixed 2026-09-08; no recompute needed (SSRV089 + VAS both checked, Δ 0) |
 | — no fix | **TR01A** | `Ratheeshkumar M T` vs `Ratheesh S` | — | branch confirms **different people**; roster entry `Ratheeshkumar M T` has no DMS match — verify still employed |
 | ✅ done | **CO01B** | `Sijo M Joy` — left the company | Aug only (4 rows, 28 Aug) — closed month, not corrected | removed from roster 2026-09-08 |
 
-### Roster names with no DMS match anywhere — verify still Accessories staff, else remove from `/data`
-- **CO01B**: `Aneesh K.P.`, `Ansal C K`
-- **IR01A**: `Denny A B`
-- **KL01A**: `Hari S Nampoothiri`, `Vipin V P`
+### Roster names with no DMS match anywhere — ✅ resolved 2026-09-09
+CO01B (`Aneesh K.P.`, `Ansal C K`), IR01A (`Denny A B`), KL01A (`Hari S Nampoothiri`, `Vipin V P`) —
+user confirms all still employed Accessories staff; they just haven't billed any accessories
+work yet, so there's no `Close SA Name` to match against. Keep them on the roster. Watch for a
+middle-initial spelling mismatch (as with TI01A/PH01A) the first time each one bills.
 
 ## September · verify  →  MTD total likely OK, per-day split wrong
 
@@ -65,7 +67,7 @@ complete; only the per-day split and the branch Daily Report view are off.
 
 | ☐ | Branch | Problem | Fix | Impact |
 |---|--------|---------|-----|--------|
-| ☐ | **IR01A** | 3 Sep upload contains all of 1–3 Sep. Still owes **real Sept 4 and Sept 6** data (only holiday-week re-pulls of the 1–3 cumulative came in). | Branch uploads 4 Sep + 6 Sep | 1–3 Sep MTD OK once the 6-Sep duplicate is gone (see Resolved); 4–6 Sep missing |
+| ☐ | **IR01A** | 3 Sep upload contains all of 1–3 Sep. 7 Sep was fixed 2026-09-08 (see Resolved). Still owes **real Sept 4, 5 and 6** data. | Branch uploads 4 + 5 + 6 Sep as separate daily files | 1–3 Sep and 7 Sep OK; 4–6 Sep missing (VAS/volume/accessories under-counted for those 3 days) |
 | ☐ | **KL01A** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
 | ☐ | **TI01A** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
 | ☐ | **TI01B** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
@@ -74,7 +76,7 @@ complete; only the per-day split and the branch Daily Report view are off.
 
 | ☐ | Branch | Problem | Fix | Impact |
 |---|--------|---------|-----|--------|
-| ☐ | **CO01A** | scom205 (Monthly KPI) for 3 Sep is identical to 2 Sep — the 2 Sep KPI file looks re-uploaded for the 3rd, not refreshed | Re-upload the correct 3 Sep scom205 KPI file | CO01A GUS + BPU MTD frozen at 2 Sep values |
+| ✅ | **CO01A** | scom205 for 3 Sep was a copy of 2 Sep | **Self-corrected** — CO01A uploaded fresh 6/7/8 Sep scom205 (4–5 Sep holiday), so current MTD is right. Only the 3 Sep per-day view still shows 2 Sep's KPI numbers; closed 2026-09-09 (not worth chasing the 3 Sep file). | none live — historical 3 Sep view only |
 
 ## September · 4–6 Sep holiday uploads  →  MTD OK, daily dates off
 
@@ -104,12 +106,43 @@ A cumulative export plus daily exports means some job orders are summed 2–3× 
 | ☐ | **TI01A** | 6 job orders appear on 2 upload dates in August | Re-upload August SSRV089 as clean daily files | deduction inflated → MTD understated |
 | ☐ | **CO01B** | The `Cost & Sale Aug 1 to 28` cumulative file was saved for both 27 and 28 Aug | Re-upload 27 & 28 Aug as single-day files (delete the duplicate snapshot) | ≈½ month of accessories double-deducted for that span |
 
+## August · Service Info VAS bill revenue — **overstated** (closed month, deferred 2026-09-09)
+
+Two issues, both pre-date the 1 Sep fixes; September VAS is clean (only TI01A, fixed 2026-09-09). User: leave August.
+
+1. **VAS accessories-staff exclusion never ran in August** — parser matched the wrong column name (`Close SA Name` vs `Close Service Advisor Name`) until 2026-09-01. No August snapshot excludes accessories-staff T-Gloss rows. Re-deriving the real Aug-28 month-to-date files: KT01A −₹3.35 L, TI01A −₹2.18 L, PH01A −₹28 K (only these three uploaded a full Aug-28 file).
+2. **Phantom August snapshots** — 11 branches hold an August date (Aug 29 for most, **Aug 28 for CO01B**) with a `vas_revenue` value but **zero raw rows** (bootstrap-cleanup left the snapshot, deleted the raw rows). Each double-counts a day into that branch's Aug VAS MTD: **CO01B ₹31.2 L**, others ₹13 K–₹1.2 L.
+
+Fix when revisiting August: delete the phantom snapshots; decide whether to re-derive the Aug-28 bootstrap VAS. `scripts/recompute-service-info-vas.mjs <BRANCH> 2026-08-01` shows both.
+
 ## Resolved
 
 | ✅ | Branch | Problem | Fix | Impact |
 |---|--------|---------|-----|--------|
 | ✅ | **CO01B** | 2 Sep upload was a partial export (19 rows, 4 advisors, no Accessories staff) | Re-parsed the correct 201-row file; snapshot + raw rows replaced 2026-09-04 (`scripts/fix-co01b-sep2-ssrv089.mjs`) | Acc. labour 0 → ₹51,813 · GUS Labour MTD 14,95,336 → **14,43,523** · GUS Parts MTD 28,92,970 → **28,39,440** |
+| ✅ | **CO01B** | 2 Sep **service-info** GS and BP files were uploaded into each other's slots (3 Sep). The 25-row BP file went to the GS slot → `service_info` snapshot for 2 Sep parsed as all zeros; the real 367-row GS file (13 wheel bal, 19 align, 7 evaporator, 112 T-Gloss lines) sat unparsed in the `service_info_bp` slot. Only that one file-pair, only that branch/day (full scan). part_sale / ssrv089 / scom205 for the day were fine. | Re-parsed the GS file from the BP slot into the 2 Sep `service_info` snapshot + raw rows; reconstructed the BP content back into the `service_info_bp` slot. 2026-09-08 (`scripts/fix-co01b-sep2-swap.mts`). | CO01B 2 Sep: WB 0 → **13**, WA 0 → **19**, evaporator 0 → **7**, brake skim 0 → **1**, VAS bill revenue 0 → **₹1,22,082**. MTD now WB **70**, WA **94** (matches the branch's own count). |
 | ✅ | **IR01A** | The 1–3 Sep cumulative "SEP 2026" export was uploaded a 2nd time filed as 6 Sep, on top of the existing 3 Sep snapshot — Sept 1–3 counted twice for `service_info` VAS counts and the `ssrv089` accessories deduction | Deleted the 6 Sep `part_sale` / `service_info` / `ssrv089` snapshots + raw rows 2026-09-07 (`scom205` left — read straight, harmless) | IR01A Sept 1–3 no longer doubled; still owes real Sept 4 + 6 (above) |
+| ✅ | **IR01A** | Repeat of the above on **7 Sep** — the "SEP 2026" cumulative uploaded again, filed as 7 Sep, across service_info / ssrv089-GS / part_sale / scom205. Double-counted Sept 1–3 again; scom205 frozen at 3 Sep. | Branch had the correct single-day "SEP 07" files. Replaced the 7 Sep snapshots + raw rows from those (`scripts/fix-ir01a-sep7.mts`), added the BP raw uploads, deleted the phantom 6 Sep scom205. 2026-09-08. | 7 Sep now real: wheel bal/align 2/2, VAS ₹10,423, accessories ₹22,153/₹9,440; scom205 GUS MTD ₹19.39 L/₹7.74 L, BPU ₹2.07 L/₹1.21 L. |
+
+---
+
+## Resolved · Part Sale — External Sales filter
+
+| ✅ | Branch | Problem | Fix | Impact |
+|---|--------|---------|-----|--------|
+| ✅ | **all except CO01B** | The External Sales filter matched a literal `BillNo` prefix `"AA"`. A BillNo is `[type][branch-letter]…` — `A` = external for every branch, but the branch letter varies (`AL` IR01A, `AF` KL01A, `AD` TI01A, …), so only CO01B's `AA` ever matched. Every other branch's external part sales scored ₹0. | Parser now matches first letter `A` = external, any branch; `C`/`I`/`D`/`E` types don't count (confirmed 2026-09-08). All 28 changed September part_sale snapshots re-derived from raw rows (`scripts/backfill-part-sale-external.mts`). | Adds the Part Sale side of External Sales for ~13 branches — e.g. PH01A +₹19 K, TR01C +₹23 K, TI01A +₹8 K MTD so far. Feeds "External Sales MTD" and "% on SPR I". |
+
+## Resolved · scom205 parser
+
+| ✅ | Branch | Problem | Fix | Impact |
+|---|--------|---------|-----|--------|
+| ✅ | **TR01B** | Export changed format ~3 Sep (`.xls` → `.xlsx`) and stopped filling the "Total" column group — parser read blanks, saved 0. Only TR01B affected. | Parser now falls back to the branch-specific column group when Total is blank (a single-branch export's branch total *is* the total). Snapshots 3/4/7 Sep re-derived from raw rows 2026-09-08 (`scripts/backfill-scom205.mjs`). | BPU Parts MTD 0 → **₹9.01 L**, BPU Labour MTD 0 → **₹3.72 L** as of 7 Sep |
+
+## Resolved · service_info parser — Brake Skimming scope
+
+| ✅ | Branch | Problem | Fix | Impact |
+|---|--------|---------|-----|--------|
+| ✅ | **9 branches** | Brake Skimming only matched `FR DISC (ONE SIDE) (ON-VEHICLE) - GRIND` / its opp-side combo — missed rear-axle disc grinds and every **off-vehicle** (bench-lathe) grind. Same skimming service, just a different Job Desc. | `isBrakeSkimmingDesc()` now matches the shape `(FR\|RR) DISC (ONE SIDE) ((ON\|OFF)-VEHICLE) … GRIND` (still per repair order, confirmed 2026-09-09). All Sept snapshots re-derived from raw rows (`scripts/recompute-service-info-brake-skimming.mts`). | Group MTD **54 → 76**. CO01A +7, MV01A +3, TR01C +3, CO01B +2, TI01A +2, TI01C +2, IR01A/TL01A/TR01A +1. KL01A, KT01A/B, KY01A, PH01A, TI01B unchanged. Display count only — no revenue effect. |
 
 ---
 

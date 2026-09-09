@@ -27,14 +27,21 @@ const SYNTHETIC_OIL_PARTS = [
 ];
 const BRAKE_CLEANING_SPRAY_PARTS = ["Z-9BCHP-00001"];
 
-/** External Sales: rows billed under an "AA"-prefixed BillNo whose PartNo
- * starts with one of these letters, plus the exact-match SKUs below —
- * confirmed with the user and verified against real AA-billed rows. */
-const EXTERNAL_SALES_BILL_PREFIX = "AA";
+/** External Sales: rows on an external-type bill whose PartNo starts with
+ * one of these letters, plus the exact-match SKUs below.
+ *
+ * A BillNo is `[type][branch-letter]26-NNNNN`. The type letter is what
+ * matters here: `A` = external sale (every branch), `C` = cash, `I` =
+ * internal (returns, always negative), `D`/`E` = other non-external types
+ * that do NOT count (confirmed with the user 2026-09-08). The branch letter
+ * varies (CO01B `AA`, IR01A `AL`, KL01A `AF`, …) — the parser matched a
+ * literal `"AA"` until 2026-09-08 and so only ever caught CO01B; every other
+ * branch's external part sales were being scored as ₹0. */
+const EXTERNAL_SALES_BILL_TYPE = "A";
 const EXTERNAL_SALES_PART_PREFIXES = ["D", "L", "Z", "B", "T"];
 
-/** Exact PartNos that count as External Sales on an AA bill even though
- * their prefix ("A") isn't in the list above:
+/** Exact PartNos that count as External Sales on an external-type bill even
+ * though their prefix ("A") isn't in the list above:
  *   - A-9ADB1-01001                  ADBLUE
  *   - A-9D101-00001 … A-9D112-00012  the 12 DIY detailing consumables
  *     (shampoo, tar remover, liquid wax, dashboard/tyre dresser, glass
@@ -54,8 +61,8 @@ const EXTERNAL_SALES_EXACT_PARTS = new Set([
  * retail item), no bill-prefix restriction unlike External Sales. Shown as
  * an additional informational breakdown on the dashboard — confirmed with
  * the user 2026-08-31 that DIY rows also legitimately match the External
- * Sales criteria (AA bill + "D" part prefix) and should keep counting
- * there too; this isn't carved out of that total, just broken out
+ * Sales criteria (external-type bill + "D" part prefix) and should keep
+ * counting there too; this isn't carved out of that total, just broken out
  * separately alongside it. */
 const DIY_PART_PREFIX = "D-DIY";
 
@@ -67,7 +74,7 @@ export type PartSaleCounts = {
    * user 2026-09-04; was /100 until then). */
   syntheticOilLtrs: number;
   brakeCleaningSpray: number;
-  /** Sum of NetAmnt for the AA-bill/PartNo-prefix filter above — the Part Sale Report side of External Sales (added to BA Tool's SPR External, see report.ts). */
+  /** Sum of NetAmnt for the external-bill / PartNo-prefix filter above — the Part Sale Report side of External Sales (added to BA Tool's SPR External, see report.ts). */
   externalSales: number;
   /** Sum of Sale Qty for DIY rows. */
   diyCount: number;
@@ -85,7 +92,7 @@ function toQty(value: unknown): number {
 }
 
 function isExternalSalesRow(billNo: string, partNo: string): boolean {
-  if (!billNo.startsWith(EXTERNAL_SALES_BILL_PREFIX)) return false;
+  if (billNo.charAt(0).toUpperCase() !== EXTERNAL_SALES_BILL_TYPE) return false;
   if (EXTERNAL_SALES_EXACT_PARTS.has(partNo)) return true;
   return EXTERNAL_SALES_PART_PREFIXES.includes(partNo[0]);
 }
@@ -168,6 +175,12 @@ export function parsePartSaleWorkbook(buffer: Buffer): ParsedPartSale {
     throw new Error(`Expected "${PART_NO_COLUMN}" and "${SALE_QTY_COLUMN}" columns — is this a Part Sale Report export?`);
   }
 
+  return { counts: partSaleCountsFromRows(rows), rawRows: rows };
+}
+
+/** The counting, split out from the workbook read so a re-parse can run
+ * straight off the stored `raw_upload_rows` (see scripts/backfill-part-sale-*). */
+export function partSaleCountsFromRows(rows: Record<string, unknown>[]): PartSaleCounts {
   let engineFlush = 0;
   let injectorCleaner = 0;
   let syntheticOilRaw = 0;
@@ -196,15 +209,12 @@ export function parsePartSaleWorkbook(buffer: Buffer): ParsedPartSale {
   }
 
   return {
-    counts: {
-      engineFlush,
-      injectorCleaner,
-      syntheticOilLtrs: syntheticOilRaw / 10,
-      brakeCleaningSpray,
-      externalSales,
-      diyCount,
-      diyRevenue,
-    },
-    rawRows: rows,
+    engineFlush,
+    injectorCleaner,
+    syntheticOilLtrs: syntheticOilRaw / 10,
+    brakeCleaningSpray,
+    externalSales,
+    diyCount,
+    diyRevenue,
   };
 }

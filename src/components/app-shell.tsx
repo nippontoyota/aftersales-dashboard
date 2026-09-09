@@ -25,6 +25,15 @@ const NAV_ITEMS = [
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true },
 ];
 
+/** The VP Service view (role `vp_service`) gets its own four-item nav and
+ * nothing else — no upload, no HQ tools, no publish. See src/app/vp/*. */
+const VP_NAV_ITEMS = [
+  { href: "/vp", label: "Overview", key: "vp" as const },
+  { href: "/vp/regions", label: "Regions", key: "vp-regions" as const },
+  { href: "/vp/branches", label: "Branches", key: "vp-branches" as const },
+  { href: "/vp/queries", label: "Queries", key: "vp-queries" as const },
+];
+
 /** HQ-only tools, kept apart from the day-to-day nav above — administrative
  * rather than something anyone checks routinely, so they sit as a small
  * link list near the account area at the bottom instead of the main list. */
@@ -39,7 +48,10 @@ const UTILITY_NAV_ITEMS = [
   { href: "/upload-sheet", label: "Upload Sheet", key: "upload-sheet" as const },
 ];
 
-type NavKey = (typeof NAV_ITEMS)[number]["key"] | (typeof UTILITY_NAV_ITEMS)[number]["key"];
+type NavKey =
+  | (typeof NAV_ITEMS)[number]["key"]
+  | (typeof UTILITY_NAV_ITEMS)[number]["key"]
+  | (typeof VP_NAV_ITEMS)[number]["key"];
 
 function DashboardIcon() {
   return (
@@ -140,6 +152,23 @@ function PanelIcon() {
   );
 }
 
+function MapIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <path d="M7.5 3.5 3 5v11.5l4.5-1.5 5 1.5L17 15V3.5l-4.5 1.5-5-1.5z" strokeLinejoin="round" />
+      <path d="M7.5 3.5v11.5M12.5 5v11.5" />
+    </svg>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <path d="M4 4.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H8l-3.5 3v-3H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function SignOutIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
@@ -209,6 +238,10 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   upload: UploadIcon,
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,
+  vp: DashboardIcon,
+  "vp-regions": MapIcon,
+  "vp-branches": BranchesIcon,
+  "vp-queries": ChatIcon,
 };
 
 export function AppShell({
@@ -217,6 +250,7 @@ export function AppShell({
   isHq = false,
   companyTabs = true,
   canUpload = true,
+  vpNav = false,
   dashboardLabel = "Executive Overview",
   identity,
   children,
@@ -235,6 +269,9 @@ export function AppShell({
   /** When false, the Upload nav item is hidden — regional managers never
    * upload. Defaults to true. */
   canUpload?: boolean;
+  /** VP Service: replace the whole nav with the four /vp items (no upload,
+   * no company tabs, no HQ utilities). Defaults to false. */
+  vpNav?: boolean;
   /** Label for the /dashboard nav item — "Daily Report" / "Regional Report"
    * for a pre-publish raw view, "Executive Overview" otherwise. */
   dashboardLabel?: string;
@@ -248,13 +285,15 @@ export function AppShell({
   // client syncs to the stored value on hydration.
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
 
-  const items = NAV_ITEMS.filter(
-    (item) =>
-      (!item.requiresDashboard || showDashboardLink) &&
-      (!item.companyWide || companyTabs) &&
-      (!item.uploadOnly || canUpload),
-  ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
-  const utilityItems = isHq ? UTILITY_NAV_ITEMS : [];
+  const items = vpNav
+    ? VP_NAV_ITEMS
+    : NAV_ITEMS.filter(
+        (item) =>
+          (!item.requiresDashboard || showDashboardLink) &&
+          (!item.companyWide || companyTabs) &&
+          (!item.uploadOnly || canUpload),
+      ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
+  const utilityItems = isHq && !vpNav ? UTILITY_NAV_ITEMS : [];
 
   const navLink = (item: { href: string; label: string; key: NavKey }, compact: boolean) => {
     const Icon = ICONS[item.key];
@@ -314,6 +353,13 @@ export function AppShell({
         )}
       </div>
 
+      {!compact ? (
+        <div className="shrink-0 border-b border-border-subtle bg-accent-soft/50 px-4 py-2">
+          <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-fg-faint">Signed in as</div>
+          <div className="truncate text-sm font-bold text-accent-text">{identity}</div>
+        </div>
+      ) : null}
+
       <nav className={`flex-1 space-y-0.5 ${compact ? "p-2" : "p-3"}`}>{items.map((item) => navLink(item, compact))}</nav>
 
       {utilityItems.length > 0 ? (
@@ -323,7 +369,6 @@ export function AppShell({
       ) : null}
 
       <div className={`border-t border-border-subtle ${compact ? "p-2" : "p-3"}`}>
-        {!compact ? <div className="mb-2 truncate px-1 text-[11px] text-fg-faint">{identity}</div> : null}
         <form action={logoutAction}>
           <button
             type="submit"
@@ -346,7 +391,7 @@ export function AppShell({
     <div className="flex min-h-screen bg-canvas text-fg">
       {/* Desktop sidebar — collapsible to an icon rail */}
       <aside
-        className={`hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex ${
+        className={`hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex print:!hidden ${
           collapsed ? "w-14" : "w-56"
         }`}
       >
@@ -367,7 +412,7 @@ export function AppShell({
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4 print:hidden">
           <div className="flex items-center gap-3">
             <button
               type="button"

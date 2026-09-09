@@ -10,6 +10,7 @@ import { ReportTable } from "../dashboard/report-table";
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
   const admin = await getCurrentAdmin();
+  if (admin?.role === "vp_service") redirect("/vp");
   if (!admin?.canViewDashboard) redirect("/upload");
   // Company-wide pages are hidden from a branch admin until their latest
   // date is published — before that they only get the Daily Report.
