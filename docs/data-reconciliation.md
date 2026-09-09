@@ -137,6 +137,12 @@ Fix when revisiting August: delete the phantom snapshots; decide whether to re-d
 |---|--------|---------|-----|--------|
 | ✅ | **TR01B** | Export changed format ~3 Sep (`.xls` → `.xlsx`) and stopped filling the "Total" column group — parser read blanks, saved 0. Only TR01B affected. | Parser now falls back to the branch-specific column group when Total is blank (a single-branch export's branch total *is* the total). Snapshots 3/4/7 Sep re-derived from raw rows 2026-09-08 (`scripts/backfill-scom205.mjs`). | BPU Parts MTD 0 → **₹9.01 L**, BPU Labour MTD 0 → **₹3.72 L** as of 7 Sep |
 
+## Resolved · service_info parser — Brake Skimming scope
+
+| ✅ | Branch | Problem | Fix | Impact |
+|---|--------|---------|-----|--------|
+| ✅ | **9 branches** | Brake Skimming only matched `FR DISC (ONE SIDE) (ON-VEHICLE) - GRIND` / its opp-side combo — missed rear-axle disc grinds and every **off-vehicle** (bench-lathe) grind. Same skimming service, just a different Job Desc. | `isBrakeSkimmingDesc()` now matches the shape `(FR\|RR) DISC (ONE SIDE) ((ON\|OFF)-VEHICLE) … GRIND` (still per repair order, confirmed 2026-09-09). All Sept snapshots re-derived from raw rows (`scripts/recompute-service-info-brake-skimming.mts`). | Group MTD **54 → 76**. CO01A +7, MV01A +3, TR01C +3, CO01B +2, TI01A +2, TI01C +2, IR01A/TL01A/TR01A +1. KL01A, KT01A/B, KY01A, PH01A, TI01B unchanged. Display count only — no revenue effect. |
+
 ---
 
 ## Related open items · Part Sale
