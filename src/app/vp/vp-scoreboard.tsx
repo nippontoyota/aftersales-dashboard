@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { achievementRatio, achievementTone, type HeroSummary, type KpiSummary } from "@/lib/aggregate";
 import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/format";
+import type { VpData } from "@/lib/vp-data";
 
 /**
  * The company scoreboard — the "Service daily report" the VP gets in Excel,
@@ -8,14 +9,9 @@ import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/forma
  * across. Everything is month-to-date bar the two "for the day" RO counts.
  * VAS bill is our modelled figure (T-Gloss/Lexus jobs priced at list).
  *
- * Also rendered on the main /dashboard (HQ + branch admins) with
- * `showFlags={false}` — same grid, minus the raise-a-query affordance.
- *
  * Month-over-month / year-over-year rows are stubbed until the historical
  * baselines are wired in.
  */
-
-export type ScoreboardRegion = { region: string; hero: HeroSummary; kpis: KpiSummary };
 
 type Col = { key: string; label: string; hero: HeroSummary; kpis: KpiSummary };
 type Kind = "num" | "rs" | "pct";
@@ -64,21 +60,10 @@ function fmtValue(v: number | null, kind: Kind): string {
 const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg" } as const;
 const TONE_BAR = { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" } as const;
 
-export function VpScoreboard({
-  regions,
-  group,
-  flagBase,
-  showFlags = true,
-}: {
-  regions: ScoreboardRegion[];
-  group: { hero: HeroSummary; kpis: KpiSummary };
-  /** Required when showFlags is true (the /vp view); unused otherwise. */
-  flagBase?: string;
-  showFlags?: boolean;
-}) {
+export function VpScoreboard({ data, flagBase }: { data: VpData; flagBase: string }) {
   const cols: Col[] = [
-    ...regions.map((r) => ({ key: r.region, label: r.region, hero: r.hero, kpis: r.kpis })),
-    { key: "Group", label: "Group", hero: group.hero, kpis: group.kpis },
+    ...data.regions.map((r) => ({ key: r.region, label: r.region, hero: r.hero, kpis: r.kpis })),
+    { key: "Group", label: "Group", hero: data.group.hero, kpis: data.group.kpis },
   ];
 
   return (
@@ -137,15 +122,13 @@ export function VpScoreboard({
                 >
                   <span className="inline-flex items-center gap-1.5">
                     {row.label}
-                    {showFlags && flagBase ? (
-                      <Link
-                        href={`${flagBase}&flag=1&fmetric=${encodeURIComponent(row.label)}`}
-                        title={`Raise a query about "${row.label}"`}
-                        className="opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100 print:hidden"
-                      >
-                        <FlagGlyph />
-                      </Link>
-                    ) : null}
+                    <Link
+                      href={`${flagBase}&flag=1&fmetric=${encodeURIComponent(row.label)}`}
+                      title={`Raise a query about "${row.label}"`}
+                      className="opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100 print:hidden"
+                    >
+                      <FlagGlyph />
+                    </Link>
                   </span>
                 </td>
                 {cols.map((c) => {
