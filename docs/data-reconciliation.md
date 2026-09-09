@@ -16,25 +16,45 @@ GUS Parts  MTD = scom205 GUS SP  Rev MTD  −  Σ daily SSRV089 accessories part
 Fixes land by re-upload through **HQ → Upload Sheet**. Send a corrected file to have it applied
 directly (as was done for CO01B — see `scripts/fix-co01b-sep2-ssrv089.mjs`).
 
-Source: pipeline audit of `raw_upload_rows` vs `scom205_snapshots` / `ssrv089_snapshots`, run 2026-09-04,
-re-checked for the 4–6 Sep uploads 2026-09-07.
+Source: pipeline audit of `raw_upload_rows` vs `scom205_snapshots` / `ssrv089_snapshots`,
+run 2026-09-04, **refreshed against live data 2026-09-09** (latest data day: 8 Sep).
+Going forward the upload date is computed — one date for every branch (see
+`src/lib/reporting-date.ts`, deployed 2026-09-09) — so the split-date problems below
+should stop recurring; the September mess still needs the catch-up uploads.
 Figures are ₹. Status key: ☐ open · ⏳ chasing branch · 📥 file received · ✅ resolved.
 
 ---
 
-## September · needs re-upload  →  GUS Labour / Parts MTD currently **overstated**
+## September · went dark after 3 Sep  →  GUS + BPU + Total Revenue MTD **blank** on the live dashboard
 
-SSRV089-General for one or more days isn't on file, so those days' Accessories sales are never subtracted.
+No scom205 / Service Info / Part Sale / SSRV089 uploaded since **3 Sep**. With no scom205
+for the current data day (8 Sep), these branches show nothing for GUS/BPU/Total Revenue —
+the bigger problem than the accessories deduction below.
 
-| ☐ | Branch | Problem | Fix | Impact |
-|---|--------|---------|-----|--------|
-| ☐ | **KT01A** | Only the 3 Sep file uploaded — 1–2 Sep missing | Branch uploads 1–2 Sep (a single 1-Sep-to-date cumulative is fine) | ≈2 days' accessories not deducted |
-| ☐ | **KT01B** | Only the 3 Sep file uploaded — 1–2 Sep missing | Branch uploads 1–2 Sep | ≈2 days' accessories not deducted |
-| ☐ | **KY01A** | Only 3 Sep uploaded — 1–2 Sep missing; **and** the 3 Sep file matched 0 Accessories staff | Upload 1–2 Sep; verify roster at `/data` (only "Nibu B" listed) | ≈2 days undeducted + roster gap |
-| ☐ | **TR01A** | Only the 3 Sep file uploaded — 1–2 Sep missing | Branch uploads 1–2 Sep | ≈2 days' accessories not deducted |
-| ☐ | **TR01C** | Only the 3 Sep file uploaded — 1–2 Sep missing | Branch uploads 1–2 Sep | ≈2 days' accessories not deducted |
-| ☐ | **MV01A** | No September SSRV089-General uploaded at all | Upload full month-to-date SSRV089-General | whole-month deduction missing · scom205 GUS labour ₹2.55 L |
-| ☐ | **TI01C** | No September SSRV089-General uploaded at all | Upload full month-to-date SSRV089-General | whole-month deduction missing · scom205 GUS labour ₹1.22 L |
+| ☐ | Branch | Last upload | Fix |
+|---|--------|-------------|-----|
+| ☐ | **KT01A** | 3 Sep — every report type | Upload 4 + 6 + 7 + 8 Sep (a single 4-Sep-to-date cumulative scom205 + SSRV089 is fine) |
+| ☐ | **KT01B** | 3 Sep — every report type | as above |
+| ☐ | **TI01B** | 3 Sep — every report type | as above |
+| ☐ | **KL01B** | scom205 1 Sep; Part Sale never; B&P-only | Upload scom205 + Part Sale + SSRV089-BP for 2 Sep onward |
+
+## September · SSRV089-General days missing  →  GUS Labour / Parts MTD **overstated**
+
+Those days' Accessories sales are never subtracted from scom205's GUS revenue.
+Expected days on file: **1, 2, 3, 4, 6, 7, 8** (5th was a Saturday holiday).
+
+| ☐ | Branch | On file | Missing | Note |
+|---|--------|---------|---------|------|
+| ☐ | **KT01A / KT01B / TI01B** | 3 | 1,2,4,6,7,8 | dark since 3 Sep (section above) |
+| ☐ | **TI01C** | 6,7,8 | 1,2,3,4 | ≈4 days undeducted |
+| ☐ | **KY01A** | 3,6,7,8 | 1,2,4 | **+ roster gap** — only "Nibu B" listed at `/data`, verify |
+| ☐ | **TR01A** | 1,3,4,7,8 | 2,6 | ≈2 days undeducted |
+| ☐ | **KL01A** | 3,4,7,8 | 1,2,6 | 1–2 fold into its 3 Sep cumulative; owes 6 |
+| — | **PH01A / TL01A / TR01C** | 1,2,3,4,7,8 | 6 only | the light Sunday — leave unless per-day accuracy matters |
+| — | **CO01A** | 1,2,3,6,7,8 | 4 | folded into its 6 Sep upload (holiday section) |
+
+✅ **MV01A** — was "no September SSRV089-General at all"; now has all 7 days (1–4, 6–8). Resolved 2026-09-09.
+   (Its **scom205** is only on 7 + 8 Sep, though — GUS/BPU MTD was blank 1–6 Sep; current 8 Sep view is fine.)
 
 ## Accessories roster name mismatches  →  GUS Parts / Labour MTD **overstated**
 
@@ -60,30 +80,24 @@ user confirms all still employed Accessories staff; they just haven't billed any
 work yet, so there's no `Close SA Name` to match against. Keep them on the roster. Watch for a
 middle-initial spelling mismatch (as with TI01A/PH01A) the first time each one bills.
 
-## September · verify  →  MTD total likely OK, per-day split wrong
+## September · per-day split wrong  →  MTD total OK, per-day view + daily delta off
 
-One upload on 3 Sep that actually contains several days of invoices. The month-to-date deduction is
-complete; only the per-day split and the branch Daily Report view are off.
+A single 3 Sep upload that actually holds 1–3 Sep — MTD counts each row once (in the "3 Sep"
+bucket), but the 1 & 2 Sep per-day snapshots are blank/zero.
 
-| ☐ | Branch | Problem | Fix | Impact |
-|---|--------|---------|-----|--------|
-| ☐ | **IR01A** | 3 Sep upload contains all of 1–3 Sep. 7 Sep was fixed 2026-09-08 (see Resolved). Still owes **real Sept 4, 5 and 6** data. | Branch uploads 4 + 5 + 6 Sep as separate daily files | 1–3 Sep and 7 Sep OK; 4–6 Sep missing (VAS/volume/accessories under-counted for those 3 days) |
-| ☐ | **KL01A** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
-| ☐ | **TI01A** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
-| ☐ | **TI01B** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
-
-## September · other
-
-| ☐ | Branch | Problem | Fix | Impact |
-|---|--------|---------|-----|--------|
-| ✅ | **CO01A** | scom205 for 3 Sep was a copy of 2 Sep | **Self-corrected** — CO01A uploaded fresh 6/7/8 Sep scom205 (4–5 Sep holiday), so current MTD is right. Only the 3 Sep per-day view still shows 2 Sep's KPI numbers; closed 2026-09-09 (not worth chasing the 3 Sep file). | none live — historical 3 Sep view only |
+| ☐ | Branch | State (2026-09-09) |
+|---|--------|--------------------|
+| ☐ | **IR01A** | 3 Sep upload = 1–3 Sep; 7 Sep fixed 2026-09-08. Still owes **real 4, 5, 6 Sep** data (nothing on file for those). |
+| ☐ | **KL01A** | 3 Sep upload = 1–3 Sep; has separate 4, 7, 8. Owes 1, 2 (split) + 6. |
+| ☐ | **TI01A** | 3 Sep upload = 1–3 Sep; has separate 4, 6, 7, 8 (correct). Only 1 & 2 per-day are blank — MTD fine. |
+| ☐ | **TI01B** | 3 Sep upload = 1–3 Sep, then nothing — see "went dark" above. |
 
 ## September · 4–6 Sep holiday uploads  →  MTD OK, daily dates off
 
-5 & 6 Sep were a holiday (5th: no uploads; 6th: a small trickle of jobs). These branches folded the
-4th's working day + the 6th's trickle into **one upload under a single date** — one upload, so no
-double-count and MTD is correct; only the per-day snapshot dates and any today-vs-yesterday delta are
-wrong for those branches on the 4th/6th. Re-upload split by day only if per-day accuracy matters.
+5 Sep = Saturday holiday (no uploads); 6 Sep = Sunday (a trickle of jobs). These branches folded the
+4th + the 6th into **one upload under a single date** — one upload, so no double-count and MTD is
+correct; only the per-day dates and any today-vs-yesterday delta are off. **This class won't recur** —
+the computed report date (deployed 2026-09-09) gives every branch one date per round.
 
 | ☐ | Branch | The single upload holds | Filed under |
 |---|--------|------------------------|-------------|
@@ -93,8 +107,14 @@ wrong for those branches on the 4th/6th. Re-upload split by day only if per-day 
 | ☐ | **TL01A** | 4th + 6th | 4 Sep |
 | ☐ | **TI01A** | 5th + 6th (its 4 Sep upload is separate and correct) | 6 Sep |
 
-Clean for 4–6 Sep: **CO01B** (two proper separate uploads — 4th full day, 6th small), PH01A, TR01A, TR01B, TR01C.
-BA Tool: 3 Sep (uploaded 4th) then 6 Sep (uploaded 7th), 4th & 5th skipped — normal, it's MTD-cumulative.
+Clean for 4–6 Sep: **CO01B** (two proper separate uploads), PH01A, TR01A, TR01B, TR01C.
+
+## September · resolved
+
+| ✅ | Branch | Was | Now |
+|---|--------|-----|-----|
+| ✅ | **CO01A** | scom205 for 3 Sep was a copy of 2 Sep | Self-corrected — fresh 6/7/8 Sep scom205 on file, current MTD right. Only the historical 3 Sep view shows 2 Sep's KPI. Closed 2026-09-09. |
+| ✅ | **MV01A** | No September SSRV089-General at all | All 7 days on file (see section above). Closed 2026-09-09. |
 
 ## August · double-counted  →  GUS Labour / Parts MTD read **low** (closed month)
 
