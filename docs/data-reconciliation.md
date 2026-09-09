@@ -105,6 +105,15 @@ A cumulative export plus daily exports means some job orders are summed 2–3× 
 | ☐ | **TI01A** | 6 job orders appear on 2 upload dates in August | Re-upload August SSRV089 as clean daily files | deduction inflated → MTD understated |
 | ☐ | **CO01B** | The `Cost & Sale Aug 1 to 28` cumulative file was saved for both 27 and 28 Aug | Re-upload 27 & 28 Aug as single-day files (delete the duplicate snapshot) | ≈½ month of accessories double-deducted for that span |
 
+## August · Service Info VAS bill revenue — **overstated** (closed month, deferred 2026-09-09)
+
+Two issues, both pre-date the 1 Sep fixes; September VAS is clean (only TI01A, fixed 2026-09-09). User: leave August.
+
+1. **VAS accessories-staff exclusion never ran in August** — parser matched the wrong column name (`Close SA Name` vs `Close Service Advisor Name`) until 2026-09-01. No August snapshot excludes accessories-staff T-Gloss rows. Re-deriving the real Aug-28 month-to-date files: KT01A −₹3.35 L, TI01A −₹2.18 L, PH01A −₹28 K (only these three uploaded a full Aug-28 file).
+2. **Phantom August snapshots** — 11 branches hold an August date (Aug 29 for most, **Aug 28 for CO01B**) with a `vas_revenue` value but **zero raw rows** (bootstrap-cleanup left the snapshot, deleted the raw rows). Each double-counts a day into that branch's Aug VAS MTD: **CO01B ₹31.2 L**, others ₹13 K–₹1.2 L.
+
+Fix when revisiting August: delete the phantom snapshots; decide whether to re-derive the Aug-28 bootstrap VAS. `scripts/recompute-service-info-vas.mjs <BRANCH> 2026-08-01` shows both.
+
 ## Resolved
 
 | ✅ | Branch | Problem | Fix | Impact |
