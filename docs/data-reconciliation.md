@@ -54,10 +54,11 @@ A roster fix touches **two** stored figures — recompute both from raw rows on 
 | — no fix | **TR01A** | `Ratheeshkumar M T` vs `Ratheesh S` | — | branch confirms **different people**; roster entry `Ratheeshkumar M T` has no DMS match — verify still employed |
 | ✅ done | **CO01B** | `Sijo M Joy` — left the company | Aug only (4 rows, 28 Aug) — closed month, not corrected | removed from roster 2026-09-08 |
 
-### Roster names with no DMS match anywhere — verify still Accessories staff, else remove from `/data`
-- **CO01B**: `Aneesh K.P.`, `Ansal C K`
-- **IR01A**: `Denny A B`
-- **KL01A**: `Hari S Nampoothiri`, `Vipin V P`
+### Roster names with no DMS match anywhere — ✅ resolved 2026-09-09
+CO01B (`Aneesh K.P.`, `Ansal C K`), IR01A (`Denny A B`), KL01A (`Hari S Nampoothiri`, `Vipin V P`) —
+user confirms all still employed Accessories staff; they just haven't billed any accessories
+work yet, so there's no `Close SA Name` to match against. Keep them on the roster. Watch for a
+middle-initial spelling mismatch (as with TI01A/PH01A) the first time each one bills.
 
 ## September · verify  →  MTD total likely OK, per-day split wrong
 
