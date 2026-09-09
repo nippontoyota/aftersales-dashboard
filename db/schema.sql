@@ -376,3 +376,17 @@ create table if not exists invoice_cancellation_files (
   file_data        bytea       not null,
   primary key (branch, month)
 );
+
+-- Report holidays (2026-09-09, at the user's request). HQ flags a date as a
+-- non-working day; the branch upload page then computes ONE report date for
+-- everyone — the most recent day before today that is neither a Saturday nor
+-- a holiday — so branches can't each file the same round under a different
+-- date. See src/lib/reporting-date.ts. Saturdays are skipped by rule (they
+-- work, but the data only reaches us Monday folded in with Sunday);
+-- Sundays count as normal report dates.
+create table if not exists report_holidays (
+  date        date        primary key,
+  note        text,
+  created_by  text        not null,
+  created_at  timestamptz not null default now()
+);

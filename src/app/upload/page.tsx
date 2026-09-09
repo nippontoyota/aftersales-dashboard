@@ -3,7 +3,9 @@ import { AppShell } from "@/components/app-shell";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadNavState } from "@/lib/dashboard-data";
-import { yesterdayIso } from "@/lib/utils";
+import { reportingDate, invalidReportDateReason } from "@/lib/reporting-date";
+import { loadReportHolidaySet } from "@/lib/report-holidays/store";
+import { ReportDatePicker } from "./report-date-picker";
 import { loadServiceInfoSnapshot } from "@/lib/service-info/store";
 import { loadPartSaleSnapshot } from "@/lib/part-sale/store";
 import { loadSsrv089Snapshot } from "@/lib/ssrv089/store";
@@ -11,7 +13,6 @@ import { loadScom205Snapshot } from "@/lib/scom205/store";
 import { loadRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { isBodyPaintOnly } from "@/lib/report";
 import { BaToolUploadForm } from "./ba-tool-upload-form";
-import { ReportDatePicker } from "./report-date-picker";
 import { BillUploadForm } from "./bill-upload-form";
 import { CancellationUploadForm } from "./cancellation-upload-form";
 import { PartSaleUploadForm } from "./part-sale-upload-form";
@@ -34,14 +35,22 @@ export default async function UploadPage({
   const identity = admin ? adminIdentityLabel(admin) : "";
   const nav = admin ? await loadNavState(admin) : { companyTabs: true, dashboardLabel: "Executive Overview", canUpload: true };
 
-  // Branches upload today for yesterday's report, so the date picker (and
-  // this lock-status check) default to yesterdayIso(). A branch catching up
-  // a day they missed picks that earlier date at the top of the panel — it
-  // flows through ?date= to here, so both the lock status of every section
-  // and the date each upload is filed under follow the picker. The regex
-  // guard keeps a junk param from reaching the snapshot loads.
+  // The date picker defaults to the computed report date — one date for every
+  // branch each round (see src/lib/reporting-date.ts) — but a branch can pick
+  // an earlier day to catch up. It can't pick a Saturday or an HQ-flagged
+  // holiday: those would split one upload round across two dates. The `?date=`
+  // is re-validated here so a hand-typed URL can't get past the picker.
+  const isBranch = admin?.role === "branch";
+  const holidaySet = isBranch ? await loadReportHolidaySet() : new Set<string>();
+  const canonicalDate = isBranch ? reportingDate(holidaySet) : "";
   const params = await searchParams;
-  const reportDate = /^\d{4}-\d{2}-\d{2}$/.test(params.date ?? "") ? params.date! : yesterdayIso();
+  const requested = params.date ?? "";
+  const requestedOk =
+    isBranch &&
+    /^\d{4}-\d{2}-\d{2}$/.test(requested) &&
+    requested <= new Date().toISOString().slice(0, 10) &&
+    !invalidReportDateReason(requested, holidaySet);
+  const reportDate = requestedOk ? requested : canonicalDate;
   // Body & Paint-only branches have no general-service desk, so their DMS
   // never produces the GS-variant Service Info / Cost & Sales files — don't
   // offer those two forms (and pending-uploads.ts drops them too).
@@ -135,11 +144,24 @@ export default async function UploadPage({
                     Report date
                   </label>
                   <div className="mt-1">
-                    <ReportDatePicker selected={reportDate} />
+                    <ReportDatePicker selected={reportDate} holidays={[...holidaySet]} />
                   </div>
                   <p className="mt-1.5 text-xs text-fg-subtle">
-                    Defaults to yesterday. Change it to upload a day you missed — each section below then shows for that
-                    date.
+                    Defaults to{" "}
+                    {new Date(`${canonicalDate}T00:00:00Z`).toLocaleDateString("en-IN", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                      timeZone: "UTC",
+                    })}{" "}
+                    — the same date for every branch this round. Pick an earlier day to catch one up; Saturdays and
+                    holidays can&apos;t be picked (their data reaches us folded into the following Sunday).
+                    {reportDate !== canonicalDate ? (
+                      <>
+                        {" "}
+                        <span className="font-medium text-fg-muted">Filing for {reportDate}.</span>
+                      </>
+                    ) : null}
                   </p>
                 </div>
                 <div className="mt-4 space-y-4">
