@@ -75,7 +75,7 @@ complete; only the per-day split and the branch Daily Report view are off.
 
 | ☐ | Branch | Problem | Fix | Impact |
 |---|--------|---------|-----|--------|
-| ☐ | **CO01A** | scom205 (Monthly KPI) for 3 Sep is identical to 2 Sep — the 2 Sep KPI file looks re-uploaded for the 3rd, not refreshed | Re-upload the correct 3 Sep scom205 KPI file | CO01A GUS + BPU MTD frozen at 2 Sep values |
+| ✅ | **CO01A** | scom205 for 3 Sep was a copy of 2 Sep | **Self-corrected** — CO01A uploaded fresh 6/7/8 Sep scom205 (4–5 Sep holiday), so current MTD is right. Only the 3 Sep per-day view still shows 2 Sep's KPI numbers; closed 2026-09-09 (not worth chasing the 3 Sep file). | none live — historical 3 Sep view only |
 
 ## September · 4–6 Sep holiday uploads  →  MTD OK, daily dates off
 
