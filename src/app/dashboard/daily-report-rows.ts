@@ -94,6 +94,7 @@ export const DAILY_REPORT_ROWS: RowDef[] = [
   m("Wheel Alignment", { today: (b) => b.wheelAlignmentForTheDay, mtd: (b) => b.wheelAlignmentMtd, fmt: num, summable: true }),
   m("Brake Skimming", { today: (b) => b.brakeSkimmingForTheDay, mtd: (b) => b.brakeSkimmingMtd, fmt: num, summable: true }),
   m("Evaporator Cleaning", { today: (b) => b.evaporatorCleaningForTheDay, mtd: (b) => b.evaporatorCleaningMtd, fmt: num, summable: true }),
+  m("Engine Flush", { today: (b) => b.engineFlushForTheDay, mtd: (b) => b.engineFlushMtd, fmt: num, summable: true }),
   m("DIY Revenue (Rs)", { today: (b) => b.diyRevenueForTheDay, mtd: (b) => b.diyRevenueMtd, fmt: rs, summable: true }),
   m("Injector Cleaner (Diesel/Petrol)", { today: (b) => b.injectorCleanerForTheDay, mtd: (b) => b.injectorCleanerMtd, fmt: num, summable: true }),
   m("Synthetic Oil (Ltrs)", { today: (b) => b.syntheticOilForTheDay, mtd: (b) => b.syntheticOilMtd, fmt: num, summable: true }),
@@ -134,7 +135,6 @@ export const DAILY_REPORT_ROWS: RowDef[] = [
     fmt: rs,
     summable: false,
   }),
-  m("Engine Flush", { today: (b) => b.engineFlushForTheDay, mtd: (b) => b.engineFlushMtd, fmt: num, summable: true }),
   m("DIY Count", { today: (b) => b.diyCountForTheDay, mtd: (b) => b.diyCountMtd, fmt: num, summable: true }),
 ];
 
