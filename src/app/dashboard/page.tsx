@@ -6,12 +6,14 @@ import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { TargetIcon, PercentIcon } from "@/components/dashboard-icons";
 import { RichKpiCard } from "@/components/rich-kpi-card";
-import { achievementRatio, computeKpiSummary } from "@/lib/aggregate";
+import { achievementRatio, computeHeroSummary, computeKpiSummary, filterBranchesByRegion } from "@/lib/aggregate";
 import { getCurrentAdmin } from "@/lib/auth";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
+import { REGIONS, type RegionName } from "@/lib/regions";
 import { computeVasTrendSeries } from "@/lib/trend";
+import { VpScoreboard } from "../vp/vp-scoreboard";
 import { AchievementDonut } from "./achievement-donut";
 import { AlertsPanel } from "./alerts-panel";
 import { BillDrilldown } from "./bill-drilldown";
@@ -167,6 +169,14 @@ async function DashboardContent({
 
   const allKpis = computeKpiSummary(report.branches);
 
+  // Company scoreboard (regions × metrics), same grid as /vp — always
+  // company-wide, so it reads off report.branches, not the region filter.
+  const scoreboardRegions = (Object.keys(REGIONS) as RegionName[]).map((rn) => {
+    const rb = filterBranchesByRegion(report.branches, rn);
+    return { region: rn, hero: computeHeroSummary(rb), kpis: computeKpiSummary(rb) };
+  });
+  const scoreboardGroup = { hero: computeHeroSummary(report.branches), kpis: allKpis };
+
   const trendSeriesByMetric = { vas: computeVasTrendSeries(monthSnapshots, serviceInfoMonthSnapshots, region) };
 
   const vasGentani = achievementRatio(kpis.vasAchievementForTheMonth, kpis.gusRoMtd);
@@ -219,6 +229,13 @@ async function DashboardContent({
 
       <div className="mt-4">
         <HeroKpi branches={report.branches} compact />
+      </div>
+
+      <div className="mt-4">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">
+          Group Scoreboard <span className="font-normal normal-case text-fg-faint">· month-to-date</span>
+        </div>
+        <VpScoreboard regions={scoreboardRegions} group={scoreboardGroup} showFlags={false} />
       </div>
 
       <div className="mt-4">

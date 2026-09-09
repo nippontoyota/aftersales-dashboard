@@ -106,7 +106,7 @@ async function Overview({
       </div>
 
       <div className="mt-6">
-        <VpScoreboard data={data} flagBase={flagBase} />
+        <VpScoreboard regions={data.regions} group={data.group} flagBase={flagBase} />
       </div>
 
       <p className="mt-4 max-w-3xl text-[11px] leading-relaxed text-fg-faint">
