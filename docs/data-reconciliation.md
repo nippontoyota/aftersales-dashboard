@@ -42,14 +42,15 @@ The roster (`/data`) matches DMS `Close SA Name` exactly (whitespace + case
 normalised only). A middle initial the DMS drops = no match = that person's
 Accessories sales never subtracted. Cross-check run 2026-09-08.
 
-Recompute after a roster fix: `node scripts/recompute-ssrv089-accessories.mjs <BRANCH> [--commit]`
-(re-derives the deduction from raw rows already on file — no re-upload).
+A roster fix touches **two** stored figures — recompute both from raw rows on file (no re-upload):
+- `node scripts/recompute-ssrv089-accessories.mjs <BRANCH> [--commit]` — the GUS Parts/Labour deduction
+- `npx tsx scripts/recompute-service-info-vas.mts <BRANCH> [--commit]` — VAS bill revenue (accessories-staff T-Gloss rows are excluded from it too)
 
 | Status | Branch | Roster → DMS | Sept impact (deduction that was missing) | Action |
 |---|--------|-------------|------------------------------------------|--------|
-| ✅ done | **PH01A** | `Santhosh V M` → `Santhosh M` | parts ₹21,893 · labour ₹37 | roster fixed + recomputed 2026-09-08 (3 Sep file was Santhosh-only, read 0/0) |
-| ✅ done | **TI01A** | `Anoop P M` → `Anoop M` (confirmed same person) | parts **₹1,25,424** · labour **₹69,254** | roster fixed + recomputed 2026-09-08 |
-| ✅ done | **KT01A** | `Prasanth R Shenoy` → `Prasanth Shenoy` (same person, still employed) | none yet — hasn't billed since Aug | roster fixed 2026-09-08; no recompute needed |
+| ✅ done | **PH01A** | `Santhosh V M` → `Santhosh M` | parts ₹21,893 · labour ₹37 · VAS ₹0 (snapshots already excluded him) | roster fixed + SSRV089 recomputed 2026-09-08 (3 Sep file was Santhosh-only, read 0/0); VAS checked 2026-09-09, no change |
+| ✅ done | **TI01A** | `Anoop P M` → `Anoop M` (confirmed same person) | parts **₹1,25,424** · labour **₹69,254** · **VAS ₹73,799** (3, 4, 7 Sep snapshots) | roster fixed + SSRV089 recomputed 2026-09-08; VAS recomputed 2026-09-09 (`recompute-service-info-vas.mts`) |
+| ✅ done | **KT01A** | `Prasanth R Shenoy` → `Prasanth Shenoy` (same person, still employed) | none yet — hasn't billed since Aug | roster fixed 2026-09-08; no recompute needed (SSRV089 + VAS both checked, Δ 0) |
 | — no fix | **TR01A** | `Ratheeshkumar M T` vs `Ratheesh S` | — | branch confirms **different people**; roster entry `Ratheeshkumar M T` has no DMS match — verify still employed |
 | ✅ done | **CO01B** | `Sijo M Joy` — left the company | Aug only (4 rows, 28 Aug) — closed month, not corrected | removed from roster 2026-09-08 |
 
