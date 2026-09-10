@@ -218,7 +218,11 @@ async function DashboardContent({
       </div>
 
       <div className="mt-4">
-        <HeroKpi branches={report.branches} compact />
+        <HeroKpi
+          branches={report.branches}
+          compact
+          pinnedBranch={admin.role === "branch" ? admin.branch : undefined}
+        />
       </div>
 
       <div className="mt-4">
