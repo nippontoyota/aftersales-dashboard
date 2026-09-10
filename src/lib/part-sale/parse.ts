@@ -33,10 +33,17 @@ const BRAKE_CLEANING_SPRAY_PARTS = ["Z-9BCHP-00001"];
  * A BillNo is `[type][branch-letter]26-NNNNN`. The type letter is what
  * matters here: `A` = external sale (every branch), `C` = cash, `I` =
  * internal (returns, always negative), `D`/`E` = other non-external types
- * that do NOT count (confirmed with the user 2026-09-08). The branch letter
- * varies (CO01B `AA`, IR01A `AL`, KL01A `AF`, …) — the parser matched a
- * literal `"AA"` until 2026-09-08 and so only ever caught CO01B; every other
- * branch's external part sales were being scored as ₹0. */
+ * that do NOT count (confirmed with the user 2026-09-08). The parser matched
+ * a literal `"AA"` until 2026-09-08 and so only ever caught CO01B; every
+ * other branch's external part sales were being scored as ₹0.
+ *
+ * The branch letter is informational only (the filter keys off the type
+ * letter alone). Full map, from the Sept 2026 files:
+ *   CO01A B · CO01B A · CO01E Q · MV01A K · KY01A M · TR01A J · TR01B E ·
+ *   TR01C H · KL01A F · PH01A R · TL01A I · KT01A C · KT01B Y · TI01A D ·
+ *   IR01A L · TI01B T · TI01C P
+ * CO01E (`Q`) is Body & Paint only and raises no `A`-type (external) bills
+ * at all — its part sales are all `CQ`/`IQ`/`EQ`. */
 const EXTERNAL_SALES_BILL_TYPE = "A";
 const EXTERNAL_SALES_PART_PREFIXES = ["D", "L", "Z", "B", "T"];
 
