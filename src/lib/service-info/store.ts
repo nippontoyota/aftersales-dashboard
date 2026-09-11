@@ -1,5 +1,10 @@
 import { pool } from "../db";
 import type { ServiceInfoCounts } from "./parse";
+import {
+  loadAllServiceInfoBpSnapshotsForDate,
+  loadAllServiceInfoBpSnapshotsForMonthUpTo,
+  type ServiceInfoBpSnapshot,
+} from "../service-info-bp/store";
 
 /** service_info_snapshots — one row per branch per date (see db/schema.sql). Upsert on (date, branch) since each branch uploads independently. */
 export type ServiceInfoSnapshot = {
@@ -88,4 +93,58 @@ export async function loadAllServiceInfoSnapshotsForMonthUpTo(date: string): Pro
     date,
   ]);
   return rows.map(rowToSnapshot);
+}
+
+/** Adds a branch/date's BP counts (Wheel Balancing / Wheel Alignment /
+ * Brake Skimming / VAS Revenue only — never Evaporator Cleaning, see
+ * service-info-bp/store.ts) onto its GS snapshot. A BP-only day (no GS
+ * snapshot at all — a Body & Paint-only branch, or GS just uploaded late)
+ * still produces a row, synthesized from the BP one alone with
+ * evaporatorCleaning at 0, rather than being dropped. Exported only for
+ * this module's own two loadCombined* functions below — every other
+ * caller (the upload-lock checks, pending-uploads.ts) must keep seeing
+ * pure-GS presence/absence, so they stay on the plain loaders above. */
+function mergeGsAndBp(gs: ServiceInfoSnapshot[], bp: ServiceInfoBpSnapshot[]): ServiceInfoSnapshot[] {
+  const bpByKey = new Map(bp.map((s) => [`${s.date}|${s.branch}`, s]));
+  const merged = gs.map((s) => {
+    const b = bpByKey.get(`${s.date}|${s.branch}`);
+    if (!b) return s;
+    bpByKey.delete(`${s.date}|${s.branch}`);
+    return {
+      ...s,
+      counts: {
+        ...s.counts,
+        wheelBalancing: s.counts.wheelBalancing + b.counts.wheelBalancing,
+        wheelAlignment: s.counts.wheelAlignment + b.counts.wheelAlignment,
+        brakeSkimming: s.counts.brakeSkimming + b.counts.brakeSkimming,
+        vasRevenue: s.counts.vasRevenue + b.counts.vasRevenue,
+      },
+    };
+  });
+  // Whatever's left in bpByKey has no matching GS snapshot for that day.
+  for (const b of bpByKey.values()) {
+    merged.push({
+      date: b.date,
+      branch: b.branch,
+      uploadedAt: b.uploadedAt,
+      sourceFileName: b.sourceFileName,
+      counts: { ...b.counts, evaporatorCleaning: 0 },
+    });
+  }
+  return merged;
+}
+
+/** Everything `loadAllServiceInfoSnapshotsForDate` returns, with each
+ * branch's BP counts (see mergeGsAndBp) added in — what report.ts and
+ * dashboard-data.ts should use; anything checking "has this branch
+ * uploaded its GS report" should keep using the plain function above. */
+export async function loadCombinedServiceInfoSnapshotsForDate(date: string): Promise<ServiceInfoSnapshot[]> {
+  const [gs, bp] = await Promise.all([loadAllServiceInfoSnapshotsForDate(date), loadAllServiceInfoBpSnapshotsForDate(date)]);
+  return mergeGsAndBp(gs, bp);
+}
+
+/** Month-long counterpart to loadCombinedServiceInfoSnapshotsForDate. */
+export async function loadCombinedServiceInfoSnapshotsForMonthUpTo(date: string): Promise<ServiceInfoSnapshot[]> {
+  const [gs, bp] = await Promise.all([loadAllServiceInfoSnapshotsForMonthUpTo(date), loadAllServiceInfoBpSnapshotsForMonthUpTo(date)]);
+  return mergeGsAndBp(gs, bp);
 }

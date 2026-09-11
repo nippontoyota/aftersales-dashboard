@@ -1,6 +1,6 @@
 import type { BaToolBranchRow } from "./ba-tool/parse";
 import { loadSnapshot, loadPreviousSnapshot, loadLatestBranchRowInMonthBefore } from "./snapshot-store";
-import { loadAllServiceInfoSnapshotsForDate, loadAllServiceInfoSnapshotsForMonthUpTo } from "./service-info/store";
+import { loadCombinedServiceInfoSnapshotsForDate, loadCombinedServiceInfoSnapshotsForMonthUpTo } from "./service-info/store";
 import type { ServiceInfoSnapshot } from "./service-info/store";
 import { loadAllPartSaleSnapshotsForDate, loadAllPartSaleSnapshotsForMonthUpTo } from "./part-sale/store";
 import type { PartSaleSnapshot } from "./part-sale/store";
@@ -456,8 +456,8 @@ export async function buildReport(date: string): Promise<Report | null> {
     billRevenueDayList,
   ] = await Promise.all([
     loadPreviousSnapshot(date),
-    loadAllServiceInfoSnapshotsForDate(date),
-    loadAllServiceInfoSnapshotsForMonthUpTo(date),
+    loadCombinedServiceInfoSnapshotsForDate(date),
+    loadCombinedServiceInfoSnapshotsForMonthUpTo(date),
     loadAllPartSaleSnapshotsForDate(date),
     loadAllPartSaleSnapshotsForMonthUpTo(date),
     loadAllSsrv089SnapshotsForMonthUpTo(date, "general"),

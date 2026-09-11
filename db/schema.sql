@@ -224,13 +224,17 @@ create table if not exists dashboard_publish_log (
 -- Service Information Report - BP and Cost and Sales Report - BP
 -- (2026-09-01, at the user's request): two more required daily uploads per
 -- branch, alongside the four that already feed real dashboard figures.
--- Nothing is parsed out of either one yet — the file itself is just kept,
--- so the upload can still be tracked and locked exactly like the other
--- four (see raw-report-uploads/store.ts), and revisited later if a real
--- use for the data emerges. One table covers both report types (report_type
--- distinguishes them) since they're identical in every way that matters
--- here: no parsing, one file per branch per date, HQ can correct via
--- Upload Sheet like anything else.
+-- The file itself is always kept here, raw, so the upload can be tracked
+-- and locked exactly like the other four (see raw-report-uploads/store.ts),
+-- and re-read later if a real use for the data emerges. One table covers
+-- both report types (report_type distinguishes them) since they're
+-- identical in every way that matters here: one file per branch per date,
+-- HQ can correct via Upload Sheet like anything else.
+--
+-- Cost and Sales Report - BP is still never parsed (BP jobs don't carry an
+-- Accessories deduction the way GS ones do). Service Info - BP *is* now
+-- also parsed on top of being kept here — see service_info_bp_snapshots
+-- below (2026-09-11, at the user's request).
 create table if not exists raw_report_uploads (
   date date not null,
   branch text not null,
@@ -239,6 +243,29 @@ create table if not exists raw_report_uploads (
   source_file_name text not null,
   file_data bytea not null,
   primary key (date, branch, report_type)
+);
+
+-- Service Info Report - BP, parsed with the exact same rules as the GS
+-- table above (service-info/parse.ts) — Wheel Balancing / Wheel Alignment /
+-- Brake Skimming / VAS Revenue only. Evaporator Cleaning is deliberately
+-- NOT tracked here: the user asked for GS+BP on the other four, but
+-- Evaporator Cleaning stays GS-only. Added onto the existing GS totals at
+-- read time (see loadCombinedServiceInfoSnapshots* in service-info/store.ts)
+-- rather than merged into service_info_snapshots itself, so GS-only figures
+-- stay queryable and the upload-lock / pending-uploads checks (which must
+-- stay GS-only) are untouched. 2026-09-11, at the user's request — rare in
+-- practice (a BP job order doesn't usually carry these job codes), backfilled
+-- for the rest of the month once added.
+create table if not exists service_info_bp_snapshots (
+  date date not null,
+  branch text not null,
+  uploaded_at timestamptz not null,
+  source_file_name text not null,
+  wheel_balancing integer not null,
+  wheel_alignment integer not null,
+  brake_skimming integer not null,
+  vas_revenue numeric not null,
+  primary key (date, branch)
 );
 
 -- Every row of every uploaded file, verbatim (2026-09-01, at the user's

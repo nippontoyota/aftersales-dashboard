@@ -1,10 +1,24 @@
 import { NextResponse } from "next/server";
+import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
+import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 
 /** Service Information Report - BP — required daily like every other
- * upload, but nothing is parsed out of it (2026-09-01, at the user's
- * request). See raw-report-uploads/store.ts. */
+ * upload. The raw file is always kept (see raw-report-uploads/store.ts),
+ * same as before 2026-09-11; on top of that it's now also parsed with the
+ * exact same rules as the GS report (service-info/parse.ts) for Wheel
+ * Balancing / Wheel Alignment / Brake Skimming / VAS Revenue — never
+ * Evaporator Cleaning, which stays GS-only (at the user's request). Those
+ * four get added onto the branch's GS totals at read time (see
+ * loadCombinedServiceInfoSnapshots* in service-info/store.ts), not merged
+ * into service_info_snapshots itself.
+ *
+ * A BP job order rarely carries these job codes, so a parse failure here
+ * (an unexpected file shape) doesn't block the upload — the raw file is
+ * still saved and locked exactly as before; it just has nothing pulled out
+ * of it, same as if this parsing step didn't exist. */
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) {
@@ -39,14 +53,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not read the uploaded file." }, { status: 400 });
   }
 
+  const uploadedAt = new Date().toISOString();
   await saveRawReportUpload({
     date,
     branch: admin.branch,
     reportType: "service_info_bp",
-    uploadedAt: new Date().toISOString(),
+    uploadedAt,
     sourceFileName: file.name,
     fileData: buffer,
   });
 
-  return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name });
+  let bpCounts = null;
+  try {
+    const staffNames = await listAccessoriesStaffNamesForBranch(admin.branch);
+    const { counts } = parseServiceInfoWorkbook(buffer, admin.branch, staffNames);
+    await saveServiceInfoBpSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts });
+    bpCounts = counts;
+  } catch {
+    // Not a Service Info-shaped export (or some other unexpected shape) —
+    // the raw file above is still saved and locked either way; there's
+    // just nothing to add to Wheel Balancing/Alignment/Brake Skimming/VAS.
+  }
+
+  return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name, bpCounts });
 }
