@@ -4,7 +4,7 @@ import { loadBillTotalsByMonth, type BillMonthTotal } from "./bill/store";
 import { buildReport, type Report } from "./report";
 import { REGIONS, type RegionName } from "./regions";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
-import { loadAllServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
+import { loadCombinedServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
 import { isDatePublished } from "./publish-store";
 
 /** Nav-shell state for the dashboard family of pages — cheap enough to run in
@@ -92,7 +92,7 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   const [report, monthSnapshots, serviceInfoMonthSnapshots, isPublished, billTotals, latestPublished] = await Promise.all([
     buildReport(date),
     loadSnapshotsForMonthUpTo(date),
-    loadAllServiceInfoSnapshotsForMonthUpTo(date),
+    loadCombinedServiceInfoSnapshotsForMonthUpTo(date),
     isDatePublished(date),
     loadBillTotalsByMonth(billBranch),
     date === latestDate ? Promise.resolve(null) : isDatePublished(latestDate),
