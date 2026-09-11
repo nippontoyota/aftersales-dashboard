@@ -17,7 +17,10 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
   // Company-wide pages are hidden from a branch admin until their latest
   // date is published — before that they only get the Daily Report.
   const nav = await loadNavState(admin);
-  if (!nav.companyTabs) redirect("/dashboard");
+  // Company-wide tools are HQ-only now — branch / regional get everything on
+  // their own dashboard (slim nav, so there is no link here anyway; this
+  // covers a bookmark or typed URL).
+  if (admin.role !== "hq") redirect("/dashboard");
   const identity = adminIdentityLabel(admin);
 
   return (

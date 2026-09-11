@@ -251,6 +251,7 @@ export function AppShell({
   companyTabs = true,
   canUpload = true,
   vpNav = false,
+  slimNav = false,
   dashboardLabel = "Executive Overview",
   identity,
   children,
@@ -272,6 +273,11 @@ export function AppShell({
   /** VP Service: replace the whole nav with the four /vp items (no upload,
    * no company tabs, no HQ utilities). Defaults to false. */
   vpNav?: boolean;
+  /** Branch / regional accounts: drop the company-wide pages (TKM Targets,
+   * Alerts, Branch Performance, Reports) from the sidebar entirely — their
+   * content now lives on the branch-first dashboard. Leaves My Branch /
+   * My Region + Cancellations + Upload. Defaults to false. */
+  slimNav?: boolean;
   /** Label for the /dashboard nav item — "Daily Report" / "Regional Report"
    * for a pre-publish raw view, "Executive Overview" otherwise. */
   dashboardLabel?: string;
@@ -290,7 +296,7 @@ export function AppShell({
     : NAV_ITEMS.filter(
         (item) =>
           (!item.requiresDashboard || showDashboardLink) &&
-          (!item.companyWide || companyTabs) &&
+          (!item.companyWide || (companyTabs && !slimNav)) &&
           (!item.uploadOnly || canUpload),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq && !vpNav ? UTILITY_NAV_ITEMS : [];
