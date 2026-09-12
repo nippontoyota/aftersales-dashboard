@@ -46,7 +46,7 @@ Expected days on file: **1, 2, 3, 4, 6, 7, 8** (5th was a Saturday holiday).
 | ☐ | Branch | On file | Missing | Note |
 |---|--------|---------|---------|------|
 | ☐ | **KT01A / KT01B / TI01B** | 3 | 1,2,4,6,7,8 | dark since 3 Sep (section above) |
-| ☐ | **TI01C** | 6,7,8 | 1,2,3,4 | ≈4 days undeducted |
+| ☐ | **TI01C** | 6,7,8,9,10 (11 Sep deleted 2026-09-12 — was a stale duplicate of 10 Sep, see "resolved" below) | 1,2,3,4 | ≈4 days undeducted |
 | ☐ | **KY01A** | 3,6,7,8 | 1,2,4 | **+ roster gap** — only "Nibu B" listed at `/data`, verify |
 | ☐ | **TR01A** | 1,3,4,7,8 | 2,6 | ≈2 days undeducted |
 | ☐ | **KL01A** | 3,4,7,8 | 1,2,6 | 1–2 fold into its 3 Sep cumulative; owes 6 |
@@ -117,6 +117,7 @@ Clean for 4–6 Sep: **CO01B** (two proper separate uploads), PH01A, TR01A, TR01
 | ✅ | **MV01A** | No September SSRV089-General at all | All 7 days on file (see section above). Closed 2026-09-09. |
 | ✅ | **CO01A** | Service Info-GS 7 Sep was a partial upload: WB 2/WA 4/BS 1/EC 0/VAS ₹6,159 vs the DMS's true day (WB 9/WA 13/BS 1/EC 3/VAS ₹36,837, cross-checked against a fresh 1–11 Sep cumulative export the user pulled 2026-09-12) | Fixed 2026-09-12 via `scripts/fix-co01a-sep-partial-uploads.mjs --commit` — replaced the 7 Sep raw rows + snapshot with the true day's 172 rows. MTD effect: WB +7, WA +9, EC +3, VAS Achievement +₹30,678. |
 | ✅ | **CO01A** | Part Sale 3 Sep was a partial upload: injector cleaner 10, DIY count 2, DIY revenue ₹466 vs the true day (11, 4, ₹932 — engine flush/synthetic oil/brake cleaning spray/external sales already matched) | Fixed 2026-09-12, same script/commit as above — replaced the 3 Sep raw rows + snapshot with the true day's 753 rows. MTD effect: injector cleaner +1, DIY count +2, DIY revenue +₹466 (informational metric only, no Total Revenue Stream impact). |
+| ✅ | **TI01C** | 11 Sep uploads for scom205, SSRV089-General, and Service Info-GS were all stale duplicates of 10 Sep (identical figures + filenames) — BA Tool's own numbers show real growth that day (GUS RO 274→311, BPU RO 37→43), so the branch resubmitted yesterday's files instead of pulling fresh ones | Fixed 2026-09-12 via `scripts/fix-ti01c-sep11-duplicate-uploads.mjs --commit` — deleted the 11 Sep snapshot + 296 raw rows across all three report types, reverting to "not yet uploaded for the 11th." scom205-derived GUS/BPU Parts & Labour MTD now blank until the real file lands (was silently stuck at 10 Sep's value); Service Info MTD no longer double-counts 10 Sep (was +4 Brake Skimming, +4 Evaporator Cleaning, +₹46,084 VAS too high). TI01C still owes a real 11 Sep upload for these three. |
 
 ## August · double-counted  →  GUS Labour / Parts MTD read **low** (closed month)
 
