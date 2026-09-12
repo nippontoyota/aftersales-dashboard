@@ -16,25 +16,45 @@ GUS Parts  MTD = scom205 GUS SP  Rev MTD  −  Σ daily SSRV089 accessories part
 Fixes land by re-upload through **HQ → Upload Sheet**. Send a corrected file to have it applied
 directly (as was done for CO01B — see `scripts/fix-co01b-sep2-ssrv089.mjs`).
 
-Source: pipeline audit of `raw_upload_rows` vs `scom205_snapshots` / `ssrv089_snapshots`, run 2026-09-04,
-re-checked for the 4–6 Sep uploads 2026-09-07.
+Source: pipeline audit of `raw_upload_rows` vs `scom205_snapshots` / `ssrv089_snapshots`,
+run 2026-09-04, **refreshed against live data 2026-09-09** (latest data day: 8 Sep).
+Going forward the upload date is computed — one date for every branch (see
+`src/lib/reporting-date.ts`, deployed 2026-09-09) — so the split-date problems below
+should stop recurring; the September mess still needs the catch-up uploads.
 Figures are ₹. Status key: ☐ open · ⏳ chasing branch · 📥 file received · ✅ resolved.
 
 ---
 
-## September · needs re-upload  →  GUS Labour / Parts MTD currently **overstated**
+## September · went dark after 3 Sep  →  GUS + BPU + Total Revenue MTD **blank** on the live dashboard
 
-SSRV089-General for one or more days isn't on file, so those days' Accessories sales are never subtracted.
+No scom205 / Service Info / Part Sale / SSRV089 uploaded since **3 Sep**. With no scom205
+for the current data day (8 Sep), these branches show nothing for GUS/BPU/Total Revenue —
+the bigger problem than the accessories deduction below.
 
-| ☐ | Branch | Problem | Fix | Impact |
-|---|--------|---------|-----|--------|
-| ☐ | **KT01A** | Only the 3 Sep file uploaded — 1–2 Sep missing | Branch uploads 1–2 Sep (a single 1-Sep-to-date cumulative is fine) | ≈2 days' accessories not deducted |
-| ☐ | **KT01B** | Only the 3 Sep file uploaded — 1–2 Sep missing | Branch uploads 1–2 Sep | ≈2 days' accessories not deducted |
-| ☐ | **KY01A** | Only 3 Sep uploaded — 1–2 Sep missing; **and** the 3 Sep file matched 0 Accessories staff | Upload 1–2 Sep; verify roster at `/data` (only "Nibu B" listed) | ≈2 days undeducted + roster gap |
-| ☐ | **TR01A** | Only the 3 Sep file uploaded — 1–2 Sep missing | Branch uploads 1–2 Sep | ≈2 days' accessories not deducted |
-| ☐ | **TR01C** | Only the 3 Sep file uploaded — 1–2 Sep missing | Branch uploads 1–2 Sep | ≈2 days' accessories not deducted |
-| ☐ | **MV01A** | No September SSRV089-General uploaded at all | Upload full month-to-date SSRV089-General | whole-month deduction missing · scom205 GUS labour ₹2.55 L |
-| ☐ | **TI01C** | No September SSRV089-General uploaded at all | Upload full month-to-date SSRV089-General | whole-month deduction missing · scom205 GUS labour ₹1.22 L |
+| ☐ | Branch | Last upload | Fix |
+|---|--------|-------------|-----|
+| ☐ | **KT01A** | 3 Sep — every report type | Upload 4 + 6 + 7 + 8 Sep (a single 4-Sep-to-date cumulative scom205 + SSRV089 is fine) |
+| ☐ | **KT01B** | 3 Sep — every report type | as above |
+| ☐ | **TI01B** | 3 Sep — every report type | as above |
+| ☐ | **KL01B** | scom205 1 Sep; Part Sale never; B&P-only | Upload scom205 + Part Sale + SSRV089-BP for 2 Sep onward |
+
+## September · SSRV089-General days missing  →  GUS Labour / Parts MTD **overstated**
+
+Those days' Accessories sales are never subtracted from scom205's GUS revenue.
+Expected days on file: **1, 2, 3, 4, 6, 7, 8** (5th was a Saturday holiday).
+
+| ☐ | Branch | On file | Missing | Note |
+|---|--------|---------|---------|------|
+| ☐ | **KT01A / KT01B / TI01B** | 3 | 1,2,4,6,7,8 | dark since 3 Sep (section above) |
+| ☐ | **TI01C** | 6,7,8 | 1,2,3,4 | ≈4 days undeducted |
+| ☐ | **KY01A** | 3,6,7,8 | 1,2,4 | **+ roster gap** — only "Nibu B" listed at `/data`, verify |
+| ☐ | **TR01A** | 1,3,4,7,8 | 2,6 | ≈2 days undeducted |
+| ☐ | **KL01A** | 3,4,7,8 | 1,2,6 | 1–2 fold into its 3 Sep cumulative; owes 6 |
+| — | **PH01A / TL01A / TR01C** | 1,2,3,4,7,8 | 6 only | the light Sunday — leave unless per-day accuracy matters |
+| — | **CO01A** | 1,2,3,6,7,8 | 4 | folded into its 6 Sep upload (holiday section) |
+
+✅ **MV01A** — was "no September SSRV089-General at all"; now has all 7 days (1–4, 6–8). Resolved 2026-09-09.
+   (Its **scom205** is only on 7 + 8 Sep, though — GUS/BPU MTD was blank 1–6 Sep; current 8 Sep view is fine.)
 
 ## Accessories roster name mismatches  →  GUS Parts / Labour MTD **overstated**
 
@@ -50,7 +70,7 @@ A roster fix touches **two** stored figures — recompute both from raw rows on 
 |---|--------|-------------|------------------------------------------|--------|
 | ✅ done | **PH01A** | `Santhosh V M` → `Santhosh M` | parts ₹21,893 · labour ₹37 · VAS ₹0 (snapshots already excluded him) | roster fixed + SSRV089 recomputed 2026-09-08 (3 Sep file was Santhosh-only, read 0/0); VAS checked 2026-09-09, no change |
 | ✅ done | **TI01A** | `Anoop P M` → `Anoop M` (confirmed same person) | parts **₹1,25,424** · labour **₹69,254** · **VAS ₹73,799** (3, 4, 7 Sep snapshots) | roster fixed + SSRV089 recomputed 2026-09-08; VAS recomputed 2026-09-09 (`recompute-service-info-vas.mts`) |
-| ✅ done | **KT01A** | `Prasanth R Shenoy` → `Prasanth Shenoy` (same person, still employed) | none yet — hasn't billed since Aug | roster fixed 2026-09-08; no recompute needed (SSRV089 + VAS both checked, Δ 0) |
+| ✅ done | **KT01A** | `Prasanth R Shenoy` → `Prasanth Shenoy` (same person, still employed) | billing heavily in Sept — **₹8,69,026 part · ₹1,26,306 labour** SSRV089 MTD (30 lines, biggest 8 Sep ₹4.32 L / 9 Sep ₹2.39 L); all captured | roster fixed 2026-09-08; re-checked 2026-09-10 — every Sept SSRV089 snapshot == roster-matched total, VAS recompute Δ 0. No action. |
 | — no fix | **TR01A** | `Ratheeshkumar M T` vs `Ratheesh S` | — | branch confirms **different people**; roster entry `Ratheeshkumar M T` has no DMS match — verify still employed |
 | ✅ done | **CO01B** | `Sijo M Joy` — left the company | Aug only (4 rows, 28 Aug) — closed month, not corrected | removed from roster 2026-09-08 |
 
@@ -60,30 +80,24 @@ user confirms all still employed Accessories staff; they just haven't billed any
 work yet, so there's no `Close SA Name` to match against. Keep them on the roster. Watch for a
 middle-initial spelling mismatch (as with TI01A/PH01A) the first time each one bills.
 
-## September · verify  →  MTD total likely OK, per-day split wrong
+## September · per-day split wrong  →  MTD total OK, per-day view + daily delta off
 
-One upload on 3 Sep that actually contains several days of invoices. The month-to-date deduction is
-complete; only the per-day split and the branch Daily Report view are off.
+A single 3 Sep upload that actually holds 1–3 Sep — MTD counts each row once (in the "3 Sep"
+bucket), but the 1 & 2 Sep per-day snapshots are blank/zero.
 
-| ☐ | Branch | Problem | Fix | Impact |
-|---|--------|---------|-----|--------|
-| ☐ | **IR01A** | 3 Sep upload contains all of 1–3 Sep. 7 Sep was fixed 2026-09-08 (see Resolved). Still owes **real Sept 4, 5 and 6** data. | Branch uploads 4 + 5 + 6 Sep as separate daily files | 1–3 Sep and 7 Sep OK; 4–6 Sep missing (VAS/volume/accessories under-counted for those 3 days) |
-| ☐ | **KL01A** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
-| ☐ | **TI01A** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
-| ☐ | **TI01B** | Single 3 Sep upload contains all of 1–3 Sep | Optional: re-upload split by day | MTD total OK · per-day view wrong |
-
-## September · other
-
-| ☐ | Branch | Problem | Fix | Impact |
-|---|--------|---------|-----|--------|
-| ✅ | **CO01A** | scom205 for 3 Sep was a copy of 2 Sep | **Self-corrected** — CO01A uploaded fresh 6/7/8 Sep scom205 (4–5 Sep holiday), so current MTD is right. Only the 3 Sep per-day view still shows 2 Sep's KPI numbers; closed 2026-09-09 (not worth chasing the 3 Sep file). | none live — historical 3 Sep view only |
+| ☐ | Branch | State (2026-09-09) |
+|---|--------|--------------------|
+| ✅ | **IR01A** | Resolved 2026-09-11 — the 8 Sep upload turned out to be a fresh 1–8 Sep cumulative (real 4 + 5 Sep filled in). Superseded the 3 Sep and 7 Sep snapshots, which were deleted to stop the double-count. See "Resolved" table below. |
+| ☐ | **KL01A** | 3 Sep upload = 1–3 Sep; has separate 4, 7, 8. Owes 1, 2 (split) + 6. |
+| ☐ | **TI01A** | 3 Sep upload = 1–3 Sep; has separate 4, 6, 7, 8 (correct). Only 1 & 2 per-day are blank — MTD fine. |
+| ☐ | **TI01B** | 3 Sep upload = 1–3 Sep, then nothing — see "went dark" above. |
 
 ## September · 4–6 Sep holiday uploads  →  MTD OK, daily dates off
 
-5 & 6 Sep were a holiday (5th: no uploads; 6th: a small trickle of jobs). These branches folded the
-4th's working day + the 6th's trickle into **one upload under a single date** — one upload, so no
-double-count and MTD is correct; only the per-day snapshot dates and any today-vs-yesterday delta are
-wrong for those branches on the 4th/6th. Re-upload split by day only if per-day accuracy matters.
+5 Sep = Saturday holiday (no uploads); 6 Sep = Sunday (a trickle of jobs). These branches folded the
+4th + the 6th into **one upload under a single date** — one upload, so no double-count and MTD is
+correct; only the per-day dates and any today-vs-yesterday delta are off. **This class won't recur** —
+the computed report date (deployed 2026-09-09) gives every branch one date per round.
 
 | ☐ | Branch | The single upload holds | Filed under |
 |---|--------|------------------------|-------------|
@@ -93,8 +107,14 @@ wrong for those branches on the 4th/6th. Re-upload split by day only if per-day 
 | ☐ | **TL01A** | 4th + 6th | 4 Sep |
 | ☐ | **TI01A** | 5th + 6th (its 4 Sep upload is separate and correct) | 6 Sep |
 
-Clean for 4–6 Sep: **CO01B** (two proper separate uploads — 4th full day, 6th small), PH01A, TR01A, TR01B, TR01C.
-BA Tool: 3 Sep (uploaded 4th) then 6 Sep (uploaded 7th), 4th & 5th skipped — normal, it's MTD-cumulative.
+Clean for 4–6 Sep: **CO01B** (two proper separate uploads), PH01A, TR01A, TR01B, TR01C.
+
+## September · resolved
+
+| ✅ | Branch | Was | Now |
+|---|--------|-----|-----|
+| ✅ | **CO01A** | scom205 for 3 Sep was a copy of 2 Sep | Self-corrected — fresh 6/7/8 Sep scom205 on file, current MTD right. Only the historical 3 Sep view shows 2 Sep's KPI. Closed 2026-09-09. |
+| ✅ | **MV01A** | No September SSRV089-General at all | All 7 days on file (see section above). Closed 2026-09-09. |
 
 ## August · double-counted  →  GUS Labour / Parts MTD read **low** (closed month)
 
@@ -121,8 +141,17 @@ Fix when revisiting August: delete the phantom snapshots; decide whether to re-d
 |---|--------|---------|-----|--------|
 | ✅ | **CO01B** | 2 Sep upload was a partial export (19 rows, 4 advisors, no Accessories staff) | Re-parsed the correct 201-row file; snapshot + raw rows replaced 2026-09-04 (`scripts/fix-co01b-sep2-ssrv089.mjs`) | Acc. labour 0 → ₹51,813 · GUS Labour MTD 14,95,336 → **14,43,523** · GUS Parts MTD 28,92,970 → **28,39,440** |
 | ✅ | **CO01B** | 2 Sep **service-info** GS and BP files were uploaded into each other's slots (3 Sep). The 25-row BP file went to the GS slot → `service_info` snapshot for 2 Sep parsed as all zeros; the real 367-row GS file (13 wheel bal, 19 align, 7 evaporator, 112 T-Gloss lines) sat unparsed in the `service_info_bp` slot. Only that one file-pair, only that branch/day (full scan). part_sale / ssrv089 / scom205 for the day were fine. | Re-parsed the GS file from the BP slot into the 2 Sep `service_info` snapshot + raw rows; reconstructed the BP content back into the `service_info_bp` slot. 2026-09-08 (`scripts/fix-co01b-sep2-swap.mts`). | CO01B 2 Sep: WB 0 → **13**, WA 0 → **19**, evaporator 0 → **7**, brake skim 0 → **1**, VAS bill revenue 0 → **₹1,22,082**. MTD now WB **70**, WA **94** (matches the branch's own count). |
+| ✅ | **CO01B** | Repeat of the above, this time on **10 Sep's Cost and Sales Report** (SSRV089), GS ↔ BP. The 30-row BP file (all `BPJ...` job orders) landed in the `ssrv089` (GS) slot → accessories deduction parsed as ₹0/₹0 despite the roster (Jeeshan V P / Vivek Lal T J / Antony Anoop) genuinely closing jobs that day; the real 163-row GS file (all `GSJ...`, familiar GS advisor names) sat unparsed in the `ssrv089_bp` slot. Caught because the branch confirmed the roster staff *did* close jobs on 10 Sep. part_sale / service_info / scom205 for the day were fine. | Re-parsed the GS file from the BP slot into the 10 Sep `ssrv089` (general) snapshot + raw rows; reconstructed the BP content (30 rows) back into the `ssrv089_bp` slot. 2026-09-11 (`scripts/fix-co01b-sep10-ssrv089-swap.mts`). | Accessories deduction MTD: parts ₹10,20,118 → **₹13,19,337**, labour ₹3,84,624 → **₹4,57,324**. GUS Parts MTD ₹68,83,611 → **₹65,84,392**; GUS Labour MTD ₹36,20,463 → **₹35,47,763**. |
 | ✅ | **IR01A** | The 1–3 Sep cumulative "SEP 2026" export was uploaded a 2nd time filed as 6 Sep, on top of the existing 3 Sep snapshot — Sept 1–3 counted twice for `service_info` VAS counts and the `ssrv089` accessories deduction | Deleted the 6 Sep `part_sale` / `service_info` / `ssrv089` snapshots + raw rows 2026-09-07 (`scom205` left — read straight, harmless) | IR01A Sept 1–3 no longer doubled; still owes real Sept 4 + 6 (above) |
 | ✅ | **IR01A** | Repeat of the above on **7 Sep** — the "SEP 2026" cumulative uploaded again, filed as 7 Sep, across service_info / ssrv089-GS / part_sale / scom205. Double-counted Sept 1–3 again; scom205 frozen at 3 Sep. | Branch had the correct single-day "SEP 07" files. Replaced the 7 Sep snapshots + raw rows from those (`scripts/fix-ir01a-sep7.mts`), added the BP raw uploads, deleted the phantom 6 Sep scom205. 2026-09-08. | 7 Sep now real: wheel bal/align 2/2, VAS ₹10,423, accessories ₹22,153/₹9,440; scom205 GUS MTD ₹19.39 L/₹7.74 L, BPU ₹2.07 L/₹1.21 L. |
+| ✅ | **IR01A** | 3rd occurrence, 8 Sep — the "Cost and Sales Report - GS" (SSRV089) file uploaded for 8 Sep was actually a fresh **1–8 Sep cumulative** (527 rows; real 4 Sep full + real 5 Sep for the first time). Landed on the 8 Sep snapshot slot on top of the still-live 3 Sep (1–4 cumulative) and 7 Sep snapshots → real days 1,2,3,4(partial),7 accessories double-counted. Verified row-for-row: the 8 Sep file is a strict superset of both (same job orders/amounts on the overlapping days). scom205 / part_sale / service_info untouched. | Deleted the redundant 3 Sep + 7 Sep `ssrv089` (general) snapshots + raw rows 2026-09-11 (`scripts/fix-ir01a-sep8-ssrv089-dupe.mjs --commit`), leaving 8 Sep as the sole 1–8 Sep cumulative. | Accessories deduction MTD: parts ₹6,19,674 → **₹4,34,646**, labour ₹1,47,057 → **₹99,522**. GUS Parts MTD ₹19,38,967 → **₹21,23,995**; GUS Labour MTD ₹8,65,395 → **₹9,12,930**. Also closes the "owes real 4/5 Sep" item above — that data was in this file all along. |
+| ✅ | **IR01A** | After the fix above, our GUS Parts MTD (₹21,23,995) still didn't match the branch's own figure (₹21,22,464) — a ₹1,531 / ₹7.90 gap. Traced to one row in the 8 Sep file: real 4 Sep, Job Order GSJ26-06993, closed by **"Albin James 2856"** — a name not on IR01A's Accessories roster (he's a service advisor, only row all month under that name). HQ confirmed 2026-09-11: the sale is real and should count as accessories this once, but he isn't accessories staff — so no roster change (would wrongly catch any of his ordinary SA sales too). | Added ₹1,531 / ₹7.90 directly to the 8 Sep snapshot's `accessories_part_sale` / `accessories_labour_sale` as a one-off manual amount — not roster-driven, so a future `recompute-ssrv089-accessories.mjs` run for IR01A would wipe it and need re-applying (`scripts/fix-ir01a-albin-james-onetime.mjs --commit`). | Accessories deduction MTD: parts ₹4,34,646 → **₹4,36,177**, labour ₹99,522 → **₹99,530**. GUS Parts MTD ₹21,23,995 → **₹21,22,464** (matches branch exactly); GUS Labour MTD ₹9,12,930 → **₹9,12,922**. |
+| ✅ | **TI01B** | Flagged 2026-09-11 via the "Value-Added Services" audit: Evaporator Cleaning MTD showed 217, 4x+ every other branch. Cause: every September **Service Information Report - GS** upload (3/8/9/10 Sep) is a cumulative month-to-date export, not a single day — verified job-order-for-job-order, each a strict superset of the last (257→504→575→643 rows, 102→188→215→242 distinct jobs). MTD summed all 4 snapshots instead of reading the latest. Also inflated Wheel Balancing, Wheel Alignment, Brake Skimming, and VAS Bill revenue the same way. | Deleted the superseded 3/8/9 Sep `service_info` snapshots + 1,336 raw rows, leaving 10 Sep as the sole (already-cumulative) holder — same remedy as the IR01A/CO01B cumulative-upload fixes above (`scripts/fix-ti01b-sep-service-info-cumulative.mjs --commit`). | Evaporator Cleaning MTD 217 → **67**; Wheel Balancing 30 → **9**; Wheel Alignment 24 → **7**; Brake Skimming 12 → **4**; VAS Bill revenue MTD ₹12,06,938 (summed) → **₹3,82,389** (latest only). Branch quoted Evaporator Cleaning as 44 as of 9 Sep — even 67/63 doesn't match that; no cancelled/duplicate/pay-type explanation found in the file (all 63 as-of-9th rows are distinct VINs, `Cancel Flag=N`, `CASH`). Unresolved residual gap — flagged to the user 2026-09-11, awaiting the branch's basis for "44". |
+| ✅ | **TI01B** | Same pattern, same branch, the **Part Sale Report** this time — every September upload (3/8/9/10 Sep, all literally `PartSaleReport-TI01B.xlsx`) is also a cumulative month-to-date export. Verified: every Bill No in 3 Sep is in 8 Sep; every one in 8 Sep is in 9 Sep; every one in 9 Sep is in 10 Sep (226→474→536→602 distinct bills, strict supersets). Branch confirmed Engine Flush should read 21 (today = MTD), not the summed 69. | Deleted the superseded 3/8/9 Sep `part_sale` snapshots + 4,096 raw rows, leaving 10 Sep as the sole holder (`scripts/fix-ti01b-sep-part-sale-cumulative.mjs --commit`). | Engine Flush MTD 69 → **21** (matches branch); Injector Cleaner 137 → **47**; Synthetic Oil 835.8 → **337.3** Ltrs; Brake Cleaning Spray 374 → **120**; External Sales ₹18,532.80 → **₹7,496**. |
+| ✅ | **TI01B** | 3rd occurrence, the **Cost and Sales Report - GS** (SSRV089) — the one that actually feeds GUS Parts/Labour MTD. Same cumulative-reupload pattern (102→188→215→242 distinct job orders, strict supersets, identical to service_info's since both use the same `GSJ...` numbering); 9 Sep and 10 Sep are byte-identical (same filename, same totals) — the branch re-uploaded yesterday's file again. Caught via the user's own before/after tracking sheet: our buggy summed accessories deduction (₹3,45,472 parts / ₹46,498 labour) reproduced their "New" GUS Parts/Labour MTD exactly (₹13,18,133 / ₹10,34,316). | Deleted the superseded 3/8/9 Sep `ssrv089` (general) snapshots + 937 raw rows, leaving 10 Sep as the sole holder (`scripts/fix-ti01b-sep-ssrv089-cumulative.mjs --commit`). | Accessories deduction MTD: parts ₹3,45,472 → **₹1,35,749**, labour ₹46,498 → **₹17,821**. GUS Parts MTD ₹13,18,133 → **₹15,27,856**; GUS Labour MTD ₹10,34,316 → **₹10,62,994** — lands close to the branch's own "yesterday" figure (₹15,21,410 / ₹10,63,995), confirming TI01B's real MTD barely moved and the ₹2 L+ "drop" the tracking sheet flagged was purely the re-upload artifact. |
+| ✅ | **KY01A** | Found 2026-09-12 via a full-company recount audit: two consecutive **Service Information Report - GS** uploads were byte-identical (same filename `Service_Info_Report-GS.csv`, same 121 rows, WB=5/WA=10/BS=1/EC=7/VAS=₹46,982 both times) — the branch resent the previous round's file instead of a fresh export, so that day's data summed twice into MTD. Only Service Info was affected; Part Sale/SSRV089/scom205/BA Tool for the same rounds were each genuinely distinct. | Deleted the resent snapshot + 121 raw rows, keeping the earlier (real) upload as sole holder (`scripts/fix-ky01a-sep09-service-info-dupe.mjs --commit`). Note: KY01A's date assignment for this whole span shifted by +1 day (unrelated correction) between the bug being found and the fix being applied — the script verifies upload content, not just the date label, before deleting. KY01A owes a fresh file for the round it resent. | Wheel Balancing MTD 73 → **68**; Wheel Alignment 96 → **86**; Brake Skimming 10 → **9**; Evaporator Cleaning 49 → **42**; VAS Bill revenue MTD ₹3,93,543 → **₹3,46,561**. |
+
+**TI01B is now confirmed to re-upload a cumulative month-to-date file for *all three* of its daily report types** (Service Info, Part Sale, SSRV089-GS) rather than a single day each round — worth a direct word to the branch, since every upload round will need re-fixing the same way until they switch to single-day exports.
 
 ---
 
@@ -131,6 +160,7 @@ Fix when revisiting August: delete the phantom snapshots; decide whether to re-d
 | ✅ | Branch | Problem | Fix | Impact |
 |---|--------|---------|-----|--------|
 | ✅ | **all except CO01B** | The External Sales filter matched a literal `BillNo` prefix `"AA"`. A BillNo is `[type][branch-letter]…` — `A` = external for every branch, but the branch letter varies (`AL` IR01A, `AF` KL01A, `AD` TI01A, …), so only CO01B's `AA` ever matched. Every other branch's external part sales scored ₹0. | Parser now matches first letter `A` = external, any branch; `C`/`I`/`D`/`E` types don't count (confirmed 2026-09-08). All 28 changed September part_sale snapshots re-derived from raw rows (`scripts/backfill-part-sale-external.mts`). | Adds the Part Sale side of External Sales for ~13 branches — e.g. PH01A +₹19 K, TR01C +₹23 K, TI01A +₹8 K MTD so far. Feeds "External Sales MTD" and "% on SPR I". |
+| ✅ not a bug | **all branches** | KT01A flagged 2026-09-11: its External Sales MTD (₹5,973) looked too low against ₹6.41 L of "A"-type-bill (external) part sales on file. Root cause: on top of the bill-type filter, `parse.ts` also requires the PartNo prefix to be `D`/`L`/`Z`/`B`/`T` (+ a short exact list) — genuine Toyota parts (PartNo prefix `A-`: panels, headlamps, brake pads, A/C compressors…) sold on the same external bills don't match, so they're excluded. Same shape at every branch — company-wide MTD: ~₹2.19 L counted vs **~₹58.7 L in `A-`-prefix parts excluded** (biggest: TR01C ₹11.8 L, TR01A ₹9.3 L, KT01A ₹6.4 L, PH01A ₹5.5 L). | **No fix — confirmed intentional 2026-09-11.** External Sales here is meant to stay scoped to lubricants/DIY/consumables/spray; genuine spare-parts counter sales are tracked elsewhere (presumably BA Tool's own SPR External) and adding them here would double-count. | None — figures unchanged. Documented so this doesn't get "rediscovered" as a bug later. |
 
 ## Resolved · scom205 parser
 

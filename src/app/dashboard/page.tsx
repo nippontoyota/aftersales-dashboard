@@ -12,6 +12,8 @@ import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { computeVasTrendSeries } from "@/lib/trend";
+import { loadBranchView, loadRegionView } from "@/lib/branch-view-data";
+import { BranchAccountPage, RegionAccountPage } from "./branch/branch-page";
 import { AchievementDonut } from "./achievement-donut";
 import { AlertsPanel } from "./alerts-panel";
 import { BillDrilldown } from "./bill-drilldown";
@@ -55,6 +57,7 @@ export default async function DashboardPage({
       isHq={admin.role === "hq"}
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
+      slimNav={nav.slimNav}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
     >
@@ -165,16 +168,28 @@ async function DashboardContent({
     );
   }
 
+  // Branch / regional accounts on a published date get the branch-first view;
+  // HQ keeps the company Executive Overview below. (Pre-publish is already
+  // handled by showBranchDailyReport / showRegionDailyReport above.)
+  if (admin.role === "branch") {
+    const view = await loadBranchView(admin.branch, date, report, monthSnapshots, serviceInfoMonthSnapshots);
+    return <BranchAccountPage view={view} branch={admin.branch} date={date} dates={dates} uploadedAt={report.uploadedAt} />;
+  }
+  if (admin.role === "regional") {
+    const { rollup, branches } = await loadRegionView(admin.region, date, report, monthSnapshots, serviceInfoMonthSnapshots);
+    return <RegionAccountPage rollup={rollup} branches={branches} date={date} dates={dates} uploadedAt={report.uploadedAt} />;
+  }
+
   const allKpis = computeKpiSummary(report.branches);
 
   const trendSeriesByMetric = { vas: computeVasTrendSeries(monthSnapshots, serviceInfoMonthSnapshots, region) };
 
   const vasGentani = achievementRatio(kpis.vasAchievementForTheMonth, kpis.gusRoMtd);
 
-  // The hero strip switches scope on its own (branch admin → own branch,
-  // everyone → All/region + step through branches) and only affects those
-  // five cards — the rest of the page still follows the header region filter.
-  const heroDefaultScope = admin.role === "branch" ? admin.branch : region;
+  // Only HQ reaches this point — branch and regional accounts returned above
+  // with their own branch-first view. The hero strip still defaults to the
+  // header region and can step through every branch.
+  const heroDefaultScope = region;
 
   // Same date/region preservation as tkm-targets/page.tsx's alertsHref — no
   // `watched` param needed here since VAS is already /alerts' own default.
@@ -222,12 +237,7 @@ async function DashboardContent({
       </div>
 
       <div className="mt-4">
-        <RevenuePerCarLeaderboard
-          branches={filteredBranches}
-          highlightBranch={admin.role === "branch" ? admin.branch : null}
-          compact
-          seeAllHref={branchesHref}
-        />
+        <RevenuePerCarLeaderboard branches={filteredBranches} highlightBranch={null} compact seeAllHref={branchesHref} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">

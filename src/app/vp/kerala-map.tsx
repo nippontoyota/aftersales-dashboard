@@ -125,7 +125,7 @@ export function KeralaMap({
                 strokeWidth="1.2"
                 filter={dim ? undefined : "url(#pinShadow)"}
                 className="cursor-pointer transition-[fill-opacity]"
-                onClick={() => go(`/vp/branches?date=${date}&branch=${pin.branch}`)}
+                onClick={() => go(`/vp/branches?date=${date}&branch=${pin.branch}${selectedRegion ? `&region=${selectedRegion}` : ""}`)}
               >
                 <title>
                   {pin.branch} · {pin.region} · {pin.display}

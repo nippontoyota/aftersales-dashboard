@@ -4,7 +4,7 @@ import { loadBillTotalsByMonth, type BillMonthTotal } from "./bill/store";
 import { buildReport, type Report } from "./report";
 import { REGIONS, type RegionName } from "./regions";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
-import { loadAllServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
+import { loadCombinedServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
 import { isDatePublished } from "./publish-store";
 
 /** Nav-shell state for the dashboard family of pages — cheap enough to run in
@@ -15,16 +15,22 @@ import { isDatePublished } from "./publish-store";
  * Upload tab. HQ is never restricted. */
 export async function loadNavState(
   admin: AdminAccount,
-): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean }> {
+): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean; slimNav: boolean }> {
   const canUpload = admin.role !== "regional";
-  if (admin.role === "hq") return { companyTabs: true, dashboardLabel: "Executive Overview", canUpload };
+  if (admin.role === "hq") return { companyTabs: true, dashboardLabel: "Executive Overview", canUpload, slimNav: false };
+  // Branch / regional accounts get the slim nav (company pages dropped, their
+  // content folded into the branch-first dashboard) — but only once the
+  // latest date is published; before that they're still in raw-report mode.
+  const slimNav = admin.role === "branch" || admin.role === "regional";
   const dates = await listSnapshotDates();
   const latest = dates.at(-1);
   const latestPublished = latest ? await isDatePublished(latest) : true;
+  const publishedLabel = admin.role === "regional" ? "My Region" : "My Branch";
   return {
     companyTabs: latestPublished,
-    dashboardLabel: latestPublished ? "Executive Overview" : admin.role === "regional" ? "Regional Report" : "Daily Report",
+    dashboardLabel: latestPublished ? publishedLabel : admin.role === "regional" ? "Regional Report" : "Daily Report",
     canUpload,
+    slimNav,
   };
 }
 
@@ -92,7 +98,7 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   const [report, monthSnapshots, serviceInfoMonthSnapshots, isPublished, billTotals, latestPublished] = await Promise.all([
     buildReport(date),
     loadSnapshotsForMonthUpTo(date),
-    loadAllServiceInfoSnapshotsForMonthUpTo(date),
+    loadCombinedServiceInfoSnapshotsForMonthUpTo(date),
     isDatePublished(date),
     loadBillTotalsByMonth(billBranch),
     date === latestDate ? Promise.resolve(null) : isDatePublished(latestDate),

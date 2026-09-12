@@ -16,6 +16,13 @@ const SCOPE_ACCENT: Record<"All" | RegionName, string> = {
  * of the four fixed scopes, so it gets its own neutral accent rather than
  * borrowing a region's color. */
 const BRANCH_ACCENT = "var(--color-fg-muted)";
+/** The viewer's *own* branch, pinned as a permanent column for a branch
+ * account (2026-09-10, at the user's request — they land on the published
+ * company dashboard and want their own line beside the region totals without
+ * having to pick it from the dropdown). A distinct hue, not a region colour
+ * and not the muted grey of an ad-hoc comparison, so "your branch" stands
+ * out from both. */
+const PINNED_BRANCH_ACCENT = "var(--color-violet)";
 
 type ScopeSummary = { label: string; summary: HeroSummary; accent: string };
 
@@ -137,8 +144,23 @@ function ScopeComparisonTable({ scopes }: { scopes: ScopeSummary[] }) {
  * "compare a branch" dropdown, one single column. `branches` must already
  * be pre-filtered to just that branch by the caller (see dashboard-data.ts)
  * — this only decides how to *render* it, the access boundary lives
- * upstream. */
-export function HeroKpi({ branches, compact, lockedBranch }: { branches: BranchReport[]; compact?: boolean; lockedBranch?: string }) {
+ * upstream.
+ *
+ * `pinnedBranch` (2026-09-10) is the softer version now in use: keep All +
+ * the three region totals, but append the viewer's own branch as a fixed
+ * column so a branch account sees their own line by default. The "compare a
+ * branch" dropdown stays — an extra column beyond the pinned one. */
+export function HeroKpi({
+  branches,
+  compact,
+  lockedBranch,
+  pinnedBranch,
+}: {
+  branches: BranchReport[];
+  compact?: boolean;
+  lockedBranch?: string;
+  pinnedBranch?: string;
+}) {
   const [selectedBranch, setSelectedBranch] = useState<string>("__none__");
 
   const scopes = useMemo<ScopeSummary[]>(() => {
@@ -154,12 +176,18 @@ export function HeroKpi({ branches, compact, lockedBranch }: { branches: BranchR
         accent: SCOPE_ACCENT[region],
       })),
     ];
-    if (selectedBranch !== "__none__") {
+    if (pinnedBranch) {
+      const branch = branches.find((b) => b.branch === pinnedBranch);
+      if (branch) base.push({ label: pinnedBranch, summary: computeHeroSummary([branch]), accent: PINNED_BRANCH_ACCENT });
+    }
+    // The dropdown can still pull in one more branch — but not a second copy
+    // of the pinned one.
+    if (selectedBranch !== "__none__" && selectedBranch !== pinnedBranch) {
       const branch = branches.find((b) => b.branch === selectedBranch);
       if (branch) base.push({ label: selectedBranch, summary: computeHeroSummary([branch]), accent: BRANCH_ACCENT });
     }
     return base;
-  }, [branches, selectedBranch, lockedBranch]);
+  }, [branches, selectedBranch, lockedBranch, pinnedBranch]);
 
   return (
     <div className={`rounded-lg border border-border bg-gradient-to-b from-canvas to-surface shadow-card ${compact ? "p-3.5" : "p-4 sm:p-5"}`}>
@@ -172,16 +200,22 @@ export function HeroKpi({ branches, compact, lockedBranch }: { branches: BranchR
             className="h-7 shrink-0 rounded-md border border-border-strong px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <option value="__none__">+ Compare a branch</option>
-            {branches.map((b) => (
-              <option key={b.branch} value={b.branch}>
-                {b.branch}
-              </option>
-            ))}
+            {branches
+              .filter((b) => b.branch !== pinnedBranch)
+              .map((b) => (
+                <option key={b.branch} value={b.branch}>
+                  {b.branch}
+                </option>
+              ))}
           </select>
         ) : null}
       </div>
 
-      <div className={`mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 ${scopes.length > 4 ? "xl:grid-cols-5" : ""}`}>
+      <div
+        className={`mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 ${
+          scopes.length >= 6 ? "xl:grid-cols-6" : scopes.length === 5 ? "xl:grid-cols-5" : ""
+        }`}
+      >
         {scopes.map((s) => (
           <ScopeBanner key={s.label} label={s.label} value={formatCompact(s.summary.totalRevenueStreamMtd)} accent={s.accent} compact={compact} />
         ))}

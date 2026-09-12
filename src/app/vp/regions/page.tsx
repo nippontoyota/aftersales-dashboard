@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
@@ -147,7 +148,12 @@ async function Regions({
                       key={b.branch}
                       className="whitespace-nowrap bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle"
                     >
-                      {b.branch}
+                      <Link
+                        href={`/vp/branches?date=${data.date}&branch=${b.branch}&region=${chosen.region}`}
+                        className="hover:text-accent-text hover:underline"
+                      >
+                        {b.branch}
+                      </Link>
                     </th>
                   ))}
                   <th className="whitespace-nowrap bg-accent-soft/50 px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-accent-text">

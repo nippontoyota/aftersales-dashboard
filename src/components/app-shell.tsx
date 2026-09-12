@@ -25,12 +25,13 @@ const NAV_ITEMS = [
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true },
 ];
 
-/** The VP Service view (role `vp_service`) gets its own four-item nav and
- * nothing else — no upload, no HQ tools, no publish. See src/app/vp/*. */
+/** The VP Service view (role `vp_service`) gets its own small nav and
+ * nothing else — no upload, no HQ tools, no publish. See src/app/vp/*.
+ * Branch detail (/vp/branches) is intentionally *not* a nav item — the only
+ * way in is clicking a branch on Regions, and it shows a "← Regions" link. */
 const VP_NAV_ITEMS = [
   { href: "/vp", label: "Overview", key: "vp" as const },
   { href: "/vp/regions", label: "Regions", key: "vp-regions" as const },
-  { href: "/vp/branches", label: "Branches", key: "vp-branches" as const },
   { href: "/vp/queries", label: "Queries", key: "vp-queries" as const },
 ];
 
@@ -240,7 +241,6 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   "upload-sheet": UploadSheetIcon,
   vp: DashboardIcon,
   "vp-regions": MapIcon,
-  "vp-branches": BranchesIcon,
   "vp-queries": ChatIcon,
 };
 
@@ -251,6 +251,7 @@ export function AppShell({
   companyTabs = true,
   canUpload = true,
   vpNav = false,
+  slimNav = false,
   dashboardLabel = "Executive Overview",
   identity,
   children,
@@ -272,6 +273,11 @@ export function AppShell({
   /** VP Service: replace the whole nav with the four /vp items (no upload,
    * no company tabs, no HQ utilities). Defaults to false. */
   vpNav?: boolean;
+  /** Branch / regional accounts: drop the company-wide pages (TKM Targets,
+   * Alerts, Branch Performance, Reports) from the sidebar entirely — their
+   * content now lives on the branch-first dashboard. Leaves My Branch /
+   * My Region + Cancellations + Upload. Defaults to false. */
+  slimNav?: boolean;
   /** Label for the /dashboard nav item — "Daily Report" / "Regional Report"
    * for a pre-publish raw view, "Executive Overview" otherwise. */
   dashboardLabel?: string;
@@ -290,7 +296,7 @@ export function AppShell({
     : NAV_ITEMS.filter(
         (item) =>
           (!item.requiresDashboard || showDashboardLink) &&
-          (!item.companyWide || companyTabs) &&
+          (!item.companyWide || (companyTabs && !slimNav)) &&
           (!item.uploadOnly || canUpload),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq && !vpNav ? UTILITY_NAV_ITEMS : [];

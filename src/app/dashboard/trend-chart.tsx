@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TrendPoint } from "@/lib/trend";
-import { formatNumber } from "@/lib/format";
+import { formatCompactCurrency, formatNumber } from "@/lib/format";
 import { useSyncedMetric } from "./metric-sync";
+
+type ValueFormatter = (v: number | null) => string;
 
 export type TrendMetricConfig = { key: string; label: string };
 
@@ -88,9 +90,11 @@ function ChartBody({
   setHoverIndex,
   height,
   gradientId,
+  formatValue,
 }: {
   points: TrendPoint[];
   maxY: number;
+  formatValue: ValueFormatter;
   path: string;
   /** Same curve as `path`, closed down to the baseline — filled with a soft
    * gradient so the line has something to sit on instead of floating on
@@ -148,7 +152,7 @@ function ChartBody({
               <g key={g}>
                 <line x1={PAD.left} x2={WIDTH - PAD.right} y1={y} y2={y} stroke={GRID_COLOR} strokeWidth={1} />
                 <text x={PAD.left - 8} y={y + 3} textAnchor="end" className="fill-fg-faint" fontSize={9.5}>
-                  {formatNumber(value)}
+                  {formatValue(value)}
                 </text>
               </g>
             );
@@ -190,10 +194,10 @@ function ChartBody({
           >
             <div className="font-medium text-fg-muted">{formatShortDate(hovered.date)}</div>
             <div className="text-fg-subtle">
-              Actual <span className="font-semibold tabular-nums text-fg">{formatNumber(hovered.actual)}</span>
+              Actual <span className="font-semibold tabular-nums text-fg">{formatValue(hovered.actual)}</span>
             </div>
             <div className="text-fg-subtle">
-              Target <span className="font-semibold tabular-nums text-fg">{formatNumber(hovered.target)}</span>
+              Target <span className="font-semibold tabular-nums text-fg">{formatValue(hovered.target)}</span>
             </div>
           </div>
         ) : null}
@@ -205,11 +209,18 @@ function ChartBody({
 export function TrendChart({
   seriesByMetric,
   metrics = DEFAULT_METRICS,
+  compactCurrency = false,
 }: {
   seriesByMetric: Record<string, TrendPoint[]>;
   /** Defaults to the main dashboard's own set (VAS only); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics and series instead. */
   metrics?: TrendMetricConfig[];
+  /** Format axis ticks / tooltip values as ₹ crore/lakh instead of the plain
+   * grouped number — the branch overview's Total Revenue Stream series runs
+   * into crores and the full figure overflows the gutter. (A boolean, not a
+   * formatter function, so it stays passable from a server component.) */
+  compactCurrency?: boolean;
 }) {
+  const formatValue: ValueFormatter = compactCurrency ? formatCompactCurrency : formatNumber;
   const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -357,6 +368,7 @@ export function TrendChart({
         setHoverIndex={setHoverIndex}
         height={HEIGHT}
         gradientId="trend-area-card"
+        formatValue={formatValue}
       />
 
       {isExpanded ? (
@@ -402,6 +414,7 @@ export function TrendChart({
                 setHoverIndex={setHoverIndex}
                 height={MODAL_HEIGHT}
                 gradientId="trend-area-modal"
+                formatValue={formatValue}
               />
             </div>
           </div>

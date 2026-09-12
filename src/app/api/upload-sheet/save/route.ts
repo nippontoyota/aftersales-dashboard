@@ -11,6 +11,7 @@ import { parseScom205Workbook } from "@/lib/scom205/parse";
 import { saveScom205Snapshot } from "@/lib/scom205/store";
 import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoSnapshot } from "@/lib/service-info/store";
+import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { saveSsrv089Snapshot } from "@/lib/ssrv089/store";
 
@@ -26,9 +27,13 @@ import { saveSsrv089Snapshot } from "@/lib/ssrv089/store";
  * GS/BP variant (2026-09-01, at the user's request) — the file signature
  * alone can't tell them apart, same reason the old SSRV089 General/Body &
  * Paint picker existed before it was dropped 2026-08-31. GS parses and
- * feeds the real dashboard figures exactly as before; BP just stores the
- * file as-is, unparsed (see raw-report-uploads/store.ts) — a fresh,
- * deliberately-unparsed path, not a revival of the old BP parsing.
+ * feeds the real dashboard figures exactly as before. SSRV089 BP just
+ * stores the file as-is, unparsed (see raw-report-uploads/store.ts). Service
+ * Info BP also always stores the file as-is, but (2026-09-11, at the user's
+ * request) is now additionally parsed for Wheel Balancing / Wheel Alignment
+ * / Brake Skimming / VAS Revenue — never Evaporator Cleaning, which stays
+ * GS-only — added onto the branch's GS totals at read time (see
+ * loadCombinedServiceInfoSnapshots* in service-info/store.ts).
  */
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -79,7 +84,17 @@ export async function POST(request: Request) {
     if (type === "service-info") {
       if (variant === "bp") {
         await saveRawReportUpload({ date, branch, reportType: "service_info_bp", uploadedAt, sourceFileName: file.name, fileData: buffer });
-        return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name });
+        let bpCounts = null;
+        try {
+          const bpStaffNames = await listAccessoriesStaffNamesForBranch(branch);
+          const { counts } = parseServiceInfoWorkbook(buffer, branch, bpStaffNames);
+          await saveServiceInfoBpSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts });
+          bpCounts = counts;
+        } catch {
+          // Same as the branch upload route — an unexpected file shape just
+          // means nothing gets pulled from it; the raw file above still saves.
+        }
+        return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name, bpCounts });
       }
       const svcInfoStaffNames = await listAccessoriesStaffNamesForBranch(branch);
       const { counts, rawRows } = parseServiceInfoWorkbook(buffer, branch, svcInfoStaffNames);
