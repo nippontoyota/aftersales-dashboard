@@ -31,6 +31,8 @@ export default async function UploadPage({
   const admin = await getCurrentAdmin();
   // Regional managers and the VP are read-only — no upload surface at all.
   if (admin?.role === "vp_service") redirect("/vp");
+  if (admin?.role === "ceo") redirect("/ceo");
+  if (admin?.role === "accounts") redirect("/accounts");
   if (admin?.role === "regional") redirect("/dashboard");
   const identity = admin ? adminIdentityLabel(admin) : "";
   const nav = admin ? await loadNavState(admin) : { companyTabs: true, dashboardLabel: "Executive Overview", canUpload: true, slimNav: false };

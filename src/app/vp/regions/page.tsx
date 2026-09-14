@@ -72,6 +72,23 @@ async function Regions({
       </div>
     );
   }
+  if (!data.report || !data.group) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-6 py-8">
+        <VpHeader
+          eyebrow="Nippon Group · Service"
+          title="Regions"
+          dates={data.dates}
+          date={data.date}
+          basePath="/vp/regions"
+          flagHref={`/vp/regions?date=${data.date}&flag=1`}
+        />
+        <div className="mt-6 rounded-xl border border-dashed border-border-strong bg-surface p-8 text-sm text-fg-subtle">
+          No BA Tool report on file for {data.date}.
+        </div>
+      </div>
+    );
+  }
 
   const metricKey = (METRICS.find((m) => m.key === params.metric)?.key ?? "total") as MetricKey;
   const metric = METRICS.find((m) => m.key === metricKey)!;

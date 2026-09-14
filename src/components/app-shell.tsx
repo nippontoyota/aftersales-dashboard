@@ -35,6 +35,16 @@ const VP_NAV_ITEMS = [
   { href: "/vp/queries", label: "Queries", key: "vp-queries" as const },
 ];
 
+/** The CEO view (role `ceo`) gets its own single-item nav, same shape as
+ * VP_NAV_ITEMS — branch detail (/ceo/branches) isn't a nav item, reached
+ * only by clicking a region on Overview. See src/app/ceo/*. */
+const CEO_NAV_ITEMS = [{ href: "/ceo", label: "Overview", key: "ceo" as const }];
+
+/** The Accounts view (role `accounts`) gets its own single-item nav, same
+ * shape as CEO_NAV_ITEMS — branch detail (/accounts/branches) isn't a nav
+ * item, reached only by clicking a region on Overview. See src/app/accounts/*. */
+const ACCOUNTS_NAV_ITEMS = [{ href: "/accounts", label: "Overview", key: "accounts" as const }];
+
 /** HQ-only tools, kept apart from the day-to-day nav above — administrative
  * rather than something anyone checks routinely, so they sit as a small
  * link list near the account area at the bottom instead of the main list. */
@@ -52,7 +62,9 @@ const UTILITY_NAV_ITEMS = [
 type NavKey =
   | (typeof NAV_ITEMS)[number]["key"]
   | (typeof UTILITY_NAV_ITEMS)[number]["key"]
-  | (typeof VP_NAV_ITEMS)[number]["key"];
+  | (typeof VP_NAV_ITEMS)[number]["key"]
+  | (typeof CEO_NAV_ITEMS)[number]["key"]
+  | (typeof ACCOUNTS_NAV_ITEMS)[number]["key"];
 
 function DashboardIcon() {
   return (
@@ -242,6 +254,8 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   vp: DashboardIcon,
   "vp-regions": MapIcon,
   "vp-queries": ChatIcon,
+  ceo: DashboardIcon,
+  accounts: DashboardIcon,
 };
 
 export function AppShell({
@@ -251,6 +265,8 @@ export function AppShell({
   companyTabs = true,
   canUpload = true,
   vpNav = false,
+  ceoNav = false,
+  accountsNav = false,
   slimNav = false,
   dashboardLabel = "Executive Overview",
   identity,
@@ -273,6 +289,12 @@ export function AppShell({
   /** VP Service: replace the whole nav with the four /vp items (no upload,
    * no company tabs, no HQ utilities). Defaults to false. */
   vpNav?: boolean;
+  /** CEO: replace the whole nav with the single /ceo item (no upload, no
+   * company tabs, no HQ utilities). Defaults to false. */
+  ceoNav?: boolean;
+  /** Accounts: replace the whole nav with the single /accounts item (no
+   * upload, no company tabs, no HQ utilities). Defaults to false. */
+  accountsNav?: boolean;
   /** Branch / regional accounts: drop the company-wide pages (TKM Targets,
    * Alerts, Branch Performance, Reports) from the sidebar entirely — their
    * content now lives on the branch-first dashboard. Leaves My Branch /
@@ -293,13 +315,17 @@ export function AppShell({
 
   const items = vpNav
     ? VP_NAV_ITEMS
+    : ceoNav
+    ? CEO_NAV_ITEMS
+    : accountsNav
+    ? ACCOUNTS_NAV_ITEMS
     : NAV_ITEMS.filter(
         (item) =>
           (!item.requiresDashboard || showDashboardLink) &&
           (!item.companyWide || (companyTabs && !slimNav)) &&
           (!item.uploadOnly || canUpload),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
-  const utilityItems = isHq && !vpNav ? UTILITY_NAV_ITEMS : [];
+  const utilityItems = isHq && !vpNav && !ceoNav && !accountsNav ? UTILITY_NAV_ITEMS : [];
 
   const navLink = (item: { href: string; label: string; key: NavKey }, compact: boolean) => {
     const Icon = ICONS[item.key];

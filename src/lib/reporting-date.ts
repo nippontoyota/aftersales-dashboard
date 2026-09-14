@@ -44,3 +44,39 @@ export function invalidReportDateReason(iso: string, holidays: ReadonlySet<strin
   if (new Date(`${iso}T00:00:00Z`).getUTCDay() === SATURDAY) return "a Saturday — its data reaches us Monday, filed under the Sunday";
   return null;
 }
+
+function isReportDate(iso: string, holidays: ReadonlySet<string>): boolean {
+  return !holidays.has(iso) && new Date(`${iso}T00:00:00Z`).getUTCDay() !== SATURDAY;
+}
+
+/**
+ * Pace-adjusted target math — "how far into the month are we" counted the
+ * same way the reporting cadence counts it (every calendar day is a working
+ * day except Saturdays, which fold into Sunday, and HQ-flagged holidays),
+ * not a flat day-of-month fraction. Used to grade MTD against a target
+ * scaled to what should have landed by now, rather than the full monthly
+ * figure.
+ */
+export function workingDaysElapsedInMonth(dateIso: string, holidays: ReadonlySet<string>): number {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth();
+  let count = 0;
+  for (let day = 1; day <= d.getUTCDate(); day++) {
+    if (isReportDate(isoOf(new Date(Date.UTC(year, month, day))), holidays)) count++;
+  }
+  return count;
+}
+
+/** Same count, but for the whole month dateIso falls in — the pacing denominator. */
+export function workingDaysInMonth(dateIso: string, holidays: ReadonlySet<string>): number {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth();
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  let count = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    if (isReportDate(isoOf(new Date(Date.UTC(year, month, day))), holidays)) count++;
+  }
+  return count;
+}

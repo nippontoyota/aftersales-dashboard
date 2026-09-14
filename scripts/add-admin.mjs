@@ -8,6 +8,8 @@
 //   node scripts/add-admin.mjs --username admin2 --hq --password "Something@2026"
 //   node scripts/add-admin.mjs --username rm-north --region North --password "Something@2026"
 //   node scripts/add-admin.mjs --username vp-service --vp --password "Something@2026"
+//   node scripts/add-admin.mjs --username ceo --ceo --password "Something@2026"
+//   node scripts/add-admin.mjs --username accounts --accounts --password "Something@2026"
 import { randomBytes, scryptSync } from "node:crypto";
 import { Client } from "pg";
 import "./load-env.mjs";
@@ -24,12 +26,14 @@ const region = getArg("region");
 const password = getArg("password");
 const isHq = args.includes("--hq");
 const isVp = args.includes("--vp");
+const isCeo = args.includes("--ceo");
+const isAccounts = args.includes("--accounts");
 
 const VALID_REGIONS = ["North", "Central", "South"];
 
-if (!username || !password || (!branch && !isHq && !region && !isVp)) {
+if (!username || !password || (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts)) {
   console.error(
-    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --region <North|Central|South> | --vp)",
+    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --region <North|Central|South> | --vp | --ceo | --accounts)",
   );
   process.exit(1);
 }
@@ -44,7 +48,7 @@ function hash(pw, salt) {
 
 const salt = randomBytes(16).toString("hex");
 const passwordHash = hash(password, salt);
-const role = isHq ? "hq" : isVp ? "vp_service" : region ? "regional" : "branch";
+const role = isHq ? "hq" : isVp ? "vp_service" : isCeo ? "ceo" : isAccounts ? "accounts" : region ? "regional" : "branch";
 
 const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await client.connect();

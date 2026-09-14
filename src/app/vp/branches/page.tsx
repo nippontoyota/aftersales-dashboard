@@ -60,6 +60,26 @@ async function Branch({
       </div>
     );
   }
+  if (!data.report) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-6 py-8">
+        <VpHeader
+          eyebrow="Nippon Group · Service"
+          title="Branch"
+          dates={data.dates}
+          date={data.date}
+          basePath="/vp/branches"
+          dateExtraParams={params.branch ? { branch: params.branch } : undefined}
+          flagHref="/vp/regions?flag=1"
+          backHref={`/vp/regions?date=${data.date}`}
+          backLabel="Regions"
+        />
+        <div className="mt-6 rounded-xl border border-dashed border-border-strong bg-surface p-8 text-sm text-fg-subtle">
+          No BA Tool report on file for {data.date}.
+        </div>
+      </div>
+    );
+  }
 
   const selected = params.branch && data.report.branches.some((b) => b.branch === params.branch) ? params.branch : null;
   // The only way in is clicking a branch on Regions — with no branch, send them back.

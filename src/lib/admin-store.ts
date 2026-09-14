@@ -30,13 +30,19 @@ export type AdminAccount =
   // Read-only VP Service — its own executive view at /vp: company-wide
   // always, no branch/region/publish gate, no uploads, no HQ tools. Can
   // raise query flags to HQ (see vp-flags/store.ts).
-  | { username: string; passwordHash: string; salt: string; role: "vp_service"; canViewDashboard: true };
+  | { username: string; passwordHash: string; salt: string; role: "vp_service"; canViewDashboard: true }
+  // Read-only CEO — its own executive view at /ceo, same shape as
+  // vp_service (company-wide, no branch/region/publish gate, no uploads).
+  | { username: string; passwordHash: string; salt: string; role: "ceo"; canViewDashboard: true }
+  // Read-only Accounts — its own finance-only executive view at /accounts,
+  // same shape again (company-wide, no branch/region/publish gate, no uploads).
+  | { username: string; passwordHash: string; salt: string; role: "accounts"; canViewDashboard: true };
 
 type AdminRow = {
   username: string;
   password_hash: string;
   salt: string;
-  role: "hq" | "branch" | "regional" | "vp_service";
+  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts";
   branch: string | null;
   region: string | null;
 };
@@ -46,6 +52,8 @@ function toAccount(row: AdminRow): AdminAccount {
   if (row.role === "branch") return { ...base, role: "branch", branch: row.branch! };
   if (row.role === "regional") return { ...base, role: "regional", region: row.region as RegionName };
   if (row.role === "vp_service") return { ...base, role: "vp_service" };
+  if (row.role === "ceo") return { ...base, role: "ceo" };
+  if (row.role === "accounts") return { ...base, role: "accounts" };
   return { ...base, role: "hq" };
 }
 
@@ -55,6 +63,8 @@ export function adminIdentityLabel(admin: AdminAccount): string {
   if (admin.role === "hq") return "HQ admin";
   if (admin.role === "regional") return `${admin.region} regional manager`;
   if (admin.role === "vp_service") return "VP Service";
+  if (admin.role === "ceo") return "CEO";
+  if (admin.role === "accounts") return "Accounts";
   return `${admin.branch} branch`;
 }
 

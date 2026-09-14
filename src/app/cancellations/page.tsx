@@ -30,6 +30,8 @@ export default async function CancellationsPage({
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/login");
   if (admin.role === "vp_service") redirect("/vp");
+  if (admin.role === "ceo") redirect("/ceo");
+  if (admin.role === "accounts") redirect("/accounts");
   const nav = await loadNavState(admin);
   const identity = adminIdentityLabel(admin);
   const params = await searchParams;

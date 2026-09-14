@@ -15,6 +15,8 @@ export default async function UploadSheetPage({
 }) {
   const admin = await getCurrentAdmin();
   if (admin?.role === "vp_service") redirect("/vp");
+  if (admin?.role === "ceo") redirect("/ceo");
+  if (admin?.role === "accounts") redirect("/accounts");
   if (!admin || admin.role !== "hq") {
     redirect("/upload");
   }

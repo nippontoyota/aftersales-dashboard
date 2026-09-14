@@ -83,6 +83,8 @@ export type DashboardData = {
   showCompanyTabs: boolean;
 };
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export async function loadDashboardData(searchParams: { date?: string; region?: string }, admin: AdminAccount): Promise<DashboardData | null> {
   const isHq = admin.role === "hq";
   const allDates = await listSnapshotDates();
@@ -90,8 +92,11 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
 
   // Everyone sees all dates — HQ to review/publish, branch admins to view their
   // own restricted dashboard (only their branch) or the full published dashboard.
+  // Any well-formed date is pickable, not just ones with an upload already on
+  // file (branches are backfilling from January onward) — buildReport simply
+  // returns null for a date with nothing uploaded yet, same as it always has.
   const dates = allDates;
-  const date = searchParams.date && dates.includes(searchParams.date) ? searchParams.date : dates.at(-1)!;
+  const date = searchParams.date && DATE_RE.test(searchParams.date) ? searchParams.date : dates.at(-1)!;
 
   const latestDate = allDates.at(-1)!;
   const billBranch = admin.role === "branch" ? admin.branch : undefined;
