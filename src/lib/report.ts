@@ -4,7 +4,7 @@ import { loadCombinedServiceInfoSnapshotsForDate, loadCombinedServiceInfoSnapsho
 import type { ServiceInfoSnapshot } from "./service-info/store";
 import { loadAllPartSaleSnapshotsForDate, loadAllPartSaleSnapshotsForMonthUpTo } from "./part-sale/store";
 import type { PartSaleSnapshot } from "./part-sale/store";
-import { loadAllSsrv089SnapshotsForMonthUpTo } from "./ssrv089/store";
+import { loadAllSsrv089SnapshotsForDate, loadAllSsrv089SnapshotsForMonthUpTo } from "./ssrv089/store";
 import type { Ssrv089Snapshot } from "./ssrv089/store";
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import type { Scom205Snapshot } from "./scom205/store";
@@ -278,8 +278,20 @@ function mergeOnlineStoreBranches(rows: BaToolBranchRow[]): { rows: BaToolBranch
   return { rows: merged.filter((row) => !(row.branch in ONLINE_STORE_PARENT_BRANCH)), breakdowns };
 }
 
+/**
+ * `today` is undefined for a branch that has no BA Tool row on this date —
+ * either the whole company's BA Tool file is missing for `date` (a
+ * not-yet-backfilled historical day, or HQ simply hasn't uploaded it yet)
+ * or, in principle, this one branch's row is absent from an otherwise
+ * present file. Every BA-Tool-sourced field below (`t(...)`) is null in that
+ * case — GUS/BPU RO, Tyre/Battery, targets, SPO, Parts Retail — but
+ * everything sourced from the branch's *own* uploads (Service Info, Part
+ * Sale, SSRV089, scom205) still computes normally, so a branch that's
+ * backfilling its other reports ahead of BA Tool isn't hidden entirely.
+ */
 function computeBranchReport(
-  today: BaToolBranchRow,
+  branch: string,
+  today: BaToolBranchRow | undefined,
   yesterday: BaToolBranchRow | undefined,
   serviceInfoToday: ServiceInfoSnapshot | undefined,
   serviceInfoMonth: ServiceInfoSnapshot[],
@@ -291,7 +303,7 @@ function computeBranchReport(
   billRevenueForTheDay: { scrapRevenue: number; usedOilRevenue: number }
 ): BranchReport {
   const y = (key: keyof BaToolBranchRow) => (yesterday ? num(yesterday[key] as number | string | null) : null);
-  const t = (key: keyof BaToolBranchRow) => num(today[key] as number | string | null);
+  const t = (key: keyof BaToolBranchRow) => (today ? num(today[key] as number | string | null) : null);
 
   const spoTGloss = t("spoTGloss");
   const spoTGlossTarget = t("spoTGlossTarget");
@@ -309,7 +321,7 @@ function computeBranchReport(
   // A Body & Paint-only branch has no general service, so its GUS Parts/
   // Labour is 0 (not "unknown"), and it never files the SSRV089-General /
   // Part Sale reports the normal null-guards wait for.
-  const bodyPaintOnly = BODY_PAINT_ONLY_BRANCHES.has(today.branch);
+  const bodyPaintOnly = BODY_PAINT_ONLY_BRANCHES.has(branch);
 
   const gusPartsMtd = bodyPaintOnly
     ? 0
@@ -328,7 +340,7 @@ function computeBranchReport(
     sprExternal !== null && externalSalesFromParts !== null ? sprExternal + externalSalesFromParts : null;
 
   return {
-    branch: today.branch,
+    branch,
 
     gusRoBilledForTheDay: delta(t("gus"), y("gus")),
     gusRoMtd,
@@ -442,7 +454,6 @@ function groupByBranch<T extends { branch: string }>(items: T[]): Map<string, T[
 
 export async function buildReport(date: string): Promise<Report | null> {
   const today = await loadSnapshot(date);
-  if (!today) return null;
 
   const [
     previous,
@@ -450,6 +461,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     serviceInfoMonthList,
     partSaleTodayList,
     partSaleMonthList,
+    ssrv089GeneralTodayList,
     ssrv089GeneralMonthList,
     scom205TodayList,
     billRevenueList,
@@ -460,6 +472,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     loadCombinedServiceInfoSnapshotsForMonthUpTo(date),
     loadAllPartSaleSnapshotsForDate(date),
     loadAllPartSaleSnapshotsForMonthUpTo(date),
+    loadAllSsrv089SnapshotsForDate(date, "general"),
     loadAllSsrv089SnapshotsForMonthUpTo(date, "general"),
     loadAllScom205SnapshotsForDate(date),
     loadBillRevenueByBranchForMonth(date.slice(0, 7)),
@@ -475,6 +488,58 @@ export async function buildReport(date: string): Promise<Report | null> {
   const billRevenue = new Map(billRevenueList.map((r) => [r.branch, r]));
   const billRevenueDay = new Map(billRevenueDayList.map((r) => [r.branch, r]));
   const NO_BILL_REVENUE = { scrapRevenue: 0, usedOilRevenue: 0 };
+
+  if (!today) {
+    // No BA Tool file at all for this date — a historical day not backfilled
+    // yet, or HQ simply hasn't uploaded it. Still show whatever the branches'
+    // own reports (Service Info / Part Sale / SSRV089 / scom205) have on
+    // file for this exact date, rather than blanking the whole report; every
+    // BA-Tool-only field (GUS/BPU RO, Tyre/Battery, targets, SPO, Parts
+    // Retail) comes back null for these branches (see computeBranchReport).
+    const branchesWithData = new Set<string>([
+      ...serviceInfoTodayList.map((s) => s.branch),
+      ...partSaleTodayList.map((s) => s.branch),
+      ...ssrv089GeneralTodayList.map((s) => s.branch),
+      ...scom205TodayList.map((s) => s.branch),
+    ]);
+    for (const deactivated of DEACTIVATED_BRANCHES) branchesWithData.delete(deactivated);
+    if (branchesWithData.size === 0) return null;
+
+    const branches = [...branchesWithData].sort().map((branch) =>
+      computeBranchReport(
+        branch,
+        undefined,
+        undefined,
+        serviceInfoToday.get(branch),
+        serviceInfoMonth.get(branch) ?? [],
+        partSaleToday.get(branch),
+        partSaleMonth.get(branch) ?? [],
+        ssrv089GeneralMonth.get(branch) ?? [],
+        scom205Today.get(branch),
+        billRevenue.get(branch) ?? NO_BILL_REVENUE,
+        billRevenueDay.get(branch) ?? NO_BILL_REVENUE
+      )
+    );
+
+    // No BA Tool upload timestamp to anchor on — use the latest of whatever
+    // did land today, so the "data as of" footer still means something.
+    const candidateTimestamps = [
+      ...serviceInfoTodayList.map((s) => s.uploadedAt),
+      ...partSaleTodayList.map((s) => s.uploadedAt),
+      ...ssrv089GeneralTodayList.map((s) => s.uploadedAt),
+      ...scom205TodayList.map((s) => s.uploadedAt),
+    ].sort();
+    const uploadedAt = candidateTimestamps.at(-1) ?? new Date().toISOString();
+
+    return {
+      date,
+      uploadedAt,
+      hasPreviousSnapshot: previous !== null,
+      previousDate: previous?.date ?? null,
+      daysSincePrevious: previous ? daysBetween(date, previous.date) : null,
+      branches,
+    };
+  }
 
   const { rows: todayBranches, breakdowns: onlineStoreBreakdowns } = mergeOnlineStoreBranches(excludeDeactivatedBranches(today.branches));
 
@@ -502,6 +567,7 @@ export async function buildReport(date: string): Promise<Report | null> {
   const branches = todayBranches.map((branchRow) => {
     const yesterdayRow = previousBranches?.find((b) => b.branch === branchRow.branch);
     const branchReport = computeBranchReport(
+      branchRow.branch,
       branchRow,
       yesterdayRow,
       serviceInfoToday.get(branchRow.branch),
