@@ -4,7 +4,7 @@ import { loadCombinedServiceInfoSnapshotsForDate, loadCombinedServiceInfoSnapsho
 import type { ServiceInfoSnapshot } from "./service-info/store";
 import { loadAllPartSaleSnapshotsForDate, loadAllPartSaleSnapshotsForMonthUpTo } from "./part-sale/store";
 import type { PartSaleSnapshot } from "./part-sale/store";
-import { loadAllSsrv089SnapshotsForDate, loadAllSsrv089SnapshotsForMonthUpTo } from "./ssrv089/store";
+import { loadAllSsrv089SnapshotsForMonthUpTo } from "./ssrv089/store";
 import type { Ssrv089Snapshot } from "./ssrv089/store";
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import type { Scom205Snapshot } from "./scom205/store";
@@ -461,7 +461,6 @@ export async function buildReport(date: string): Promise<Report | null> {
     serviceInfoMonthList,
     partSaleTodayList,
     partSaleMonthList,
-    ssrv089GeneralTodayList,
     ssrv089GeneralMonthList,
     scom205TodayList,
     billRevenueList,
@@ -472,12 +471,16 @@ export async function buildReport(date: string): Promise<Report | null> {
     loadCombinedServiceInfoSnapshotsForMonthUpTo(date),
     loadAllPartSaleSnapshotsForDate(date),
     loadAllPartSaleSnapshotsForMonthUpTo(date),
-    loadAllSsrv089SnapshotsForDate(date, "general"),
     loadAllSsrv089SnapshotsForMonthUpTo(date, "general"),
     loadAllScom205SnapshotsForDate(date),
     loadBillRevenueByBranchForMonth(date.slice(0, 7)),
     loadBillRevenueByBranchForDate(date),
   ]);
+
+  // Only needed for the !today branch-discovery set below — derived from the
+  // month-up-to-date list already fetched above (it includes `date` itself
+  // when a snapshot exists for it) rather than a second query.
+  const ssrv089GeneralTodayList = ssrv089GeneralMonthList.filter((s) => s.date === date);
 
   const serviceInfoToday = byBranch(serviceInfoTodayList);
   const serviceInfoMonth = groupByBranch(serviceInfoMonthList);
