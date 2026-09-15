@@ -44,8 +44,18 @@ async function Overview({
       </div>
     );
   }
+  if (!data.report || !data.group) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-6 py-8">
+        <VpHeader eyebrow="Nippon Group · Service" title="Executive Overview" dates={data.dates} date={data.date} basePath="/vp" flagHref={`/vp?date=${data.date}&flag=1`} />
+        <div className="mt-6 rounded-xl border border-dashed border-border-strong bg-surface p-8 text-sm text-fg-subtle">
+          No BA Tool report on file for {data.date}.
+        </div>
+      </div>
+    );
+  }
 
-  const { group } = data;
+  const { group, report } = data;
   const flagBase = `/vp?date=${data.date}`;
   const uploadedAtLabel = new Date(data.report.uploadedAt).toLocaleString("en-IN", {
     day: "numeric",
@@ -106,7 +116,7 @@ async function Overview({
       </div>
 
       <div className="mt-6">
-        <VpScoreboard data={data} flagBase={flagBase} />
+        <VpScoreboard data={{ ...data, report, group }} flagBase={flagBase} />
       </div>
 
       <p className="mt-4 max-w-3xl text-[11px] leading-relaxed text-fg-faint">

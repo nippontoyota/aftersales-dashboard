@@ -26,8 +26,11 @@ export type VpRegionRollup = {
 export type VpData = {
   date: string;
   dates: string[];
-  report: Report;
-  group: { hero: HeroSummary; kpis: KpiSummary };
+  /** Null when no BA Tool report exists for `date` yet — a date without an
+   * upload is pickable now (branches are backfilling from January onward),
+   * so this is expected, not an error. */
+  report: Report | null;
+  group: { hero: HeroSummary; kpis: KpiSummary } | null;
   regions: VpRegionRollup[];
 };
 
@@ -37,9 +40,9 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
   const dates = await listSnapshotDates();
   if (dates.length === 0) return null;
 
-  const date = requestedDate && DATE_RE.test(requestedDate) && dates.includes(requestedDate) ? requestedDate : dates.at(-1)!;
+  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
   const report = await buildReport(date);
-  if (!report) return null;
+  if (!report) return { date, dates, report: null, group: null, regions: [] };
 
   const regions: VpRegionRollup[] = (Object.keys(REGIONS) as RegionName[]).map((region) => {
     const branches = filterBranchesByRegion(report.branches, region);

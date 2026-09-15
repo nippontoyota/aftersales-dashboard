@@ -46,7 +46,7 @@ Expected days on file: **1, 2, 3, 4, 6, 7, 8** (5th was a Saturday holiday).
 | ☐ | Branch | On file | Missing | Note |
 |---|--------|---------|---------|------|
 | ☐ | **KT01A / KT01B / TI01B** | 3 | 1,2,4,6,7,8 | dark since 3 Sep (section above) |
-| ☐ | **TI01C** | 6,7,8 | 1,2,3,4 | ≈4 days undeducted |
+| ☐ | **TI01C** | 6,7,8,9,10 (11 + 13 Sep deleted — recurring stale duplicates of 10 Sep, see "resolved" below) | 1,2,3,4 | ≈4 days undeducted |
 | ☐ | **KY01A** | 3,6,7,8 | 1,2,4 | **+ roster gap** — only "Nibu B" listed at `/data`, verify |
 | ☐ | **TR01A** | 1,3,4,7,8 | 2,6 | ≈2 days undeducted |
 | ☐ | **KL01A** | 3,4,7,8 | 1,2,6 | 1–2 fold into its 3 Sep cumulative; owes 6 |
@@ -115,6 +115,11 @@ Clean for 4–6 Sep: **CO01B** (two proper separate uploads), PH01A, TR01A, TR01
 |---|--------|-----|-----|
 | ✅ | **CO01A** | scom205 for 3 Sep was a copy of 2 Sep | Self-corrected — fresh 6/7/8 Sep scom205 on file, current MTD right. Only the historical 3 Sep view shows 2 Sep's KPI. Closed 2026-09-09. |
 | ✅ | **MV01A** | No September SSRV089-General at all | All 7 days on file (see section above). Closed 2026-09-09. |
+| ✅ | **CO01A** | Service Info-GS 7 Sep was a partial upload: WB 2/WA 4/BS 1/EC 0/VAS ₹6,159 vs the DMS's true day (WB 9/WA 13/BS 1/EC 3/VAS ₹36,837, cross-checked against a fresh 1–11 Sep cumulative export the user pulled 2026-09-12) | Fixed 2026-09-12 via `scripts/fix-co01a-sep-partial-uploads.mjs --commit` — replaced the 7 Sep raw rows + snapshot with the true day's 172 rows. MTD effect: WB +7, WA +9, EC +3, VAS Achievement +₹30,678. |
+| ✅ | **CO01A** | Part Sale 3 Sep was a partial upload: injector cleaner 10, DIY count 2, DIY revenue ₹466 vs the true day (11, 4, ₹932 — engine flush/synthetic oil/brake cleaning spray/external sales already matched) | Fixed 2026-09-12, same script/commit as above — replaced the 3 Sep raw rows + snapshot with the true day's 753 rows. MTD effect: injector cleaner +1, DIY count +2, DIY revenue +₹466 (informational metric only, no Total Revenue Stream impact). |
+| ✅ | **TI01C** | 11 Sep uploads for scom205, SSRV089-General, and Service Info-GS were all stale duplicates of 10 Sep (identical figures + filenames) — BA Tool's own numbers show real growth that day (GUS RO 274→311, BPU RO 37→43), so the branch resubmitted yesterday's files instead of pulling fresh ones | Fixed 2026-09-12 via `scripts/fix-ti01c-sep11-duplicate-uploads.mjs --commit` — deleted the 11 Sep snapshot + 296 raw rows across all three report types, reverting to "not yet uploaded for the 11th." scom205-derived GUS/BPU Parts & Labour MTD now blank until the real file lands (was silently stuck at 10 Sep's value); Service Info MTD no longer double-counts 10 Sep (was +4 Brake Skimming, +4 Evaporator Cleaning, +₹46,084 VAS too high). TI01C still owes a real 11 Sep upload for these three. |
+| ✅ | **TI01C** | Same pattern recurred — asked "is it okay now" 2026-09-15, re-checked and found the branch had resent the *same* 10 Sep files again for the 11th (after the fix above) and now also for the 13th (12 Sep folds into 13, Saturday). Hash-verified byte-identical across all three dates for scom205, SSRV089-General, and Service Info-GS; BA Tool showed real, continuing growth the whole time (GUS RO 274→311→339→359 through the 14th), confirming the branch's own reports simply weren't capturing real business, three rounds running. | Deleted the 11 Sep AND 13 Sep snapshots + 592 raw rows across all three report types (`scripts/fix-ti01c-sep11-13-duplicate-uploads.mjs --commit`), reverting both to "not yet uploaded." Script includes a pre-delete safety check that aborts if the three dates ever stop matching exactly, given how easily this recurs. TI01C now owes real uploads for 11 and 13 Sep (or one combined 11–13 Sep file, same guidance given for CO01B's Saturday fold this round) across scom205, SSRV089-General, and Service Info. | scom205-derived GUS/BPU Parts & Labour MTD blank for 11 and 13 Sep until real files land; Service Info/SSRV089 MTD no longer triple-counts the 10th's job orders/VAS entries. |
+| ✅ | **KY01A / PH01A / TL01A / TR01A / TR01C** | "Opulent Auto Care Pvt Ltd" (a vendor buying parts from us for its own use, spelled differently at every branch) was showing up as a Part Sale Report `CustomerName` and its purchases were counting toward External Sales — 9 branches have Opulent rows total, but only these 5 have ones that both land in September and match the External Sales filter (bill type A + tracked part prefix); KL01A also has 10 Opulent rows in Sept but none match the filter, so no change there | Fixed 2026-09-12 via `scripts/recompute-part-sale-external-excluding-opulent.mjs --commit` — re-derived `external_sales` from the raw rows already on file, excluding any row whose CustomerName contains "opulent". External Sales MTD: KY01A 5,484→3,415 (−2,070), PH01A 31,653→20,704 (−10,950), TL01A 10,151→8,128 (−2,023), TR01A 33,583→30,125 (−3,458), TR01C 39,296→35,544 (−3,752). Flows straight through to each branch's Total Revenue Stream MTD. |
 
 ## August · double-counted  →  GUS Labour / Parts MTD read **low** (closed month)
 
@@ -173,6 +178,17 @@ Fix when revisiting August: delete the phantom snapshots; decide whether to re-d
 | ✅ | Branch | Problem | Fix | Impact |
 |---|--------|---------|-----|--------|
 | ✅ | **9 branches** | Brake Skimming only matched `FR DISC (ONE SIDE) (ON-VEHICLE) - GRIND` / its opp-side combo — missed rear-axle disc grinds and every **off-vehicle** (bench-lathe) grind. Same skimming service, just a different Job Desc. | `isBrakeSkimmingDesc()` now matches the shape `(FR\|RR) DISC (ONE SIDE) ((ON\|OFF)-VEHICLE) … GRIND` (still per repair order, confirmed 2026-09-09). All Sept snapshots re-derived from raw rows (`scripts/recompute-service-info-brake-skimming.mts`). | Group MTD **54 → 76**. CO01A +7, MV01A +3, TR01C +3, CO01B +2, TI01A +2, TI01C +2, IR01A/TL01A/TR01A +1. KL01A, KT01A/B, KY01A, PH01A, TI01B unchanged. Display count only — no revenue effect. |
+
+## Open · CO01A Wheel Balancing/Alignment/Evaporator Cleaning still off vs the branch's own count
+
+After the Sept 7 Service Info-GS fix above, the branch team's own manual tally for September still runs
+**+1 Wheel Balancing, +2 Wheel Alignment, +2 Evaporator Cleaning** below what the dashboard now shows —
+Brake Skimming and VAS Revenue matched exactly. Checked for the obvious causes (2026-09-12): no duplicate
+rows in the file, no GS/BP overlap, no cancelled jobs, no ambiguous job-code-to-description collisions.
+One suspicious row found — Job Order `GSJ2613730` (Wheel Alignment), Reg No is the literal placeholder
+`"REGNO"`, closed by CO01A's own Accessories staffer (Aneesh E K) — but that only accounts for 1 of the 2
+Wheel Alignment excess, and none of Wheel Balancing/Evaporator Cleaning. Waiting on the branch's own list
+of Job Order/invoice numbers to diff directly against.
 
 ---
 

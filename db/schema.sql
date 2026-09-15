@@ -25,25 +25,33 @@ create table if not exists admins (
   dashboard_access boolean not null default false,
   -- 'vp_service' is read-only and company-wide (no branch/region/publish
   -- gate) — the VP Service executive view at /vp. See src/app/vp/*.
-  constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service')),
+  -- 'ceo' is read-only and company-wide, same shape as vp_service — its own
+  -- executive view at /ceo. See src/app/ceo/*.
+  -- 'accounts' is read-only and company-wide, same shape again — the
+  -- finance-only executive view at /accounts. See src/app/accounts/*.
+  constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts')),
   constraint admins_role_scope_consistency check (
     (role = 'branch'     and branch is not null and region is null) or
     (role = 'hq'         and branch is null     and region is null) or
     (role = 'regional'   and branch is null     and region in ('North', 'Central', 'South')) or
-    (role = 'vp_service' and branch is null     and region is null)
+    (role = 'vp_service' and branch is null     and region is null) or
+    (role = 'ceo'        and branch is null     and region is null) or
+    (role = 'accounts'   and branch is null     and region is null)
   )
 );
 -- Upgrade an existing database:
 alter table admins add column if not exists region text;
 alter table admins drop constraint if exists branch_role_consistency;
 alter table admins drop constraint if exists admins_role_check;
-alter table admins add constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service'));
+alter table admins add constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts'));
 alter table admins drop constraint if exists admins_role_scope_consistency;
 alter table admins add constraint admins_role_scope_consistency check (
   (role = 'branch'     and branch is not null and region is null) or
   (role = 'hq'         and branch is null     and region is null) or
   (role = 'regional'   and branch is null     and region in ('North', 'Central', 'South')) or
-  (role = 'vp_service' and branch is null     and region is null)
+  (role = 'vp_service' and branch is null     and region is null) or
+  (role = 'ceo'        and branch is null     and region is null) or
+  (role = 'accounts'   and branch is null     and region is null)
 );
 
 -- VP Service → HQ query/flag threads. The VP pins a flag to whatever they

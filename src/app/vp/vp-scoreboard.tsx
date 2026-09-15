@@ -60,7 +60,7 @@ function fmtValue(v: number | null, kind: Kind): string {
 const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg" } as const;
 const TONE_BAR = { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" } as const;
 
-export function VpScoreboard({ data, flagBase }: { data: VpData; flagBase: string }) {
+export function VpScoreboard({ data, flagBase }: { data: VpData & { group: NonNullable<VpData["group"]> }; flagBase: string }) {
   const cols: Col[] = [
     ...data.regions.map((r) => ({ key: r.region, label: r.region, hero: r.hero, kpis: r.kpis })),
     { key: "Group", label: "Group", hero: data.group.hero, kpis: data.group.kpis },

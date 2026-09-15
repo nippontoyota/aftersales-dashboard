@@ -10,6 +10,7 @@ import { achievementRatio, computeKpiSummary } from "@/lib/aggregate";
 import { getCurrentAdmin } from "@/lib/auth";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
+import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { computeVasTrendSeries } from "@/lib/trend";
 import { loadBranchView, loadRegionView } from "@/lib/branch-view-data";
@@ -44,6 +45,8 @@ export default async function DashboardPage({
 }) {
   const admin = await getCurrentAdmin();
   if (admin?.role === "vp_service") redirect("/vp");
+  if (admin?.role === "ceo") redirect("/ceo");
+  if (admin?.role === "accounts") redirect("/accounts");
   if (!admin?.canViewDashboard) {
     redirect("/upload");
   }
@@ -98,12 +101,17 @@ async function DashboardContent({
     const branchReport = data.filteredBranches[0];
     if (!data.report || !branchReport) {
       return (
-        <div className="mx-auto max-w-[1600px] p-6">
-          <h1 className="text-lg font-semibold text-fg">Daily Report</h1>
-          <div className="mt-4 rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
-            Your uploads are saved. This report fills in once HQ has uploaded the day&apos;s BA Tool file.
-          </div>
-        </div>
+        <NoDataForDate
+          title="Daily Report"
+          date={data.date}
+          dates={data.dates}
+          basePath="/dashboard"
+          message={
+            data.date === data.dates.at(-1)
+              ? "Your uploads are saved. This report fills in once HQ has uploaded the day's BA Tool file."
+              : `No BA Tool report on file for ${data.date}.`
+          }
+        />
       );
     }
     const uploadedAtLabel = new Date(data.report.uploadedAt).toLocaleString("en-IN", {
@@ -130,12 +138,17 @@ async function DashboardContent({
   if (data.showRegionDailyReport && admin.role === "regional") {
     if (!data.report || data.filteredBranches.length === 0) {
       return (
-        <div className="mx-auto max-w-[1600px] p-6">
-          <h1 className="text-lg font-semibold text-fg">Regional Report — {admin.region}</h1>
-          <div className="mt-4 rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
-            This report fills in once HQ has uploaded the day&apos;s BA Tool file.
-          </div>
-        </div>
+        <NoDataForDate
+          title={`Regional Report — ${admin.region}`}
+          date={data.date}
+          dates={data.dates}
+          basePath="/dashboard"
+          message={
+            data.date === data.dates.at(-1)
+              ? "This report fills in once HQ has uploaded the day's BA Tool file."
+              : `No BA Tool report on file for ${data.date}.`
+          }
+        />
       );
     }
     const uploadedAtLabel = new Date(data.report.uploadedAt).toLocaleString("en-IN", {
@@ -161,11 +174,7 @@ async function DashboardContent({
     data;
 
   if (!report) {
-    return (
-      <div className="mx-auto max-w-[1600px] p-6">
-        <div className="rounded-lg border border-bad/30 bg-bad-soft p-4 text-sm text-bad">Could not load the report for {date}.</div>
-      </div>
-    );
+    return <NoDataForDate title="Executive Overview" date={date} dates={dates} basePath="/dashboard" />;
   }
 
   // Branch / regional accounts on a published date get the branch-first view;
