@@ -232,13 +232,27 @@ export function isBodyPaintOnly(branch: string): boolean {
 /** Branch codes that aren't real physical branches — their BA Tool row folds
  * into a parent branch's row and the code itself never appears downstream
  * as its own branch. CO01C is Nippon Toyota's online-store sales channel;
- * its row only carries real SPR External / SPO Dealer figures (everything
- * else in it is empty), so only those fields get merged in. Splitting the
- * parent and online figures back apart for an "expand" view is separate,
- * later work — this only handles the merge. */
+ * its BA Tool row only carries real SPR External / SPO Dealer figures
+ * (everything else in it is empty), so only those fields get merged in.
+ * Since 2026-09-15, CO01C can also upload its own Part Sale Report (see
+ * /upload's "Online Store Part Sale Report" field and
+ * /api/upload/part-sale-online) — those rows get merged into CO01A's own
+ * partSaleMonth below, the same "folds into the parent" treatment. Optional,
+ * not part of any branch's required-uploads set (an online store doesn't
+ * transact every day — see pending-uploads.ts / admin-store.ts, which never
+ * list CO01C at all). Splitting the parent and online figures back apart for
+ * an "expand" view is separate, later work — this only handles the merge. */
 const ONLINE_STORE_PARENT_BRANCH: Record<string, string> = {
   CO01C: "CO01A",
 };
+
+/** The online-store code for a parent branch's own login (e.g. "CO01A" ->
+ * "CO01C"), or undefined if that branch has no online-store channel — used
+ * by /api/upload/part-sale-online to attribute an upload to the right code
+ * without trusting the client to supply it. */
+export function onlineStoreCodeFor(parentBranch: string): string | undefined {
+  return Object.entries(ONLINE_STORE_PARENT_BRANCH).find(([, parent]) => parent === parentBranch)?.[0];
+}
 
 const ONLINE_STORE_MERGED_FIELDS: Exclude<keyof BaToolBranchRow, "branch">[] = ["sprExternal", "spoDealer", "spoDealerTarget"];
 
@@ -491,6 +505,22 @@ export async function buildReport(date: string): Promise<Report | null> {
   const serviceInfoMonth = groupByBranch(serviceInfoMonthList);
   const partSaleToday = byBranch(partSaleTodayList);
   const partSaleMonth = groupByBranch(partSaleMonthList);
+
+  // Fold an online store's own Part Sale Report (e.g. CO01C's) into its
+  // parent's MTD figures (e.g. CO01A's) — same "folds into the parent"
+  // treatment as the BA Tool merge above, just done by concatenating
+  // snapshot rows instead of summing individual fields, since sumBy() in
+  // computeBranchReport already sums whatever's in the list. Only affects
+  // MTD: partSaleToday (the day's own single snapshot, used for the
+  // non-External-Sales "for the day" figures) is left un-merged, since an
+  // online store's engine-flush/DIY consumable sales are negligible and not
+  // worth the added complexity of merging two single-snapshot objects.
+  for (const [onlineCode, parentCode] of Object.entries(ONLINE_STORE_PARENT_BRANCH)) {
+    const onlineMonth = partSaleMonth.get(onlineCode);
+    if (!onlineMonth || onlineMonth.length === 0) continue;
+    partSaleMonth.set(parentCode, [...(partSaleMonth.get(parentCode) ?? []), ...onlineMonth]);
+  }
+
   const ssrv089GeneralMonth = groupByBranch(ssrv089GeneralMonthList);
   const scom205Today = byBranch(scom205TodayList);
   const billRevenue = new Map(billRevenueList.map((r) => [r.branch, r]));
@@ -511,6 +541,14 @@ export async function buildReport(date: string): Promise<Report | null> {
       ...scom205TodayList.map((s) => s.branch),
     ]);
     for (const deactivated of DEACTIVATED_BRANCHES) branchesWithData.delete(deactivated);
+    // An online store's data is already merged into its parent's
+    // partSaleMonth above — make sure the parent shows up here too (even if
+    // it filed nothing of its own that day) and the online code never gets
+    // its own duplicate row.
+    for (const [onlineCode, parentCode] of Object.entries(ONLINE_STORE_PARENT_BRANCH)) {
+      if (branchesWithData.has(onlineCode)) branchesWithData.add(parentCode);
+      branchesWithData.delete(onlineCode);
+    }
     if (branchesWithData.size === 0) return null;
 
     const branches = [...branchesWithData].sort().map((branch) =>
