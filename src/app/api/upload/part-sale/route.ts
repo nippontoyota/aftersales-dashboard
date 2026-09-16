@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
+import { hashRows } from "@/lib/duplicate-detection";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { loadPartSaleSnapshot, savePartSaleSnapshot } from "@/lib/part-sale/store";
-import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { loadMostRecentRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -50,6 +51,22 @@ export async function POST(request: Request) {
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
       { status: 422 }
     );
+  }
+
+  // Warn-and-allow duplicate check (2026-09-16, at the user's request) — see
+  // scom205's upload route for the full rationale. A branch genuinely
+  // combining several days into one export (extra rows for the newer days)
+  // hashes differently and is never flagged — only an exact resend matches.
+  const confirmed = formData.get("confirmDuplicate") === "true";
+  if (!confirmed) {
+    const previous = await loadMostRecentRawUploadRowsBefore("part_sale", admin.branch, date);
+    if (previous && hashRows(rawRows) === hashRows(previous.rows)) {
+      return NextResponse.json({
+        duplicate: true,
+        previousDate: previous.date,
+        message: `This file looks identical to your upload from ${previous.date} — same rows. Are you sure this is ${date}'s file?`,
+      });
+    }
   }
 
   const uploadedAt = new Date().toISOString();

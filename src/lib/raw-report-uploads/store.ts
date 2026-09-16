@@ -26,6 +26,26 @@ export async function loadRawReportUpload(date: string, branch: string, reportTy
   return rows[0] ? { sourceFileName: rows[0].source_file_name, uploadedAt: rows[0].uploaded_at } : null;
 }
 
+/** Most recent upload strictly before `beforeDate` for one branch/report
+ * type, file bytes included — the one caller that does want file_data back:
+ * the duplicate-upload check (see duplicate-detection.ts) needs to hash the
+ * previous file to compare against a fresh one, since these two report
+ * types keep no parsed rows to compare instead. */
+export async function loadMostRecentRawReportUploadBefore(
+  branch: string,
+  reportType: RawReportType,
+  beforeDate: string
+): Promise<{ date: string; sourceFileName: string; fileData: Buffer } | null> {
+  const { rows } = await pool.query<{ date: string; source_file_name: string; file_data: Buffer }>(
+    `select date::text as date, source_file_name, file_data from raw_report_uploads
+     where branch = $1 and report_type = $2 and date < $3
+     order by date desc limit 1`,
+    [branch, reportType, beforeDate]
+  );
+  const r = rows[0];
+  return r ? { date: r.date, sourceFileName: r.source_file_name, fileData: r.file_data } : null;
+}
+
 /** Every branch that's uploaded a given report type for a date, in one
  * query — the pending-uploads view needs "who's done vs. who hasn't" across
  * all 20 branches, not a one-branch lock check. */

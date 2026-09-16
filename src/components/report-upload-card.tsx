@@ -140,26 +140,29 @@ function ReportUploadForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // A duplicate-upload warning (see the six upload API routes) — holds the
+  // already-built FormData (file included) so "Upload anyway" can resubmit
+  // it with confirmDuplicate set, rather than asking the admin to re-pick
+  // the file. Cleared on cancel, on a fresh submit, or once resolved.
+  const [duplicateWarning, setDuplicateWarning] = useState<{ message: string; formData: FormData } | null>(null);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function submit(formData: FormData, fileName: string) {
     setPending(true);
     setError(null);
     setSuccess(null);
-
-    const formData = new FormData(e.currentTarget);
-    const file = formData.get("file");
-    const fileName = file instanceof File ? file.name : "uploaded file";
-    // Branch panel: the date comes from the shared picker above. BA Tool:
-    // the in-form field below already put it in the FormData.
-    if (reportDate) formData.set("date", reportDate);
     try {
       const res = await fetch(endpoint, { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Upload failed.");
+        setDuplicateWarning(null);
         return;
       }
+      if (data.duplicate) {
+        setDuplicateWarning({ message: data.message ?? "This looks like a duplicate upload.", formData });
+        return;
+      }
+      setDuplicateWarning(null);
       const message = formatSuccess(data);
       setSuccess(message);
       formRef.current?.reset();
@@ -169,9 +172,30 @@ function ReportUploadForm({
       router.refresh();
     } catch {
       setError("Upload failed — could not reach the server.");
+      setDuplicateWarning(null);
     } finally {
       setPending(false);
     }
+  }
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const file = formData.get("file");
+    const fileName = file instanceof File ? file.name : "uploaded file";
+    // Branch panel: the date comes from the shared picker above. BA Tool:
+    // the in-form field below already put it in the FormData.
+    if (reportDate) formData.set("date", reportDate);
+    submit(formData, fileName);
+  }
+
+  function handleConfirmDuplicate() {
+    if (!duplicateWarning) return;
+    const formData = duplicateWarning.formData;
+    formData.set("confirmDuplicate", "true");
+    const file = formData.get("file");
+    const fileName = file instanceof File ? file.name : "uploaded file";
+    submit(formData, fileName);
   }
 
   const fieldId = `file-${endpoint.replace(/\W+/g, "-")}`;
@@ -225,13 +249,37 @@ function ReportUploadForm({
         </p>
       ) : null}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
-      >
-        {pending ? "Uploading…" : "Upload"}
-      </button>
+      {duplicateWarning ? (
+        <div className="space-y-2 rounded-md border border-warn/30 bg-warn-soft p-3" role="alert" aria-live="assertive">
+          <p className="text-sm text-warn">{duplicateWarning.message}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleConfirmDuplicate}
+              disabled={pending}
+              className="h-8 rounded-md border border-warn/40 bg-surface px-3 text-xs font-medium text-warn hover:bg-warn-soft disabled:opacity-60"
+            >
+              {pending ? "Uploading…" : "Yes, upload anyway"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDuplicateWarning(null)}
+              disabled={pending}
+              className="h-8 rounded-md px-3 text-xs font-medium text-fg-subtle hover:text-fg"
+            >
+              Cancel — let me pick a different file
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="submit"
+          disabled={pending}
+          className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
+        >
+          {pending ? "Uploading…" : "Upload"}
+        </button>
+      )}
     </form>
   );
 }

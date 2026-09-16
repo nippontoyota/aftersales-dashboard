@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
-import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { hashRows } from "@/lib/duplicate-detection";
+import { loadMostRecentRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { loadSsrv089Snapshot, saveSsrv089Snapshot } from "@/lib/ssrv089/store";
 
@@ -52,6 +53,22 @@ export async function POST(request: Request) {
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
       { status: 422 }
     );
+  }
+
+  // Warn-and-allow duplicate check (2026-09-16, at the user's request) — see
+  // scom205's upload route for the full rationale. This is the report type
+  // that caused the most repeat trouble this month (TI01C resent the same
+  // Cost & Sales file three rounds running).
+  const confirmed = formData.get("confirmDuplicate") === "true";
+  if (!confirmed) {
+    const previous = await loadMostRecentRawUploadRowsBefore("ssrv089", admin.branch, date);
+    if (previous && hashRows(rawRows) === hashRows(previous.rows)) {
+      return NextResponse.json({
+        duplicate: true,
+        previousDate: previous.date,
+        message: `This file looks identical to your upload from ${previous.date} — same rows. Are you sure this is ${date}'s file?`,
+      });
+    }
   }
 
   const uploadedAt = new Date().toISOString();

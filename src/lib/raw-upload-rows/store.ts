@@ -66,3 +66,26 @@ export async function loadRawUploadRows(reportType: RawUploadReportType, date: s
   );
   return rows.map((r) => r.row_data);
 }
+
+/** Every raw row from the most recent upload strictly before `beforeDate`
+ * for one report type/branch — the duplicate-upload check (see
+ * duplicate-detection.ts) hashes this against a fresh upload's rows to spot
+ * a branch resending an earlier day's file under a new date. Returns null
+ * (not an empty row list) when there's nothing before that date at all, so
+ * a branch's very first upload of the month is never flagged. */
+export async function loadMostRecentRawUploadRowsBefore(
+  reportType: RawUploadReportType,
+  branch: string,
+  beforeDate: string
+): Promise<{ date: string; rows: unknown[] } | null> {
+  const { rows: dateRows } = await pool.query<{ date: string }>(
+    `select distinct date::text as date from raw_upload_rows
+     where report_type = $1 and branch = $2 and date < $3
+     order by date desc limit 1`,
+    [reportType, branch, beforeDate]
+  );
+  const date = dateRows[0]?.date;
+  if (!date) return null;
+  const rows = await loadRawUploadRows(reportType, date, branch);
+  return { date, rows };
+}
