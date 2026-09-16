@@ -6,23 +6,32 @@ import { REGIONS, type RegionName } from "./regions";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
 import { loadCombinedServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
 import { isDatePublished } from "./publish-store";
+import { countActionableForHq, countActionableForRegion } from "./region-queries/store";
+import { countOpenVpFlags } from "./vp-flags/store";
 
 /** Nav-shell state for the dashboard family of pages — cheap enough to run in
  * the fast outer shell (before the Suspense'd content). A branch or regional
  * admin whose latest uploaded date isn't published yet is in raw-report mode:
  * the /dashboard nav item is relabelled and the company-wide tabs (Reports,
- * TKM Targets, Alerts, Branches) are hidden. Regional admins never see the
- * Upload tab. HQ is never restricted. */
+ * TKM Targets, Queries, Branches) are hidden — except Queries stays visible
+ * for a regional admin (see app-shell.tsx's `regionalVisible`). Regional
+ * admins never see the Upload tab. HQ is never restricted. */
 export async function loadNavState(
   admin: AdminAccount,
-): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean; slimNav: boolean }> {
+): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean; slimNav: boolean; queriesBadge: number }> {
   const canUpload = admin.role !== "regional";
-  if (admin.role === "hq") return { companyTabs: true, dashboardLabel: "Executive Overview", canUpload, slimNav: false };
+  if (admin.role === "hq") {
+    const [vpOpen, regionActionable] = await Promise.all([countOpenVpFlags(), countActionableForHq()]);
+    return { companyTabs: true, dashboardLabel: "Executive Overview", canUpload, slimNav: false, queriesBadge: vpOpen + regionActionable };
+  }
   // Branch / regional accounts get the slim nav (company pages dropped, their
   // content folded into the branch-first dashboard) — but only once the
   // latest date is published; before that they're still in raw-report mode.
   const slimNav = admin.role === "branch" || admin.role === "regional";
-  const dates = await listSnapshotDates();
+  const [dates, queriesBadge] = await Promise.all([
+    listSnapshotDates(),
+    admin.role === "regional" ? countActionableForRegion(admin.region) : Promise.resolve(0),
+  ]);
   const latest = dates.at(-1);
   const latestPublished = latest ? await isDatePublished(latest) : true;
   const publishedLabel = admin.role === "regional" ? "My Region" : "My Branch";
@@ -31,6 +40,7 @@ export async function loadNavState(
     dashboardLabel: latestPublished ? publishedLabel : admin.role === "regional" ? "Regional Report" : "Daily Report",
     canUpload,
     slimNav,
+    queriesBadge,
   };
 }
 

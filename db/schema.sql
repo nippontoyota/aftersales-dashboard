@@ -79,6 +79,32 @@ create table if not exists vp_flags (
 create index if not exists vp_flags_status_idx on vp_flags (status, created_at desc);
 create index if not exists vp_flags_branch_idx on vp_flags (context_branch) where context_branch is not null;
 
+-- HQ ↔ Regional Manager query threads — bidirectional, unlike vp_flags
+-- (VP → HQ only). `direction` says who asked: 'to_hq' means the regional
+-- manager for `region` raised it (mirrors vp_flags' shape); 'to_region'
+-- means HQ raised it, addressed to that region's manager. One question +
+-- one reply per thread, same open/answered/closed lifecycle as vp_flags.
+-- See src/lib/region-queries/store.ts.
+create table if not exists region_queries (
+  id bigint generated always as identity primary key,
+  created_by text not null references admins(username),
+  created_at timestamptz not null default now(),
+  direction text not null,
+  region text not null,
+  context_date date,
+  context_branch text,
+  note text not null,
+  status text not null default 'open',
+  reply text,
+  replied_by text references admins(username),
+  replied_at timestamptz,
+  constraint region_queries_direction_check check (direction in ('to_hq', 'to_region')),
+  constraint region_queries_region_check check (region in ('North', 'Central', 'South')),
+  constraint region_queries_status_check check (status in ('open', 'answered', 'closed'))
+);
+create index if not exists region_queries_region_idx on region_queries (region, status, created_at desc);
+create index if not exists region_queries_status_idx on region_queries (status, created_at desc);
+
 -- One row per branch per date — mirrors data/uploads/{date}.json's `branches` array.
 create table if not exists ba_tool_snapshots (
   date date not null,

@@ -57,6 +57,8 @@ export default async function CancellationsPage({
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}
+      isRegional={admin.role === "regional"}
+      queriesBadge={nav.queriesBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
     >

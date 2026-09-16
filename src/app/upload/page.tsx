@@ -35,7 +35,9 @@ export default async function UploadPage({
   if (admin?.role === "accounts") redirect("/accounts");
   if (admin?.role === "regional") redirect("/dashboard");
   const identity = admin ? adminIdentityLabel(admin) : "";
-  const nav = admin ? await loadNavState(admin) : { companyTabs: true, dashboardLabel: "Executive Overview", canUpload: true, slimNav: false };
+  const nav = admin
+    ? await loadNavState(admin)
+    : { companyTabs: true, dashboardLabel: "Executive Overview", canUpload: true, slimNav: false, queriesBadge: 0 };
 
   // The date picker defaults to the computed report date — one date for every
   // branch each round (see src/lib/reporting-date.ts) — but a branch can pick
@@ -86,7 +88,7 @@ export default async function UploadPage({
       : null;
 
   return (
-    <AppShell current="upload" showDashboardLink={admin?.canViewDashboard ?? false} isHq={admin?.role === "hq"} companyTabs={nav.companyTabs} slimNav={nav.slimNav} dashboardLabel={nav.dashboardLabel} identity={identity}>
+    <AppShell current="upload" showDashboardLink={admin?.canViewDashboard ?? false} isHq={admin?.role === "hq"} companyTabs={nav.companyTabs} slimNav={nav.slimNav} queriesBadge={nav.queriesBadge} dashboardLabel={nav.dashboardLabel} identity={identity}>
       <div className="mx-auto w-full max-w-2xl p-6">
         {admin?.role === "hq" ? (
           <UploadTabs

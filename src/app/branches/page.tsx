@@ -28,7 +28,7 @@ export default async function BranchesPage({ searchParams }: { searchParams: Pro
   const identity = adminIdentityLabel(admin);
 
   return (
-    <AppShell current="branches" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} identity={identity}>
+    <AppShell current="branches" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} queriesBadge={nav.queriesBadge} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton />}>
         <BranchesContent searchParams={searchParams} admin={admin} />
       </Suspense>
