@@ -115,11 +115,13 @@ export type BranchReport = {
   bpuPartsMtd: number | null;
   bpuLabourMtd: number | null;
 
-  // External Sales MTD (Rs) = BA Tool's SPR External (already cumulative)
-  // plus the branch's cumulative Part Sale Report "External Sales" filter
-  // (external-type-bill rows, PartNo prefix match — see part-sale/parse.ts).
-  // Null whenever Part Sale Report hasn't been uploaded for this branch this
-  // month, same conservative rule as GUS Parts MTD above.
+  // External Sales MTD (Rs) = the branch's cumulative Part Sale Report
+  // "External Sales" filter alone (every row on an `A`-type bill, plus
+  // matching `F`-type returns — see part-sale/parse.ts). BA Tool's SPR
+  // External is no longer used here as of 2026-09-15. Null whenever Part
+  // Sale Report hasn't been uploaded for this branch this month, same
+  // conservative rule as GUS Parts MTD above — 0 instead for a Body &
+  // Paint-only branch (see BODY_PAINT_ONLY_BRANCHES below).
   externalSalesMtd: number | null;
 
   // Scrap and used-oil revenue (Rs, without tax) — sum of PDF bill taxable
@@ -136,7 +138,8 @@ export type BranchReport = {
   usedOilRevenueMtd: number;
 
   // From the user's real "Revenue Stream" reference sheet — verified against
-  // its embedded formulas directly, not re-derived by us:
+  // its embedded formulas directly, not re-derived by us (External Sales
+  // input redefined 2026-09-15, see externalSalesMtd above):
   //   Total MTD (Rs)  = GUS Parts + GUS Labour + BPU Parts + BPU Labour + External Sales
   //   % on SPR I       = External Sales / (Parts Retail Achievement MTD [SPR Internal] + External Sales)
   // % on SPR I is null unless every input it depends on is present. Total MTD
@@ -206,10 +209,15 @@ function excludeDeactivatedBranches(rows: BaToolBranchRow[]): BaToolBranchRow[] 
  * null-guards on the GUS accessories deduction and the Part-Sale external
  * component leave their Total Revenue Stream MTD null even though their BPU
  * revenue is real. For these branches GUS Parts/Labour MTD is 0 (there is no
- * general service) and the Part-Sale external component defaults to 0 when
- * absent — so Total Revenue = BPU Parts + BPU Labour + SPR External + scrap
- * + used-oil. Confirmed with the user 2026-09-08. Revisit if any of them
- * adds a service desk (its scom205 GUS revenue would then be non-zero).
+ * general service) and External Sales MTD defaults to 0 when the Part Sale
+ * Report is absent (or present with no `A`-type bills) — so Total Revenue =
+ * BPU Parts + BPU Labour + External Sales + scrap + used-oil. Confirmed with
+ * the user 2026-09-08; External Sales input redefined 2026-09-15 (BA Tool's
+ * SPR External dropped from the formula group-wide, including these
+ * branches — confirmed 2026-09-15 this also zeroes TR01B/KL01B's External
+ * Sales versus their old SPR External figures, since neither files real
+ * Part Sale Report `A`-type bills). Revisit if any of them adds a service
+ * desk (its scom205 GUS revenue would then be non-zero).
  *
  * Exported so the upload surface stays in step: these branches never get the
  * GS-variant Service Info / Cost & Sales files, so the /upload page hides
@@ -311,7 +319,6 @@ function computeBranchReport(
   const accessoriesPartSaleMtd = sumBy(ssrv089GeneralMonth, (s) => s.totals.accessoriesPartSale);
   const accessoriesLabourSaleMtd = sumBy(ssrv089GeneralMonth, (s) => s.totals.accessoriesLabourSale);
   const externalSalesFromPartsMtd = sumBy(partSaleMonth, (s) => s.counts.externalSales);
-  const sprExternal = t("sprExternal");
   const partsRetailAchievementForTheMonth = t("sprInternal");
 
   const gusRoMtd = t("gus");
@@ -335,9 +342,7 @@ function computeBranchReport(
       : null;
   const bpuPartsMtd = scom205Today?.totals.bpuSpRevMtd ?? null;
   const bpuLabourMtd = scom205Today?.totals.bpuLabRevMtd ?? null;
-  const externalSalesFromParts = externalSalesFromPartsMtd ?? (bodyPaintOnly ? 0 : null);
-  const externalSalesMtd =
-    sprExternal !== null && externalSalesFromParts !== null ? sprExternal + externalSalesFromParts : null;
+  const externalSalesMtd = externalSalesFromPartsMtd ?? (bodyPaintOnly ? 0 : null);
 
   return {
     branch,

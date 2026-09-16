@@ -13,6 +13,8 @@ const PART_NO_COLUMN = "PartNo";
 const SALE_QTY_COLUMN = "Sale Qty";
 const BILL_NO_COLUMN = "BillNo";
 const NET_AMNT_COLUMN = "NetAmnt";
+const REF_DOC_NO_COLUMN = "RefDocNo";
+const CUSTOMER_NAME_COLUMN = "CustomerName";
 
 const ENGINE_FLUSH_PARTS = ["A-08814-80061", "A-08814-80090"];
 const INJECTOR_CLEANER_PARTS = ["A-08813-80100", "A-08813-80019"];
@@ -27,50 +29,47 @@ const SYNTHETIC_OIL_PARTS = [
 ];
 const BRAKE_CLEANING_SPRAY_PARTS = ["Z-9BCHP-00001"];
 
-/** External Sales: rows on an external-type bill whose PartNo starts with
- * one of these letters, plus the exact-match SKUs below.
+/** External Sales (2026-09-15 rule, replaces the old PartNo-prefix filter):
  *
  * A BillNo is `[type][branch-letter]26-NNNNN`. The type letter is what
- * matters here: `A` = external sale (every branch), `C` = cash, `I` =
- * internal (returns, always negative), `D`/`E` = other non-external types
- * that do NOT count (confirmed with the user 2026-09-08). The parser matched
- * a literal `"AA"` until 2026-09-08 and so only ever caught CO01B; every
- * other branch's external part sales were being scored as ₹0.
+ * matters: `A` = external sale (every branch — the branch letter is just
+ * that branch's own fixed code, e.g. CO01B is `AA`, CO01A is `AB`, KL01A is
+ * `AF` — informational only, the filter keys off the type letter alone).
  *
- * The branch letter is informational only (the filter keys off the type
- * letter alone). Full map, from the Sept 2026 files:
- *   CO01A B · CO01B A · CO01E Q · MV01A K · KY01A M · TR01A J · TR01B E ·
- *   TR01C H · KL01A F · PH01A R · TL01A I · KT01A C · KT01B Y · TI01A D ·
- *   IR01A L · TI01B T · TI01C P
- * CO01E (`Q`) is Body & Paint only and raises no `A`-type (external) bills
- * at all — its part sales are all `CQ`/`IQ`/`EQ`. */
+ * Every row on an `A`-type bill counts in full (its whole NetAmnt, no more
+ * PartNo filtering), PLUS every row on an `F`-type bill (a return/credit
+ * note) whose RefDocNo points back to an `A`-type bill — its NetAmnt is
+ * already negative in the file, so adding it nets the return against the
+ * original sale. Confirmed against real Sept 2026 data: every `F`-type row
+ * on file so far has an `A`-type RefDocNo. */
 const EXTERNAL_SALES_BILL_TYPE = "A";
-const EXTERNAL_SALES_PART_PREFIXES = ["D", "L", "Z", "B", "T"];
+const EXTERNAL_SALES_RETURN_BILL_TYPE = "F";
 
-/** Exact PartNos that count as External Sales on an external-type bill even
- * though their prefix ("A") isn't in the list above:
- *   - A-9ADB1-01001                  ADBLUE
- *   - A-9D101-00001 … A-9D112-00012  the 12 DIY detailing consumables
- *     (shampoo, tar remover, liquid wax, dashboard/tyre dresser, glass
- *     cleaner, leather conditioner, microfiber cloth, tissue box, …) —
- *     added 2026-09-04 at the user's request. External Sales only: they do
- *     NOT feed the DIY count/revenue breakdown, which stays on the separate
- *     "D-DIY…" SKU scheme. */
-const EXTERNAL_SALES_EXACT_PARTS = new Set([
-  "A-9ADB1-01001",
-  "A-9D101-00001", "A-9D102-00002", "A-9D103-00003", "A-9D104-00004",
-  "A-9D105-00005", "A-9D106-00006", "A-9D107-00007", "A-9D108-00008",
-  "A-9D109-00009", "A-9D110-00010", "A-9D111-00011", "A-9D112-00012",
-]);
+/** Opulent Auto Care Pvt Ltd is a vendor (buys parts from us for their own
+ * use), not a revenue-generating customer — its rows never count toward
+ * External Sales. Confirmed with the user 2026-09-12; "Opulent" is spelled
+ * differently at every branch, so this matches by substring. Originally
+ * patched into stored snapshots by a one-off script
+ * (scripts/recompute-part-sale-external-excluding-opulent.mjs) layered on
+ * top of the old PartNo-prefix rule; folded into the parser itself
+ * 2026-09-15 so it survives the External Sales rule rewrite (and any
+ * future one) instead of needing to be re-applied by hand. */
+const EXCLUDED_CUSTOMER_SUBSTRINGS = ["opulent"];
+
+function isExcludedCustomer(customerName: string): boolean {
+  const normalized = customerName.toLowerCase();
+  return EXCLUDED_CUSTOMER_SUBSTRINGS.some((needle) => normalized.includes(needle));
+}
 
 /** DIY — any row whose PartNo starts with "D-DIY" (e.g. "D-DIYRATS053",
  * "D-DIYKLPF001" — rat repellent spray, car perfume, that kind of small
- * retail item), no bill-prefix restriction unlike External Sales. Shown as
- * an additional informational breakdown on the dashboard — confirmed with
- * the user 2026-08-31 that DIY rows also legitimately match the External
- * Sales criteria (external-type bill + "D" part prefix) and should keep
- * counting there too; this isn't carved out of that total, just broken out
- * separately alongside it. */
+ * retail item), independent of bill type. Shown as an additional
+ * informational breakdown on the dashboard — confirmed with the user
+ * 2026-08-31 that DIY rows on an external-type bill also legitimately count
+ * toward External Sales; this isn't carved out of that total (and, since
+ * 2026-09-15, External Sales no longer filters by PartNo at all — every row
+ * on an `A`-type bill counts, DIY included), just broken out separately
+ * alongside it. */
 const DIY_PART_PREFIX = "D-DIY";
 
 export type PartSaleCounts = {
@@ -81,7 +80,7 @@ export type PartSaleCounts = {
    * user 2026-09-04; was /100 until then). */
   syntheticOilLtrs: number;
   brakeCleaningSpray: number;
-  /** Sum of NetAmnt for the external-bill / PartNo-prefix filter above — the Part Sale Report side of External Sales (added to BA Tool's SPR External, see report.ts). */
+  /** Sum of NetAmnt for `A`-type bill rows plus matching `F`-type return rows, excluding Opulent (a vendor, not a customer) — the entire External Sales figure (see report.ts; BA Tool's SPR External is no longer used here as of 2026-09-15). */
   externalSales: number;
   /** Sum of Sale Qty for DIY rows. */
   diyCount: number;
@@ -98,10 +97,11 @@ function toQty(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function isExternalSalesRow(billNo: string, partNo: string): boolean {
-  if (billNo.charAt(0).toUpperCase() !== EXTERNAL_SALES_BILL_TYPE) return false;
-  if (EXTERNAL_SALES_EXACT_PARTS.has(partNo)) return true;
-  return EXTERNAL_SALES_PART_PREFIXES.includes(partNo[0]);
+function isExternalSalesRow(billNo: string, refDocNo: string): boolean {
+  const billType = billNo.charAt(0).toUpperCase();
+  if (billType === EXTERNAL_SALES_BILL_TYPE) return true;
+  if (billType === EXTERNAL_SALES_RETURN_BILL_TYPE) return refDocNo.charAt(0).toUpperCase() === EXTERNAL_SALES_BILL_TYPE;
+  return false;
 }
 
 /** XLSX (zip) starts with "PK\x03\x04"; legacy XLS (OLE2) with D0 CF 11 E0.
@@ -205,7 +205,9 @@ export function partSaleCountsFromRows(rows: Record<string, unknown>[]): PartSal
     else if (BRAKE_CLEANING_SPRAY_PARTS.includes(part)) brakeCleaningSpray += qty;
 
     const billNo = normalizePart(row[BILL_NO_COLUMN]);
-    if (isExternalSalesRow(billNo, part)) {
+    const refDocNo = normalizePart(row[REF_DOC_NO_COLUMN]);
+    const customerName = normalizePart(row[CUSTOMER_NAME_COLUMN]);
+    if (isExternalSalesRow(billNo, refDocNo) && !isExcludedCustomer(customerName)) {
       externalSales += toQty(row[NET_AMNT_COLUMN]);
     }
 
