@@ -254,6 +254,12 @@ export function onlineStoreCodeFor(parentBranch: string): string | undefined {
   return Object.entries(ONLINE_STORE_PARENT_BRANCH).find(([, parent]) => parent === parentBranch)?.[0];
 }
 
+/** Every online-store code (currently just "CO01C") — not a real branch
+ * (excluded from listBranchCodes/pending-uploads, see above), but valid as
+ * an Upload Sheet target specifically for a Part Sale Report, since HQ needs
+ * a fallback for when CO01A can't file it themselves. */
+export const ONLINE_STORE_CODES: readonly string[] = Object.keys(ONLINE_STORE_PARENT_BRANCH);
+
 const ONLINE_STORE_MERGED_FIELDS: Exclude<keyof BaToolBranchRow, "branch">[] = ["sprExternal", "spoDealer", "spoDealerTarget"];
 
 /** The parent branch's own (physical-store-only) Offtake next to the online
