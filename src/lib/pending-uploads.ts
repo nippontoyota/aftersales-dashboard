@@ -4,7 +4,7 @@ import { loadAllPartSaleSnapshotsForDate } from "./part-sale/store";
 import { loadAllSsrv089SnapshotsForDate } from "./ssrv089/store";
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import { loadAllRawReportUploadsForDate } from "./raw-report-uploads/store";
-import { isBodyPaintOnly } from "./report";
+import { isBodyPaintOnly, onlineStoreCodeFor } from "./report";
 
 /** The 6 report types every branch uploads daily, in the same order they
  * appear on /upload — used here so "what's missing" reads in that order
@@ -31,6 +31,14 @@ export type BranchUploadStatus = {
   missing: ReportTypeKey[];
 };
 
+export type OnlineStoreUploadStatus = {
+  /** e.g. "CO01A" */
+  parentBranch: string;
+  /** e.g. "CO01C" */
+  code: string;
+  uploaded: boolean;
+};
+
 export type PendingUploadsSummary = {
   date: string;
   totalBranches: number;
@@ -39,6 +47,13 @@ export type PendingUploadsSummary = {
    * meaningful here (nothing to rank by severity, just presence/absence),
    * so this is just branch-code order. */
   pending: BranchUploadStatus[];
+  /** Informational only — an online store (e.g. CO01C, folded into CO01A's
+   * own figures, see onlineStoreCodeFor in report.ts) has no required
+   * uploads of its own (it doesn't transact every day), so it never affects
+   * totalBranches/completeCount/pending. This just says whether it has a
+   * Part Sale Report on file for this date, so HQ can still see it (2026-
+   * 09-16, at the user's request). */
+  onlineStores: OnlineStoreUploadStatus[];
 };
 
 /** Cross-references every branch against all 6 report types for one date,
@@ -75,10 +90,19 @@ export async function loadPendingUploadsSummary(date: string): Promise<PendingUp
     if (missing.length > 0) pending.push({ branch, missing });
   }
 
+  const uploadedOnlineCodes = new Set(partSale.map((r) => r.branch));
+  const onlineStores: OnlineStoreUploadStatus[] = [];
+  for (const branch of branches) {
+    const code = onlineStoreCodeFor(branch);
+    if (!code) continue;
+    onlineStores.push({ parentBranch: branch, code, uploaded: uploadedOnlineCodes.has(code) });
+  }
+
   return {
     date,
     totalBranches: branches.length,
     completeCount: branches.length - pending.length,
     pending,
+    onlineStores,
   };
 }

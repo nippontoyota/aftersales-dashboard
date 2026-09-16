@@ -44,6 +44,22 @@ export function PendingUploadsPanel({ summary }: { summary: PendingUploadsSummar
           ))}
         </ul>
       )}
+
+      {summary.onlineStores.length > 0 && (
+        <div className="mt-3 space-y-1.5 border-t border-border pt-3">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-fg-faint">Online stores — informational, not required</div>
+          {summary.onlineStores.map((o) => (
+            <div key={o.code} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-bg-subtle p-2 text-xs">
+              <span className="font-medium text-fg">
+                {o.code} <span className="font-normal text-fg-faint">({o.parentBranch}&apos;s online store)</span>
+              </span>
+              <span className={o.uploaded ? "font-medium text-good" : "text-fg-subtle"}>
+                {o.uploaded ? "Part Sale Report uploaded" : "No Part Sale Report today"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
