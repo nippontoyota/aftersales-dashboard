@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { hashRows } from "@/lib/duplicate-detection";
-import { loadMostRecentRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { loadSsrv089Snapshot, saveSsrv089Snapshot } from "@/lib/ssrv089/store";
 
@@ -57,16 +57,21 @@ export async function POST(request: Request) {
 
   // Warn-and-allow duplicate check (2026-09-16, at the user's request) — see
   // scom205's upload route for the full rationale. This is the report type
-  // that caused the most repeat trouble this month (TI01C resent the same
-  // Cost & Sales file three rounds running).
+  // that caused the most repeat trouble this month — TI01C resent the same
+  // Cost & Sales file on the 11th and 13th, then *again* on the 15th
+  // against the 10th specifically, skipping right over a real upload on the
+  // 14th, which is exactly why every prior date is checked here now, not
+  // just the most recent one.
   const confirmed = formData.get("confirmDuplicate") === "true";
   if (!confirmed) {
-    const previous = await loadMostRecentRawUploadRowsBefore("ssrv089", admin.branch, date);
-    if (previous && hashRows(rawRows) === hashRows(previous.rows)) {
+    const priorUploads = await loadAllRawUploadRowsBefore("ssrv089", admin.branch, date);
+    const newHash = hashRows(rawRows);
+    const match = priorUploads.find((u) => hashRows(u.rows) === newHash);
+    if (match) {
       return NextResponse.json({
         duplicate: true,
-        previousDate: previous.date,
-        message: `This file looks identical to your upload from ${previous.date} — same rows. Are you sure this is ${date}'s file?`,
+        previousDate: match.date,
+        message: `This file looks identical to your upload from ${match.date} — same rows. Are you sure this is ${date}'s file?`,
       });
     }
   }

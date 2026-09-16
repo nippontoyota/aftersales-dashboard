@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { hashBuffer } from "@/lib/duplicate-detection";
-import { loadMostRecentRawReportUploadBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 
@@ -58,17 +58,19 @@ export async function POST(request: Request) {
   // report type kept no parsed rows to hash (see raw-report-uploads/store.ts),
   // which is exactly what let TI01C's resent BP file slip past the row-hash
   // check that caught its GS-side twin (see docs/data-reconciliation.md).
-  // Compares raw file bytes directly against the branch's most recent prior
-  // upload instead.
+  // Compares raw file bytes directly against every prior upload this month,
+  // not just the most recent one (see raw-report-uploads/store.ts for why).
   const confirmed = formData.get("confirmDuplicate") === "true";
   if (!confirmed) {
-    const previous = await loadMostRecentRawReportUploadBefore(admin.branch, "service_info_bp", date);
-    if (previous && hashBuffer(buffer) === hashBuffer(previous.fileData)) {
+    const priorUploads = await loadAllRawReportUploadsBefore(admin.branch, "service_info_bp", date);
+    const newHash = hashBuffer(buffer);
+    const match = priorUploads.find((u) => hashBuffer(u.fileData) === newHash);
+    if (match) {
       return NextResponse.json({
         duplicate: true,
-        previousDate: previous.date,
-        previousFileName: previous.sourceFileName,
-        message: `This file looks identical to your upload from ${previous.date} (${previous.sourceFileName}). Are you sure this is ${date}'s file?`,
+        previousDate: match.date,
+        previousFileName: match.sourceFileName,
+        message: `This file looks identical to your upload from ${match.date} (${match.sourceFileName}). Are you sure this is ${date}'s file?`,
       });
     }
   }

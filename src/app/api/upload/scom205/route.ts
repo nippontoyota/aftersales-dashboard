@@ -3,7 +3,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { totalsMatch } from "@/lib/duplicate-detection";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
-import { loadMostRecentScom205SnapshotBefore, loadScom205Snapshot, saveScom205Snapshot } from "@/lib/scom205/store";
+import { loadAllScom205SnapshotsBefore, loadScom205Snapshot, saveScom205Snapshot } from "@/lib/scom205/store";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -56,19 +56,23 @@ export async function POST(request: Request) {
   // Warn-and-allow duplicate check (2026-09-16, at the user's request) —
   // TI01C repeatedly resent an earlier day's KPI file under a new date this
   // month, silently freezing GUS/BPU Parts & Labour MTD. scom205's four
-  // totals are cumulative-MTD, so an exact match against the branch's most
-  // recent prior upload is a strong "this is yesterday's file again"
-  // signal. Skipped once the admin confirms via confirmDuplicate — they
-  // still have to resubmit the file itself, not just click through.
+  // totals are cumulative-MTD, so an exact match against *any* of the
+  // branch's prior uploads this month is a strong "this is an old file
+  // again" signal — checked against every prior date, not just the most
+  // recent one, after TI01C resent its 10 Sept file again on the 15th with
+  // a real upload (the 14th) sitting in between (caught 2026-09-16).
+  // Skipped once the admin confirms via confirmDuplicate — they still have
+  // to resubmit the file itself, not just click through.
   const confirmed = formData.get("confirmDuplicate") === "true";
   if (!confirmed) {
-    const previous = await loadMostRecentScom205SnapshotBefore(date, admin.branch);
-    if (previous && totalsMatch(totals, previous.totals)) {
+    const priorSnapshots = await loadAllScom205SnapshotsBefore(date, admin.branch);
+    const match = priorSnapshots.find((s) => totalsMatch(totals, s.totals));
+    if (match) {
       return NextResponse.json({
         duplicate: true,
-        previousDate: previous.date,
-        previousFileName: previous.sourceFileName,
-        message: `This looks identical to your upload from ${previous.date} (${previous.sourceFileName}) — same GUS/BPU totals. Are you sure this is ${date}'s file?`,
+        previousDate: match.date,
+        previousFileName: match.sourceFileName,
+        message: `This looks identical to your upload from ${match.date} (${match.sourceFileName}) — same GUS/BPU totals. Are you sure this is ${date}'s file?`,
       });
     }
   }

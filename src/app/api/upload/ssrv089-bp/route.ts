@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { hashBuffer } from "@/lib/duplicate-detection";
-import { loadMostRecentRawReportUploadBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
 
 /** Cost and Sales Report - BP — required daily like every other upload, but
  * nothing is parsed out of it (2026-09-01, at the user's request). See
@@ -44,16 +44,19 @@ export async function POST(request: Request) {
 
   // Warn-and-allow duplicate check (2026-09-16, at the user's request) — see
   // service-info-bp's upload route for the full rationale (this report type
-  // also keeps no parsed rows, so file bytes are compared directly).
+  // also keeps no parsed rows, so file bytes are compared directly, against
+  // every prior upload this month rather than just the most recent one).
   const confirmed = formData.get("confirmDuplicate") === "true";
   if (!confirmed) {
-    const previous = await loadMostRecentRawReportUploadBefore(admin.branch, "ssrv089_bp", date);
-    if (previous && hashBuffer(buffer) === hashBuffer(previous.fileData)) {
+    const priorUploads = await loadAllRawReportUploadsBefore(admin.branch, "ssrv089_bp", date);
+    const newHash = hashBuffer(buffer);
+    const match = priorUploads.find((u) => hashBuffer(u.fileData) === newHash);
+    if (match) {
       return NextResponse.json({
         duplicate: true,
-        previousDate: previous.date,
-        previousFileName: previous.sourceFileName,
-        message: `This file looks identical to your upload from ${previous.date} (${previous.sourceFileName}). Are you sure this is ${date}'s file?`,
+        previousDate: match.date,
+        previousFileName: match.sourceFileName,
+        message: `This file looks identical to your upload from ${match.date} (${match.sourceFileName}). Are you sure this is ${date}'s file?`,
       });
     }
   }

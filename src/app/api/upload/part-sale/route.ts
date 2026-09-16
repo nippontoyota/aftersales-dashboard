@@ -3,7 +3,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { hashRows } from "@/lib/duplicate-detection";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { loadPartSaleSnapshot, savePartSaleSnapshot } from "@/lib/part-sale/store";
-import { loadMostRecentRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -57,14 +57,18 @@ export async function POST(request: Request) {
   // scom205's upload route for the full rationale. A branch genuinely
   // combining several days into one export (extra rows for the newer days)
   // hashes differently and is never flagged — only an exact resend matches.
+  // Checked against every prior upload this month, not just the most
+  // recent one (see raw-upload-rows/store.ts for why).
   const confirmed = formData.get("confirmDuplicate") === "true";
   if (!confirmed) {
-    const previous = await loadMostRecentRawUploadRowsBefore("part_sale", admin.branch, date);
-    if (previous && hashRows(rawRows) === hashRows(previous.rows)) {
+    const priorUploads = await loadAllRawUploadRowsBefore("part_sale", admin.branch, date);
+    const newHash = hashRows(rawRows);
+    const match = priorUploads.find((u) => hashRows(u.rows) === newHash);
+    if (match) {
       return NextResponse.json({
         duplicate: true,
-        previousDate: previous.date,
-        message: `This file looks identical to your upload from ${previous.date} — same rows. Are you sure this is ${date}'s file?`,
+        previousDate: match.date,
+        message: `This file looks identical to your upload from ${match.date} — same rows. Are you sure this is ${date}'s file?`,
       });
     }
   }

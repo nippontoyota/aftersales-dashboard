@@ -58,22 +58,23 @@ export async function loadScom205Snapshot(date: string, branch: string): Promise
   };
 }
 
-/** Most recent snapshot strictly before `date` for one branch — the
- * duplicate-upload check (see duplicate-detection.ts) compares this
- * against a fresh upload's totals to spot a branch resending an earlier
- * day's KPI file under a new date (scom205 has no row list to hash, but its
- * four totals are cumulative-MTD, so an exact match against the prior day
- * is just as strong a signal). */
-export async function loadMostRecentScom205SnapshotBefore(date: string, branch: string): Promise<Scom205Snapshot | null> {
+/** Every snapshot strictly before `date` for one branch — the
+ * duplicate-upload check (see duplicate-detection.ts) compares a fresh
+ * upload's totals against *all* of these, not just the most recent one:
+ * TI01C resent its 10 Sept file again on the 15th, five days later and with
+ * a real upload (the 14th) in between, so comparing only against the
+ * immediately preceding day missed it entirely (caught 2026-09-16). scom205
+ * has no row list to hash, but its four totals are cumulative-MTD, so an
+ * exact match against any earlier day is just as strong a signal as a fresh
+ * one. */
+export async function loadAllScom205SnapshotsBefore(date: string, branch: string): Promise<Scom205Snapshot[]> {
   const { rows } = await pool.query<{ date: string; uploaded_at: Date; source_file_name: string; gus_sp_rev_mtd: string; gus_lab_rev_mtd: string; bpu_sp_rev_mtd: string; bpu_lab_rev_mtd: string }>(
     `select date::text as date, uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd
      from scom205_snapshots where branch = $1 and date < $2
-     order by date desc limit 1`,
+     order by date desc`,
     [branch, date]
   );
-  const r = rows[0];
-  if (!r) return null;
-  return {
+  return rows.map((r) => ({
     date: r.date,
     branch,
     uploadedAt: r.uploaded_at.toISOString(),
@@ -84,7 +85,7 @@ export async function loadMostRecentScom205SnapshotBefore(date: string, branch: 
       bpuSpRevMtd: Number(r.bpu_sp_rev_mtd),
       bpuLabRevMtd: Number(r.bpu_lab_rev_mtd),
     },
-  };
+  }));
 }
 
 /** All branches' snapshots for exactly one date — one query instead of one per branch, used when building the full dashboard report. Values are already MTD-cumulative, so unlike the other sources there's no "for the month" bulk loader needed. */
