@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TrendPoint } from "@/lib/trend";
-import { formatCompactCurrency, formatNumber } from "@/lib/format";
+import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
+import { computePace } from "@/lib/pace";
 import { useSyncedMetric } from "./metric-sync";
 
 type ValueFormatter = (v: number | null) => string;
@@ -84,6 +85,10 @@ function ChartBody({
   path,
   areaPath,
   targetPath,
+  projectedPath,
+  projectedTargetPath,
+  projectedPoint,
+  extraSlots,
   scaleX,
   scaleY,
   hoverIndex,
@@ -101,6 +106,18 @@ function ChartBody({
    * bare white (2026-09-01, at the user's request for more inviting charts). */
   areaPath: string;
   targetPath: string;
+  /** Dotted continuation from today's actual/target out to the projected
+   * month-end value (2026-09-16, at the user's request — "where will they
+   * reach at this rate"). Empty string when there's no date to forecast
+   * from, or no days remain in the month. */
+  projectedPath: string;
+  projectedTargetPath: string;
+  projectedPoint: { x: number; y: number } | null;
+  /** Extra x-axis slots (one per remaining calendar day) reserved to the
+   * right of the real data so the projection has somewhere to run to. 0
+   * when there's no forecast, in which case the real data fills the full
+   * chart width exactly as before this feature existed. */
+  extraSlots: number;
   scaleX: (i: number) => number;
   scaleY: (v: number) => number;
   hoverIndex: number | null;
@@ -161,6 +178,15 @@ function ChartBody({
           {areaPath ? <path d={areaPath} fill={`url(#${gradientId})`} stroke="none" /> : null}
           {targetPath ? <path d={targetPath} fill="none" stroke={TARGET_COLOR} strokeWidth={2} strokeDasharray="4 3" strokeLinecap="round" /> : null}
           {path ? <path d={path} fill="none" stroke={ACCENT} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" /> : null}
+          {projectedTargetPath ? (
+            <path d={projectedTargetPath} fill="none" stroke={TARGET_COLOR} strokeWidth={1.75} strokeDasharray="1 3.5" strokeLinecap="round" opacity={0.85} />
+          ) : null}
+          {projectedPath ? (
+            <path d={projectedPath} fill="none" stroke={ACCENT} strokeWidth={2} strokeDasharray="1 3.5" strokeLinecap="round" opacity={0.8} />
+          ) : null}
+          {projectedPoint ? (
+            <circle cx={projectedPoint.x} cy={projectedPoint.y} r={3.5} fill="var(--color-surface)" stroke={ACCENT} strokeWidth={1.75} />
+          ) : null}
 
           {lastActual !== null && lastActual !== undefined ? (
             <circle cx={scaleX(lastIndex)} cy={scaleY(lastActual)} r={3} fill={ACCENT} stroke="var(--color-surface)" strokeWidth={1.5} />
@@ -178,9 +204,20 @@ function ChartBody({
               <text x={PAD.left} y={height - 8} className="fill-fg-faint" fontSize={10}>
                 {formatShortDate(points[0].date)}
               </text>
-              <text x={WIDTH - PAD.right} y={height - 8} textAnchor="end" className="fill-fg-faint" fontSize={10}>
+              <text
+                x={scaleX(lastIndex)}
+                y={height - 8}
+                textAnchor={extraSlots > 0 ? "middle" : "end"}
+                className="fill-fg-faint"
+                fontSize={10}
+              >
                 {formatShortDate(points[points.length - 1].date)}
               </text>
+              {extraSlots > 0 ? (
+                <text x={WIDTH - PAD.right} y={height - 8} textAnchor="end" className="fill-fg-faint" fontSize={10}>
+                  Month-end
+                </text>
+              ) : null}
             </>
           ) : null}
         </svg>
@@ -210,6 +247,7 @@ export function TrendChart({
   seriesByMetric,
   metrics = DEFAULT_METRICS,
   compactCurrency = false,
+  date,
 }: {
   seriesByMetric: Record<string, TrendPoint[]>;
   /** Defaults to the main dashboard's own set (VAS only); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics and series instead. */
@@ -219,6 +257,10 @@ export function TrendChart({
    * into crores and the full figure overflows the gutter. (A boolean, not a
    * formatter function, so it stays passable from a server component.) */
   compactCurrency?: boolean;
+  /** The page's "as of" date — enables the month-end projection (dotted
+   * line + stat row) via lib/pace.ts's run-rate math. Omit entirely to
+   * render exactly as before this feature existed (no forecast). */
+  date?: string;
 }) {
   const formatValue: ValueFormatter = compactCurrency ? formatCompactCurrency : formatNumber;
   const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
@@ -236,21 +278,60 @@ export function TrendChart({
   }
 
   const points = seriesByMetric[metric] ?? EMPTY_POINTS;
+  const lastPoint = points.length > 0 ? points[points.length - 1] : null;
+  const lastActualValue = lastPoint?.actual ?? null;
+  const lastTargetValue = lastPoint?.target ?? null;
+  const firstTargetValue = points.find((p) => p.target !== null)?.target ?? null;
+
+  // Most targets on this chart are a fixed monthly figure repeated on every
+  // day's row (BPU, Offtake, Parts Retail, PM+OC) — but VAS Bill's target is
+  // a moving benchmark recomputed daily from GUS RO MTD (see
+  // computeVasTrendSeries), so it legitimately grows through the month like
+  // actual does. Distinguish by shape rather than hardcoding a metric key:
+  // if the earliest observed target this month is under half the latest
+  // one, it's been growing, not just fixed with a bit of day-to-day noise
+  // from branches that don't report every day (e.g. the online-store code).
+  const isTargetMoving = firstTargetValue !== null && lastTargetValue !== null && lastTargetValue !== 0 && firstTargetValue / lastTargetValue < 0.5;
+
+  // Forecast (2026-09-16, at the user's request — "where will they reach at
+  // this rate, how much is needed"): reuses lib/pace.ts's run-rate math,
+  // same as the Hero KPI strip and TKM Targets cards. `date` is optional —
+  // omit it (e.g. a caller with no natural "as of" date) and the chart
+  // renders exactly as it did before this feature existed.
+  const pace = useMemo(
+    () => (date && lastActualValue !== null && lastTargetValue !== null ? computePace(date, lastActualValue, lastTargetValue) : null),
+    [date, lastActualValue, lastTargetValue]
+  );
+  // Only extrapolated when the target is actually moving — treating the
+  // target-so-far as its own "actual" purely to linearly project where that
+  // benchmark lands by month-end. For a fixed target this would wrongly
+  // "project" a constant value upward just because it's mid-month; a fixed
+  // target's own projection is simply itself (see projectedTargetEom).
+  const targetPace = useMemo(
+    () => (date && isTargetMoving && lastTargetValue !== null ? computePace(date, lastTargetValue, null) : null),
+    [date, isTargetMoving, lastTargetValue]
+  );
+  const projectedTargetEom = isTargetMoving ? targetPace?.projectedEom ?? null : lastTargetValue;
+  const extraSlots = pace?.daysRemaining ?? 0;
 
   const maxY = useMemo(() => {
     const values = points.flatMap((p) => [p.actual, p.target]).filter((v): v is number => v !== null);
+    if (pace?.projectedEom != null) values.push(pace.projectedEom);
+    if (projectedTargetEom != null) values.push(projectedTargetEom);
     return Math.max(1, ...values);
-  }, [points]);
+  }, [points, pace, projectedTargetEom]);
 
   const scaleX = useMemo(() => {
     const innerW = WIDTH - PAD.left - PAD.right;
-    return (i: number) => PAD.left + (points.length <= 1 ? 0 : (i / (points.length - 1)) * innerW);
-  }, [points.length]);
+    const totalSlots = points.length - 1 + extraSlots;
+    return (i: number) => PAD.left + (totalSlots <= 0 ? 0 : (i / totalSlots) * innerW);
+  }, [points.length, extraSlots]);
 
-  /** Builds the smoothed actual curve, its filled-to-baseline twin, and the
-   * straight (unsmoothed) target line for a given pixel height — shared by
-   * the compact card and the taller expanded modal so they only ever differ
-   * in `height`, never in how the paths themselves are built. */
+  /** Builds the smoothed actual curve, its filled-to-baseline twin, the
+   * straight (unsmoothed) target line, and — when a forecast is available —
+   * a dotted continuation of each out to the projected month-end value, for
+   * a given pixel height. Shared by the compact card and the taller
+   * expanded modal so they only ever differ in `height`. */
   const buildPaths = useCallback(
     (scaleY: (v: number) => number, height: number) => {
       const baseline = height - PAD.bottom;
@@ -271,16 +352,38 @@ export function TrendChart({
         started = true;
       });
 
-      return { path, areaPath, targetPath: targetPath.trim() };
+      let projectedPath = "";
+      let projectedPoint: { x: number; y: number } | null = null;
+      if (extraSlots > 0 && pace?.projectedEom != null && lastActualValue !== null) {
+        const from = { x: scaleX(points.length - 1), y: scaleY(lastActualValue) };
+        const to = { x: scaleX(points.length - 1 + extraSlots), y: scaleY(pace.projectedEom) };
+        projectedPath = `M${from.x.toFixed(1)},${from.y.toFixed(1)} L${to.x.toFixed(1)},${to.y.toFixed(1)}`;
+        projectedPoint = to;
+      }
+
+      // Drawn even for a fixed target (projectedTargetEom === lastTargetValue
+      // there) — a flat dotted continuation at the same height correctly
+      // shows "this target isn't moving," rather than just stopping short.
+      let projectedTargetPath = "";
+      if (extraSlots > 0 && projectedTargetEom != null && lastTargetValue !== null) {
+        const from = { x: scaleX(points.length - 1), y: scaleY(lastTargetValue) };
+        const to = { x: scaleX(points.length - 1 + extraSlots), y: scaleY(projectedTargetEom) };
+        projectedTargetPath = `M${from.x.toFixed(1)},${from.y.toFixed(1)} L${to.x.toFixed(1)},${to.y.toFixed(1)}`;
+      }
+
+      return { path, areaPath, targetPath: targetPath.trim(), projectedPath, projectedTargetPath, projectedPoint };
     },
-    [points, scaleX]
+    [points, scaleX, extraSlots, pace, projectedTargetEom, lastActualValue, lastTargetValue]
   );
 
   const scaleY = useMemo(() => {
     const innerH = HEIGHT - PAD.top - PAD.bottom;
     return (v: number) => PAD.top + innerH - (v / maxY) * innerH;
   }, [maxY]);
-  const { path, areaPath, targetPath } = useMemo(() => buildPaths(scaleY, HEIGHT), [scaleY, buildPaths]);
+  const { path, areaPath, targetPath, projectedPath, projectedTargetPath, projectedPoint } = useMemo(
+    () => buildPaths(scaleY, HEIGHT),
+    [scaleY, buildPaths]
+  );
 
   // scaleY was built against HEIGHT — the modal renders taller, so it needs
   // its own scaleY sharing the same maxY/domain but a different pixel range.
@@ -291,10 +394,14 @@ export function TrendChart({
     const innerH = MODAL_HEIGHT - PAD.top - PAD.bottom;
     return (v: number) => PAD.top + innerH - (v / maxY) * innerH;
   }, [maxY]);
-  const { path: modalPath, areaPath: modalAreaPath, targetPath: modalTargetPath } = useMemo(
-    () => buildPaths(modalScaleY, MODAL_HEIGHT),
-    [modalScaleY, buildPaths]
-  );
+  const {
+    path: modalPath,
+    areaPath: modalAreaPath,
+    targetPath: modalTargetPath,
+    projectedPath: modalProjectedPath,
+    projectedTargetPath: modalProjectedTargetPath,
+    projectedPoint: modalProjectedPoint,
+  } = useMemo(() => buildPaths(modalScaleY, MODAL_HEIGHT), [modalScaleY, buildPaths]);
 
   useEffect(() => {
     if (!isExpanded) return;
@@ -306,7 +413,7 @@ export function TrendChart({
   }, [isExpanded]);
 
   const legend = (
-    <div className="mt-3 flex items-center gap-4 text-[11px] text-fg-subtle">
+    <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-fg-subtle">
       <span className="inline-flex items-center gap-1.5">
         <span className="h-0.5 w-3 rounded-full" style={{ background: ACCENT }} />
         Actual
@@ -315,8 +422,50 @@ export function TrendChart({
         <span className="h-0.5 w-3 rounded-full border-t border-dashed" style={{ borderColor: TARGET_COLOR }} />
         Target
       </span>
+      {extraSlots > 0 && pace?.projectedEom != null ? (
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-0.5 w-3 rounded-full border-t border-dotted" style={{ borderColor: ACCENT }} />
+          Projected
+        </span>
+      ) : null}
     </div>
   );
+
+  // pace.projectedAchievementRatio divides the projected actual by *today's*
+  // target-to-date — correct for a fixed target (projectedTargetEom equals
+  // it exactly, so this reduces to the same thing), but VAS Bill's target
+  // itself grows day by day (tied to GUS RO MTD, see trend.ts), so for a
+  // moving target that would compare a month-end actual against a
+  // still-partial target and wildly overstate achievement (confirmed live:
+  // showed 155.7% against a hero card reading 78% for the same day).
+  // Dividing by projectedTargetEom instead keeps both cases correct.
+  const projectedRatio = pace?.projectedEom != null && projectedTargetEom ? pace.projectedEom / projectedTargetEom : null;
+
+  // "Projected month-end: ₹5.2L (88% of target) · Need ₹11K/day for the
+  // rest of the month" — plain-English readout of the same pace math the
+  // dotted line draws, so the number is there even without hovering the
+  // chart. Absent entirely when there's nothing to forecast from.
+  const forecastRow =
+    pace?.projectedEom != null ? (
+      <div className="mt-2 text-[11px] text-fg-subtle">
+        Projected month-end{" "}
+        <span className="font-semibold tabular-nums text-fg">{formatValue(pace.projectedEom)}</span>
+        {projectedRatio != null ? (
+          <>
+            {" "}
+            (<span className="font-medium tabular-nums text-fg-muted">{formatPercent(projectedRatio)}</span> of target)
+          </>
+        ) : null}
+        {pace.gap !== null && pace.gap > 0 && pace.requiredRatePerDay !== null && pace.daysRemaining > 0 ? (
+          <>
+            {" "}
+            · Need <span className="font-semibold tabular-nums text-fg">{formatValue(pace.requiredRatePerDay)}/day</span> for the rest of the month
+          </>
+        ) : pace.gap !== null && pace.gap <= 0 ? (
+          <span className="font-medium text-good"> · Target already met</span>
+        ) : null}
+      </div>
+    ) : null;
 
   const metricSelect =
     metrics.length > 1 ? (
@@ -362,6 +511,10 @@ export function TrendChart({
         path={path}
         areaPath={areaPath}
         targetPath={targetPath}
+        projectedPath={projectedPath}
+        projectedTargetPath={projectedTargetPath}
+        projectedPoint={projectedPoint}
+        extraSlots={extraSlots}
         scaleX={scaleX}
         scaleY={scaleY}
         hoverIndex={hoverIndex}
@@ -370,6 +523,7 @@ export function TrendChart({
         gradientId="trend-area-card"
         formatValue={formatValue}
       />
+      {forecastRow}
 
       {isExpanded ? (
         <div
@@ -408,6 +562,10 @@ export function TrendChart({
                 path={modalPath}
                 areaPath={modalAreaPath}
                 targetPath={modalTargetPath}
+                projectedPath={modalProjectedPath}
+                projectedTargetPath={modalProjectedTargetPath}
+                projectedPoint={modalProjectedPoint}
+                extraSlots={extraSlots}
                 scaleX={scaleX}
                 scaleY={modalScaleY}
                 hoverIndex={hoverIndex}
@@ -416,6 +574,7 @@ export function TrendChart({
                 gradientId="trend-area-modal"
                 formatValue={formatValue}
               />
+              {forecastRow}
             </div>
           </div>
         </div>

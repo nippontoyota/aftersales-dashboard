@@ -16,7 +16,7 @@ const NAV_ITEMS = [
   // pre-publish "Daily Report" / "Regional Report").
   { href: "/dashboard", label: "Executive Overview", key: "dashboard" as const, requiresDashboard: true, companyWide: false, uploadOnly: false },
   { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
-  { href: "/alerts", label: "Alerts", key: "alerts" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
+  { href: "/queries", label: "Queries", key: "queries" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
   { href: "/branches", label: "Branch Performance", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
   { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
   // Not gated by publish (companyWide:false) — a branch admin should always be
@@ -92,15 +92,6 @@ function TkmTargetsIcon() {
       <circle cx="10" cy="10" r="7" />
       <circle cx="10" cy="10" r="3.8" />
       <circle cx="10" cy="10" r="0.8" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function AlertsIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
-      <path d="M5 8a5 5 0 0 1 10 0c0 3.5 1.2 4.8 1.2 4.8H3.8S5 11.5 5 8z" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8.3 15.5a1.8 1.8 0 0 0 3.4 0" strokeLinecap="round" />
     </svg>
   );
 }
@@ -244,7 +235,7 @@ function NavPending() {
 const ICONS: Record<NavKey, () => React.ReactElement> = {
   dashboard: DashboardIcon,
   "tkm-targets": TkmTargetsIcon,
-  alerts: AlertsIcon,
+  queries: ChatIcon,
   branches: BranchesIcon,
   reports: ReportsIcon,
   cancellations: CancellationsIcon,

@@ -7,11 +7,15 @@ import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
-import { AlertsPanel, TKM_WATCHED } from "../dashboard/alerts-panel";
 import { CancellationFlag } from "../cancellations/cancellation-flag";
 import { VpFlagsPanel } from "@/components/vp-flags-panel";
 
-export default async function AlertsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string; watched?: string }> }) {
+/** Formerly "Alerts" — the achievement-below-target list (AlertsPanel) was
+ * dropped entirely (2026-09-15, at the user's request: "not really needed").
+ * What's left is VP Service's flag-to-HQ inbox (VpFlagsPanel) plus the
+ * Cancellations flag — genuinely different from a below-target alert, so the
+ * page keeps a home even though the achievement-alerts feature is gone. */
+export default async function QueriesPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
   const admin = await getCurrentAdmin();
   if (admin?.role === "vp_service") redirect("/vp");
   if (admin?.role === "ceo") redirect("/ceo");
@@ -27,33 +31,28 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
   const identity = adminIdentityLabel(admin);
 
   return (
-    <AppShell current="alerts" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} identity={identity}>
+    <AppShell current="queries" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton />}>
-        <AlertsContent searchParams={searchParams} admin={admin} />
+        <QueriesContent searchParams={searchParams} admin={admin} />
       </Suspense>
     </AppShell>
   );
 }
 
-async function AlertsContent({
+async function QueriesContent({
   searchParams,
   admin,
 }: {
-  searchParams: Promise<{ date?: string; region?: string; watched?: string }>;
+  searchParams: Promise<{ date?: string; region?: string }>;
   admin: AdminAccount;
 }) {
   const params = await searchParams;
   const data = await loadDashboardData(params, admin);
-  // Defaults to VAS (the main Dashboard's own alerts) — TKM Targets' "View
-  // all" links here with ?watched=tkm so the full page counts the same
-  // BPU/Offtake/Parts Retail/PM+OC alerts its preview just showed, instead
-  // of silently falling back to a different metric set (found 2026-09-01).
-  const isTkm = params.watched === "tkm";
 
   if (!data) {
     return (
       <div className="mx-auto max-w-[1600px] p-6">
-        <h1 className="text-lg font-semibold text-fg">Alerts</h1>
+        <h1 className="text-lg font-semibold text-fg">Queries</h1>
         <div className="mt-4 rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           No BA Tool reports have been uploaded yet.
         </div>
@@ -61,22 +60,14 @@ async function AlertsContent({
     );
   }
   if (!data.report) {
-    return (
-      <NoDataForDate
-        title="Alerts"
-        date={data.date}
-        dates={data.dates}
-        basePath="/alerts"
-        extraParams={isTkm ? { watched: "tkm" } : undefined}
-      />
-    );
+    return <NoDataForDate title="Queries" date={data.date} dates={data.dates} basePath="/queries" />;
   }
 
   return (
     <div className="mx-auto max-w-[1600px] p-6">
       <DashboardPageHeader
-        title="Alerts"
-        basePath="/alerts"
+        title="Queries"
+        basePath="/queries"
         date={data.date}
         region={data.region}
         dates={data.dates}
@@ -87,18 +78,13 @@ async function AlertsContent({
         isPublished={data.isPublished}
         canPublish={data.canPublish}
         isCompanyScope={data.isCompanyScope}
-        extraParams={isTkm ? { watched: "tkm" } : undefined}
       />
-      <p className="mt-3 text-xs text-fg-faint">Watching: {isTkm ? "BPU, Offtake, Parts Retail, PM+OC (TKM Targets)" : "VAS (Dashboard)"}</p>
       <Suspense fallback={null}>
         <CancellationFlag admin={admin} />
       </Suspense>
       <Suspense fallback={null}>
         <VpFlagsPanel admin={admin} />
       </Suspense>
-      <div className="mt-3">
-        <AlertsPanel branches={data.filteredBranches} variant="full" watched={isTkm ? TKM_WATCHED : undefined} />
-      </div>
     </div>
   );
 }

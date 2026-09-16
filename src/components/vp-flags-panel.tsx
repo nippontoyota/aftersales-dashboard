@@ -4,7 +4,7 @@ import { listVpFlags, listVpFlagsForRegion } from "@/lib/vp-flags/store";
 import { VpFlagThread } from "@/app/vp/vp-flag-thread";
 
 /**
- * VP Service query flags, surfaced on /alerts. HQ sees every open flag and
+ * VP Service query flags, surfaced on /queries. HQ sees every open flag and
  * can reply inline; a regional manager sees the open flags that touch a
  * branch in their region, read-only. Everyone else gets nothing.
  */

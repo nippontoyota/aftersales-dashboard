@@ -13,8 +13,6 @@ import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatNumber } from "@/lib/format";
 import { computePace } from "@/lib/pace";
 import { computeTrendSeries } from "@/lib/trend";
-import { AchievementDonut, type DonutMetricConfig } from "../dashboard/achievement-donut";
-import { AlertsPanel, TKM_WATCHED } from "../dashboard/alerts-panel";
 import { BranchPerformanceBars, type BarsMetricConfig } from "../dashboard/branch-performance-bars";
 import { BranchPerformanceHeatmap, type HeatmapMetricConfig } from "../dashboard/branch-performance-heatmap";
 import { BranchRankingChart, TKM_RANKING_METRICS } from "../dashboard/branch-ranking-chart";
@@ -29,13 +27,6 @@ import { TrendChart, type TrendMetricConfig } from "../dashboard/trend-chart";
  * (2026-08-31, at the user's request). Full company-wide view for
  * everyone, same as Dashboard/Alerts/Branches/Reports — gated only by
  * publish status (see dashboard-data.ts), not by role. */
-
-const DONUT_METRICS: DonutMetricConfig[] = [
-  { key: "partsRetail", label: "Parts Retail", actual: "partsRetailAchievementForTheMonth", target: "partsRetailTarget" },
-  { key: "bpu", label: "BPU", actual: "bpuAchievementForTheMonth", target: "bpuTarget" },
-  { key: "offtake", label: "Offtake", actual: "offtakeAchievementForTheMonth", target: "offtakeTarget" },
-  { key: "pmOc", label: "PM+OC", actual: "pmOcAchievementForTheMonth", target: "pmOcTarget" },
-];
 
 const TREND_METRICS: TrendMetricConfig[] = [
   { key: "partsRetail", label: "Parts Retail (Rs)" },
@@ -140,15 +131,6 @@ async function TkmTargetsContent({
     pmOc: computePace(date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget),
   };
 
-  // "View all" has to carry both the TKM watched-set (so /alerts counts the
-  // same BPU/Offtake/Parts Retail/PM+OC alerts the preview just did, not its
-  // own VAS default) and the current date/region — a bare "/alerts" used to
-  // drop both, silently swapping to a different metric set (found
-  // 2026-09-01) and resetting to the latest date.
-  const alertsHrefParams = new URLSearchParams({ date, watched: "tkm" });
-  if (region !== "All") alertsHrefParams.set("region", region);
-  const alertsHref = `/alerts?${alertsHrefParams.toString()}`;
-
   return (
     <div className="mx-auto max-w-[1600px] p-6">
       <DashboardPageHeader
@@ -215,13 +197,12 @@ async function TkmTargetsContent({
       {/* Trend / Achievement / Region Scorecard share one metric selection —
           pick BPU (etc.) in any of the three dropdowns and all three switch. */}
       <MetricSyncProvider initialMetric={TREND_METRICS[0].key}>
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <TrendChart seriesByMetric={trendSeriesByMetric} metrics={TREND_METRICS} />
-          <AchievementDonut branches={filteredBranches} metrics={DONUT_METRICS} />
+        <div className="mt-4">
+          <TrendChart seriesByMetric={trendSeriesByMetric} metrics={TREND_METRICS} date={date} />
         </div>
 
         <div className="mt-4">
-          <RegionScorecard branches={report.branches} monthSnapshots={monthSnapshots} date={date} metrics={REGION_METRICS} />
+          <RegionScorecard branches={report.branches} monthSnapshots={monthSnapshots} metrics={REGION_METRICS} />
         </div>
       </MetricSyncProvider>
 
@@ -233,7 +214,7 @@ async function TkmTargetsContent({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4">
         <InsightsPanel
           kpis={allKpis}
           branches={report.branches}
@@ -242,7 +223,6 @@ async function TkmTargetsContent({
           perBranchMetrics={PER_BRANCH_METRICS}
           regionGapMetric={REGION_GAP_METRIC}
         />
-        <AlertsPanel branches={filteredBranches} variant="preview" watched={TKM_WATCHED} viewAllHref={alertsHref} />
       </div>
 
       <div className="mt-4">

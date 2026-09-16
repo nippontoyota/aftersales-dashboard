@@ -36,7 +36,7 @@ export async function raiseVpFlagAction(_prev: FlagState, formData: FormData): P
   });
 
   revalidatePath("/vp/queries");
-  revalidatePath("/alerts");
+  revalidatePath("/queries");
   return { error: null, ok: true };
 }
 
@@ -53,7 +53,7 @@ export async function replyVpFlagAction(_prev: FlagState, formData: FormData): P
 
   await replyToVpFlag({ id, repliedBy: admin.username, reply, status: close ? "closed" : "answered" });
   revalidatePath("/vp/queries");
-  revalidatePath("/alerts");
+  revalidatePath("/queries");
   return { error: null, ok: true };
 }
 
@@ -69,6 +69,6 @@ export async function setVpFlagStatusAction(_prev: FlagState, formData: FormData
 
   await setVpFlagStatus(id, status);
   revalidatePath("/vp/queries");
-  revalidatePath("/alerts");
+  revalidatePath("/queries");
   return { error: null, ok: true };
 }
