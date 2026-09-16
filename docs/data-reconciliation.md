@@ -48,7 +48,7 @@ Expected days on file: **1, 2, 3, 4, 6, 7, 8** (5th was a Saturday holiday).
 | ☐ | **KT01A / KT01B / TI01B** | 3 | 1,2,4,6,7,8 | dark since 3 Sep (section above) |
 | ☐ | **TI01C** | 6,7,8,9,10 (11 + 13 Sep deleted — recurring stale duplicates of 10 Sep, see "resolved" below) | 1,2,3,4 | ≈4 days undeducted |
 | ☐ | **KY01A** | 3,6,7,8 | 1,2,4 | **+ roster gap** — only "Nibu B" listed at `/data`, verify |
-| ☐ | **TR01A** | 1,3,4,7,8 | 2,6 | ≈2 days undeducted |
+| ☐ | **TR01A** | 1,2,3,4,7,8,9,10,11,13,14 | 6 | ≈1 day undeducted (also see roster fix below — `Ratheeshkumar M T` → `Ratheesh S` applied 2026-09-15, this row is now on top of that) |
 | ☐ | **KL01A** | 3,4,7,8 | 1,2,6 | 1–2 fold into its 3 Sep cumulative; owes 6 |
 | — | **PH01A / TL01A / TR01C** | 1,2,3,4,7,8 | 6 only | the light Sunday — leave unless per-day accuracy matters |
 | — | **CO01A** | 1,2,3,6,7,8 | 4 | folded into its 6 Sep upload (holiday section) |
@@ -71,7 +71,7 @@ A roster fix touches **two** stored figures — recompute both from raw rows on 
 | ✅ done | **PH01A** | `Santhosh V M` → `Santhosh M` | parts ₹21,893 · labour ₹37 · VAS ₹0 (snapshots already excluded him) | roster fixed + SSRV089 recomputed 2026-09-08 (3 Sep file was Santhosh-only, read 0/0); VAS checked 2026-09-09, no change |
 | ✅ done | **TI01A** | `Anoop P M` → `Anoop M` (confirmed same person) | parts **₹1,25,424** · labour **₹69,254** · **VAS ₹73,799** (3, 4, 7 Sep snapshots) | roster fixed + SSRV089 recomputed 2026-09-08; VAS recomputed 2026-09-09 (`recompute-service-info-vas.mts`) |
 | ✅ done | **KT01A** | `Prasanth R Shenoy` → `Prasanth Shenoy` (same person, still employed) | billing heavily in Sept — **₹8,69,026 part · ₹1,26,306 labour** SSRV089 MTD (30 lines, biggest 8 Sep ₹4.32 L / 9 Sep ₹2.39 L); all captured | roster fixed 2026-09-08; re-checked 2026-09-10 — every Sept SSRV089 snapshot == roster-matched total, VAS recompute Δ 0. No action. |
-| — no fix | **TR01A** | `Ratheeshkumar M T` vs `Ratheesh S` | — | branch confirms **different people**; roster entry `Ratheeshkumar M T` has no DMS match — verify still employed |
+| ✅ done | **TR01A** | `Ratheeshkumar M T` → `Ratheesh S` (confirmed same/only accessories person — `Ratheeshkumar M T` never appears in TR01A's SSRV089 export, Aug or Sep; earlier "different people" note superseded) | parts **₹2,41,100.44** · labour **₹83,851.66** · VAS **−₹69,286.76** (7 SSRV089 snapshots + 4 Service Info snapshots) | roster fixed + both recomputed 2026-09-15. GUS Parts MTD 50,72,892 → 48,31,792; still ≈₹2.63L over the vendor's Revenue Streams figure (₹45,68,977) — unexplained, separate from this fix; 6-Sep SSRV089 still not uploaded (see row above) |
 | ✅ done | **CO01B** | `Sijo M Joy` — left the company | Aug only (4 rows, 28 Aug) — closed month, not corrected | removed from roster 2026-09-08 |
 
 ### Roster names with no DMS match anywhere — ✅ resolved 2026-09-09
