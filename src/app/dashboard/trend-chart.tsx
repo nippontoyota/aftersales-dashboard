@@ -58,6 +58,14 @@ function formatShortDate(iso: string): string {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+type HoverInfo = { date: string; actual: number | null; target: number | null; isProjected: boolean };
+
 function ExpandIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-3.5 w-3.5" aria-hidden="true">
@@ -93,6 +101,7 @@ function ChartBody({
   scaleY,
   hoverIndex,
   setHoverIndex,
+  hovered,
   height,
   gradientId,
   formatValue,
@@ -122,6 +131,11 @@ function ChartBody({
   scaleY: (v: number) => number;
   hoverIndex: number | null;
   setHoverIndex: (i: number | null) => void;
+  /** The hovered point's date/actual/target — computed by the parent (not
+   * derived here from `points[hoverIndex]`) because `hoverIndex` can now
+   * range past the last real point, into the projected region, where there
+   * is no real point to look up (see TrendChart's `hoveredInfo`). */
+  hovered: HoverInfo | null;
   /** Taller in the expanded modal — same viewBox width, more vertical room to read. */
   height: number;
   /** SVG gradient ids can't repeat across the page (the card and the
@@ -132,7 +146,6 @@ function ChartBody({
   const innerH = height - PAD.top - PAD.bottom;
   const gridSteps = 4;
   const gridLines = Array.from({ length: gridSteps + 1 }, (_, i) => i / gridSteps);
-  const hovered = hoverIndex !== null ? points[hoverIndex] : null;
   const lastIndex = points.length - 1;
   const lastActual = points[lastIndex]?.actual;
 
@@ -150,8 +163,14 @@ function ChartBody({
             const rect = e.currentTarget.getBoundingClientRect();
             const relX = ((e.clientX - rect.left) / rect.width) * WIDTH;
             const innerW = WIDTH - PAD.left - PAD.right;
-            const idx = Math.round(((relX - PAD.left) / innerW) * (points.length - 1));
-            setHoverIndex(Math.min(points.length - 1, Math.max(0, idx)));
+            // Must match scaleX's domain (real data + reserved projection
+            // slots), not just the real data count — otherwise hovering
+            // anywhere past the last real point (including the projected
+            // region and the true right edge) resolves to a stale index and
+            // the tooltip appears to freeze wherever today's data now sits.
+            const totalSlots = points.length - 1 + extraSlots;
+            const idx = Math.round(((relX - PAD.left) / innerW) * totalSlots);
+            setHoverIndex(Math.min(totalSlots, Math.max(0, idx)));
           }}
           onMouseLeave={() => setHoverIndex(null)}
         >
@@ -229,7 +248,10 @@ function ChartBody({
               left: `${Math.min(78, Math.max(2, (scaleX(hoverIndex!) / WIDTH) * 100))}%`,
             }}
           >
-            <div className="font-medium text-fg-muted">{formatShortDate(hovered.date)}</div>
+            <div className="font-medium text-fg-muted">
+              {formatShortDate(hovered.date)}
+              {hovered.isProjected ? <span className="ml-1 font-normal text-fg-faint">(projected)</span> : null}
+            </div>
             <div className="text-fg-subtle">
               Actual <span className="font-semibold tabular-nums text-fg">{formatValue(hovered.actual)}</span>
             </div>
@@ -313,6 +335,27 @@ export function TrendChart({
   );
   const projectedTargetEom = isTargetMoving ? targetPace?.projectedEom ?? null : lastTargetValue;
   const extraSlots = pace?.daysRemaining ?? 0;
+
+  // Resolves `hoverIndex` to a date/actual/target — a straight lookup for a
+  // real data point, or (per the user's choice) a linearly interpolated
+  // value along the same dotted line drawn on the chart when the hovered
+  // slot falls in the projected region past the last real point.
+  const hoveredInfo = useMemo<HoverInfo | null>(() => {
+    if (hoverIndex === null) return null;
+    if (hoverIndex <= points.length - 1) {
+      const p = points[hoverIndex];
+      return p ? { date: p.date, actual: p.actual, target: p.target, isProjected: false } : null;
+    }
+    if (!lastPoint || extraSlots <= 0) return null;
+    const daysIn = hoverIndex - (points.length - 1);
+    const fraction = Math.min(1, daysIn / extraSlots);
+    const date = addDaysIso(lastPoint.date, daysIn);
+    const actual =
+      pace?.projectedEom != null && lastActualValue !== null ? lastActualValue + fraction * (pace.projectedEom - lastActualValue) : null;
+    const target =
+      projectedTargetEom != null && lastTargetValue !== null ? lastTargetValue + fraction * (projectedTargetEom - lastTargetValue) : null;
+    return { date, actual, target, isProjected: true };
+  }, [hoverIndex, points, lastPoint, extraSlots, pace, projectedTargetEom, lastActualValue, lastTargetValue]);
 
   const maxY = useMemo(() => {
     const values = points.flatMap((p) => [p.actual, p.target]).filter((v): v is number => v !== null);
@@ -519,6 +562,7 @@ export function TrendChart({
         scaleY={scaleY}
         hoverIndex={hoverIndex}
         setHoverIndex={setHoverIndex}
+        hovered={hoveredInfo}
         height={HEIGHT}
         gradientId="trend-area-card"
         formatValue={formatValue}
@@ -570,6 +614,7 @@ export function TrendChart({
                 scaleY={modalScaleY}
                 hoverIndex={hoverIndex}
                 setHoverIndex={setHoverIndex}
+                hovered={hoveredInfo}
                 height={MODAL_HEIGHT}
                 gradientId="trend-area-modal"
                 formatValue={formatValue}
