@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { computeHeroSummary, filterBranchesByRegion, type HeroSummary } from "@/lib/aggregate";
 import { formatCompact, formatNumber, formatPercent } from "@/lib/format";
 import type { BranchReport } from "@/lib/report";
-import { REGIONS, type RegionName } from "@/lib/regions";
+import { REGIONS, regionForBranch, type RegionName } from "@/lib/regions";
 
 const SCOPE_ACCENT: Record<"All" | RegionName, string> = {
   All: "var(--color-fg)",
@@ -163,6 +163,24 @@ export function HeroKpi({
 }) {
   const [selectedBranch, setSelectedBranch] = useState<string>("__none__");
 
+  // "+ Compare a branch" grouped by region (Central/South/North, REGIONS
+  // order) instead of a flat alphabetical list — same grouping pattern as
+  // hero-kpi-strip.tsx's scope switcher, so the two dropdowns read
+  // consistently. A branch with no region mapping (shouldn't happen with
+  // real BA Tool data) still needs to be reachable, so it falls into a
+  // trailing "Other" group rather than being dropped silently.
+  const compareOptions = useMemo(() => {
+    const eligible = branches.filter((b) => b.branch !== pinnedBranch);
+    const byCode = new Map(eligible.map((b) => [b.branch, b]));
+    const byRegion = new Map<RegionName, BranchReport[]>();
+    for (const region of Object.keys(REGIONS) as RegionName[]) {
+      const list = REGIONS[region].map((code) => byCode.get(code)).filter((b): b is BranchReport => b !== undefined);
+      if (list.length > 0) byRegion.set(region, list);
+    }
+    const loose = eligible.filter((b) => regionForBranch(b.branch) === null);
+    return { byRegion, loose };
+  }, [branches, pinnedBranch]);
+
   const scopes = useMemo<ScopeSummary[]>(() => {
     if (lockedBranch) {
       const branch = branches.find((b) => b.branch === lockedBranch);
@@ -200,13 +218,28 @@ export function HeroKpi({
             className="h-7 shrink-0 rounded-md border border-border-strong px-1.5 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <option value="__none__">+ Compare a branch</option>
-            {branches
-              .filter((b) => b.branch !== pinnedBranch)
-              .map((b) => (
-                <option key={b.branch} value={b.branch}>
-                  {b.branch}
-                </option>
-              ))}
+            {(Object.keys(REGIONS) as RegionName[]).map((region) => {
+              const list = compareOptions.byRegion.get(region);
+              if (!list) return null;
+              return (
+                <optgroup key={region} label={region}>
+                  {list.map((b) => (
+                    <option key={b.branch} value={b.branch}>
+                      {b.branch}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
+            {compareOptions.loose.length > 0 ? (
+              <optgroup label="Other">
+                {compareOptions.loose.map((b) => (
+                  <option key={b.branch} value={b.branch}>
+                    {b.branch}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
           </select>
         ) : null}
       </div>
