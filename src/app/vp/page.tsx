@@ -79,7 +79,7 @@ async function Overview({
       value: group.hero.bpuRoMtd?.toLocaleString("en-IN") ?? "—",
       sub: `${group.hero.bpuRoBilledForTheDay?.toLocaleString("en-IN") ?? "—"} today`,
     },
-    { label: "VAS Achievement", value: formatPercent(vasRatio), tone: achievementTone(vasRatio) },
+    { label: "TGLOSS", value: formatPercent(vasRatio), tone: achievementTone(vasRatio) },
   ];
 
   return (

@@ -114,7 +114,7 @@ async function Branch({
         <MiniStat label="GUS RO · MTD" value={branch.gusRoMtd?.toLocaleString("en-IN") ?? "—"} />
         <MiniStat label="BPU RO · MTD" value={branch.bpuRoMtd?.toLocaleString("en-IN") ?? "—"} />
         <MiniStat
-          label="VAS Achievement"
+          label="TGLOSS"
           value={formatPercent(achievementRatio(branch.vasAchievementForTheMonth, branch.vasBillTarget))}
         />
       </div>
