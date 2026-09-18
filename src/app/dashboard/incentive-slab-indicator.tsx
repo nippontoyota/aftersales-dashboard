@@ -65,7 +65,11 @@ type RingStatus = "achieved" | "onTrack" | "pending";
 
 function ringTooltip(slabNumber: 1 | 2 | 3 | 4, target: number, actual: number | null, projectedEom: number | null, status: RingStatus): string {
   const statusLabel = status === "achieved" ? "Achieved" : status === "onTrack" ? "On track (projected by month-end)" : "Pending";
-  const projectedLine = status === "onTrack" ? `\nProjected by month-end: ${currencyFull(projectedEom)}` : "";
+  // Shown for every still-pending ring, not just "on track" ones — a ring
+  // that's short of pace (like CO01B's, confirmed 2026-09-18) needs the
+  // projected figure just as much, so it's clear *why* it's plain grey
+  // instead of dashed, not just that it is.
+  const projectedLine = status !== "achieved" && projectedEom !== null ? `\nProjected by month-end: ${currencyFull(projectedEom)}` : "";
   return `Slab ${slabNumber}\n\nTarget: ${currencyFull(target)}\nActual: ${currencyFull(actual)}${projectedLine}\nStatus: ${statusLabel}`;
 }
 
