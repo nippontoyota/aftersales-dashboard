@@ -1,5 +1,6 @@
 import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import { formatNumber } from "@/lib/format";
+import { computePace } from "@/lib/pace";
 
 /**
  * Four concentric rings — Slab 1 innermost through Slab 4 outermost —
@@ -13,6 +14,15 @@ import { formatNumber } from "@/lib/format";
  * Every branch evaluates against its *own* slab thresholds (loaded from
  * incentive_slab_targets for the viewed month) — two branches with the same
  * Actual can land on different slabs.
+ *
+ * Forecast (2026-09-18, at the user's request — "is it possible to show a
+ * forecast trend"): a ring not yet achieved but on track to be crossed by
+ * month-end at the current run rate renders dashed instead of solid grey —
+ * same green used for "achieved," just a different stroke pattern, so the
+ * palette stays exactly green/grey (no third status color). Projection
+ * reuses computePace() as-is (simple actual÷daysElapsed×daysInMonth run
+ * rate, the same math already driving the VAS Bill target card elsewhere on
+ * this page) rather than a working-day-aware variant.
  */
 
 const GREEN = "var(--color-good-solid)";
@@ -51,14 +61,19 @@ export function computeSlabsAchieved(actual: number | null, slabs: IncentiveSlab
 
 const currencyFull = (value: number | null) => (value === null ? "—" : `₹${formatNumber(value)}`);
 
-function ringTooltip(slabNumber: 1 | 2 | 3 | 4, target: number, actual: number | null, achieved: boolean): string {
-  return `Slab ${slabNumber}\n\nTarget: ${currencyFull(target)}\nActual: ${currencyFull(actual)}\nStatus: ${achieved ? "Achieved" : "Pending"}`;
+type RingStatus = "achieved" | "onTrack" | "pending";
+
+function ringTooltip(slabNumber: 1 | 2 | 3 | 4, target: number, actual: number | null, projectedEom: number | null, status: RingStatus): string {
+  const statusLabel = status === "achieved" ? "Achieved" : status === "onTrack" ? "On track (projected by month-end)" : "Pending";
+  const projectedLine = status === "onTrack" ? `\nProjected by month-end: ${currencyFull(projectedEom)}` : "";
+  return `Slab ${slabNumber}\n\nTarget: ${currencyFull(target)}\nActual: ${currencyFull(actual)}${projectedLine}\nStatus: ${statusLabel}`;
 }
 
 export function IncentiveSlabIndicator({
   scopeLabel,
   actual,
   slabs,
+  date,
   size = 92,
   /** The KPI card this renders inside already shows Actual as its own big
    * headline number — repeating it under the rings there would be pure
@@ -72,6 +87,8 @@ export function IncentiveSlabIndicator({
   actual: number | null;
   /** Undefined when no target was uploaded/aggregated for this scope this month — shown as a muted placeholder rather than hidden. */
   slabs: IncentiveSlabTargets | undefined;
+  /** The viewed report date — feeds computePace() for the "on track by month-end" forecast. Omit to skip the forecast entirely (rings just render achieved/pending, no dashed state). */
+  date?: string;
   size?: number;
   showActual?: boolean;
 }) {
@@ -92,6 +109,14 @@ export function IncentiveSlabIndicator({
   const thresholds = [slabs.slab1, slabs.slab2, slabs.slab3, slabs.slab4];
   const currentSlabLabel = achievedCount === 0 ? "Not Achieved" : String(achievedCount);
 
+  // On-track forecast: where the metric lands by month-end at the current
+  // run rate (computePace — target is irrelevant to projectedEom, only
+  // actual/date, so it's passed null), evaluated against the same slabs.
+  // A ring only counts as "on track" if it isn't already achieved — the
+  // forecast is purely about which *pending* rings are headed for green.
+  const projectedEom = date ? computePace(date, actual, null).projectedEom : null;
+  const projectedGreen = projectedEom !== null ? computeSlabsAchieved(projectedEom, slabs).ringGreen : null;
+
   return (
     <div className="flex flex-col items-center gap-1 text-center">
       <svg
@@ -103,10 +128,20 @@ export function IncentiveSlabIndicator({
       >
         {RADII.map((r, i) => {
           const slabNumber = (i + 1) as 1 | 2 | 3 | 4;
-          const tooltip = ringTooltip(slabNumber, thresholds[i], actual, ringGreen[i]);
+          const status: RingStatus = ringGreen[i] ? "achieved" : projectedGreen?.[i] ? "onTrack" : "pending";
+          const tooltip = ringTooltip(slabNumber, thresholds[i], actual, projectedEom, status);
           return (
             <g key={slabNumber} className="cursor-default">
-              <circle cx={CENTER} cy={CENTER} r={r} fill="none" stroke={ringGreen[i] ? GREEN : GREY} strokeWidth={STROKE} pointerEvents="none" />
+              <circle
+                cx={CENTER}
+                cy={CENTER}
+                r={r}
+                fill="none"
+                stroke={status === "pending" ? GREY : GREEN}
+                strokeWidth={STROKE}
+                strokeDasharray={status === "onTrack" ? "3 2.5" : undefined}
+                pointerEvents="none"
+              />
               {/* Invisible, much wider hit target on top of the same ring — see PITCH comment above. */}
               <circle cx={CENTER} cy={CENTER} r={r} fill="none" stroke="transparent" strokeWidth={PITCH} pointerEvents="stroke">
                 <title>{tooltip}</title>
