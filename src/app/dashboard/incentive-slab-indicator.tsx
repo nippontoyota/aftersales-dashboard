@@ -25,6 +25,13 @@ const STROKE = 6;
 const GAP = 3;
 const RADII = [14, 14 + STROKE + GAP, 14 + 2 * (STROKE + GAP), 14 + 3 * (STROKE + GAP)] as const; // slab1..slab4, innermost to outermost
 const CENTER = 50;
+// The visible ring is thin (STROKE); hovering it precisely at the card's
+// compact render size was fiddly (confirmed by the user 2026-09-18). Each
+// ring gets a second, invisible hit-target circle exactly PITCH wide —
+// PITCH is the center-to-center spacing between adjacent rings, so two
+// neighbors' hit zones meet edge-to-edge with no dead zone in the gap
+// between them and no overlap into each other.
+const PITCH = STROKE + GAP;
 
 export type SlabAchievement = { achievedCount: 0 | 1 | 2 | 3 | 4; ringGreen: [boolean, boolean, boolean, boolean] };
 
@@ -96,19 +103,15 @@ export function IncentiveSlabIndicator({
       >
         {RADII.map((r, i) => {
           const slabNumber = (i + 1) as 1 | 2 | 3 | 4;
+          const tooltip = ringTooltip(slabNumber, thresholds[i], actual, ringGreen[i]);
           return (
-            <circle
-              key={slabNumber}
-              cx={CENTER}
-              cy={CENTER}
-              r={r}
-              fill="none"
-              stroke={ringGreen[i] ? GREEN : GREY}
-              strokeWidth={STROKE}
-              className="cursor-default"
-            >
-              <title>{ringTooltip(slabNumber, thresholds[i], actual, ringGreen[i])}</title>
-            </circle>
+            <g key={slabNumber} className="cursor-default">
+              <circle cx={CENTER} cy={CENTER} r={r} fill="none" stroke={ringGreen[i] ? GREEN : GREY} strokeWidth={STROKE} pointerEvents="none" />
+              {/* Invisible, much wider hit target on top of the same ring — see PITCH comment above. */}
+              <circle cx={CENTER} cy={CENTER} r={r} fill="none" stroke="transparent" strokeWidth={PITCH} pointerEvents="stroke">
+                <title>{tooltip}</title>
+              </circle>
+            </g>
           );
         })}
       </svg>
