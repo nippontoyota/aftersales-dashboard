@@ -119,7 +119,24 @@ export function IncentiveSlabIndicator({
   // A ring only counts as "on track" if it isn't already achieved — the
   // forecast is purely about which *pending* rings are headed for green.
   const projectedEom = date ? computePace(date, actual, null).projectedEom : null;
-  const projectedGreen = projectedEom !== null ? computeSlabsAchieved(projectedEom, slabs).ringGreen : null;
+  const projected = projectedEom !== null ? computeSlabsAchieved(projectedEom, slabs) : null;
+  const projectedGreen = projected?.ringGreen ?? null;
+
+  // The "at this rate..." line below the rings (2026-09-18, at the user's
+  // request, alongside the ring dashing above) — three cases, confirmed with
+  // the user: projection doesn't clear Slab 1 at all; projection matches
+  // what's already achieved (rate holding steady, shown anyway per the
+  // user's choice); projection clears a slab beyond what's achieved today.
+  // projectedAchievedCount can never be lower than achievedCount — projecting
+  // forward from a non-negative run rate only ever adds to the total.
+  const forecastText =
+    projected === null
+      ? null
+      : projected.achievedCount === 0
+        ? "Not on track for Slab 1"
+        : projected.achievedCount === achievedCount
+          ? `On track to hold Slab ${projected.achievedCount}`
+          : `At this rate, would reach Slab ${projected.achievedCount}`;
 
   return (
     <div className="flex flex-col items-center gap-1 text-center">
@@ -159,6 +176,7 @@ export function IncentiveSlabIndicator({
         <div className="text-[9px] uppercase tracking-wide text-fg-faint">Current Slab</div>
         <div className={`text-xs font-semibold ${achievedCount === 0 ? "text-fg-faint" : "text-good"}`}>{currentSlabLabel}</div>
       </div>
+      {forecastText ? <div className="text-[9px] text-fg-faint">{forecastText}</div> : null}
       {showActual ? <div className="text-[9px] tabular-nums text-fg-faint">{currencyFull(actual)}</div> : null}
     </div>
   );
