@@ -451,3 +451,25 @@ create table if not exists report_holidays (
   created_by  text        not null,
   created_at  timestamptz not null default now()
 );
+
+-- Incentive slab targets, per branch per calendar month (2026-09-18, at the
+-- user's request). Four ascending revenue thresholds (slab1 lowest, slab4
+-- highest) a branch's Total Revenue Stream MTD is compared against for the
+-- Incentive Slab Achievement rings on the Dashboard's hero card — see
+-- src/lib/incentive-slabs/. HQ uploads/replaces the whole month's Excel file
+-- at /data; each upload fully replaces that month's rows (same delete+insert
+-- semantics as ba_tool_snapshots) so a corrected re-upload never leaves
+-- stale branches behind. Month-scoped (not just "current") so a past
+-- month's dashboard keeps showing what was actually targeted that month.
+create table if not exists incentive_slab_targets (
+  month             text        not null, -- 'YYYY-MM'
+  branch            text        not null,
+  slab1             numeric     not null,
+  slab2             numeric     not null,
+  slab3             numeric     not null,
+  slab4             numeric     not null,
+  uploaded_at       timestamptz not null,
+  uploaded_by       text        not null,
+  source_file_name  text        not null,
+  primary key (month, branch)
+);

@@ -10,6 +10,7 @@ import { achievementRatio, computeKpiSummary } from "@/lib/aggregate";
 import { getCurrentAdmin } from "@/lib/auth";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
+import { loadIncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { computeVasTrendSeries } from "@/lib/trend";
@@ -192,6 +193,11 @@ async function DashboardContent({
 
   const allKpis = computeKpiSummary(report.branches);
 
+  // Plain object, not the Map loadIncentiveSlabTargets returns — a Map
+  // doesn't survive the server-component -> client-component prop boundary
+  // as reliably as a plain object does, and HeroKpiStrip is "use client".
+  const incentiveSlabTargets = Object.fromEntries(await loadIncentiveSlabTargets(date.slice(0, 7)));
+
   const trendSeriesByMetric = { vas: computeVasTrendSeries(monthSnapshots, serviceInfoMonthSnapshots, region) };
 
   const vasGentani = achievementRatio(kpis.vasAchievementForTheMonth, kpis.gusRoMtd);
@@ -236,6 +242,7 @@ async function DashboardContent({
           date={date}
           hasPreviousUpload={hasPreviousUpload}
           defaultScope={heroDefaultScope}
+          incentiveSlabTargets={incentiveSlabTargets}
         />
       </div>
 
