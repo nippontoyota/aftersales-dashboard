@@ -11,11 +11,9 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatNumber } from "@/lib/format";
-import { computePace } from "@/lib/pace";
+import { computePace, paceTone } from "@/lib/pace";
 import { computeTrendSeries } from "@/lib/trend";
-import { BranchPerformanceBars, type BarsMetricConfig } from "../dashboard/branch-performance-bars";
 import { BranchPerformanceHeatmap, type HeatmapMetricConfig } from "../dashboard/branch-performance-heatmap";
-import { BranchRankingChart, TKM_RANKING_METRICS } from "../dashboard/branch-ranking-chart";
 import { InsightsPanel } from "../dashboard/insights-panel";
 import { MetricSyncProvider } from "../dashboard/metric-sync";
 import { RegionScorecard, type RegionMetricConfig } from "../dashboard/region-scorecard";
@@ -29,9 +27,9 @@ import { TrendChart, type TrendMetricConfig } from "../dashboard/trend-chart";
  * publish status (see dashboard-data.ts), not by role. */
 
 const TREND_METRICS: TrendMetricConfig[] = [
-  { key: "partsRetail", label: "Parts Retail (Rs)" },
+  { key: "partsRetail", label: "Parts Retail", isCurrency: true },
   { key: "bpu", label: "BPU" },
-  { key: "offtake", label: "Offtake (Rs)" },
+  { key: "offtake", label: "Offtake", isCurrency: true },
   { key: "pmOc", label: "PM+OC" },
 ];
 
@@ -43,17 +41,10 @@ const REGION_METRICS: RegionMetricConfig[] = [
 ];
 
 const HEATMAP_METRICS: HeatmapMetricConfig[] = [
-  { label: "Parts Retail", actual: "partsRetailAchievementForTheMonth", target: "partsRetailTarget" },
-  { label: "BPU Ach.", actual: "bpuAchievementForTheMonth", target: "bpuTarget" },
-  { label: "Offtake", actual: "offtakeAchievementForTheMonth", target: "offtakeTarget" },
-  { label: "PM+OC", actual: "pmOcAchievementForTheMonth", target: "pmOcTarget" },
-];
-
-const BARS_METRICS: BarsMetricConfig[] = [
-  { key: "partsRetail", label: "Parts Retail (Rs)", actual: "partsRetailAchievementForTheMonth", target: "partsRetailTarget" },
-  { key: "bpu", label: "BPU", actual: "bpuAchievementForTheMonth", target: "bpuTarget" },
-  { key: "offtake", label: "Offtake (Rs)", actual: "offtakeAchievementForTheMonth", target: "offtakeTarget" },
-  { key: "pmOc", label: "PM+OC", actual: "pmOcAchievementForTheMonth", target: "pmOcTarget" },
+  { label: "Parts Retail", actual: "partsRetailAchievementForTheMonth", target: "partsRetailTarget", syncKey: "partsRetail", baToolActual: "sprInternal", baToolTarget: "sprInternalTarget" },
+  { label: "BPU Ach.", actual: "bpuAchievementForTheMonth", target: "bpuTarget", syncKey: "bpu", baToolActual: "bpus", baToolTarget: "bpusTarget" },
+  { label: "Offtake", actual: "offtakeAchievementForTheMonth", target: "offtakeTarget", syncKey: "offtake", baToolActual: "spoDealer", baToolTarget: "spoDealerTarget" },
+  { label: "PM+OC", actual: "pmOcAchievementForTheMonth", target: "pmOcTarget", syncKey: "pmOc", baToolActual: "pm", baToolTarget: "pmTarget" },
 ];
 
 const PER_BRANCH_METRICS = [
@@ -131,6 +122,16 @@ async function TkmTargetsContent({
     pmOc: computePace(date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget),
   };
 
+  // Same pace methodology everywhere on this page (2026-09-19, at the user's
+  // request) — one paceTone call per KPI, reused for the card's status chip,
+  // matching the heatmap/region-card/insights logic exactly.
+  const tone = {
+    bpu: paceTone(date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget),
+    offtake: paceTone(date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget),
+    partsRetail: paceTone(date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget),
+    pmOc: paceTone(date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget),
+  };
+
   return (
     <div className="mx-auto max-w-[1600px] p-6">
       <DashboardPageHeader
@@ -148,8 +149,11 @@ async function TkmTargetsContent({
         isCompanyScope={isCompanyScope}
       />
 
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-        <RichKpiCard icon={<TargetIcon />} color="amber" label="CPU Achievement MTD" value={formatNumber(kpis.cpuAchievementForTheMonth)} sub="no target set" pace={pace.cpu} />
+      {/* Four target-based KPIs are the primary cards; CPU has no target
+          anywhere in the data (confirmed 2026-09-19) so it's a visually
+          smaller, clearly-labelled secondary card — actual + run rate only,
+          never styled as if it were comparable to an achievement %. */}
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <RichKpiCard
           icon={<WrenchIcon />}
           color="blue"
@@ -159,6 +163,7 @@ async function TkmTargetsContent({
           target={kpis.bpuTarget}
           hasPreviousUpload={hasPreviousUpload}
           pace={pace.bpu}
+          paceTone={tone.bpu}
         />
         <RichKpiCard
           icon={<TargetIcon />}
@@ -169,6 +174,7 @@ async function TkmTargetsContent({
           target={kpis.offtakeTarget}
           hasPreviousUpload={hasPreviousUpload}
           pace={pace.offtake}
+          paceTone={tone.offtake}
           formatPaceValue={formatCompactCurrency}
         />
         <RichKpiCard
@@ -180,6 +186,7 @@ async function TkmTargetsContent({
           target={kpis.partsRetailTarget}
           hasPreviousUpload={hasPreviousUpload}
           pace={pace.partsRetail}
+          paceTone={tone.partsRetail}
           formatPaceValue={formatCompactCurrency}
         />
         <RichKpiCard
@@ -191,28 +198,37 @@ async function TkmTargetsContent({
           target={kpis.pmOcTarget}
           hasPreviousUpload={hasPreviousUpload}
           pace={pace.pmOc}
+          paceTone={tone.pmOc}
         />
       </div>
 
-      {/* Trend / Achievement / Region Scorecard share one metric selection —
-          pick BPU (etc.) in any of the three dropdowns and all three switch. */}
+      <div className="mt-3 max-w-xs">
+        <RichKpiCard
+          icon={<TargetIcon />}
+          color="amber"
+          label="CPU Achievement MTD"
+          value={formatNumber(kpis.cpuAchievementForTheMonth)}
+          sub="Target not set"
+          pace={pace.cpu}
+        />
+      </div>
+
+      {/* Trend / Region Scorecard / Heatmap sort all share one metric
+          selection — pick BPU (etc.) in any dropdown and all three switch,
+          per the user's 2026-09-19 request. */}
       <MetricSyncProvider initialMetric={TREND_METRICS[0].key}>
         <div className="mt-4">
-          <TrendChart seriesByMetric={trendSeriesByMetric} metrics={TREND_METRICS} date={date} />
+          <TrendChart seriesByMetric={trendSeriesByMetric} metrics={TREND_METRICS} date={date} chartHeight={150} />
         </div>
 
         <div className="mt-4">
-          <RegionScorecard branches={report.branches} monthSnapshots={monthSnapshots} metrics={REGION_METRICS} />
+          <RegionScorecard branches={report.branches} monthSnapshots={monthSnapshots} metrics={REGION_METRICS} date={date} />
+        </div>
+
+        <div className="mt-4">
+          <BranchPerformanceHeatmap branches={filteredBranches} metrics={HEATMAP_METRICS} date={date} monthSnapshots={monthSnapshots} />
         </div>
       </MetricSyncProvider>
-
-      <div className="mt-4 space-y-4">
-        <BranchPerformanceHeatmap branches={report.branches} metrics={HEATMAP_METRICS} />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <BranchPerformanceBars branches={report.branches} metrics={BARS_METRICS} />
-          <BranchRankingChart branches={report.branches} metrics={TKM_RANKING_METRICS} />
-        </div>
-      </div>
 
       <div className="mt-4">
         <InsightsPanel
@@ -222,6 +238,7 @@ async function TkmTargetsContent({
           trackedKpis={TKM_TRACKED_KPIS}
           perBranchMetrics={PER_BRANCH_METRICS}
           regionGapMetric={REGION_GAP_METRIC}
+          maxVisible={3}
         />
       </div>
 

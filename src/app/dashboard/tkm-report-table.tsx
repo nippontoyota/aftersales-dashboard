@@ -10,7 +10,7 @@ export function TkmReportTable({ branches, daysSincePrevious }: { branches: Bran
 
   return (
     <SectionTable
-      title="TKM Targets"
+      title="Target details"
       subtitle={`delta below the bar is vs. previous upload · ${asOf}`}
       branches={branches}
       columns={[

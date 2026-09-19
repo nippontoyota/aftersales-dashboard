@@ -1,3 +1,5 @@
+import type { AchievementTone } from "./aggregate";
+
 /**
  * Run-rate / pacing math — "are we on track to hit target by month-end,"
  * not just "what % of target are we at today." Pure functions, no DB access,
@@ -33,4 +35,54 @@ export function computePace(date: string, actual: number | null, target: number 
   const projectedAchievementRatio = projectedEom !== null && target !== null && target !== 0 ? projectedEom / target : null;
 
   return { daysElapsed, daysInMonth, daysRemaining, runRatePerDay, requiredRatePerDay, gap, projectedEom, projectedAchievementRatio };
+}
+
+/**
+ * Progress-to-date ratio: how far into the month's *target* the branch/KPI
+ * should be by `date`, if the target were being hit evenly every calendar
+ * day (elapsed days ÷ days in month — calendar days, not working days;
+ * confirmed with the user 2026-09-19, consistent with computePace above).
+ * Used as the denominator for pace-vs-expected-pace comparisons (heatmap
+ * colour, KPI/region "on track" status) — kept separate from computePace so
+ * callers that only need this one number don't have to supply actual/target.
+ */
+export function expectedProgressRatio(date: string): number {
+  const d = new Date(`${date}T00:00:00Z`);
+  const daysElapsed = d.getUTCDate();
+  const daysInMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  return daysInMonth > 0 ? daysElapsed / daysInMonth : 0;
+}
+
+/**
+ * "Are we on track as of today" — not "what % of the full month target have
+ * we hit" (that's achievementRatio/achievementTone in aggregate.ts, and
+ * stays mostly red until late in the month by design). paceRatio compares
+ * the achievement-%-so-far against the expected-progress-%-so-far, so a
+ * branch running exactly on schedule reads 100% on day 5 same as day 25.
+ * Returns null when there's no target or no actual to grade (see
+ * hasActualWithoutTarget in aggregate.ts for that case).
+ */
+export function paceRatio(date: string, actual: number | null, target: number | null): number | null {
+  if (actual === null || target === null || target === 0) return null;
+  const expected = expectedProgressRatio(date);
+  if (expected <= 0) return null;
+  return actual / target / expected;
+}
+
+/**
+ * Same three-band shape as achievementTone (good/warn/critical/neutral), but
+ * graded against expected pace-to-date rather than the full-month target —
+ * this is the ONE pace methodology shared by KPI cards, region cards, the
+ * heatmap, and insights (confirmed with the user 2026-09-19: never a
+ * different rule in different places). Slightly more forgiving than
+ * achievementTone's 90% amber line (85% here) since a pace ratio is noisier
+ * day to day — one slow day early in the month swings it further than the
+ * same slip would move a full-month ratio.
+ */
+export function paceTone(date: string, actual: number | null, target: number | null): AchievementTone {
+  const ratio = paceRatio(date, actual, target);
+  if (ratio === null) return "neutral";
+  if (ratio >= 1) return "good";
+  if (ratio >= 0.85) return "warn";
+  return "critical";
 }

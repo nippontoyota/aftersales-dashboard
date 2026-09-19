@@ -3,6 +3,7 @@
 import { achievementRatio, achievementTone, computeKpiSummary, filterBranchesByRegion, type AchievementTone } from "@/lib/aggregate";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computeTrendSeries, computeVasTrendSeries, type TrendPoint } from "@/lib/trend";
+import { paceTone as computePaceTone } from "@/lib/pace";
 import type { BranchReport } from "@/lib/report";
 import { REGIONS, type RegionName } from "@/lib/regions";
 import type { Snapshot } from "@/lib/snapshot-store";
@@ -43,11 +44,25 @@ const TONE_TEXT: Record<AchievementTone, string> = {
   critical: "text-bad",
   neutral: "text-fg-faint",
 };
+const STATUS_CHIP: Record<AchievementTone, { text: string; cls: string } | null> = {
+  good: { text: "On track", cls: "bg-good-soft text-good" },
+  warn: { text: "Behind pace", cls: "bg-warn-soft text-warn" },
+  critical: { text: "Behind pace", cls: "bg-bad-soft text-bad" },
+  neutral: null,
+};
 
 /** Headline number + trend only (2026-09-15, at the user's request — the
  * pace/gap breakdown and the best/weakest branch drill-down were "stuff you
  * don't actually look at"). See git history for the fuller card if that
- * level of detail is ever wanted back. */
+ * level of detail is ever wanted back.
+ *
+ * `date` is optional and opts into a second, denser mode (2026-09-19, at the
+ * user's request — the TKM Targets page): gap-to-target + an on-track/
+ * behind-pace chip (colour from lib/pace.ts's paceTone, the same pace rule
+ * used by the heatmap/KPI cards/insights) replace the sparkline, which the
+ * user found added visual noise without helping interpretation. Omitting
+ * `date` keeps the card exactly as it always was — the main Dashboard's
+ * region cards don't pass it. */
 function RegionCard({
   region,
   branches,
@@ -55,6 +70,7 @@ function RegionCard({
   metricActual,
   metricTarget,
   formatValue,
+  date,
 }: {
   region: RegionName;
   branches: BranchReport[];
@@ -62,24 +78,42 @@ function RegionCard({
   metricActual: keyof BranchReport;
   metricTarget: keyof BranchReport;
   formatValue: (v: number | null) => string;
+  date?: string;
 }) {
   const regionBranches = filterBranchesByRegion(branches, region);
   const kpis = computeKpiSummary(regionBranches);
   const actual = kpis[metricActual as keyof typeof kpis] as number | null;
   const target = kpis[metricTarget as keyof typeof kpis] as number | null;
   const ratio = achievementRatio(actual, target);
-  const tone = achievementTone(ratio);
+  const tone = date ? computePaceTone(date, actual, target) : achievementTone(ratio);
+  const statusChip = date ? STATUS_CHIP[tone] : null;
+  const gap = actual !== null && target !== null ? target - actual : null;
 
   return (
     <div className="rounded-lg border border-border bg-surface p-3.5 shadow-card">
-      <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: REGION_ACCENT[region] }}>
-        <span className="h-2 w-2 rounded-full" style={{ background: REGION_ACCENT[region] }} />
-        {region}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: REGION_ACCENT[region] }}>
+          <span className="h-2 w-2 rounded-full" style={{ background: REGION_ACCENT[region] }} />
+          {region}
+        </div>
+        {statusChip ? <span className={`rounded px-1.5 py-0.5 text-[9.5px] font-semibold ${statusChip.cls}`}>{statusChip.text}</span> : null}
       </div>
       <div className={`mt-1 text-lg font-semibold tabular-nums ${TONE_TEXT[tone]}`}>{formatValue(actual)}</div>
       <div className={`text-[11px] font-medium ${TONE_TEXT[tone]}`}>{ratio === null ? "no target set" : `${formatPercent(ratio)} of target`}</div>
 
-      {series.length >= 2 ? <div className="mt-2"><Sparkline values={series.map((p) => p.actual)} color={REGION_ACCENT[region]} /></div> : null}
+      {date ? (
+        gap !== null && gap > 0 ? (
+          <div className="mt-1 text-[10.5px] text-fg-faint">
+            Gap <span className="font-medium text-fg-muted">{formatValue(gap)}</span>
+          </div>
+        ) : gap !== null ? (
+          <div className="mt-1 text-[10.5px] font-medium text-good">Target already met</div>
+        ) : null
+      ) : series.length >= 2 ? (
+        <div className="mt-2">
+          <Sparkline values={series.map((p) => p.actual)} color={REGION_ACCENT[region]} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -92,6 +126,7 @@ export function RegionScorecard({
   monthSnapshots,
   serviceInfoMonthSnapshots = [],
   metrics = DEFAULT_METRICS,
+  date,
 }: {
   branches: BranchReport[];
   monthSnapshots: Snapshot[];
@@ -99,6 +134,8 @@ export function RegionScorecard({
   serviceInfoMonthSnapshots?: ServiceInfoSnapshot[];
   /** Defaults to the main dashboard's own set (VAS only); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics instead. */
   metrics?: RegionMetricConfig[];
+  /** Opts into the gap/on-track-chip mode instead of the sparkline — see RegionCard's doc comment. Omit to keep the main Dashboard's original cards. */
+  date?: string;
 }) {
   const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
   const config = metrics.find((m) => m.key === metric) ?? metrics[0];
@@ -130,6 +167,7 @@ export function RegionScorecard({
             key={region}
             region={region}
             branches={branches}
+            date={date}
             metricActual={config.actual as keyof BranchReport}
             metricTarget={config.target as keyof BranchReport}
             series={
