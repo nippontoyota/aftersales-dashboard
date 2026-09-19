@@ -15,14 +15,18 @@ import { computePace } from "@/lib/pace";
  * incentive_slab_targets for the viewed month) — two branches with the same
  * Actual can land on different slabs.
  *
- * Forecast (2026-09-18, at the user's request — "is it possible to show a
- * forecast trend"): a ring not yet achieved but on track to be crossed by
- * month-end at the current run rate renders dashed instead of solid grey —
- * same green used for "achieved," just a different stroke pattern, so the
- * palette stays exactly green/grey (no third status color). Projection
- * reuses computePace() as-is (simple actual÷daysElapsed×daysInMonth run
- * rate, the same math already driving the VAS Bill target card elsewhere on
- * this page) rather than a working-day-aware variant.
+ * Ring color is strictly actual-vs-target (achieved=green, pending=grey) —
+ * never the forecast. Fixed 2026-09-19 after a reported bug: on 2026-09-17
+ * CO01A showed "Current Slab: Not Achieved" (0 of 4 slabs) but all four
+ * rings rendered dashed green because they were merely on-track per
+ * computePace()'s projection — a projected number must never paint a
+ * still-pending ring green. Forecast now only ever appears as the
+ * `forecastText` line below the rings and inside each pending ring's
+ * tooltip, both explicitly labelled as a forecast/projection, never as
+ * achievement status — see ringTooltip() below. Projection reuses
+ * computePace() as-is (simple actual÷daysElapsed×daysInMonth run rate, the
+ * same math already driving the VAS Bill target card elsewhere on this page)
+ * rather than a working-day-aware variant.
  */
 
 const GREEN = "var(--color-good-solid)";
@@ -31,8 +35,8 @@ const GREY = "var(--color-border-strong)";
 // viewBox is a fixed 100x100 unit square regardless of the rendered size
 // (set by the `size` prop via width/height) — keeps the ring math simple and
 // the component crisp at any scale.
-const STROKE = 6;
-const GAP = 3;
+const STROKE = 7;
+const GAP = 3.5;
 const RADII = [14, 14 + STROKE + GAP, 14 + 2 * (STROKE + GAP), 14 + 3 * (STROKE + GAP)] as const; // slab1..slab4, innermost to outermost
 const CENTER = 50;
 // The visible ring is thin (STROKE); hovering it precisely at the card's
@@ -61,16 +65,21 @@ export function computeSlabsAchieved(actual: number | null, slabs: IncentiveSlab
 
 const currencyFull = (value: number | null) => (value === null ? "—" : `₹${formatNumber(value)}`);
 
-type RingStatus = "achieved" | "onTrack" | "pending";
+/** Achievement is strictly actual-vs-target — a forecast can never make this
+ * "achieved". Kept as its own type (not reused from computeSlabsAchieved's
+ * boolean[]) so the tooltip/ring-fill code can't accidentally be handed a
+ * projected value where an achieved one is expected. */
+type RingStatus = "achieved" | "pending";
 
 function ringTooltip(slabNumber: 1 | 2 | 3 | 4, target: number, actual: number | null, projectedEom: number | null, status: RingStatus): string {
-  const statusLabel = status === "achieved" ? "Achieved" : status === "onTrack" ? "On track (projected by month-end)" : "Pending";
-  // Shown for every still-pending ring, not just "on track" ones — a ring
-  // that's short of pace (like CO01B's, confirmed 2026-09-18) needs the
-  // projected figure just as much, so it's clear *why* it's plain grey
-  // instead of dashed, not just that it is.
-  const projectedLine = status !== "achieved" && projectedEom !== null ? `\nProjected by month-end: ${currencyFull(projectedEom)}` : "";
-  return `Slab ${slabNumber}\n\nTarget: ${currencyFull(target)}\nActual: ${currencyFull(actual)}${projectedLine}\nStatus: ${statusLabel}`;
+  // The forecast line is always labelled "Forecast" and always separate from
+  // Status — it describes a still-pending ring's trajectory, never its
+  // current achievement. Shown for every pending ring with a forecast
+  // available, not just ones on track to clear — a ring that's short of pace
+  // (like CO01B's, confirmed 2026-09-18) needs the projected figure just as
+  // much, so it's clear *why* it's pending, not just that it is.
+  const forecastLine = status === "pending" && projectedEom !== null ? `\nForecast (projected month-end): ${currencyFull(projectedEom)}` : "";
+  return `Slab ${slabNumber}\n\nTarget: ${currencyFull(target)}\nActual: ${currencyFull(actual)}${forecastLine}\nStatus: ${status === "achieved" ? "Achieved" : "Pending"}`;
 }
 
 export function IncentiveSlabIndicator({
@@ -78,7 +87,7 @@ export function IncentiveSlabIndicator({
   actual,
   slabs,
   date,
-  size = 92,
+  size = 108,
   /** The KPI card this renders inside already shows Actual as its own big
    * headline number — repeating it under the rings there would be pure
    * duplication, so the embedded (scope-switcher-driven) use case turns it
@@ -91,7 +100,7 @@ export function IncentiveSlabIndicator({
   actual: number | null;
   /** Undefined when no target was uploaded/aggregated for this scope this month — shown as a muted placeholder rather than hidden. */
   slabs: IncentiveSlabTargets | undefined;
-  /** The viewed report date — feeds computePace() for the "on track by month-end" forecast. Omit to skip the forecast entirely (rings just render achieved/pending, no dashed state). */
+  /** The viewed report date — feeds computePace() for the "at this rate…" forecast text/tooltip below and inside the rings. Omit to skip the forecast entirely; ring fill (achieved/pending) is unaffected either way. */
   date?: string;
   size?: number;
   showActual?: boolean;
@@ -113,22 +122,21 @@ export function IncentiveSlabIndicator({
   const thresholds = [slabs.slab1, slabs.slab2, slabs.slab3, slabs.slab4];
   const currentSlabLabel = achievedCount === 0 ? "Not Achieved" : String(achievedCount);
 
-  // On-track forecast: where the metric lands by month-end at the current
-  // run rate (computePace — target is irrelevant to projectedEom, only
-  // actual/date, so it's passed null), evaluated against the same slabs.
-  // A ring only counts as "on track" if it isn't already achieved — the
-  // forecast is purely about which *pending* rings are headed for green.
+  // Forecast: where the metric lands by month-end at the current run rate
+  // (computePace — target is irrelevant to projectedEom, only actual/date,
+  // so it's passed null), evaluated against the same slabs. This never feeds
+  // ring color/fill — see the RingStatus/ringGreen-only comparison below —
+  // it only drives the "at this rate…" text and each pending ring's tooltip.
   const projectedEom = date ? computePace(date, actual, null).projectedEom : null;
   const projected = projectedEom !== null ? computeSlabsAchieved(projectedEom, slabs) : null;
-  const projectedGreen = projected?.ringGreen ?? null;
 
   // The "at this rate..." line below the rings (2026-09-18, at the user's
-  // request, alongside the ring dashing above) — three cases, confirmed with
-  // the user: projection doesn't clear Slab 1 at all; projection matches
-  // what's already achieved (rate holding steady, shown anyway per the
-  // user's choice); projection clears a slab beyond what's achieved today.
-  // projectedAchievedCount can never be lower than achievedCount — projecting
-  // forward from a non-negative run rate only ever adds to the total.
+  // request) — three cases, confirmed with the user: projection doesn't
+  // clear Slab 1 at all; projection matches what's already achieved (rate
+  // holding steady, shown anyway per the user's choice); projection clears a
+  // slab beyond what's achieved today. projectedAchievedCount can never be
+  // lower than achievedCount — projecting forward from a non-negative run
+  // rate only ever adds to the total.
   const forecastText =
     projected === null
       ? null
@@ -149,7 +157,9 @@ export function IncentiveSlabIndicator({
       >
         {RADII.map((r, i) => {
           const slabNumber = (i + 1) as 1 | 2 | 3 | 4;
-          const status: RingStatus = ringGreen[i] ? "achieved" : projectedGreen?.[i] ? "onTrack" : "pending";
+          // Ring fill is achieved-vs-pending only — actual compared straight
+          // against this slab's own threshold, never the forecast.
+          const status: RingStatus = ringGreen[i] ? "achieved" : "pending";
           const tooltip = ringTooltip(slabNumber, thresholds[i], actual, projectedEom, status);
           return (
             <g key={slabNumber} className="cursor-default">
@@ -158,9 +168,8 @@ export function IncentiveSlabIndicator({
                 cy={CENTER}
                 r={r}
                 fill="none"
-                stroke={status === "pending" ? GREY : GREEN}
+                stroke={status === "achieved" ? GREEN : GREY}
                 strokeWidth={STROKE}
-                strokeDasharray={status === "onTrack" ? "3 2.5" : undefined}
                 pointerEvents="none"
               />
               {/* Invisible, much wider hit target on top of the same ring — see PITCH comment above. */}

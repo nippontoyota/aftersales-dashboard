@@ -187,7 +187,7 @@ export function HeroKpiStrip({
           hasPreviousUpload={hasPreviousUpload}
           extra={
             incentiveSlabTargets ? (
-              <IncentiveSlabIndicator scopeLabel={current?.value ?? scope} actual={hero.totalRevenueStreamMtd} slabs={scopeSlabs} date={date} size={64} showActual={false} />
+              <IncentiveSlabIndicator scopeLabel={current?.value ?? scope} actual={hero.totalRevenueStreamMtd} slabs={scopeSlabs} date={date} showActual={false} />
             ) : undefined
           }
         />
