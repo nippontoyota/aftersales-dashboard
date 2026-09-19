@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
-import { loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { hashBuffer } from "@/lib/duplicate-detection";
+import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 
@@ -51,6 +52,27 @@ export async function POST(request: Request) {
     buffer = Buffer.from(await file.arrayBuffer());
   } catch {
     return NextResponse.json({ error: "Could not read the uploaded file." }, { status: 400 });
+  }
+
+  // Warn-and-allow duplicate check (2026-09-16, at the user's request) — this
+  // report type kept no parsed rows to hash (see raw-report-uploads/store.ts),
+  // which is exactly what let TI01C's resent BP file slip past the row-hash
+  // check that caught its GS-side twin (see docs/data-reconciliation.md).
+  // Compares raw file bytes directly against every prior upload this month,
+  // not just the most recent one (see raw-report-uploads/store.ts for why).
+  const confirmed = formData.get("confirmDuplicate") === "true";
+  if (!confirmed) {
+    const priorUploads = await loadAllRawReportUploadsBefore(admin.branch, "service_info_bp", date);
+    const newHash = hashBuffer(buffer);
+    const match = priorUploads.find((u) => hashBuffer(u.fileData) === newHash);
+    if (match) {
+      return NextResponse.json({
+        duplicate: true,
+        previousDate: match.date,
+        previousFileName: match.sourceFileName,
+        message: `This file looks identical to your upload from ${match.date} (${match.sourceFileName}). Are you sure this is ${date}'s file?`,
+      });
+    }
   }
 
   const uploadedAt = new Date().toISOString();

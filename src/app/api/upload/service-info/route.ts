@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
-import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { hashRows } from "@/lib/duplicate-detection";
+import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-info/store";
 
@@ -52,6 +53,25 @@ export async function POST(request: Request) {
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
       { status: 422 }
     );
+  }
+
+  // Warn-and-allow duplicate check (2026-09-16, at the user's request) — see
+  // scom205's upload route for the full rationale. This report is a daily
+  // row list, not a cumulative total, so the signal is an exact row-content
+  // match — checked against every prior upload this month, not just the
+  // most recent one (see raw-upload-rows/store.ts for why).
+  const confirmed = formData.get("confirmDuplicate") === "true";
+  if (!confirmed) {
+    const priorUploads = await loadAllRawUploadRowsBefore("service_info", admin.branch, date);
+    const newHash = hashRows(rawRows);
+    const match = priorUploads.find((u) => hashRows(u.rows) === newHash);
+    if (match) {
+      return NextResponse.json({
+        duplicate: true,
+        previousDate: match.date,
+        message: `This file looks identical to your upload from ${match.date} — same rows. Are you sure this is ${date}'s file?`,
+      });
+    }
   }
 
   const uploadedAt = new Date().toISOString();

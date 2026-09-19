@@ -48,6 +48,7 @@ export function BranchOverviewBody({ view, date }: { view: BranchView; date: str
             { key: "vas", label: "VAS Bill (Rs)" },
           ]}
           compactCurrency
+          date={date}
         />
         <VasGauge view={view} date={date} />
       </div>

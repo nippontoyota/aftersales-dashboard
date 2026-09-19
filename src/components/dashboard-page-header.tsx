@@ -37,11 +37,10 @@ export function DashboardPageHeader({
   isPublished?: boolean;
   /** Only HQ can publish — the control renders only when this is true. */
   canPublish?: boolean;
-  /** Extra query params (e.g. /alerts' `watched=tkm`) that identify which
-   * variant of the page this is — carried through the refresh link, the
-   * publish redirect, and passed down to Date/RegionSelect, so switching
-   * date/region or publishing doesn't silently drop back to a default
-   * variant (found 2026-09-01, see alerts-panel.tsx's viewAllHref). */
+  /** Extra query params that identify which variant of the page this is —
+   * carried through the refresh link, the publish redirect, and passed down
+   * to Date/RegionSelect, so switching date/region or publishing doesn't
+   * silently drop back to a default variant. */
   extraParams?: Record<string, string>;
   /** Whether the user has company-wide access for this date. If false, the view is locked to their own branch. */
   isCompanyScope?: boolean;

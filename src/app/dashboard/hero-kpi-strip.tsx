@@ -3,12 +3,15 @@
 import { useMemo, useState } from "react";
 import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion } from "@/lib/aggregate";
 import { formatCompactCurrency, formatNumber } from "@/lib/format";
+import { aggregateIncentiveSlabTargets } from "@/lib/incentive-slabs/aggregate";
+import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import { computePace } from "@/lib/pace";
 import { REGIONS, type RegionName } from "@/lib/regions";
 import type { BranchReport } from "@/lib/report";
 import { eyebrow } from "@/lib/ui";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { RevenueIcon, StorefrontIcon, WrenchIcon } from "@/components/dashboard-icons";
+import { IncentiveSlabIndicator } from "./incentive-slab-indicator";
 
 type Option = { value: string; label: string; region: RegionName | null; kind: "all" | "region" | "branch" };
 
@@ -26,12 +29,21 @@ export function HeroKpiStrip({
   date,
   hasPreviousUpload,
   defaultScope,
+  incentiveSlabTargets,
 }: {
   branches: BranchReport[];
   date: string;
   hasPreviousUpload: boolean;
   /** "All", a RegionName, or a branch code — where the switcher starts. */
   defaultScope: string;
+  /** This month's Slab 1-4 targets, keyed by branch code — loaded server-side
+   * from incentive_slab_targets (see /data's upload form). Drives the
+   * Incentive Slab Achievement rings embedded in the Total Revenue Stream
+   * card below, evaluated against whatever this component's own scope
+   * switcher currently has selected (a region/"All" scope sums its member
+   * branches' targets — see aggregateIncentiveSlabTargets). Omitted entirely
+   * hides the rings (no empty ring placeholder). */
+  incentiveSlabTargets?: Record<string, IncentiveSlabTargets>;
 }) {
   const options = useMemo<Option[]>(() => {
     const present = new Set(branches.map((b) => b.branch));
@@ -71,6 +83,16 @@ export function HeroKpiStrip({
     () => computePace(date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget),
     [date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget],
   );
+
+  // The ring's target: the selected branch's own thresholds, or — for a
+  // region/"All" scope — those branches' thresholds summed, same total the
+  // source Excel's own region/company subtotal rows held.
+  const scopeSlabs = useMemo(() => {
+    if (!incentiveSlabTargets) return undefined;
+    if (current?.kind === "branch") return incentiveSlabTargets[scope];
+    const codes = current?.kind === "region" ? REGIONS[scope as RegionName] : branches.map((b) => b.branch);
+    return aggregateIncentiveSlabTargets(incentiveSlabTargets, codes);
+  }, [incentiveSlabTargets, current, scope, branches]);
 
   const gusRevenue =
     hero.gusPartsMtd !== null && hero.gusLabourMtd !== null ? hero.gusPartsMtd + hero.gusLabourMtd : null;
@@ -163,6 +185,11 @@ export function HeroKpiStrip({
           label="Total Revenue Stream MTD"
           value={formatCompactCurrency(hero.totalRevenueStreamMtd)}
           hasPreviousUpload={hasPreviousUpload}
+          extra={
+            incentiveSlabTargets ? (
+              <IncentiveSlabIndicator scopeLabel={current?.value ?? scope} actual={hero.totalRevenueStreamMtd} slabs={scopeSlabs} date={date} showActual={false} />
+            ) : undefined
+          }
         />
         <RichKpiCard
           icon={<RevenueIcon />}

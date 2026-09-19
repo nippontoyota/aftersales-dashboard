@@ -14,15 +14,18 @@ const NAV_ITEMS = [
   // `label` here is a fallback only — AppShell always overrides the dashboard
   // item's label with the `dashboardLabel` prop ("Executive Overview", or the
   // pre-publish "Daily Report" / "Regional Report").
-  { href: "/dashboard", label: "Executive Overview", key: "dashboard" as const, requiresDashboard: true, companyWide: false, uploadOnly: false },
-  { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
-  { href: "/alerts", label: "Alerts", key: "alerts" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
-  { href: "/branches", label: "Branch Performance", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
-  { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false },
+  { href: "/dashboard", label: "Executive Overview", key: "dashboard" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false },
+  { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false },
+  // regionalVisible: shown even under slimNav for a regional admin — their
+  // own HQ↔Regional query thread, unlike the other company-wide pages which
+  // fold into the branch-first dashboard for them.
+  { href: "/queries", label: "Queries", key: "queries" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: true },
+  { href: "/branches", label: "Branch Performance", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false },
+  { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false },
   // Not gated by publish (companyWide:false) — a branch admin should always be
   // able to see its own cancellations; the page scopes rows to the account.
-  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false },
-  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true },
+  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false },
+  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false },
 ];
 
 /** The VP Service view (role `vp_service`) gets its own small nav and
@@ -92,15 +95,6 @@ function TkmTargetsIcon() {
       <circle cx="10" cy="10" r="7" />
       <circle cx="10" cy="10" r="3.8" />
       <circle cx="10" cy="10" r="0.8" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function AlertsIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
-      <path d="M5 8a5 5 0 0 1 10 0c0 3.5 1.2 4.8 1.2 4.8H3.8S5 11.5 5 8z" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8.3 15.5a1.8 1.8 0 0 0 3.4 0" strokeLinecap="round" />
     </svg>
   );
 }
@@ -244,7 +238,7 @@ function NavPending() {
 const ICONS: Record<NavKey, () => React.ReactElement> = {
   dashboard: DashboardIcon,
   "tkm-targets": TkmTargetsIcon,
-  alerts: AlertsIcon,
+  queries: ChatIcon,
   branches: BranchesIcon,
   reports: ReportsIcon,
   cancellations: CancellationsIcon,
@@ -268,6 +262,8 @@ export function AppShell({
   ceoNav = false,
   accountsNav = false,
   slimNav = false,
+  isRegional = false,
+  queriesBadge = 0,
   dashboardLabel = "Executive Overview",
   identity,
   children,
@@ -300,6 +296,12 @@ export function AppShell({
    * content now lives on the branch-first dashboard. Leaves My Branch /
    * My Region + Cancellations + Upload. Defaults to false. */
   slimNav?: boolean;
+  /** A regional admin — keeps `regionalVisible` nav items (just Queries)
+   * showing even under slimNav. Defaults to false. */
+  isRegional?: boolean;
+  /** Count shown as a small badge on the Queries nav item — threads awaiting
+   * this viewer's attention. 0 (default) renders no badge. */
+  queriesBadge?: number;
   /** Label for the /dashboard nav item — "Daily Report" / "Regional Report"
    * for a pre-publish raw view, "Executive Overview" otherwise. */
   dashboardLabel?: string;
@@ -322,7 +324,7 @@ export function AppShell({
     : NAV_ITEMS.filter(
         (item) =>
           (!item.requiresDashboard || showDashboardLink) &&
-          (!item.companyWide || (companyTabs && !slimNav)) &&
+          (!item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && isRegional)) &&
           (!item.uploadOnly || canUpload),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq && !vpNav && !ceoNav && !accountsNav ? UTILITY_NAV_ITEMS : [];
@@ -330,19 +332,28 @@ export function AppShell({
   const navLink = (item: { href: string; label: string; key: NavKey }, compact: boolean) => {
     const Icon = ICONS[item.key];
     const active = current === item.key;
+    const badge = item.key === "queries" ? queriesBadge : 0;
     return (
       <Link
         key={item.key}
         href={item.href}
         aria-current={active ? "page" : undefined}
         onClick={() => setMobileOpen(false)}
-        title={compact ? item.label : undefined}
-        className={`flex items-center rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+        title={compact ? (badge > 0 ? `${item.label} (${badge})` : item.label) : undefined}
+        className={`relative flex items-center rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
           compact ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2"
         } ${active ? "bg-accent-soft text-accent-text" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
       >
         <Icon />
+        {compact && badge > 0 ? (
+          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-bad-solid" aria-hidden="true" />
+        ) : null}
         {!compact && item.label}
+        {!compact && badge > 0 ? (
+          <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-bad-solid px-1.5 text-[11px] font-semibold text-on-accent">
+            {badge}
+          </span>
+        ) : null}
         {!compact ? <NavPending /> : null}
       </Link>
     );

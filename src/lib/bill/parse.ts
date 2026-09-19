@@ -127,6 +127,7 @@ export function extractInvoiceNumber(text: string): string | null {
 export function extractTaxableValue(text: string): number | null {
   const strategies = [
     fromLineTotalRow, // Format 2: "Line Total: ₹ 22,903.68 ₹ 2,061.33 ..."
+    fromTotalLabelBlock, // multi-item invoices: "Total:" row wrapped onto its own lines
     fromGstRate, // Format 1: CGST amount ÷ its rate = taxable base
     fromTotalsRow, // Format 1: "<afterTax> <tax> <taxable> <disc> <total>" row
     fromGrandTotalMinusGst, // generic: grand total − all GST amounts
@@ -163,6 +164,31 @@ function fromLineTotalRow(text: string): number | null {
       return null;
     }
   }
+  return taxable;
+}
+
+/**
+ * Multi-item invoices whose "Total:" summary row gets wrapped onto separate
+ * text lines by the PDF extractor, e.g. "Total: ₹\n11,540.00\n₹ 288.50 ₹\n
+ * 288.50\n₹ 0.00 ₹ 0.00 ₹ 12,117.00". Same column order as fromLineTotalRow:
+ * Taxable, CGST, SGST, IGST, Other Charges, Total Value. Requires all six
+ * columns to validate — with the label and numbers on different lines there's
+ * no single-line context to sanity-check against otherwise.
+ */
+function fromTotalLabelBlock(text: string): number | null {
+  const m = text.match(/\n\s*Total\s*:\s*/i);
+  if (!m || m.index === undefined) return null;
+
+  const after = text.slice(m.index + m[0].length, m.index + m[0].length + 400);
+  const nums = moneyTokens(after);
+  if (nums.length < 6) return null;
+
+  const taxable = nums[0];
+  if (taxable <= 0) return null;
+
+  const sum = nums[0] + nums[1] + nums[2] + nums[3] + nums[4];
+  if (Math.abs(sum - nums[5]) > 1) return null;
+
   return taxable;
 }
 

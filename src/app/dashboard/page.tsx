@@ -10,15 +10,15 @@ import { achievementRatio, computeKpiSummary } from "@/lib/aggregate";
 import { getCurrentAdmin } from "@/lib/auth";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
+import { loadIncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { computeVasTrendSeries } from "@/lib/trend";
 import { loadBranchView, loadRegionView } from "@/lib/branch-view-data";
 import { BranchAccountPage, RegionAccountPage } from "./branch/branch-page";
-import { AchievementDonut } from "./achievement-donut";
-import { AlertsPanel } from "./alerts-panel";
 import { BillDrilldown } from "./bill-drilldown";
 import { BranchDailyReport } from "./branch-daily-report";
+import { DashboardTabs } from "./dashboard-tabs";
 import { RegionDailyReport } from "./region-daily-report";
 import { HeroKpi } from "./hero-kpi";
 import { HeroKpiStrip } from "./hero-kpi-strip";
@@ -61,6 +61,8 @@ export default async function DashboardPage({
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}
+      isRegional={admin.role === "regional"}
+      queriesBadge={nav.queriesBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
     >
@@ -191,6 +193,11 @@ async function DashboardContent({
 
   const allKpis = computeKpiSummary(report.branches);
 
+  // Plain object, not the Map loadIncentiveSlabTargets returns — a Map
+  // doesn't survive the server-component -> client-component prop boundary
+  // as reliably as a plain object does, and HeroKpiStrip is "use client".
+  const incentiveSlabTargets = Object.fromEntries(await loadIncentiveSlabTargets(date.slice(0, 7)));
+
   const trendSeriesByMetric = { vas: computeVasTrendSeries(monthSnapshots, serviceInfoMonthSnapshots, region) };
 
   const vasGentani = achievementRatio(kpis.vasAchievementForTheMonth, kpis.gusRoMtd);
@@ -200,12 +207,9 @@ async function DashboardContent({
   // header region and can step through every branch.
   const heroDefaultScope = region;
 
-  // Same date/region preservation as tkm-targets/page.tsx's alertsHref — no
-  // `watched` param needed here since VAS is already /alerts' own default.
-  const alertsHrefParams = new URLSearchParams({ date });
-  if (region !== "All") alertsHrefParams.set("region", region);
-  const alertsHref = `/alerts?${alertsHrefParams.toString()}`;
-  const branchesHref = `/branches?${alertsHrefParams.toString()}`;
+  const hrefParams = new URLSearchParams({ date });
+  if (region !== "All") hrefParams.set("region", region);
+  const branchesHref = `/branches?${hrefParams.toString()}`;
 
   const uploadedAtLabel = new Date(report.uploadedAt).toLocaleString("en-IN", {
     day: "numeric",
@@ -238,64 +242,61 @@ async function DashboardContent({
           date={date}
           hasPreviousUpload={hasPreviousUpload}
           defaultScope={heroDefaultScope}
+          incentiveSlabTargets={incentiveSlabTargets}
         />
       </div>
 
       <div className="mt-4">
-        <HeroKpi branches={report.branches} compact />
-      </div>
+        <DashboardTabs
+          overview={
+            <>
+              <HeroKpi branches={report.branches} compact />
+              <div className="mt-4">
+                <RevenuePerCarLeaderboard branches={filteredBranches} highlightBranch={null} compact seeAllHref={branchesHref} />
+              </div>
+            </>
+          }
+          trends={<TrendChart seriesByMetric={trendSeriesByMetric} date={date} />}
+          regions={
+            <RegionScorecard
+              branches={report.branches}
+              monthSnapshots={monthSnapshots}
+              serviceInfoMonthSnapshots={serviceInfoMonthSnapshots}
+            />
+          }
+          insights={<InsightsPanel kpis={allKpis} branches={report.branches} date={date} />}
+          more={
+            <>
+              <CollapsibleCard title="Other KPIs" defaultOpen>
+                <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-2">
+                  <RichKpiCard icon={<PercentIcon />} color="violet" label="External Sales % on SPR I" value={formatPercent(kpis.externalSalesPctOfSprInternal)} sub="avg across branches" />
+                  <RichKpiCard icon={<TargetIcon />} color="indigo" label="VAS Gentani" value={formatCompactCurrency(vasGentani)} sub="VAS revenue per GUS RO" />
+                </div>
+              </CollapsibleCard>
 
-      <div className="mt-4">
-        <RevenuePerCarLeaderboard branches={filteredBranches} highlightBranch={null} compact seeAllHref={branchesHref} />
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TrendChart seriesByMetric={trendSeriesByMetric} />
-        <AchievementDonut branches={filteredBranches} />
-      </div>
-
-      <div className="mt-4">
-        <RegionScorecard
-          branches={report.branches}
-          monthSnapshots={monthSnapshots}
-          serviceInfoMonthSnapshots={serviceInfoMonthSnapshots}
-          date={date}
+              {billTotals.length > 0 && (
+                <div className="mt-4">
+                  <CollapsibleCard title="Bills — Taxable Value" defaultOpen>
+                    <div className="space-y-2 p-3">
+                      {billTotals.map((bt) => (
+                        <BillDrilldown
+                          key={bt.month}
+                          month={bt.month}
+                          total={bt.total}
+                          count={bt.count}
+                          scrapTotal={bt.scrapTotal}
+                          usedOilTotal={bt.usedOilTotal}
+                          untaggedTotal={bt.untaggedTotal}
+                        />
+                      ))}
+                    </div>
+                  </CollapsibleCard>
+                </div>
+              )}
+            </>
+          }
         />
       </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <InsightsPanel kpis={allKpis} branches={report.branches} date={date} />
-        <AlertsPanel branches={filteredBranches} variant="preview" viewAllHref={alertsHref} />
-      </div>
-
-      <div className="mt-4">
-        <CollapsibleCard title="Other KPIs" defaultOpen>
-          <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-2">
-            <RichKpiCard icon={<PercentIcon />} color="violet" label="External Sales % on SPR I" value={formatPercent(kpis.externalSalesPctOfSprInternal)} sub="avg across branches" />
-            <RichKpiCard icon={<TargetIcon />} color="indigo" label="VAS Gentani" value={formatCompactCurrency(vasGentani)} sub="VAS revenue per GUS RO" />
-          </div>
-        </CollapsibleCard>
-      </div>
-
-      {billTotals.length > 0 && (
-        <div className="mt-4">
-          <CollapsibleCard title="Bills — Taxable Value" defaultOpen>
-            <div className="space-y-2 p-3">
-              {billTotals.map((bt) => (
-                <BillDrilldown
-                  key={bt.month}
-                  month={bt.month}
-                  total={bt.total}
-                  count={bt.count}
-                  scrapTotal={bt.scrapTotal}
-                  usedOilTotal={bt.usedOilTotal}
-                  untaggedTotal={bt.untaggedTotal}
-                />
-              ))}
-            </div>
-          </CollapsibleCard>
-        </div>
-      )}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-[11px] text-fg-faint">
         <span>Data as of: {uploadedAtLabel} IST</span>

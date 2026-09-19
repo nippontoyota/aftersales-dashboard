@@ -13,7 +13,7 @@ export function RegionSelect({
   selected: string;
   date: string;
   basePath?: string;
-  /** Extra query params (e.g. /alerts' `watched=tkm`) to carry along on
+  /** Extra query params to carry along on
    * every navigation — otherwise switching regions silently drops them. */
   extraParams?: Record<string, string>;
 }) {

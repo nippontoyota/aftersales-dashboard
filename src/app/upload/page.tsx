@@ -11,11 +11,11 @@ import { loadPartSaleSnapshot } from "@/lib/part-sale/store";
 import { loadSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { loadScom205Snapshot } from "@/lib/scom205/store";
 import { loadRawReportUpload } from "@/lib/raw-report-uploads/store";
-import { isBodyPaintOnly } from "@/lib/report";
+import { isBodyPaintOnly, onlineStoreCodeFor } from "@/lib/report";
 import { BaToolUploadForm } from "./ba-tool-upload-form";
 import { BillUploadForm } from "./bill-upload-form";
 import { CancellationUploadForm } from "./cancellation-upload-form";
-import { PartSaleUploadForm } from "./part-sale-upload-form";
+import { PartSaleUploadForm, OnlineStorePartSaleUploadForm } from "./part-sale-upload-form";
 import { Scom205UploadForm } from "./scom205-upload-form";
 import { ServiceInfoUploadForm } from "./service-info-upload-form";
 import { ServiceInfoBpUploadForm } from "./service-info-bp-upload-form";
@@ -35,7 +35,9 @@ export default async function UploadPage({
   if (admin?.role === "accounts") redirect("/accounts");
   if (admin?.role === "regional") redirect("/dashboard");
   const identity = admin ? adminIdentityLabel(admin) : "";
-  const nav = admin ? await loadNavState(admin) : { companyTabs: true, dashboardLabel: "Executive Overview", canUpload: true, slimNav: false };
+  const nav = admin
+    ? await loadNavState(admin)
+    : { companyTabs: true, dashboardLabel: "Executive Overview", canUpload: true, slimNav: false, queriesBadge: 0 };
 
   // The date picker defaults to the computed report date — one date for every
   // branch each round (see src/lib/reporting-date.ts) — but a branch can pick
@@ -57,6 +59,7 @@ export default async function UploadPage({
   // never produces the GS-variant Service Info / Cost & Sales files — don't
   // offer those two forms (and pending-uploads.ts drops them too).
   const bpOnly = admin?.role === "branch" && isBodyPaintOnly(admin.branch);
+  const onlineStoreCode = admin?.role === "branch" ? onlineStoreCodeFor(admin.branch) : undefined;
   const alreadyUploaded =
     admin?.role === "branch"
       ? await (async () => {
@@ -64,13 +67,14 @@ export default async function UploadPage({
           // set 2026-09-01, at the user's request — six report types per
           // branch per day now, nothing parsed out of the two BP ones (see
           // raw-report-uploads/store.ts).
-          const [serviceInfo, serviceInfoBp, ssrvGeneral, ssrvBp, partSale, scom205] = await Promise.all([
+          const [serviceInfo, serviceInfoBp, ssrvGeneral, ssrvBp, partSale, scom205, partSaleOnline] = await Promise.all([
             loadServiceInfoSnapshot(reportDate, admin.branch),
             loadRawReportUpload(reportDate, admin.branch, "service_info_bp"),
             loadSsrv089Snapshot(reportDate, admin.branch, "general"),
             loadRawReportUpload(reportDate, admin.branch, "ssrv089_bp"),
             loadPartSaleSnapshot(reportDate, admin.branch),
             loadScom205Snapshot(reportDate, admin.branch),
+            onlineStoreCode ? loadPartSaleSnapshot(reportDate, onlineStoreCode) : Promise.resolve(null),
           ]);
           const pick = (s: { sourceFileName: string; uploadedAt: string } | null) =>
             s ? { sourceFileName: s.sourceFileName, uploadedAt: s.uploadedAt } : null;
@@ -81,12 +85,13 @@ export default async function UploadPage({
             ssrvBp: pick(ssrvBp),
             partSale: pick(partSale),
             scom205: pick(scom205),
+            partSaleOnline: pick(partSaleOnline),
           };
         })()
       : null;
 
   return (
-    <AppShell current="upload" showDashboardLink={admin?.canViewDashboard ?? false} isHq={admin?.role === "hq"} companyTabs={nav.companyTabs} slimNav={nav.slimNav} dashboardLabel={nav.dashboardLabel} identity={identity}>
+    <AppShell current="upload" showDashboardLink={admin?.canViewDashboard ?? false} isHq={admin?.role === "hq"} companyTabs={nav.companyTabs} slimNav={nav.slimNav} queriesBadge={nav.queriesBadge} dashboardLabel={nav.dashboardLabel} identity={identity}>
       <div className="mx-auto w-full max-w-2xl p-6">
         {admin?.role === "hq" ? (
           <UploadTabs
@@ -176,6 +181,9 @@ export default async function UploadPage({
                   )}
                   <Ssrv089BpUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.ssrvBp} />
                   <PartSaleUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.partSale} />
+                  {onlineStoreCode && (
+                    <OnlineStorePartSaleUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.partSaleOnline} />
+                  )}
                   <Scom205UploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.scom205} />
                 </div>
               </>

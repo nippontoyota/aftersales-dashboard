@@ -79,6 +79,32 @@ create table if not exists vp_flags (
 create index if not exists vp_flags_status_idx on vp_flags (status, created_at desc);
 create index if not exists vp_flags_branch_idx on vp_flags (context_branch) where context_branch is not null;
 
+-- HQ ↔ Regional Manager query threads — bidirectional, unlike vp_flags
+-- (VP → HQ only). `direction` says who asked: 'to_hq' means the regional
+-- manager for `region` raised it (mirrors vp_flags' shape); 'to_region'
+-- means HQ raised it, addressed to that region's manager. One question +
+-- one reply per thread, same open/answered/closed lifecycle as vp_flags.
+-- See src/lib/region-queries/store.ts.
+create table if not exists region_queries (
+  id bigint generated always as identity primary key,
+  created_by text not null references admins(username),
+  created_at timestamptz not null default now(),
+  direction text not null,
+  region text not null,
+  context_date date,
+  context_branch text,
+  note text not null,
+  status text not null default 'open',
+  reply text,
+  replied_by text references admins(username),
+  replied_at timestamptz,
+  constraint region_queries_direction_check check (direction in ('to_hq', 'to_region')),
+  constraint region_queries_region_check check (region in ('North', 'Central', 'South')),
+  constraint region_queries_status_check check (status in ('open', 'answered', 'closed'))
+);
+create index if not exists region_queries_region_idx on region_queries (region, status, created_at desc);
+create index if not exists region_queries_status_idx on region_queries (status, created_at desc);
+
 -- One row per branch per date — mirrors data/uploads/{date}.json's `branches` array.
 create table if not exists ba_tool_snapshots (
   date date not null,
@@ -424,4 +450,26 @@ create table if not exists report_holidays (
   note        text,
   created_by  text        not null,
   created_at  timestamptz not null default now()
+);
+
+-- Incentive slab targets, per branch per calendar month (2026-09-18, at the
+-- user's request). Four ascending revenue thresholds (slab1 lowest, slab4
+-- highest) a branch's Total Revenue Stream MTD is compared against for the
+-- Incentive Slab Achievement rings on the Dashboard's hero card — see
+-- src/lib/incentive-slabs/. HQ uploads/replaces the whole month's Excel file
+-- at /data; each upload fully replaces that month's rows (same delete+insert
+-- semantics as ba_tool_snapshots) so a corrected re-upload never leaves
+-- stale branches behind. Month-scoped (not just "current") so a past
+-- month's dashboard keeps showing what was actually targeted that month.
+create table if not exists incentive_slab_targets (
+  month             text        not null, -- 'YYYY-MM'
+  branch            text        not null,
+  slab1             numeric     not null,
+  slab2             numeric     not null,
+  slab3             numeric     not null,
+  slab4             numeric     not null,
+  uploaded_at       timestamptz not null,
+  uploaded_by       text        not null,
+  source_file_name  text        not null,
+  primary key (month, branch)
 );

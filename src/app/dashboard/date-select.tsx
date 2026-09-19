@@ -42,7 +42,7 @@ export function DateSelect({
   selected: string;
   region: string;
   basePath?: string;
-  /** Extra query params (e.g. /alerts' `watched=tkm`) to carry along on
+  /** Extra query params to carry along on
    * every navigation — otherwise switching dates silently drops them. */
   extraParams?: Record<string, string>;
 }) {

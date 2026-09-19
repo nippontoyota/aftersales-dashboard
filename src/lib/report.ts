@@ -115,11 +115,13 @@ export type BranchReport = {
   bpuPartsMtd: number | null;
   bpuLabourMtd: number | null;
 
-  // External Sales MTD (Rs) = BA Tool's SPR External (already cumulative)
-  // plus the branch's cumulative Part Sale Report "External Sales" filter
-  // (external-type-bill rows, PartNo prefix match — see part-sale/parse.ts).
-  // Null whenever Part Sale Report hasn't been uploaded for this branch this
-  // month, same conservative rule as GUS Parts MTD above.
+  // External Sales MTD (Rs) = the branch's cumulative Part Sale Report
+  // "External Sales" filter alone (every row on an `A`-type bill, plus
+  // matching `F`-type returns — see part-sale/parse.ts). BA Tool's SPR
+  // External is no longer used here as of 2026-09-15. Null whenever Part
+  // Sale Report hasn't been uploaded for this branch this month, same
+  // conservative rule as GUS Parts MTD above — 0 instead for a Body &
+  // Paint-only branch (see BODY_PAINT_ONLY_BRANCHES below).
   externalSalesMtd: number | null;
 
   // Scrap and used-oil revenue (Rs, without tax) — sum of PDF bill taxable
@@ -136,7 +138,8 @@ export type BranchReport = {
   usedOilRevenueMtd: number;
 
   // From the user's real "Revenue Stream" reference sheet — verified against
-  // its embedded formulas directly, not re-derived by us:
+  // its embedded formulas directly, not re-derived by us (External Sales
+  // input redefined 2026-09-15, see externalSalesMtd above):
   //   Total MTD (Rs)  = GUS Parts + GUS Labour + BPU Parts + BPU Labour + External Sales
   //   % on SPR I       = External Sales / (Parts Retail Achievement MTD [SPR Internal] + External Sales)
   // % on SPR I is null unless every input it depends on is present. Total MTD
@@ -206,10 +209,15 @@ function excludeDeactivatedBranches(rows: BaToolBranchRow[]): BaToolBranchRow[] 
  * null-guards on the GUS accessories deduction and the Part-Sale external
  * component leave their Total Revenue Stream MTD null even though their BPU
  * revenue is real. For these branches GUS Parts/Labour MTD is 0 (there is no
- * general service) and the Part-Sale external component defaults to 0 when
- * absent — so Total Revenue = BPU Parts + BPU Labour + SPR External + scrap
- * + used-oil. Confirmed with the user 2026-09-08. Revisit if any of them
- * adds a service desk (its scom205 GUS revenue would then be non-zero).
+ * general service) and External Sales MTD defaults to 0 when the Part Sale
+ * Report is absent (or present with no `A`-type bills) — so Total Revenue =
+ * BPU Parts + BPU Labour + External Sales + scrap + used-oil. Confirmed with
+ * the user 2026-09-08; External Sales input redefined 2026-09-15 (BA Tool's
+ * SPR External dropped from the formula group-wide, including these
+ * branches — confirmed 2026-09-15 this also zeroes TR01B/KL01B's External
+ * Sales versus their old SPR External figures, since neither files real
+ * Part Sale Report `A`-type bills). Revisit if any of them adds a service
+ * desk (its scom205 GUS revenue would then be non-zero).
  *
  * Exported so the upload surface stays in step: these branches never get the
  * GS-variant Service Info / Cost & Sales files, so the /upload page hides
@@ -224,13 +232,33 @@ export function isBodyPaintOnly(branch: string): boolean {
 /** Branch codes that aren't real physical branches — their BA Tool row folds
  * into a parent branch's row and the code itself never appears downstream
  * as its own branch. CO01C is Nippon Toyota's online-store sales channel;
- * its row only carries real SPR External / SPO Dealer figures (everything
- * else in it is empty), so only those fields get merged in. Splitting the
- * parent and online figures back apart for an "expand" view is separate,
- * later work — this only handles the merge. */
+ * its BA Tool row only carries real SPR External / SPO Dealer figures
+ * (everything else in it is empty), so only those fields get merged in.
+ * Since 2026-09-15, CO01C can also upload its own Part Sale Report (see
+ * /upload's "Online Store Part Sale Report" field and
+ * /api/upload/part-sale-online) — those rows get merged into CO01A's own
+ * partSaleMonth below, the same "folds into the parent" treatment. Optional,
+ * not part of any branch's required-uploads set (an online store doesn't
+ * transact every day — see pending-uploads.ts / admin-store.ts, which never
+ * list CO01C at all). Splitting the parent and online figures back apart for
+ * an "expand" view is separate, later work — this only handles the merge. */
 const ONLINE_STORE_PARENT_BRANCH: Record<string, string> = {
   CO01C: "CO01A",
 };
+
+/** The online-store code for a parent branch's own login (e.g. "CO01A" ->
+ * "CO01C"), or undefined if that branch has no online-store channel — used
+ * by /api/upload/part-sale-online to attribute an upload to the right code
+ * without trusting the client to supply it. */
+export function onlineStoreCodeFor(parentBranch: string): string | undefined {
+  return Object.entries(ONLINE_STORE_PARENT_BRANCH).find(([, parent]) => parent === parentBranch)?.[0];
+}
+
+/** Every online-store code (currently just "CO01C") — not a real branch
+ * (excluded from listBranchCodes/pending-uploads, see above), but valid as
+ * an Upload Sheet target specifically for a Part Sale Report, since HQ needs
+ * a fallback for when CO01A can't file it themselves. */
+export const ONLINE_STORE_CODES: readonly string[] = Object.keys(ONLINE_STORE_PARENT_BRANCH);
 
 const ONLINE_STORE_MERGED_FIELDS: Exclude<keyof BaToolBranchRow, "branch">[] = ["sprExternal", "spoDealer", "spoDealerTarget"];
 
@@ -311,7 +339,6 @@ function computeBranchReport(
   const accessoriesPartSaleMtd = sumBy(ssrv089GeneralMonth, (s) => s.totals.accessoriesPartSale);
   const accessoriesLabourSaleMtd = sumBy(ssrv089GeneralMonth, (s) => s.totals.accessoriesLabourSale);
   const externalSalesFromPartsMtd = sumBy(partSaleMonth, (s) => s.counts.externalSales);
-  const sprExternal = t("sprExternal");
   const partsRetailAchievementForTheMonth = t("sprInternal");
 
   const gusRoMtd = t("gus");
@@ -335,9 +362,7 @@ function computeBranchReport(
       : null;
   const bpuPartsMtd = scom205Today?.totals.bpuSpRevMtd ?? null;
   const bpuLabourMtd = scom205Today?.totals.bpuLabRevMtd ?? null;
-  const externalSalesFromParts = externalSalesFromPartsMtd ?? (bodyPaintOnly ? 0 : null);
-  const externalSalesMtd =
-    sprExternal !== null && externalSalesFromParts !== null ? sprExternal + externalSalesFromParts : null;
+  const externalSalesMtd = externalSalesFromPartsMtd ?? (bodyPaintOnly ? 0 : null);
 
   return {
     branch,
@@ -486,6 +511,22 @@ export async function buildReport(date: string): Promise<Report | null> {
   const serviceInfoMonth = groupByBranch(serviceInfoMonthList);
   const partSaleToday = byBranch(partSaleTodayList);
   const partSaleMonth = groupByBranch(partSaleMonthList);
+
+  // Fold an online store's own Part Sale Report (e.g. CO01C's) into its
+  // parent's MTD figures (e.g. CO01A's) — same "folds into the parent"
+  // treatment as the BA Tool merge above, just done by concatenating
+  // snapshot rows instead of summing individual fields, since sumBy() in
+  // computeBranchReport already sums whatever's in the list. Only affects
+  // MTD: partSaleToday (the day's own single snapshot, used for the
+  // non-External-Sales "for the day" figures) is left un-merged, since an
+  // online store's engine-flush/DIY consumable sales are negligible and not
+  // worth the added complexity of merging two single-snapshot objects.
+  for (const [onlineCode, parentCode] of Object.entries(ONLINE_STORE_PARENT_BRANCH)) {
+    const onlineMonth = partSaleMonth.get(onlineCode);
+    if (!onlineMonth || onlineMonth.length === 0) continue;
+    partSaleMonth.set(parentCode, [...(partSaleMonth.get(parentCode) ?? []), ...onlineMonth]);
+  }
+
   const ssrv089GeneralMonth = groupByBranch(ssrv089GeneralMonthList);
   const scom205Today = byBranch(scom205TodayList);
   const billRevenue = new Map(billRevenueList.map((r) => [r.branch, r]));
@@ -506,6 +547,14 @@ export async function buildReport(date: string): Promise<Report | null> {
       ...scom205TodayList.map((s) => s.branch),
     ]);
     for (const deactivated of DEACTIVATED_BRANCHES) branchesWithData.delete(deactivated);
+    // An online store's data is already merged into its parent's
+    // partSaleMonth above — make sure the parent shows up here too (even if
+    // it filed nothing of its own that day) and the online code never gets
+    // its own duplicate row.
+    for (const [onlineCode, parentCode] of Object.entries(ONLINE_STORE_PARENT_BRANCH)) {
+      if (branchesWithData.has(onlineCode)) branchesWithData.add(parentCode);
+      branchesWithData.delete(onlineCode);
+    }
     if (branchesWithData.size === 0) return null;
 
     const branches = [...branchesWithData].sort().map((branch) =>

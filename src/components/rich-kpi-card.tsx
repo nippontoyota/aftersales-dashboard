@@ -51,6 +51,7 @@ export function RichKpiCard({
   sparklineValues,
   formatPaceValue = formatNumber,
   showSparkline = true,
+  extra,
 }: {
   icon: React.ReactNode;
   color: keyof typeof ACCENT;
@@ -70,6 +71,8 @@ export function RichKpiCard({
   formatPaceValue?: (v: number | null) => string;
   /** Off to drop the drawn chart line while keeping the "Run rate X/day" text — for a branch admin's numbers-only dashboard, where the line itself is exactly the kind of chart they asked not to see, but the run rate figure is still a plain number worth keeping. */
   showSparkline?: boolean;
+  /** Anything else this specific card needs in the space between the value/icon row and the footer — e.g. the Incentive Slab Achievement rings on the Total Revenue Stream card. Renders instead of the target-bar/sparkline/sub block, not alongside it — a card only has room for one. */
+  extra?: React.ReactNode;
 }) {
   const hasTarget = actual !== undefined && target !== undefined;
   const ratio = hasTarget ? achievementRatio(actual, target) : null;
@@ -96,7 +99,9 @@ export function RichKpiCard({
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${accent.chip}`}>{icon}</div>
       </div>
 
-      {hasTarget ? (
+      {extra ? (
+        <div className="mt-2 flex flex-1 items-center justify-center">{extra}</div>
+      ) : hasTarget ? (
         <div className="mt-3.5">
           <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2 ring-1 ring-inset ring-border-subtle">
             <div

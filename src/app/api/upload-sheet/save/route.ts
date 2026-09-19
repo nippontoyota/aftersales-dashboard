@@ -7,6 +7,7 @@ import { savePartSaleSnapshot } from "@/lib/part-sale/store";
 import { saveRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { detectReportType } from "@/lib/report-sniffer";
+import { ONLINE_STORE_CODES } from "@/lib/report";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
 import { saveScom205Snapshot } from "@/lib/scom205/store";
 import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
@@ -58,11 +59,6 @@ export async function POST(request: Request) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: "Choose a valid date for this upload." }, { status: 400 });
   }
-  const branchCodes = await listBranchCodes();
-  if (!branchCodes.includes(branch)) {
-    return NextResponse.json({ error: "Choose a valid branch." }, { status: 400 });
-  }
-
   let buffer: Buffer;
   try {
     buffer = Buffer.from(await file.arrayBuffer());
@@ -76,6 +72,16 @@ export async function POST(request: Request) {
       { error: "Could not recognize this file as a Service Info, Part Sale, SSRV089, or scom205 report." },
       { status: 422 }
     );
+  }
+
+  // An online store (e.g. CO01C) only ever files a Part Sale Report — its
+  // code is deliberately absent from listBranchCodes() (not a real branch,
+  // no other report type applies to it), so it's only accepted here when
+  // that's the detected type.
+  const branchCodes = await listBranchCodes();
+  const allowedBranches = type === "part-sale" ? [...branchCodes, ...ONLINE_STORE_CODES] : branchCodes;
+  if (!allowedBranches.includes(branch)) {
+    return NextResponse.json({ error: "Choose a valid branch." }, { status: 400 });
   }
 
   const uploadedAt = new Date().toISOString();

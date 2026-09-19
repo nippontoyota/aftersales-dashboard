@@ -7,6 +7,9 @@ import { listReportHolidays, loadReportHolidaySet } from "@/lib/report-holidays/
 import { addReportHolidayAction, removeReportHolidayAction } from "@/lib/report-holidays/actions";
 import { reportingDate } from "@/lib/reporting-date";
 import { REGIONS, type RegionName } from "@/lib/regions";
+import { loadIncentiveSlabTargets, loadIncentiveSlabUploadInfo } from "@/lib/incentive-slabs/store";
+import { formatCompactCurrency } from "@/lib/format";
+import { IncentiveSlabsUploadForm } from "./incentive-slabs-upload-form";
 
 const longDate = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
@@ -23,6 +26,11 @@ export default async function DataPage() {
     loadReportHolidaySet(),
   ]);
   const currentReportDate = reportingDate(holidaySet);
+  const currentMonth = currentReportDate.slice(0, 7);
+  const [incentiveSlabTargets, incentiveSlabUploadInfo] = await Promise.all([
+    loadIncentiveSlabTargets(currentMonth),
+    loadIncentiveSlabUploadInfo(currentMonth),
+  ]);
 
   const staffByBranch = new Map<string, { id: number; name: string }[]>();
   for (const s of allStaff) {
@@ -98,6 +106,73 @@ export default async function DataPage() {
           ) : (
             <div className="mt-3 border-t border-dashed border-border pt-3 text-xs text-fg-faint">No holidays flagged.</div>
           )}
+        </div>
+
+        <h1 className="mt-10 text-xl font-semibold tracking-tight text-fg">Incentive Slab Targets</h1>
+        <p className="mt-1 text-sm text-fg-subtle">
+          Each branch&apos;s four ascending revenue thresholds for the month — drives the Incentive Slab Achievement
+          rings on the Dashboard&apos;s Total Revenue Stream card. Uploading for a month fully replaces every branch&apos;s
+          targets for that month; earlier months keep whatever was uploaded for them.
+        </p>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,360px)_1fr]">
+          <IncentiveSlabsUploadForm defaultMonth={currentMonth} />
+
+          <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">
+                Currently loaded — {currentMonth}
+              </h2>
+              {incentiveSlabUploadInfo ? (
+                <span className="shrink-0 text-[10px] text-fg-faint">
+                  {incentiveSlabUploadInfo.sourceFileName} ·{" "}
+                  {new Date(incentiveSlabUploadInfo.uploadedAt).toLocaleString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    timeZone: "Asia/Kolkata",
+                  })}
+                </span>
+              ) : null}
+            </div>
+
+            {incentiveSlabTargets.size === 0 ? (
+              <div className="mt-3 text-xs text-fg-faint">No targets uploaded for {currentMonth} yet.</div>
+            ) : (
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[420px] border-separate border-spacing-0 text-[12px]">
+                  <thead>
+                    <tr>
+                      <th className="pb-1 pr-3 text-left text-[10px] font-medium text-fg-faint">Branch</th>
+                      <th className="pb-1 pl-3 text-right text-[10px] font-medium text-fg-faint">Slab 1</th>
+                      <th className="pb-1 pl-3 text-right text-[10px] font-medium text-fg-faint">Slab 2</th>
+                      <th className="pb-1 pl-3 text-right text-[10px] font-medium text-fg-faint">Slab 3</th>
+                      <th className="pb-1 pl-3 text-right text-[10px] font-medium text-fg-faint">Slab 4</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(Object.keys(REGIONS) as RegionName[]).flatMap((region) =>
+                      REGIONS[region]
+                        .filter((branch) => incentiveSlabTargets.has(branch))
+                        .map((branch) => {
+                          const t = incentiveSlabTargets.get(branch)!;
+                          return (
+                            <tr key={branch} className="border-t border-border-subtle">
+                              <td className="whitespace-nowrap py-1 pr-3 font-medium text-fg">{branch}</td>
+                              <td className="whitespace-nowrap py-1 pl-3 text-right tabular-nums text-fg-muted">{formatCompactCurrency(t.slab1)}</td>
+                              <td className="whitespace-nowrap py-1 pl-3 text-right tabular-nums text-fg-muted">{formatCompactCurrency(t.slab2)}</td>
+                              <td className="whitespace-nowrap py-1 pl-3 text-right tabular-nums text-fg-muted">{formatCompactCurrency(t.slab3)}</td>
+                              <td className="whitespace-nowrap py-1 pl-3 text-right tabular-nums text-fg-muted">{formatCompactCurrency(t.slab4)}</td>
+                            </tr>
+                          );
+                        })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
         <h1 className="mt-10 text-xl font-semibold tracking-tight text-fg">Accessories Staff</h1>

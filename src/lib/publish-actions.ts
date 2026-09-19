@@ -17,7 +17,7 @@ export async function publishDashboardAction(formData: FormData): Promise<void> 
 
   // Every page that reads publish status needs to see the fresh state.
   revalidatePath("/dashboard");
-  revalidatePath("/alerts");
+  revalidatePath("/queries");
   revalidatePath("/branches");
   revalidatePath("/reports");
   revalidatePath("/tkm-targets");
