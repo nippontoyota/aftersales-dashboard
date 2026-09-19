@@ -146,6 +146,7 @@ async function TkmTargetsContent({
         isPublished={isPublished}
         canPublish={canPublish}
         isCompanyScope={isCompanyScope}
+        branchOptions={report.branches.map((b) => b.branch)}
       />
 
       {/* Four target-based KPIs are the primary cards; CPU has no target

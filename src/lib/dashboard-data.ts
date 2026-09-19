@@ -62,7 +62,8 @@ export async function loadNavState(
  * through every page. */
 export type DashboardData = {
   date: string;
-  region: RegionName | "All";
+  /** "All", a RegionName, or a bare branch code — see aggregate.ts's filterBranchesByRegion. */
+  region: string;
   dates: string[];
   report: Report | null;
   filteredBranches: Report["branches"];
@@ -128,13 +129,21 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   // Region: a regional manager is locked to their own region until the date
   // is published; after that (isCompanyScope) they can switch like HQ, but
   // still default to their own region when no explicit choice is made.
+  // Also accepts a bare branch code (2026-09-19, at the user's request — the
+  // TKM Targets page's scope dropdown), validated against branches actually
+  // present in this date's report rather than a fixed list, same as
+  // hero-kpi-strip.tsx's own scope switcher.
   const requestedRegion =
     searchParams.region && searchParams.region in REGIONS ? (searchParams.region as RegionName) : null;
-  let region: RegionName | "All";
+  const requestedBranch =
+    !requestedRegion && searchParams.region && report?.branches.some((b) => b.branch === searchParams.region)
+      ? searchParams.region
+      : null;
+  let region: string;
   if (admin.role === "regional" && !isCompanyScope) {
     region = admin.region;
   } else if (isCompanyScope) {
-    region = requestedRegion ?? (admin.role === "regional" ? admin.region : "All");
+    region = requestedRegion ?? requestedBranch ?? (admin.role === "regional" ? admin.region : "All");
   } else {
     region = "All";
   }

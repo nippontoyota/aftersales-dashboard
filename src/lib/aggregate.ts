@@ -1,10 +1,19 @@
 import type { BranchReport } from "./report";
 import { REGIONS, type RegionName } from "./regions";
 
-export function filterBranchesByRegion(branches: BranchReport[], region: RegionName | "All"): BranchReport[] {
+/** `region` is usually "All" or a RegionName, but also accepts a bare
+ * branch code (2026-09-19, at the user's request — the TKM Targets page's
+ * scope dropdown) — anything that isn't "All" and isn't a known region name
+ * is treated as "just this one branch." Widened to `string` rather than
+ * `RegionName | "All" | string` since TS collapses that union to `string`
+ * anyway. */
+export function filterBranchesByRegion(branches: BranchReport[], region: string): BranchReport[] {
   if (region === "All") return branches;
-  const codes: readonly string[] = REGIONS[region];
-  return branches.filter((b) => codes.includes(b.branch));
+  if (region in REGIONS) {
+    const codes: readonly string[] = REGIONS[region as RegionName];
+    return branches.filter((b) => codes.includes(b.branch));
+  }
+  return branches.filter((b) => b.branch === region);
 }
 
 type NumericBranchReportKey = {
