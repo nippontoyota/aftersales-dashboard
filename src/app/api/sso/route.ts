@@ -25,7 +25,7 @@ export async function GET(request: Request) {
         // 2. Generate the token manually to avoid Next.js cookie jar bugs
         const username = 'ceo';
         const expiresAt = Date.now() + 12 * 60 * 60 * 1000;
-        const payload = ${ username }.${ expiresAt };
+        const payload = `${username}.${expiresAt}`;
         const secret = process.env.SESSION_SECRET;
 
         if (!secret) {
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
         }
 
         const signature = createHmac("sha256", secret).update(payload).digest("hex");
-        const sessionToken = ${ payload }.${ signature };
+        const sessionToken = `${payload}.${signature}`;
 
         // 3. Create the redirect response
         const response = NextResponse.redirect(new URL('/ceo', request.url));
