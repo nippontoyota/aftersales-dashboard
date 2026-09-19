@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
-import { formatNumber } from "@/lib/format";
+import { formatCompact } from "@/lib/format";
 import { computePace } from "@/lib/pace";
 
 /**
@@ -66,7 +66,7 @@ export function computeSlabsAchieved(actual: number | null, slabs: IncentiveSlab
   return { achievedCount, ringGreen };
 }
 
-const currencyFull = (value: number | null) => (value === null ? "—" : `₹${formatNumber(value)}`);
+const currencyFull = (value: number | null) => (value === null ? "—" : `₹${formatCompact(value)}`);
 
 /** Achievement is strictly actual-vs-target — a forecast can never make this
  * "achieved". Kept as its own type (not reused from computeSlabsAchieved's
