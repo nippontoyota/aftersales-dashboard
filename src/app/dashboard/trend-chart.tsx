@@ -8,7 +8,7 @@ import { useSyncedMetric } from "./metric-sync";
 
 type ValueFormatter = (v: number | null) => string;
 
-export type TrendMetricConfig = { key: string; label: string };
+export type TrendMetricConfig = { key: string; label: string; isCurrency?: boolean };
 
 /** BPU/Offtake/Parts Retail/PM+OC moved to their own trend chart on the TKM
  * Targets page (2026-08-31) — this default is what's left on the main
@@ -270,6 +270,7 @@ export function TrendChart({
   metrics = DEFAULT_METRICS,
   compactCurrency = false,
   date,
+  chartHeight = HEIGHT,
 }: {
   seriesByMetric: Record<string, TrendPoint[]>;
   /** Defaults to the main dashboard's own set (VAS only); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics and series instead. */
@@ -277,15 +278,24 @@ export function TrendChart({
   /** Format axis ticks / tooltip values as ₹ crore/lakh instead of the plain
    * grouped number — the branch overview's Total Revenue Stream series runs
    * into crores and the full figure overflows the gutter. (A boolean, not a
-   * formatter function, so it stays passable from a server component.) */
+   * formatter function, so it stays passable from a server component.)
+   * Only used as a fallback for metrics that don't set their own
+   * `isCurrency` — a page mixing Rs and count metrics under one shared
+   * selector (TKM Targets) should set `isCurrency` per metric instead. */
   compactCurrency?: boolean;
   /** The page's "as of" date — enables the month-end projection (dotted
    * line + stat row) via lib/pace.ts's run-rate math. Omit entirely to
    * render exactly as before this feature existed (no forecast). */
   date?: string;
+  /** Compact card height in px — defaults to the original 220. The TKM
+   * Targets page passes a shorter chart so it doesn't dominate the page
+   * (2026-09-19, at the user's request); the expanded modal always uses its
+   * own taller MODAL_HEIGHT regardless of this. */
+  chartHeight?: number;
 }) {
-  const formatValue: ValueFormatter = compactCurrency ? formatCompactCurrency : formatNumber;
   const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
+  const selectedMetricConfig = metrics.find((m) => m.key === metric) ?? metrics[0];
+  const formatValue: ValueFormatter = (selectedMetricConfig?.isCurrency ?? compactCurrency) ? formatCompactCurrency : formatNumber;
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -420,12 +430,12 @@ export function TrendChart({
   );
 
   const scaleY = useMemo(() => {
-    const innerH = HEIGHT - PAD.top - PAD.bottom;
+    const innerH = chartHeight - PAD.top - PAD.bottom;
     return (v: number) => PAD.top + innerH - (v / maxY) * innerH;
-  }, [maxY]);
+  }, [maxY, chartHeight]);
   const { path, areaPath, targetPath, projectedPath, projectedTargetPath, projectedPoint } = useMemo(
-    () => buildPaths(scaleY, HEIGHT),
-    [scaleY, buildPaths]
+    () => buildPaths(scaleY, chartHeight),
+    [scaleY, buildPaths, chartHeight]
   );
 
   // scaleY was built against HEIGHT — the modal renders taller, so it needs
@@ -563,7 +573,7 @@ export function TrendChart({
         hoverIndex={hoverIndex}
         setHoverIndex={setHoverIndex}
         hovered={hoveredInfo}
-        height={HEIGHT}
+        height={chartHeight}
         gradientId="trend-area-card"
         formatValue={formatValue}
       />

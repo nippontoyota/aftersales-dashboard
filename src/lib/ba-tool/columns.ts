@@ -24,6 +24,9 @@ export const BA_TOOL_COLUMNS = {
   batteryActuals: "Battery Actuals",
   batteryTarget: "Battery Target",
   servicePenetration: "Service Penetration",
+  serviceGentanI: "Service Gentan I",
+  serviceRevenue: "Service Revenue",
+  serviceUnits: "Service Units",
 } as const;
 
 export type BaToolKey = keyof typeof BA_TOOL_COLUMNS;

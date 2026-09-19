@@ -1,10 +1,19 @@
 import type { BranchReport } from "./report";
 import { REGIONS, type RegionName } from "./regions";
 
-export function filterBranchesByRegion(branches: BranchReport[], region: RegionName | "All"): BranchReport[] {
+/** `region` is usually "All" or a RegionName, but also accepts a bare
+ * branch code (2026-09-19, at the user's request — the TKM Targets page's
+ * scope dropdown) — anything that isn't "All" and isn't a known region name
+ * is treated as "just this one branch." Widened to `string` rather than
+ * `RegionName | "All" | string` since TS collapses that union to `string`
+ * anyway. */
+export function filterBranchesByRegion(branches: BranchReport[], region: string): BranchReport[] {
   if (region === "All") return branches;
-  const codes: readonly string[] = REGIONS[region];
-  return branches.filter((b) => codes.includes(b.branch));
+  if (region in REGIONS) {
+    const codes: readonly string[] = REGIONS[region as RegionName];
+    return branches.filter((b) => codes.includes(b.branch));
+  }
+  return branches.filter((b) => b.branch === region);
 }
 
 type NumericBranchReportKey = {
@@ -56,6 +65,15 @@ export type KpiSummary = {
   externalSalesMtd: number | null;
   /** Averaged across branches, not summed — see avgField. */
   externalSalesPctOfSprInternal: number | null;
+  spoTGloss: number | null;
+  spoTGlossTarget: number | null;
+  serviceRevenue: number | null;
+  serviceUnits: number | null;
+  /** Rs-per-RO figure. NOT an average of each branch's own Service Gentan I
+   * (that would weight every branch equally regardless of volume — a bug
+   * caught 2026-09-19) — computed as summed serviceRevenue ÷ summed
+   * serviceUnits, the same weighted-ratio construction as "VAS Gentani." */
+  serviceGentanI: number | null;
 };
 
 export function computeKpiSummary(branches: BranchReport[]): KpiSummary {
@@ -80,6 +98,11 @@ export function computeKpiSummary(branches: BranchReport[]): KpiSummary {
     bpuLabourMtd: sumField(branches, "bpuLabourMtd"),
     externalSalesMtd: sumField(branches, "externalSalesMtd"),
     externalSalesPctOfSprInternal: avgField(branches, "externalSalesPctOfSprInternal"),
+    spoTGloss: sumField(branches, "spoTGloss"),
+    spoTGlossTarget: sumField(branches, "spoTGlossTarget"),
+    serviceRevenue: sumField(branches, "serviceRevenue"),
+    serviceUnits: sumField(branches, "serviceUnits"),
+    serviceGentanI: achievementRatio(sumField(branches, "serviceRevenue"), sumField(branches, "serviceUnits")),
   };
 }
 

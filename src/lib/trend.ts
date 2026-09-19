@@ -19,14 +19,20 @@ function num(value: number | string | null | undefined): number | null {
   return typeof value === "number" ? value : null;
 }
 
-function branchesInRegion(region: RegionName | "All"): readonly string[] | null {
+/** "All" -> no filter, a RegionName -> its member branches, anything else
+ * (a bare branch code, e.g. the TKM Targets page's scope dropdown) -> just
+ * that one branch. Same widened-to-string convention as
+ * aggregate.ts's filterBranchesByRegion. */
+function branchesInRegion(region: string): readonly string[] | null {
   if (region === "All") return null;
-  return REGIONS[region];
+  if (region in REGIONS) return REGIONS[region as RegionName];
+  return [region];
 }
 
 export function computeTrendSeries(
   monthSnapshots: Snapshot[],
-  region: RegionName | "All",
+  /** "All", a RegionName, or a bare branch code — see branchesInRegion above. */
+  region: string,
   actualKey: keyof BaToolBranchRow,
   /** Omit for a metric with no real confirmed target (e.g. GUS RO) — every point's `target` comes back null rather than a misleading stand-in. */
   targetKey?: keyof BaToolBranchRow,
@@ -84,7 +90,8 @@ const VAS_BILL_TARGET_PER_RO = 3000;
 export function computeVasTrendSeries(
   baToolMonthSnapshots: Snapshot[],
   serviceInfoMonthSnapshots: ServiceInfoSnapshot[],
-  region: RegionName | "All",
+  /** "All", a RegionName, or a bare branch code — see branchesInRegion above. */
+  region: string,
   branchLock?: string
 ): TrendPoint[] {
   const allowedBranches = branchLock ? [branchLock] : branchesInRegion(region);

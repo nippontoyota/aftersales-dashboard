@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { achievementRatio, achievementTone, TRACKED_KPIS, type KpiSummary, type TrackedKpi } from "@/lib/aggregate";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { computePace } from "@/lib/pace";
@@ -119,6 +122,7 @@ export function InsightsPanel({
   trackedKpis = TRACKED_KPIS,
   perBranchMetrics = DEFAULT_PER_BRANCH_METRICS,
   regionGapMetric = DEFAULT_REGION_GAP_METRIC,
+  maxVisible,
 }: {
   kpis: KpiSummary;
   branches: BranchReport[];
@@ -127,8 +131,17 @@ export function InsightsPanel({
   trackedKpis?: TrackedKpi[];
   perBranchMetrics?: PerBranchMetric[];
   regionGapMetric?: RegionGapMetric;
+  /** Caps the default list behind a "View more" toggle (2026-09-19, at the
+   * user's request — the TKM Targets page, which can generate up to 4
+   * insights and wanted only the top ones visible by default). Omit to show
+   * every insight with no toggle at all — the main Dashboard's own panel
+   * (max 4 anyway) keeps its original always-expanded behaviour. */
+  maxVisible?: number;
 }) {
   const insights = buildInsights(kpis, branches, date, trackedKpis, perBranchMetrics, regionGapMetric);
+  const [showAll, setShowAll] = useState(maxVisible === undefined);
+  const visible = showAll ? insights : insights.slice(0, maxVisible);
+  const hiddenCount = insights.length - visible.length;
 
   return (
     <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
@@ -138,16 +151,35 @@ export function InsightsPanel({
       {insights.length === 0 ? (
         <div className="mt-3 text-xs text-fg-faint">Nothing notable — every tracked KPI is on or near target.</div>
       ) : (
-        <ul className="mt-3 space-y-2.5">
-          {insights.map((text, i) => (
-            <li key={i} className="flex items-start gap-2.5 text-xs text-fg-muted">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-info-soft text-info">
-                <LightbulbIcon />
-              </span>
-              <span className="min-w-0 flex-1">{text}</span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="mt-3 space-y-2.5">
+            {visible.map((text, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-xs text-fg-muted">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-info-soft text-info">
+                  <LightbulbIcon />
+                </span>
+                <span className="min-w-0 flex-1">{text}</span>
+              </li>
+            ))}
+          </ul>
+          {hiddenCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="mt-2.5 text-[11px] font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              View {hiddenCount} more
+            </button>
+          ) : showAll && maxVisible !== undefined && insights.length > maxVisible ? (
+            <button
+              type="button"
+              onClick={() => setShowAll(false)}
+              className="mt-2.5 text-[11px] font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              Show less
+            </button>
+          ) : null}
+        </>
       )}
     </div>
   );

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { DateSelect } from "@/app/dashboard/date-select";
 import { RegionSelect } from "@/app/dashboard/region-select";
-import type { RegionName } from "@/lib/regions";
 import { publishDashboardAction } from "@/lib/publish-actions";
 
 /** Shared title + MTD subtitle + region/date selects + refresh + publish
@@ -22,11 +21,13 @@ export function DashboardPageHeader({
   canPublish = false,
   extraParams,
   isCompanyScope = true,
+  branchOptions,
 }: {
   title: string;
   basePath: string;
   date: string;
-  region: RegionName | "All";
+  /** "All", a RegionName, or a bare branch code — see aggregate.ts's filterBranchesByRegion. */
+  region: string;
   dates: string[];
   branchCount: number;
   hasPreviousUpload: boolean;
@@ -44,6 +45,10 @@ export function DashboardPageHeader({
   extraParams?: Record<string, string>;
   /** Whether the user has company-wide access for this date. If false, the view is locked to their own branch. */
   isCompanyScope?: boolean;
+  /** Branch codes to offer individually in the region select, grouped under
+   * their region (2026-09-19, at the user's request — the TKM Targets
+   * page). Omit to keep every other page's plain region-only dropdown. */
+  branchOptions?: string[];
 }) {
   const extraQuery = extraParams ? `&${new URLSearchParams(extraParams).toString()}` : "";
   const currentHref = `${basePath}?date=${date}${isCompanyScope && region !== "All" ? `&region=${region}` : ""}${extraQuery}`;
@@ -99,7 +104,9 @@ export function DashboardPageHeader({
             </form>
           )
         ) : null}
-        {showRegionSelect && isCompanyScope ? <RegionSelect selected={region} date={date} basePath={basePath} extraParams={extraParams} /> : null}
+        {showRegionSelect && isCompanyScope ? (
+          <RegionSelect selected={region} date={date} basePath={basePath} extraParams={extraParams} branches={branchOptions} />
+        ) : null}
         <DateSelect dates={[...dates].reverse()} selected={date} region={region} basePath={basePath} extraParams={extraParams} />
         <Link
           href={currentHref}

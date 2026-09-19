@@ -15,6 +15,12 @@ const TONE_TEXT: Record<AchievementTone, string> = {
   critical: "text-bad",
   neutral: "text-fg-faint",
 };
+const STATUS_CHIP: Record<AchievementTone, { text: string; cls: string } | null> = {
+  good: { text: "On track", cls: "bg-good-soft text-good" },
+  warn: { text: "Behind pace", cls: "bg-warn-soft text-warn" },
+  critical: { text: "Behind pace", cls: "bg-bad-soft text-bad" },
+  neutral: null,
+};
 
 // Per-card identity: a soft chip behind the icon + a hairline accent along
 // the card's top edge. Decorative, not a status signal — status lives in the
@@ -48,6 +54,7 @@ export function RichKpiCard({
   target,
   hasPreviousUpload,
   pace,
+  paceTone,
   sparklineValues,
   formatPaceValue = formatNumber,
   showSparkline = true,
@@ -65,6 +72,8 @@ export function RichKpiCard({
   hasPreviousUpload?: boolean;
   /** Run-rate/required-rate/gap for this metric — see lib/pace.ts. Only rendered when `actual`/`target` are also provided. */
   pace?: Pace;
+  /** Pace-vs-expected-progress tone (lib/pace.ts's paceTone) — when given, this drives the bar colour and the "On track"/"Behind pace" chip instead of the plain full-month achievementTone, so status reads consistently with the heatmap/region cards/insights. Omit to keep the old full-month-ratio colouring (e.g. the main Dashboard's cards, which don't use pace-based status). */
+  paceTone?: AchievementTone;
   /** Day-by-day actual values for the month, for the sparkline — only shown when there's no target bar taking that space instead. */
   sparklineValues?: (number | null)[];
   /** How to format pace figures (Rs vs plain count) — defaults to the same formatter as the headline value. */
@@ -76,7 +85,8 @@ export function RichKpiCard({
 }) {
   const hasTarget = actual !== undefined && target !== undefined;
   const ratio = hasTarget ? achievementRatio(actual, target) : null;
-  const tone = achievementTone(ratio);
+  const tone = paceTone ?? achievementTone(ratio);
+  const statusChip = paceTone ? STATUS_CHIP[paceTone] : null;
   const widthPct = ratio === null ? 0 : Math.min(100, Math.max(0, ratio * 100));
   const accent = ACCENT[color] ?? ACCENT.indigo;
 
@@ -109,8 +119,13 @@ export function RichKpiCard({
               style={{ width: `${widthPct}%` }}
             />
           </div>
-          <div className={`mt-1.5 text-[11px] font-semibold tabular-nums ${TONE_TEXT[tone]}`}>
-            {ratio === null ? "no target set" : `${Math.round(ratio * 100)}% of target`}
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <span className={`text-[11px] font-semibold tabular-nums ${TONE_TEXT[tone]}`}>
+              {ratio === null ? "no target set" : `${Math.round(ratio * 100)}% of target`}
+            </span>
+            {statusChip ? (
+              <span className={`rounded px-1.5 py-0.5 text-[9.5px] font-semibold ${statusChip.cls}`}>{statusChip.text}</span>
+            ) : null}
           </div>
           {pace ? (
             <div className="mt-2 space-y-0.5 text-[10px] text-fg-faint">
@@ -138,11 +153,12 @@ export function RichKpiCard({
       ) : (showSparkline && sparklineValues && sparklineValues.filter((v) => v !== null).length >= 2) ||
         (pace?.runRatePerDay !== null && pace?.runRatePerDay !== undefined) ? (
         <div className="mt-3">
+          {sub ? <div className="text-[11px] font-medium text-fg-faint">{sub}</div> : null}
           {showSparkline && sparklineValues && sparklineValues.filter((v) => v !== null).length >= 2 ? (
             <Sparkline values={sparklineValues} color={tone === "neutral" ? "#94a3b8" : undefined} />
           ) : null}
           {pace?.runRatePerDay !== null && pace?.runRatePerDay !== undefined ? (
-            <div className={showSparkline ? "mt-1 text-[10px] text-fg-faint" : "text-[10px] text-fg-faint"}>
+            <div className={sub || showSparkline ? "mt-1 text-[10px] text-fg-faint" : "text-[10px] text-fg-faint"}>
               Run rate <span className="font-medium text-fg-muted">{formatPaceValue(pace.runRatePerDay)}/day</span>
             </div>
           ) : null}

@@ -17,6 +17,15 @@ import { pool } from "../db";
  * a stale invoice there is a strong tell that the cancellation hasn't
  * propagated. Body & Paint ROs (`BPE…`) aren't in SSRV089-General, so those
  * come back "unverified" — an honest "can't check from this data".
+ *
+ * A "stale" row closed by an Accessories-staff SA is worse than an ordinary
+ * stale row: report.ts's Accessories deduction (see
+ * ssrv089/cancellation-adjustment.ts) has its own fix for this now, but
+ * that fix only runs for the exact revenue_month it targets — this flag
+ * exists so a stale Accessories bill is never just a quiet "might still be
+ * counted" the way a stale GS bill is (whose scom205-side revenue is
+ * usually already correct at the DMS level, per the reconciliation's own
+ * design). `accessoriesImpact` marks that stronger case explicitly.
  */
 
 export type ReconcileStatus =
@@ -38,6 +47,10 @@ export type ReconcileRow = {
   status: ReconcileStatus;
   /** true when the value is likely still counted — the "needs a look" set. */
   flagged: boolean;
+  /** Only meaningful when status === "stale": the stale SSRV089 row was
+   * closed by an Accessories-staff SA, so it's still being subtracted from
+   * GUS Parts/Labour MTD (Total Revenue), not just sitting unresolved. */
+  accessoriesImpact: boolean;
   /** ISO timestamp — the freshest scom205 read for the branch this month
    * (latest report date vs. last upload). Null when no scom205 on file. */
   lastKpiCutoff: string | null;
@@ -51,6 +64,13 @@ export type ReconcileResult = {
 };
 
 export async function reconcileCancellations(month: string, branch?: string): Promise<ReconcileResult> {
+  // Exclusive month-end bound for the raw_upload_rows date-range filter
+  // below — `month` is "YYYY-MM", so Date.UTC's month index (0 = Jan) is
+  // already one past it, landing on the 1st of the following month.
+  const [y, m] = month.split("-").map(Number);
+  const monthStart = `${month}-01`;
+  const monthEndExclusive = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+
   const { rows } = await pool.query<{
     doc_no: string;
     branch: string;
@@ -66,6 +86,7 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
     has_replacement: boolean;
     still_present: boolean;
     ro_in_ssrv: boolean;
+    accessories_stale: boolean;
   }>(
     `
     with canc as (
@@ -78,15 +99,22 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
              coalesce(to_char(issue_date, 'YYYY-MM'), month) as revenue_month,
              replace(doc_no, '-', '') as doc_key
       from invoice_cancellations
-      where month = $1 ${branch ? "and branch = $2" : ""}
+      where month = $1 and ($2::text is null or branch = $2)
     ),
     ssrv as (
       select r.branch,
              replace(r.row_data->>'JobOrder No', '-', '') as ro,
-             replace(coalesce(r.row_data->>'Invoice Doc No.', ''), '-', '') as inv
+             replace(coalesce(r.row_data->>'Invoice Doc No.', ''), '-', '') as inv,
+             trim(coalesce(r.row_data->>'Close SA Name', '')) as close_sa_name
       from raw_upload_rows r
+      -- date range, not to_char(r.date,'YYYY-MM') = $1 — see the identical
+      -- fix + EXPLAIN ANALYZE numbers in ssrv089/cancellation-adjustment.ts
+      -- (2026-09-19): the old string comparison couldn't use
+      -- raw_upload_rows_lookup_idx's date column, forcing a scan of every
+      -- SSRV089 row ever uploaded instead of just this month's.
       where r.report_type = 'ssrv089'
-        and to_char(r.date, 'YYYY-MM') = $1
+        and r.date >= $3::date
+        and r.date < $4::date
     ),
     -- The branch's freshest Monthly-KPI (scom205) read per month: the row
     -- for the latest report date, and when we actually uploaded it. The DMS
@@ -107,12 +135,19 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
            (lk.branch is not null and c.cancel_moment > greatest(lk.last_uploaded, lk.last_date::timestamptz)) as after_last_kpi,
            exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.inv <> c.doc_key and s.ro is not null and s.ro <> '') as has_replacement,
            exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.inv = c.doc_key) as still_present,
-           exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.ro is not null and s.ro <> '') as ro_in_ssrv
+           exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.ro is not null and s.ro <> '') as ro_in_ssrv,
+           exists (
+             select 1 from ssrv s
+             join accessories_staff a
+               on a.branch = s.branch
+              and lower(regexp_replace(a.name, '\\s+', ' ', 'g')) = lower(regexp_replace(s.close_sa_name, '\\s+', ' ', 'g'))
+             where s.branch = c.branch and s.inv = c.doc_key
+           ) as accessories_stale
     from canc c
     left join last_kpi lk on lk.branch = c.branch and lk.kmonth = c.revenue_month
     order by c.branch, c.cancel_date, c.doc_no
     `,
-    branch ? [month, branch] : [month],
+    [month, branch ?? null, monthStart, monthEndExclusive],
   );
 
   const out: ReconcileRow[] = rows.map((r) => {
@@ -134,6 +169,7 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
       afterTax: Number(r.after_tax),
       status,
       flagged: status === "stale" || status === "after_kpi_cutoff",
+      accessoriesImpact: status === "stale" && r.accessories_stale,
       lastKpiCutoff: r.last_kpi_cutoff ? new Date(r.last_kpi_cutoff).toISOString() : null,
     };
   });
