@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import { formatNumber } from "@/lib/format";
 import { computePace } from "@/lib/pace";
@@ -69,7 +72,7 @@ const currencyFull = (value: number | null) => (value === null ? "—" : `₹${f
  * "achieved". Kept as its own type (not reused from computeSlabsAchieved's
  * boolean[]) so the tooltip/ring-fill code can't accidentally be handed a
  * projected value where an achieved one is expected. */
-type RingStatus = "achieved" | "pending";
+type RingStatus = "achieved" | "projected" | "pending";
 
 function ringTooltip(slabNumber: 1 | 2 | 3 | 4, target: number, actual: number | null, projectedEom: number | null, status: RingStatus): string {
   // The forecast line is always labelled "Forecast" and always separate from
@@ -79,7 +82,7 @@ function ringTooltip(slabNumber: 1 | 2 | 3 | 4, target: number, actual: number |
   // (like CO01B's, confirmed 2026-09-18) needs the projected figure just as
   // much, so it's clear *why* it's pending, not just that it is.
   const forecastLine = status === "pending" && projectedEom !== null ? `\nForecast (projected month-end): ${currencyFull(projectedEom)}` : "";
-  return `Slab ${slabNumber}\n\nTarget: ${currencyFull(target)}\nActual: ${currencyFull(actual)}${forecastLine}\nStatus: ${status === "achieved" ? "Achieved" : "Pending"}`;
+  return `Slab ${slabNumber}\n\nTarget: ${currencyFull(target)}\nActual: ${currencyFull(actual)}${forecastLine}\nStatus: ${status === "achieved" ? "Achieved" : status === "projected" ? "Projected (On Track)" : "Pending"}`;
 }
 
 export function IncentiveSlabIndicator({
@@ -105,6 +108,8 @@ export function IncentiveSlabIndicator({
   size?: number;
   showActual?: boolean;
 }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   if (!slabs) {
     return (
       <div className="flex flex-col items-center gap-1 text-center" title={`${scopeLabel} — no incentive slab target set for this month`}>
@@ -146,47 +151,139 @@ export function IncentiveSlabIndicator({
           ? `On track to hold Slab ${projected.achievedCount}`
           : `At this rate, would reach Slab ${projected.achievedCount}`;
 
-  return (
-    <div className="flex flex-col items-center gap-1 text-center">
-      <svg
-        viewBox="0 0 100 100"
-        width={size}
-        height={size}
-        role="img"
-        aria-label={`${scopeLabel}: current slab ${currentSlabLabel}, actual ${currencyFull(actual)}`}
-      >
-        {RADII.map((r, i) => {
-          const slabNumber = (i + 1) as 1 | 2 | 3 | 4;
-          // Ring fill is achieved-vs-pending only — actual compared straight
-          // against this slab's own threshold, never the forecast.
-          const status: RingStatus = ringGreen[i] ? "achieved" : "pending";
-          const tooltip = ringTooltip(slabNumber, thresholds[i], actual, projectedEom, status);
-          return (
-            <g key={slabNumber} className="cursor-default">
-              <circle
-                cx={CENTER}
-                cy={CENTER}
-                r={r}
-                fill="none"
-                stroke={status === "achieved" ? GREEN : GREY}
-                strokeWidth={STROKE}
-                pointerEvents="none"
-              />
-              {/* Invisible, much wider hit target on top of the same ring — see PITCH comment above. */}
-              <circle cx={CENTER} cy={CENTER} r={r} fill="none" stroke="transparent" strokeWidth={PITCH} pointerEvents="stroke">
-                <title>{tooltip}</title>
-              </circle>
-            </g>
-          );
-        })}
-      </svg>
+  const maxTarget = thresholds[3];
+  const actualWidth = Math.min(100, maxTarget > 0 ? ((actual ?? 0) / maxTarget) * 100 : 0);
 
-      <div className="leading-tight">
-        <div className="text-[9px] uppercase tracking-wide text-fg-faint">Current Slab</div>
-        <div className={`text-xs font-semibold ${achievedCount === 0 ? "text-fg-faint" : "text-good"}`}>{currentSlabLabel}</div>
+  return (
+    <>
+      <div className="flex flex-col items-center gap-1 text-center">
+        <button
+          type="button"
+          onClick={() => setIsModalOpen(true)}
+          className="rounded-full outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <svg
+            viewBox="0 0 100 100"
+            width={size}
+            height={size}
+            role="img"
+            aria-label={`${scopeLabel}: current slab ${currentSlabLabel}, actual ${currencyFull(actual)}. Click for details.`}
+          >
+            {RADII.map((r, i) => {
+              const slabNumber = (i + 1) as 1 | 2 | 3 | 4;
+              const isProjected = projected && projected.ringGreen[i] && !ringGreen[i];
+              // Ring fill is achieved-vs-pending only — actual compared straight
+              // against this slab's own threshold, never the forecast.
+              const status: RingStatus = ringGreen[i] ? "achieved" : isProjected ? "projected" : "pending";
+              const tooltip = ringTooltip(slabNumber, thresholds[i], actual, projectedEom, status);
+              return (
+                <g key={slabNumber} className="cursor-default">
+                  <circle
+                    cx={CENTER}
+                    cy={CENTER}
+                    r={r}
+                    fill="none"
+                    stroke={status === "achieved" || status === "projected" ? GREEN : GREY}
+                    strokeWidth={STROKE}
+                    strokeDasharray={status === "projected" ? "4 4" : undefined}
+                    pointerEvents="none"
+                  />
+                  {/* Invisible, much wider hit target on top of the same ring — see PITCH comment above. */}
+                  <circle cx={CENTER} cy={CENTER} r={r} fill="none" stroke="transparent" strokeWidth={PITCH} pointerEvents="stroke">
+                    <title>{tooltip}</title>
+                  </circle>
+                </g>
+              );
+            })}
+          </svg>
+        </button>
+
+        <div className="leading-tight">
+          <div className="text-[9px] uppercase tracking-wide text-fg-faint">Current Slab</div>
+          <div className={`text-xs font-semibold ${achievedCount === 0 ? "text-fg-faint" : "text-good"}`}>{currentSlabLabel}</div>
+        </div>
+        {forecastText ? <div className="text-[9px] text-fg-faint">{forecastText}</div> : null}
+        {showActual ? <div className="text-[9px] tabular-nums text-fg-faint">{currencyFull(actual)}</div> : null}
       </div>
-      {forecastText ? <div className="text-[9px] text-fg-faint">{forecastText}</div> : null}
-      {showActual ? <div className="text-[9px] tabular-nums text-fg-faint">{currencyFull(actual)}</div> : null}
-    </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}>
+          <div className="relative w-full max-w-lg rounded-xl border border-border bg-surface shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border p-4">
+              <h2 className="text-lg font-semibold text-fg">Slab Details: {scopeLabel}</h2>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="rounded p-1 text-fg-muted hover:bg-surface-2 hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-5">
+              {/* Progress Bar */}
+              <div className="mb-8">
+                <div className="mb-2 flex justify-between text-sm">
+                  <span className="font-medium text-fg">Actual Progress</span>
+                  <span className="font-semibold text-fg">{currencyFull(actual)}</span>
+                </div>
+                <div className="relative h-4 w-full rounded-full bg-surface-2 overflow-hidden">
+                  <div className="absolute left-0 top-0 h-full bg-good-solid transition-all duration-500" style={{ width: `${actualWidth}%` }} />
+                </div>
+                <div className="relative mt-2 h-4 w-full text-[10px] text-fg-faint">
+                  {thresholds.map((t, i) => {
+                    const pos = Math.min(100, maxTarget > 0 ? (t / maxTarget) * 100 : 0);
+                    return (
+                      <div key={i} className="absolute flex flex-col items-center -translate-x-1/2" style={{ left: `${pos}%`, top: '-1.25rem' }}>
+                        <div className="h-4 w-px bg-border-strong mb-1" />
+                        <span>S{i+1}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Table / List */}
+              <div className="divide-y divide-border rounded-lg border border-border">
+                <div className="grid grid-cols-4 px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-fg-faint bg-surface-2 rounded-t-lg">
+                  <div>Slab</div>
+                  <div className="text-right">Target</div>
+                  <div className="text-right">Status</div>
+                  <div className="text-right">Forecast</div>
+                </div>
+                {thresholds.map((t, i) => {
+                  const slabNumber = (i + 1) as 1 | 2 | 3 | 4;
+                  const isProjected = projected && projected.ringGreen[i] && !ringGreen[i];
+                  const status: RingStatus = ringGreen[i] ? "achieved" : isProjected ? "projected" : "pending";
+                  
+                  let statusBadge;
+                  if (status === "achieved") {
+                    statusBadge = <span className="rounded bg-good-soft px-1.5 py-0.5 text-good">Achieved</span>;
+                  } else if (status === "projected") {
+                    statusBadge = <span className="rounded border border-good/40 bg-surface px-1.5 py-0.5 text-good border-dashed">On Track</span>;
+                  } else {
+                    statusBadge = <span className="rounded bg-surface-2 px-1.5 py-0.5 text-fg-subtle">Pending</span>;
+                  }
+
+                  return (
+                    <div key={slabNumber} className="grid grid-cols-4 items-center px-4 py-3 text-sm">
+                      <div className="font-medium text-fg">Slab {slabNumber}</div>
+                      <div className="text-right tabular-nums text-fg">{currencyFull(t)}</div>
+                      <div className="text-right text-[11px] font-medium">{statusBadge}</div>
+                      <div className="text-right tabular-nums text-fg-subtle">
+                        {status === "pending" && projectedEom ? currencyFull(projectedEom) : "—"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
