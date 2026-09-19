@@ -15,6 +15,16 @@ import { IncentiveSlabIndicator } from "./incentive-slab-indicator";
 
 type Option = { value: string; label: string; region: RegionName | null; kind: "all" | "region" | "branch" };
 
+/** CO01E (Kalamassery Body & Paint) has no VAS/Service Info of its own and
+ * shares CO01B's city — its incentive slab thresholds were set as one
+ * combined target with CO01B, not two separately achievable ones (confirmed
+ * with the user 2026-09-19: viewed alone, neither branch's own revenue ever
+ * clears its slabs). Only the Total Revenue Stream card + its incentive
+ * slab ring combine them when CO01B is the selected scope — every other
+ * hero card (GUS RO, BPU RO, External Sales, VAS) stays CO01B-only, and
+ * selecting CO01E on its own is unaffected. */
+const CO01B_SLAB_COMBINED_BRANCHES = ["CO01B", "CO01E"];
+
 /**
  * The five Executive Overview hero cards, with a scope switcher that drives
  * *only these cards* — the rest of the page still follows the header's
@@ -84,15 +94,31 @@ export function HeroKpiStrip({
     [date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget],
   );
 
-  // The ring's target: the selected branch's own thresholds, or — for a
-  // region/"All" scope — those branches' thresholds summed, same total the
-  // source Excel's own region/company subtotal rows held.
+  const isCo01bScope = current?.kind === "branch" && scope === "CO01B";
+
+  // Total Revenue Stream (headline + ring) uses CO01B+CO01E combined when
+  // CO01B is selected — see CO01B_SLAB_COMBINED_BRANCHES above. Every other
+  // scope (including CO01E on its own) uses the plain `scoped` set, same as
+  // `hero` above.
+  const revenueScoped = useMemo(
+    () => (isCo01bScope ? branches.filter((b) => CO01B_SLAB_COMBINED_BRANCHES.includes(b.branch)) : scoped),
+    [isCo01bScope, branches, scoped],
+  );
+  const revenueHero = useMemo(() => computeHeroSummary(revenueScoped), [revenueScoped]);
+
+  // The ring's target: the selected branch's own thresholds (CO01B+CO01E
+  // combined when CO01B is selected), or — for a region/"All" scope — those
+  // branches' thresholds summed, same total the source Excel's own
+  // region/company subtotal rows held.
   const scopeSlabs = useMemo(() => {
     if (!incentiveSlabTargets) return undefined;
-    if (current?.kind === "branch") return incentiveSlabTargets[scope];
+    if (current?.kind === "branch") {
+      if (isCo01bScope) return aggregateIncentiveSlabTargets(incentiveSlabTargets, CO01B_SLAB_COMBINED_BRANCHES);
+      return incentiveSlabTargets[scope];
+    }
     const codes = current?.kind === "region" ? REGIONS[scope as RegionName] : branches.map((b) => b.branch);
     return aggregateIncentiveSlabTargets(incentiveSlabTargets, codes);
-  }, [incentiveSlabTargets, current, scope, branches]);
+  }, [incentiveSlabTargets, current, scope, branches, isCo01bScope]);
 
   const gusRevenue =
     hero.gusPartsMtd !== null && hero.gusLabourMtd !== null ? hero.gusPartsMtd + hero.gusLabourMtd : null;
@@ -182,12 +208,19 @@ export function HeroKpiStrip({
         <RichKpiCard
           icon={<RevenueIcon />}
           color="indigo"
-          label="Total Revenue Stream MTD"
-          value={formatCompactCurrency(hero.totalRevenueStreamMtd)}
+          label={isCo01bScope ? "Total Revenue Stream MTD (incl. CO01E)" : "Total Revenue Stream MTD"}
+          value={formatCompactCurrency(revenueHero.totalRevenueStreamMtd)}
           hasPreviousUpload={hasPreviousUpload}
           extra={
             incentiveSlabTargets ? (
-              <IncentiveSlabIndicator scopeLabel={current?.value ?? scope} actual={hero.totalRevenueStreamMtd} slabs={scopeSlabs} date={date} showActual={false} />
+              <IncentiveSlabIndicator
+                scopeLabel={isCo01bScope ? "CO01B + CO01E" : (current?.value ?? scope)}
+                actual={revenueHero.totalRevenueStreamMtd}
+                slabs={scopeSlabs}
+                date={date}
+                showActual={false}
+                variant="circles"
+              />
             ) : undefined
           }
         />
