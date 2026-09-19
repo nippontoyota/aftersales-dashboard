@@ -22,6 +22,17 @@ const STATUS_LABEL: Record<ReconcileStatus, string> = {
   unverified: "Can't verify (BP / no SSRV089)",
 };
 
+/** A stale row closed by an Accessories-staff SA isn't just "might still be
+ * counted" — SSRV089's Accessories deduction (see
+ * lib/ssrv089/cancellation-adjustment.ts) has no cancellation awareness of
+ * its own, so this is subtracted from GUS Parts/Labour MTD (Total Revenue)
+ * every day until the branch re-uploads a corrected SSRV089. Distinct label
+ * so it doesn't blend in with an ordinary stale GS row. */
+function statusLabel(r: { status: ReconcileStatus; accessoriesImpact: boolean }): string {
+  if (r.status === "stale" && r.accessoriesImpact) return "Still in SSRV089 — deducted from Total Revenue (Accessories)";
+  return STATUS_LABEL[r.status];
+}
+
 export default async function CancellationsPage({
   searchParams,
 }: {
@@ -87,6 +98,8 @@ export default async function CancellationsPage({
   const monthSummaries = summaries.filter((s) => s.month === month && (!scopeSet || scopeSet.has(s.branch)));
   const flagged = reconcile.rows.filter((r) => r.flagged && (!scopeSet || scopeSet.has(r.branch)));
   const flaggedValue = flagged.reduce((s, r) => s + r.beforeTax, 0);
+  const accessoriesImpacted = flagged.filter((r) => r.accessoriesImpact);
+  const accessoriesImpactedValue = accessoriesImpacted.reduce((s, r) => s + r.beforeTax, 0);
 
   const totalCount = kpis.reduce((s, k) => s + k.count, 0);
   const totalValue = kpis.reduce((s, k) => s + k.beforeTaxTotal, 0);
@@ -149,12 +162,18 @@ export default async function CancellationsPage({
               {flagged.length} cancellation{flagged.length === 1 ? "" : "s"} ({inr(flaggedValue)} before tax) may still be in{" "}
               {monthLabel(month)}&apos;s figures.
             </div>
+            {accessoriesImpacted.length > 0 ? (
+              <div className="mt-1 font-medium text-bad">
+                {accessoriesImpacted.length} of those ({inr(accessoriesImpactedValue)}) {accessoriesImpacted.length === 1 ? "is" : "are"} confirmed
+                still being deducted from Total Revenue right now (Accessories-staff-closed, still in SSRV089) — not just "might be," this one moves the number every day it's unresolved.
+              </div>
+            ) : null}
             <ul className="mt-2 space-y-1 text-fg-muted">
               {flagged.map((r) => (
                 <li key={r.docNo}>
                   <span className="font-medium text-fg">{r.branch}</span> · {r.docNo}
                   {r.refDocNo ? ` (RO ${r.refDocNo})` : ""} · {inr(r.beforeTax)} · {r.cancelReason} ·{" "}
-                  <span className="text-fg-subtle">{STATUS_LABEL[r.status]}</span>
+                  <span className={r.accessoriesImpact ? "font-medium text-bad" : "text-fg-subtle"}>{statusLabel(r)}</span>
                   {r.status === "after_kpi_cutoff" && r.lastKpiCutoff
                     ? ` — cancelled ${r.cancelDate}, KPI last refreshed ${new Date(r.lastKpiCutoff).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}`
                     : ""}
