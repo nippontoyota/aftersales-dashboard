@@ -38,6 +38,7 @@ const COLUMN_NAME: Record<Exclude<BaToolKey, "branch">, string> = {
   batteryActuals: "battery_actuals",
   batteryTarget: "battery_target",
   servicePenetration: "service_penetration",
+  serviceGentanI: "service_gentan_i",
 };
 
 export async function saveSnapshot(snapshot: Snapshot): Promise<void> {

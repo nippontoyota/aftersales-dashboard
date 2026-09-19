@@ -43,6 +43,8 @@ export type BranchReport = {
   spoTGloss: number | null;
   spoTGlossTarget: number | null;
   tGlossSpo: number | null;
+  /** Raw BA Tool figure, no target — see columns.ts. Added to the TKM Targets hero card 2026-09-19. */
+  serviceGentanI: number | null;
 
   cpuForTheDay: number | null;
   cpuAchievementForTheMonth: number | null;
@@ -403,6 +405,7 @@ function computeBranchReport(
     spoTGloss,
     spoTGlossTarget,
     tGlossSpo: ratio(spoTGloss, spoTGlossTarget),
+    serviceGentanI: t("serviceGentanI"),
 
     cpuForTheDay: delta(t("cpus"), y("cpus")),
     cpuAchievementForTheMonth: t("cpus"),

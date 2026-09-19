@@ -56,6 +56,12 @@ export type KpiSummary = {
   externalSalesMtd: number | null;
   /** Averaged across branches, not summed — see avgField. */
   externalSalesPctOfSprInternal: number | null;
+  spoTGloss: number | null;
+  spoTGlossTarget: number | null;
+  /** Rs-per-RO figure, same shape as "VAS Gentani" — averaged across
+   * branches, not summed (see avgField). Added to the TKM Targets hero
+   * card 2026-09-19. */
+  serviceGentanI: number | null;
 };
 
 export function computeKpiSummary(branches: BranchReport[]): KpiSummary {
@@ -80,6 +86,9 @@ export function computeKpiSummary(branches: BranchReport[]): KpiSummary {
     bpuLabourMtd: sumField(branches, "bpuLabourMtd"),
     externalSalesMtd: sumField(branches, "externalSalesMtd"),
     externalSalesPctOfSprInternal: avgField(branches, "externalSalesPctOfSprInternal"),
+    spoTGloss: sumField(branches, "spoTGloss"),
+    spoTGlossTarget: sumField(branches, "spoTGlossTarget"),
+    serviceGentanI: avgField(branches, "serviceGentanI"),
   };
 }
 

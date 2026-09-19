@@ -5,12 +5,12 @@ import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { TargetIcon, WrenchIcon, StorefrontIcon } from "@/components/dashboard-icons";
 import { RichKpiCard } from "@/components/rich-kpi-card";
-import { computeKpiSummary, TKM_TRACKED_KPIS } from "@/lib/aggregate";
+import { achievementRatio, computeKpiSummary, TKM_TRACKED_KPIS } from "@/lib/aggregate";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
-import { formatCompactCurrency, formatNumber } from "@/lib/format";
+import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computePace, paceTone } from "@/lib/pace";
 import { computeTrendSeries } from "@/lib/trend";
 import { BranchPerformanceHeatmap, type HeatmapMetricConfig } from "../dashboard/branch-performance-heatmap";
@@ -115,7 +115,6 @@ async function TkmTargetsContent({
   };
 
   const pace = {
-    cpu: computePace(date, kpis.cpuAchievementForTheMonth, null),
     bpu: computePace(date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget),
     offtake: computePace(date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget),
     partsRetail: computePace(date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget),
@@ -202,15 +201,26 @@ async function TkmTargetsContent({
         />
       </div>
 
-      <div className="mt-3 max-w-xs">
-        <RichKpiCard
-          icon={<TargetIcon />}
-          color="amber"
-          label="CPU Achievement MTD"
-          value={formatNumber(kpis.cpuAchievementForTheMonth)}
-          sub="Target not set"
-          pace={pace.cpu}
-        />
+      {/* CPU Achievement MTD removed 2026-09-19, at the user's request —
+          replaced by this compact card of three related figures, none of
+          which are target-graded, so this stays a plain figures card, not a
+          RichKpiCard. */}
+      <div className="mt-3 max-w-sm rounded-lg border border-border bg-surface p-4 shadow-card">
+        <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Service Metrics MTD</div>
+        <dl className="mt-2.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <dt className="text-xs text-fg-faint">Service Gentan I</dt>
+            <dd className="text-sm font-semibold tabular-nums text-fg">{formatCompactCurrency(kpis.serviceGentanI)}</dd>
+          </div>
+          <div className="flex items-center justify-between">
+            <dt className="text-xs text-fg-faint">Service Penetration</dt>
+            <dd className="text-sm font-semibold tabular-nums text-fg">{formatPercent(kpis.penetrationTGlossService)}</dd>
+          </div>
+          <div className="flex items-center justify-between">
+            <dt className="text-xs text-fg-faint">T-Gloss SPO</dt>
+            <dd className="text-sm font-semibold tabular-nums text-fg">{formatPercent(achievementRatio(kpis.spoTGloss, kpis.spoTGlossTarget))}</dd>
+          </div>
+        </dl>
       </div>
 
       {/* Trend / Region Scorecard / Heatmap sort all share one metric

@@ -136,6 +136,13 @@ create table if not exists ba_tool_snapshots (
 -- won't retrofit a new column onto it, hence the explicit alter.
 alter table ba_tool_snapshots add column if not exists spr_external numeric;
 
+-- Service Gentan I — a BA Tool column that went unmapped (and so silently
+-- dropped from every upload, though the raw file itself was archived in
+-- raw_upload_rows) until 2026-09-19, when it was added to the TKM Targets
+-- hero card. Backfilled for already-uploaded dates from that raw archive —
+-- see db/backfill-service-gentan-i.mjs.
+alter table ba_tool_snapshots add column if not exists service_gentan_i numeric;
+
 -- Mirrors data/service-info/{date}/{branch}.json.
 create table if not exists service_info_snapshots (
   date date not null,
