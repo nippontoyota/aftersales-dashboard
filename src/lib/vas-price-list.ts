@@ -53,7 +53,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
       "small": 4832,
       "medium": 4498.54,
       "large": 4644.99,
-      "xl": 4832
+      "xl": 4880
     },
     "tierB": {
       "small": null,
@@ -67,10 +67,10 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Health",
     "name": "TGLOSS Air Fresh-Front Evaporator",
     "tierA": {
-      "small": 2600,
+      "small": 2626,
       "medium": 2709.83,
       "large": 2742.15,
-      "xl": 2797
+      "xl": 2825
     },
     "tierB": {
       "small": 2619,
@@ -87,7 +87,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
       "small": 2736,
       "medium": 2572.47,
       "large": 2707.81,
-      "xl": 2736
+      "xl": 2763
     },
     "tierB": {
       "small": null,
@@ -101,7 +101,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Alloy Wheel Cleaning & Protection",
     "tierA": {
-      "small": 1809,
+      "small": 1827,
       "medium": 1886.68,
       "large": 2100.8,
       "xl": 2451.27
@@ -118,7 +118,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Appearance",
     "name": "TGLOSS Ceramic Coating",
     "tierA": {
-      "small": 11370,
+      "small": 11484,
       "medium": 14847,
       "large": 19897,
       "xl": 25502.5
@@ -135,7 +135,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Appearance",
     "name": "TGLOSS Ceramic Coating+1Booster",
     "tierA": {
-      "small": 14260,
+      "small": 14403,
       "medium": 18493.1,
       "large": 24270.3,
       "xl": 29880.85
@@ -152,7 +152,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Appearance",
     "name": "TGLOSS CERAMIC COATING WITH 2 BOOSTERS [+2]",
     "tierA": {
-      "small": 17150,
+      "small": 17322,
       "medium": 22139.2,
       "large": 28643.6,
       "xl": 34259.2
@@ -169,7 +169,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Appearance",
     "name": "TGLOSS Graphene Coating",
     "tierA": {
-      "small": 13620,
+      "small": 13756,
       "medium": 19543.5,
       "large": 24745,
       "xl": 30401
@@ -186,7 +186,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Appearance",
     "name": "TGLOSS Graphene Coating +1 Booster",
     "tierA": {
-      "small": 16510,
+      "small": 16675,
       "medium": 23189.6,
       "large": 29118.3,
       "xl": 34779.35
@@ -203,7 +203,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Appearance",
     "name": "TGLOSS GRAPHENE COATING WITH 2 BOOSTERS [+2]",
     "tierA": {
-      "small": 19400,
+      "small": 19594,
       "medium": 26835.7,
       "large": 33491.6,
       "xl": 39157.7
@@ -237,7 +237,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Appearance",
     "name": "TGLOSS GRAPHENE COATING WITH 3 BOOSTERS [+3]",
     "tierA": {
-      "small": 22290,
+      "small": 22513,
       "medium": 30481.8,
       "large": 37864.9,
       "xl": 43536.05
@@ -247,6 +247,23 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
       "medium": 29401,
       "large": 36577,
       "xl": 42117
+    }
+  },
+  {
+    "jobCode": "99TGSA08",
+    "category": "Appearance",
+    "name": "TGLOSS Booster Coating",
+    "tierA": {
+      "small": 2919,
+      "medium": 3646,
+      "large": 4373,
+      "xl": 4373
+    },
+    "tierB": {
+      "small": 2762,
+      "medium": 3454,
+      "large": 4146,
+      "xl": 4146
     }
   },
   {
@@ -288,7 +305,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Exterior Beautification",
     "tierA": {
-      "small": 2089,
+      "small": 2110,
       "medium": 2175.54,
       "large": 2476.52,
       "xl": 2702.76
@@ -305,7 +322,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS GLOSS BODY COATING",
     "tierA": {
-      "small": 10089,
+      "small": 10190,
       "medium": 10644.39,
       "large": 13205.75,
       "xl": 13963.25
@@ -322,7 +339,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Headlamp Restoration",
     "tierA": {
-      "small": 1380,
+      "small": 1394,
       "medium": 1545.3,
       "large": 1702.86,
       "xl": 1750.33
@@ -339,7 +356,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Int. Enrich. with Leather Conditioner",
     "tierA": {
-      "small": 3574,
+      "small": 3610,
       "medium": 3844.06,
       "large": 4430.87,
       "xl": 4646
@@ -356,7 +373,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Interior Enrichment",
     "tierA": {
-      "small": 1375,
+      "small": 1389,
       "medium": 1436.22,
       "large": 1593.78,
       "xl": 1814.97
@@ -373,7 +390,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Interior Enrichment with Disinfectant",
     "tierA": {
-      "small": 2818,
+      "small": 2846,
       "medium": 3391.58,
       "large": 3931.93,
       "xl": 4344.01
@@ -390,7 +407,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Protection",
     "name": "TGLOSS Internal Panel Coating",
     "tierA": {
-      "small": 2914,
+      "small": 2943,
       "medium": 3399.66,
       "large": 3817.8,
       "xl": 4176.35
@@ -407,7 +424,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Logo Cleaning",
     "tierA": {
-      "small": 477,
+      "small": 482,
       "medium": 494.9,
       "large": 513.08,
       "xl": 540.35
@@ -424,7 +441,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Mech Care",
     "tierA": {
-      "small": 571,
+      "small": 577,
       "medium": 603.98,
       "large": 639.33,
       "xl": 656.5
@@ -441,7 +458,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Health",
     "name": "TGLOSS Odour Neutralizer & Disinfectant",
     "tierA": {
-      "small": 821,
+      "small": 829,
       "medium": 845.37,
       "large": 866.58,
       "xl": 881.73
@@ -458,7 +475,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Plastic Care",
     "tierA": {
-      "small": 562,
+      "small": 568,
       "medium": 615.09,
       "large": 638.32,
       "xl": 677.71
@@ -475,7 +492,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Premium Exterior Care",
     "tierA": {
-      "small": 4793,
+      "small": 4841,
       "medium": 5193.42,
       "large": 5952.94,
       "xl": 6288.26
@@ -492,7 +509,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Premium Interior Enrichment",
     "tierA": {
-      "small": 2281,
+      "small": 2304,
       "medium": 2512.88,
       "large": 2813.86,
       "xl": 3038.08
@@ -509,7 +526,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Safety",
     "name": "TGLOSS Rat Repellent",
     "tierA": {
-      "small": 909,
+      "small": 918,
       "medium": 978.69,
       "large": 1058.48,
       "xl": 1098.88
@@ -526,7 +543,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Protection",
     "name": "TGLOSS Silencer Coating",
     "tierA": {
-      "small": 1394,
+      "small": 1408,
       "medium": 1488.74,
       "large": 1548.33,
       "xl": 1611.96
@@ -560,7 +577,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Protection",
     "name": "TGLOSS Underbody Coating",
     "tierA": {
-      "small": 4002,
+      "small": 4042,
       "medium": 4631.86,
       "large": 5547.93,
       "xl": 6103.43
@@ -577,7 +594,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Appearance",
     "name": "TGLOSS UV Protection",
     "tierA": {
-      "small": 1226,
+      "small": 1238,
       "medium": 1371.58,
       "large": 1483.69,
       "xl": 1560.45
@@ -900,7 +917,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Windshield Polish -Front",
     "tierA": {
-      "small": 1529,
+      "small": 1544,
       "medium": 1588.73,
       "large": 1686.7,
       "xl": 2105.85
@@ -917,7 +934,7 @@ export const VAS_PRICE_LIST: VasTreatmentPrice[] = [
     "category": "Restoration",
     "name": "TGLOSS Windshield Polish-Front & Rear",
     "tierA": {
-      "small": 2235,
+      "small": 2257,
       "medium": 2304.82,
       "large": 2580.55,
       "xl": 3312.8
