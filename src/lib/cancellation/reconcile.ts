@@ -64,6 +64,13 @@ export type ReconcileResult = {
 };
 
 export async function reconcileCancellations(month: string, branch?: string): Promise<ReconcileResult> {
+  // Exclusive month-end bound for the raw_upload_rows date-range filter
+  // below — `month` is "YYYY-MM", so Date.UTC's month index (0 = Jan) is
+  // already one past it, landing on the 1st of the following month.
+  const [y, m] = month.split("-").map(Number);
+  const monthStart = `${month}-01`;
+  const monthEndExclusive = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+
   const { rows } = await pool.query<{
     doc_no: string;
     branch: string;
@@ -92,7 +99,7 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
              coalesce(to_char(issue_date, 'YYYY-MM'), month) as revenue_month,
              replace(doc_no, '-', '') as doc_key
       from invoice_cancellations
-      where month = $1 ${branch ? "and branch = $2" : ""}
+      where month = $1 and ($2::text is null or branch = $2)
     ),
     ssrv as (
       select r.branch,
@@ -100,8 +107,14 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
              replace(coalesce(r.row_data->>'Invoice Doc No.', ''), '-', '') as inv,
              trim(coalesce(r.row_data->>'Close SA Name', '')) as close_sa_name
       from raw_upload_rows r
+      -- date range, not to_char(r.date,'YYYY-MM') = $1 — see the identical
+      -- fix + EXPLAIN ANALYZE numbers in ssrv089/cancellation-adjustment.ts
+      -- (2026-09-19): the old string comparison couldn't use
+      -- raw_upload_rows_lookup_idx's date column, forcing a scan of every
+      -- SSRV089 row ever uploaded instead of just this month's.
       where r.report_type = 'ssrv089'
-        and to_char(r.date, 'YYYY-MM') = $1
+        and r.date >= $3::date
+        and r.date < $4::date
     ),
     -- The branch's freshest Monthly-KPI (scom205) read per month: the row
     -- for the latest report date, and when we actually uploaded it. The DMS
@@ -134,7 +147,7 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
     left join last_kpi lk on lk.branch = c.branch and lk.kmonth = c.revenue_month
     order by c.branch, c.cancel_date, c.doc_no
     `,
-    branch ? [month, branch] : [month],
+    [month, branch ?? null, monthStart, monthEndExclusive],
   );
 
   const out: ReconcileRow[] = rows.map((r) => {

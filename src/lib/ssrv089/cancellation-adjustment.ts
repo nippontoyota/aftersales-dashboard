@@ -46,7 +46,15 @@ export async function loadCancelledAccessoriesAdjustmentForMonth(
              ${toNumericExpr("Part Sale")} as part_sale,
              ${toNumericExpr("Labour Sale")} as labour_sale
       from raw_upload_rows r
-      where r.report_type = 'ssrv089' and to_char(r.date, 'YYYY-MM') = $1
+      -- date range, not to_char(r.date,'YYYY-MM') = $1 — the old string
+      -- comparison couldn't use raw_upload_rows_lookup_idx's date column at
+      -- all, forcing a scan of every SSRV089 row ever uploaded (124ms and
+      -- growing) instead of just this month's (confirmed via EXPLAIN
+      -- ANALYZE 2026-09-19: 124ms -> 5ms on ~170k rows). Read-only query,
+      -- same results — see db/verify-cancellation-adjustment-query.mjs.
+      where r.report_type = 'ssrv089'
+        and r.date >= date_trunc('month', $2::date)
+        and r.date < date_trunc('month', $2::date) + interval '1 month'
     )
     select s.branch,
            sum(s.part_sale) as part_sale,
@@ -59,7 +67,7 @@ export async function loadCancelledAccessoriesAdjustmentForMonth(
     where s.inv <> ''
     group by s.branch
     `,
-    [monthPrefix]
+    [monthPrefix, date]
   );
 
   return new Map(rows.map((r) => [r.branch, { partSale: Number(r.part_sale), labourSale: Number(r.labour_sale) }]));
