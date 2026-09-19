@@ -67,9 +67,12 @@ export type KpiSummary = {
   externalSalesPctOfSprInternal: number | null;
   spoTGloss: number | null;
   spoTGlossTarget: number | null;
-  /** Rs-per-RO figure, same shape as "VAS Gentani" — averaged across
-   * branches, not summed (see avgField). Added to the TKM Targets hero
-   * card 2026-09-19. */
+  serviceRevenue: number | null;
+  serviceUnits: number | null;
+  /** Rs-per-RO figure. NOT an average of each branch's own Service Gentan I
+   * (that would weight every branch equally regardless of volume — a bug
+   * caught 2026-09-19) — computed as summed serviceRevenue ÷ summed
+   * serviceUnits, the same weighted-ratio construction as "VAS Gentani." */
   serviceGentanI: number | null;
 };
 
@@ -97,7 +100,9 @@ export function computeKpiSummary(branches: BranchReport[]): KpiSummary {
     externalSalesPctOfSprInternal: avgField(branches, "externalSalesPctOfSprInternal"),
     spoTGloss: sumField(branches, "spoTGloss"),
     spoTGlossTarget: sumField(branches, "spoTGlossTarget"),
-    serviceGentanI: avgField(branches, "serviceGentanI"),
+    serviceRevenue: sumField(branches, "serviceRevenue"),
+    serviceUnits: sumField(branches, "serviceUnits"),
+    serviceGentanI: achievementRatio(sumField(branches, "serviceRevenue"), sumField(branches, "serviceUnits")),
   };
 }
 

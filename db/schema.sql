@@ -143,6 +143,16 @@ alter table ba_tool_snapshots add column if not exists spr_external numeric;
 -- see db/backfill-service-gentan-i.mjs.
 alter table ba_tool_snapshots add column if not exists service_gentan_i numeric;
 
+-- Service Revenue / Service Units — also raw BA Tool columns, added
+-- 2026-09-19 right after service_gentan_i above, once it turned out the
+-- company/region-level Service Gentan I hero figure needs to be Service
+-- Revenue ÷ Service Units computed from these two sums, not an average of
+-- each branch's own already-divided Service Gentan I (that average weights
+-- every branch equally regardless of volume, which is wrong). Backfilled
+-- from the raw archive — see db/backfill-service-revenue-units.mjs.
+alter table ba_tool_snapshots add column if not exists service_revenue numeric;
+alter table ba_tool_snapshots add column if not exists service_units numeric;
+
 -- Mirrors data/service-info/{date}/{branch}.json.
 create table if not exists service_info_snapshots (
   date date not null,

@@ -43,8 +43,11 @@ export type BranchReport = {
   spoTGloss: number | null;
   spoTGlossTarget: number | null;
   tGlossSpo: number | null;
-  /** Raw BA Tool figure, no target — see columns.ts. Added to the TKM Targets hero card 2026-09-19. */
+  /** Raw BA Tool figure, no target — see columns.ts. Added to the TKM Targets hero card 2026-09-19. Correct at branch level; the company/region rollup must divide summed serviceRevenue by summed serviceUnits instead of averaging this field — see aggregate.ts's KpiSummary. */
   serviceGentanI: number | null;
+  /** Raw BA Tool figures — the numerator/denominator behind Service Gentan I, needed separately so the company/region rollup can divide their sums rather than average each branch's already-divided rate. */
+  serviceRevenue: number | null;
+  serviceUnits: number | null;
 
   cpuForTheDay: number | null;
   cpuAchievementForTheMonth: number | null;
@@ -406,6 +409,8 @@ function computeBranchReport(
     spoTGlossTarget,
     tGlossSpo: ratio(spoTGloss, spoTGlossTarget),
     serviceGentanI: t("serviceGentanI"),
+    serviceRevenue: t("serviceRevenue"),
+    serviceUnits: t("serviceUnits"),
 
     cpuForTheDay: delta(t("cpus"), y("cpus")),
     cpuAchievementForTheMonth: t("cpus"),
