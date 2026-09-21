@@ -219,7 +219,6 @@ export function HeroKpiStrip({
                 slabs={scopeSlabs}
                 date={date}
                 showActual={false}
-                variant="circles"
               />
             ) : undefined
           }
