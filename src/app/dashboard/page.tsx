@@ -207,10 +207,6 @@ async function DashboardContent({
   // header region and can step through every branch.
   const heroDefaultScope = region;
 
-  const hrefParams = new URLSearchParams({ date });
-  if (region !== "All") hrefParams.set("region", region);
-  const branchesHref = `/branches?${hrefParams.toString()}`;
-
   const uploadedAtLabel = new Date(report.uploadedAt).toLocaleString("en-IN", {
     day: "numeric",
     month: "short",
@@ -252,7 +248,7 @@ async function DashboardContent({
             <>
               <HeroKpi branches={report.branches} compact />
               <div className="mt-4">
-                <RevenuePerCarLeaderboard branches={filteredBranches} highlightBranch={null} compact seeAllHref={branchesHref} />
+                <RevenuePerCarLeaderboard branches={filteredBranches} highlightBranch={null} compact />
               </div>
             </>
           }
