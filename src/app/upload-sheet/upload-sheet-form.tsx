@@ -51,6 +51,10 @@ export function UploadSheetForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // Service Info's RO-overlap warning (see service-info/upload-validation.ts)
+  // — holds the built FormData so "Save anyway" can resubmit it with
+  // confirmDuplicate set, same pattern as the branch upload cards.
+  const [duplicateWarning, setDuplicateWarning] = useState<{ message: string; formData: FormData } | null>(null);
   const successRef = useRef<HTMLParagraphElement>(null);
 
   // On save, the detected-type block (branch picker + Save) collapses and
@@ -73,6 +77,7 @@ export function UploadSheetForm() {
     setVariant("gs");
     setError(null);
     setSuccess(null);
+    setDuplicateWarning(null);
     if (!picked) return;
 
     setDetecting(true);
@@ -94,29 +99,24 @@ export function UploadSheetForm() {
     }
   }
 
-  async function handleSave() {
-    if (!file || !detection) return;
-    if (!branch) {
-      setError("Choose which branch this file belongs to.");
-      return;
-    }
-
+  async function doSave(formData: FormData) {
     setSaving(true);
     setError(null);
     setSuccess(null);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("date", date);
-      formData.append("branch", branch);
-      if (HAS_VARIANT[detection.type]) formData.append("variant", variant);
-
       const res = await fetch("/api/upload-sheet/save", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Save failed.");
+        setDuplicateWarning(null);
         return;
       }
+      if (data.duplicate) {
+        setDuplicateWarning({ message: data.message ?? "This looks like a duplicate upload.", formData });
+        return;
+      }
+      setDuplicateWarning(null);
+      if (!detection) return;
       const label = HAS_VARIANT[detection.type] ? `${TYPE_LABEL[detection.type]} - ${variant.toUpperCase()}` : TYPE_LABEL[detection.type];
       setSuccess(`Saved ${label} for ${branch}, ${date}.`);
       setFile(null);
@@ -127,9 +127,31 @@ export function UploadSheetForm() {
       router.refresh();
     } catch {
       setError("Could not reach the server to save this file.");
+      setDuplicateWarning(null);
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSave() {
+    if (!file || !detection) return;
+    if (!branch) {
+      setError("Choose which branch this file belongs to.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("date", date);
+    formData.append("branch", branch);
+    if (HAS_VARIANT[detection.type]) formData.append("variant", variant);
+    await doSave(formData);
+  }
+
+  async function handleConfirmDuplicate() {
+    if (!duplicateWarning) return;
+    duplicateWarning.formData.set("confirmDuplicate", "true");
+    await doSave(duplicateWarning.formData);
   }
 
   return (
@@ -220,14 +242,38 @@ export function UploadSheetForm() {
             </select>
           </div>
 
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
+          {duplicateWarning ? (
+            <div className="space-y-2 rounded-md border border-warn/30 bg-warn-soft p-3" role="alert" aria-live="assertive">
+              <p className="text-sm text-warn">{duplicateWarning.message}</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmDuplicate}
+                  disabled={saving}
+                  className="h-8 rounded-md border border-warn/40 bg-surface px-3 text-xs font-medium text-warn hover:bg-warn-soft disabled:opacity-60"
+                >
+                  {saving ? "Saving…" : "Yes, save anyway"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateWarning(null)}
+                  disabled={saving}
+                  className="h-8 rounded-md px-3 text-xs font-medium text-fg-subtle hover:text-fg"
+                >
+                  Cancel — let me check
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          )}
         </div>
       ) : null}
 
