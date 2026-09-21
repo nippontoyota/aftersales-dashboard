@@ -206,22 +206,58 @@ async function TkmTargetsContent({
           replaced by this compact card of three related figures, none of
           which are target-graded, so this stays a plain figures card, not a
           RichKpiCard. */}
-      <div className="mt-3 max-w-sm rounded-lg border border-border bg-surface p-4 shadow-card">
-        <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Service Metrics MTD</div>
-        <dl className="mt-2.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <dt className="text-xs text-fg-faint">Service Gentan I</dt>
-            <dd className="text-sm font-semibold tabular-nums text-fg">{formatCompactCurrency(kpis.serviceGentanI)}</dd>
-          </div>
-          <div className="flex items-center justify-between">
-            <dt className="text-xs text-fg-faint">Service Penetration</dt>
-            <dd className="text-sm font-semibold tabular-nums text-fg">{formatPercent(kpis.penetrationTGlossService)}</dd>
-          </div>
-          <div className="flex items-center justify-between">
-            <dt className="text-xs text-fg-faint">T-Gloss SPO</dt>
-            <dd className="text-sm font-semibold tabular-nums text-fg">{formatPercent(achievementRatio(kpis.spoTGloss, kpis.spoTGlossTarget))}</dd>
-          </div>
-        </dl>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
+          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Service Metrics MTD</div>
+          <dl className="mt-2.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <dt className="text-xs text-fg-faint">Service Gentan I</dt>
+              <dd className="text-sm font-semibold tabular-nums text-fg">{formatCompactCurrency(kpis.serviceGentanI)}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-xs text-fg-faint">Service Penetration</dt>
+              <dd className="text-sm font-semibold tabular-nums text-fg">{formatPercent(kpis.penetrationTGlossService)}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-xs text-fg-faint">T-Gloss SPO</dt>
+              <dd className="text-sm font-semibold tabular-nums text-fg">{formatPercent(achievementRatio(kpis.spoTGloss, kpis.spoTGlossTarget))}</dd>
+            </div>
+          </dl>
+        </div>
+
+        {/* Battery/Tyre actuals + their share of PM, pulled straight from the
+            BA Tool (2026-09-21, at the user's request) — plain figures, not
+            target-graded, same treatment as Service Metrics MTD. */}
+        <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
+          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Battery &amp; Tyre MTD</div>
+          <dl className="mt-2.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <dt className="text-xs text-fg-faint">Battery Actuals</dt>
+              <dd className="text-sm font-semibold tabular-nums text-fg">{formatNumber(kpis.batterySalesForTheMonth)}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-xs text-fg-faint">Tyre Actual</dt>
+              <dd className="text-sm font-semibold tabular-nums text-fg">{formatNumber(kpis.tireSalesForTheMonth)}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
+          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Battery+Tyre / PM %</div>
+          <dl className="mt-2.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <dt className="text-xs text-fg-faint">(Battery + Tyre) of PM Actual</dt>
+              <dd className="text-sm font-semibold tabular-nums text-fg">
+                {formatPercent(
+                  achievementRatio(
+                    (kpis.batterySalesForTheMonth ?? 0) + (kpis.tireSalesForTheMonth ?? 0),
+                    kpis.pmOcAchievementForTheMonth
+                  )
+                )}
+              </dd>
+            </div>
+          </dl>
+        </div>
       </div>
 
       {/* Trend / Region Scorecard / Heatmap sort all share one metric

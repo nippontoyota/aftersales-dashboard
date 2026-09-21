@@ -74,6 +74,8 @@ export type KpiSummary = {
    * caught 2026-09-19) — computed as summed serviceRevenue ÷ summed
    * serviceUnits, the same weighted-ratio construction as "VAS Gentani." */
   serviceGentanI: number | null;
+  batterySalesForTheMonth: number | null;
+  tireSalesForTheMonth: number | null;
 };
 
 export function computeKpiSummary(branches: BranchReport[]): KpiSummary {
@@ -103,6 +105,8 @@ export function computeKpiSummary(branches: BranchReport[]): KpiSummary {
     serviceRevenue: sumField(branches, "serviceRevenue"),
     serviceUnits: sumField(branches, "serviceUnits"),
     serviceGentanI: achievementRatio(sumField(branches, "serviceRevenue"), sumField(branches, "serviceUnits")),
+    batterySalesForTheMonth: sumField(branches, "batterySalesForTheMonth"),
+    tireSalesForTheMonth: sumField(branches, "tireSalesForTheMonth"),
   };
 }
 
