@@ -8,7 +8,6 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
-import { BranchRankingChart } from "../dashboard/branch-ranking-chart";
 import { RevenuePerCarLeaderboard } from "../dashboard/revenue-per-car-leaderboard";
 import { RevenuePerVehicleTable } from "../dashboard/revenue-per-vehicle-table";
 
@@ -82,7 +81,6 @@ async function BranchesContent({
           highlightBranch={admin.role === "branch" ? admin.branch : null}
         />
         <BranchPerformanceHeatmap branches={data.filteredBranches} />
-        <BranchRankingChart branches={data.filteredBranches} defaultOpen />
         <RevenuePerVehicleTable branches={data.filteredBranches} />
       </div>
     </div>
