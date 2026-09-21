@@ -102,8 +102,10 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Profit MTD</th>
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GS ROs</th>
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GS Utilization</th>
+              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GS Profit/RO</th>
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">BP ROs</th>
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">BP Utilization</th>
+              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">BP Profit/RO</th>
             </tr>
           </thead>
           <tbody>
@@ -119,10 +121,12 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
                   <td className={`px-4 py-2 text-right tabular-nums font-semibold ${TONE_TEXT[gsTone]}`}>
                     {gs ? formatPercent(gs.utilizationPct) : "—"}
                   </td>
+                  <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(branch.gsGrossProfitPerRoMtd)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{bp ? formatCompact(bp.actualRoMtd) : "—"}</td>
                   <td className={`px-4 py-2 text-right tabular-nums font-semibold ${TONE_TEXT[bpTone]}`}>
                     {bp ? formatPercent(bp.utilizationPct) : "—"}
                   </td>
+                  <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(branch.bpGrossProfitPerRoMtd)}</td>
                 </tr>
               );
             })}

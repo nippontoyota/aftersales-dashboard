@@ -156,14 +156,32 @@ export type BranchReport = {
   totalRevenueStreamMtd: number | null;
   externalSalesPctOfSprInternal: number | null;
 
-  // Profit MTD (Rs) — a modelled figure from fixed margin assumptions the
-  // user gave directly (2026-09-21), not a books-reconciled accounting
-  // number: 20% of GUS Parts + 20% of BPU Parts + 100% of GUS Labour + 100%
-  // of BPU Labour + 20% of External Sales + 100% of scrap/used-oil revenue.
-  // Same null-guard as totalRevenueStreamMtd — null unless the five BA-Tool
-  // inputs are present; scrap/used-oil (always numeric) never resurrect a
-  // null total on their own. Used only by the CEO dashboard for now.
+  // Profit family (Rs) — modelled figures from fixed margin assumptions the
+  // user gave directly (2026-09-21, extended 2026-09-22 with TGLOSS Margin),
+  // not books-reconciled accounting numbers. Verified against the user's
+  // "Critical KPI" reference sheet row for row (2026-09-21/22) — every
+  // formula below matched the sheet's own Target and MTD columns exactly.
+  //
+  //   Total Parts Profit = 20% × (GUS Parts + BPU Parts + External Sales)
+  //   Total Labour Profit = 100% × (GUS Labour + BPU Labour)
+  //   TGLOSS Margin = 38% of TGLOSS Revenue (vasAchievementForTheMonth)
+  //   Gross Profit (profitMtd) = Parts Profit + Labour Profit + TGLOSS Margin
+  //                              + scrap + used-oil revenue
+  //   GS/BP Gross Profit per RO = (channel Labour + 20% × channel Parts) ÷
+  //                               channel RO count — External Sales and
+  //                               TGLOSS Margin aren't split by channel, so
+  //                               they're excluded from these two.
+  //
+  // Same null-guard throughout as totalRevenueStreamMtd — null unless the
+  // five BA-Tool inputs (+ vasAchievementForTheMonth for Gross Profit) are
+  // present; scrap/used-oil (always numeric) never resurrect a null total on
+  // their own. Used only by the CEO dashboard for now.
+  partsProfitMtd: number | null;
+  labourProfitMtd: number | null;
+  tglossMarginMtd: number | null;
   profitMtd: number | null;
+  gsGrossProfitPerRoMtd: number | null;
+  bpGrossProfitPerRoMtd: number | null;
 };
 
 export type Report = {
@@ -489,15 +507,35 @@ function computeBranchReport(
         ? ratio(externalSalesMtd, partsRetailAchievementForTheMonth + externalSalesMtd)
         : null,
 
+    partsProfitMtd:
+      gusPartsMtd !== null && bpuPartsMtd !== null && externalSalesMtd !== null
+        ? 0.2 * (gusPartsMtd + bpuPartsMtd + externalSalesMtd)
+        : null,
+    labourProfitMtd: gusLabourMtd !== null && bpuLabourMtd !== null ? gusLabourMtd + bpuLabourMtd : null,
+    tglossMarginMtd: vasAchievementForTheMonth !== null ? 0.38 * vasAchievementForTheMonth : null,
     profitMtd:
-      gusPartsMtd !== null && gusLabourMtd !== null && bpuPartsMtd !== null && bpuLabourMtd !== null && externalSalesMtd !== null
+      gusPartsMtd !== null &&
+      gusLabourMtd !== null &&
+      bpuPartsMtd !== null &&
+      bpuLabourMtd !== null &&
+      externalSalesMtd !== null &&
+      vasAchievementForTheMonth !== null
         ? 0.2 * gusPartsMtd +
           0.2 * bpuPartsMtd +
           gusLabourMtd +
           bpuLabourMtd +
           0.2 * externalSalesMtd +
+          0.38 * vasAchievementForTheMonth +
           billRevenue.scrapRevenue +
           billRevenue.usedOilRevenue
+        : null,
+    gsGrossProfitPerRoMtd:
+      gusLabourMtd !== null && gusPartsMtd !== null && gusRoMtd !== null && gusRoMtd !== 0
+        ? (gusLabourMtd + 0.2 * gusPartsMtd) / gusRoMtd
+        : null,
+    bpGrossProfitPerRoMtd:
+      bpuLabourMtd !== null && bpuPartsMtd !== null && t("bpus") !== null && t("bpus") !== 0
+        ? (bpuLabourMtd + 0.2 * bpuPartsMtd) / t("bpus")!
         : null,
   };
 }

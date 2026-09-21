@@ -7,13 +7,13 @@ import {
   GS_BAYS,
   type BayUtilization,
 } from "./bay-capacity";
-import { computeHeroSummary, filterBranchesByRegion, type HeroSummary } from "./aggregate";
+import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, grossProfitPerRo, type HeroSummary, type KpiSummary } from "./aggregate";
 import { REGIONS, type RegionName } from "./regions";
 import { loadReportHolidaySet } from "./report-holidays/store";
 import { workingDaysElapsedInMonth } from "./reporting-date";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { computeTrendSeries } from "./trend";
-import { listSnapshotDates, loadSnapshotsForMonthUpTo } from "./snapshot-store";
+import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
 
 /**
  * The data foundation for the CEO executive view (/ceo). Company-wide only,
@@ -41,6 +41,34 @@ export type CeoRegionRollup = {
   utilization: CeoUtilization;
 };
 
+/** The Profit family, properly weighted at whatever scope (group/region) the
+ * caller sums branches to — see BranchReport's profit fields in report.ts
+ * for the formulas, all verified against the user's "Critical KPI" reference
+ * sheet. The per-RO figures are NOT averages of each branch's own ratio (see
+ * aggregate.ts's grossProfitPerRo doc comment). */
+export type CeoProfitBreakdown = {
+  partsProfitMtd: number | null;
+  labourProfitMtd: number | null;
+  tglossMarginMtd: number | null;
+  grossProfitMtd: number | null;
+  gsGrossProfitPerRo: number | null;
+  bpGrossProfitPerRo: number | null;
+  blendedGrossProfitPerRo: number | null;
+};
+
+function computeProfitBreakdown(hero: HeroSummary): CeoProfitBreakdown {
+  const totalRo = hero.gusRoMtd !== null && hero.bpuRoMtd !== null ? hero.gusRoMtd + hero.bpuRoMtd : null;
+  return {
+    partsProfitMtd: hero.partsProfitMtd,
+    labourProfitMtd: hero.labourProfitMtd,
+    tglossMarginMtd: hero.tglossMarginMtd,
+    grossProfitMtd: hero.profitMtd,
+    gsGrossProfitPerRo: grossProfitPerRo(hero.gusLabourMtd, hero.gusPartsMtd, hero.gusRoMtd),
+    bpGrossProfitPerRo: grossProfitPerRo(hero.bpuLabourMtd, hero.bpuPartsMtd, hero.bpuRoMtd),
+    blendedGrossProfitPerRo: hero.profitMtd !== null && totalRo !== null && totalRo !== 0 ? hero.profitMtd / totalRo : null,
+  };
+}
+
 /** Rule-based callout — the worst-pacing bay-utilization line across regions
  * (Group excluded, since "which region" is the useful signal), named down to
  * its lowest branch. Null when nothing is meaningfully behind. */
@@ -60,12 +88,16 @@ export type CeoData = {
    * that's derived from `report` follows suit. */
   report: Report | null;
   workingDaysElapsed: number;
-  group: { hero: HeroSummary; utilization: CeoUtilization } | null;
+  group: { hero: HeroSummary; kpis: KpiSummary; utilization: CeoUtilization; profit: CeoProfitBreakdown } | null;
   regions: CeoRegionRollup[];
   revenueTrend: { date: string; actual: number | null }[];
   gsRoTrend: { date: string; actual: number | null }[];
   bpRoTrend: { date: string; actual: number | null }[];
   callout: CeoCallout | null;
+  /** BPU/Offtake/Parts Retail/PM+OC/Tyre/Battery region scorecard, trend
+   * chart, and heatmap all need the raw month snapshots directly — same data
+   * already loaded here for gsRoTrend/bpRoTrend, just also handed to the page. */
+  monthSnapshots: Snapshot[];
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -111,7 +143,19 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     loadSnapshotsForMonthUpTo(date),
   ]);
   if (!report) {
-    return { date, dates, report: null, workingDaysElapsed: 0, group: null, regions: [], revenueTrend: [], gsRoTrend: [], bpRoTrend: [], callout: null };
+    return {
+      date,
+      dates,
+      report: null,
+      workingDaysElapsed: 0,
+      group: null,
+      regions: [],
+      revenueTrend: [],
+      gsRoTrend: [],
+      bpRoTrend: [],
+      callout: null,
+      monthSnapshots: [],
+    };
   }
 
   const workingDaysElapsed = workingDaysElapsedInMonth(date, holidays);
@@ -128,13 +172,19 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
 
   const gsRoTrend = computeTrendSeries(monthSnapshots, "All", "gus").map((p) => ({ date: p.date, actual: p.actual }));
   const bpRoTrend = computeTrendSeries(monthSnapshots, "All", "bpus").map((p) => ({ date: p.date, actual: p.actual }));
+  const groupHero = computeHeroSummary(report.branches);
 
   return {
     date,
     dates,
     report,
     workingDaysElapsed,
-    group: { hero: computeHeroSummary(report.branches), utilization: rollupUtilization(report.branches, workingDaysElapsed) },
+    group: {
+      hero: groupHero,
+      kpis: computeKpiSummary(report.branches),
+      utilization: rollupUtilization(report.branches, workingDaysElapsed),
+      profit: computeProfitBreakdown(groupHero),
+    },
     regions,
     // Total Revenue has no single BA Tool column (it's GUS+BPU parts/labour +
     // external + scrap/oil, assembled in report.ts) — a real day-by-day trend
@@ -145,5 +195,6 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     gsRoTrend,
     bpRoTrend,
     callout: buildCallout(regions),
+    monthSnapshots,
   };
 }
