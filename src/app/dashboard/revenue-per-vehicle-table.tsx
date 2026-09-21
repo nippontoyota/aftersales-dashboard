@@ -1,35 +1,31 @@
 import type { BranchReport } from "@/lib/report";
+import { isBodyPaintOnly } from "@/lib/report";
 import { achievementRatio } from "@/lib/aggregate";
 import { formatCompact } from "@/lib/format";
 import { REGIONS, regionForBranch, type RegionName } from "@/lib/regions";
+import { BpuCell } from "./revenue-per-vehicle-row";
 import { SectionTable, type SectionColumn } from "./section-table";
 
 /**
- * "How much are we earning per car" — every real revenue stream on the
- * dashboard, each divided by the RO count it actually belongs to (2026-08-31,
- * at the user's request): GUS-billed streams against GUS RO MTD, BPU-billed
- * streams against BPU RO MTD (confirmed with the user — "bpus revenue would
- * be against bpus"), everything else that isn't tied to one specific stream
- * (Parts Retail, Offtake, External Sales, VAS) against GUS RO MTD as the
- * best available proxy for "cars serviced," and Total Revenue Stream against
- * GUS + BPU RO combined since that total blends both populations.
+ * "How much are we earning per car" — one compact table, one row per
+ * branch, replacing the earlier 7-board ranked-list layout (2026-09-21, at
+ * the user's request — that layout was too much scrolling, "way too
+ * messed up"). Columns, left to right: GUS Parts, GUS Labour, BPU (combined,
+ * click to split Parts/Labour), TGloss/GUS, Parts Retail, Offtake — no
+ * Total Revenue column (dropped at the user's request). GUS Parts/Labour
+ * and TGloss/GUS are banded against fixed per-RO targets; BPU/Parts
+ * Retail/Offtake have no fixed target yet, so they're plain figures.
  *
- * Pure presentation — every input here is already computed on BranchReport;
- * nothing new is persisted. Reused as-is for both the HQ comparison table
- * (all branches, on /branches) and a branch admin's own single row (on
- * their Dashboard) — same component, just a different `branches` array,
- * same pattern as report-table.tsx / tkm-report-table.tsx.
+ * Body & Paint-only branches (CO01E/KL01B/TR01B) are shown in their own
+ * small table below — their BPU RO counts aren't comparable to a mixed
+ * branch's (confirmed 2026-09-11), so they're never mixed into the main
+ * rows or its "All branches" total.
  */
 function perVehicleCell(revenue: number | null, roCount: number | null) {
   const value = achievementRatio(revenue, roCount);
-  return <div className="w-20 whitespace-nowrap text-sm font-semibold tabular-nums text-fg">{formatCompact(value)}</div>;
+  return <div className="w-20 whitespace-nowrap text-right text-sm font-semibold tabular-nums text-fg">{formatCompact(value)}</div>;
 }
 
-/** Per-RO GUS target bands (2026-09-21, at the user's request) — fixed
- * thresholds provided by the user for GUS-only per-RO metrics: GUS Parts,
- * GUS Labour, and TGloss/GUS. Higher is always better. A branch with no GUS
- * RO at all (BPU/Body-&-Paint-only, e.g. CO01E/KL01B/TR01B) has nothing
- * GUS to grade, so it gets a plain "—", never a band. */
 type Band = { min: number; className: string };
 
 const BAND_COLORS = {
@@ -56,7 +52,6 @@ const TGLOSS_PER_RO_BANDS: Band[] = [
 ];
 
 function bandedPerRoCell(numerator: number | null, gusRoMtd: number | null, bands: Band[]) {
-  // No GUS RO at all — this branch has nothing GUS to grade (BPU/Body-&-Paint-only).
   if (gusRoMtd === null || gusRoMtd === 0) {
     return <div className="w-20 whitespace-nowrap text-center text-sm text-fg-faint">—</div>;
   }
@@ -72,42 +67,50 @@ function bandedPerRoCell(numerator: number | null, gusRoMtd: number | null, band
 const COLUMNS: SectionColumn[] = [
   { label: "GUS Parts (Rs/Car)", render: (r) => bandedPerRoCell(r.gusPartsMtd, r.gusRoMtd, PARTS_PER_RO_BANDS) },
   { label: "GUS Labour (Rs/Car)", render: (r) => bandedPerRoCell(r.gusLabourMtd, r.gusRoMtd, LABOUR_PER_RO_BANDS) },
-  { label: "BPU Parts (Rs/Car)", render: (r) => perVehicleCell(r.bpuPartsMtd, r.bpuRoMtd) },
-  { label: "BPU Labour (Rs/Car)", render: (r) => perVehicleCell(r.bpuLabourMtd, r.bpuRoMtd) },
+  {
+    label: "BPU (Rs/Car)",
+    render: (r) => (
+      <BpuCell
+        combined={achievementRatio((r.bpuPartsMtd ?? 0) + (r.bpuLabourMtd ?? 0), r.bpuRoMtd)}
+        parts={achievementRatio(r.bpuPartsMtd, r.bpuRoMtd)}
+        labour={achievementRatio(r.bpuLabourMtd, r.bpuRoMtd)}
+      />
+    ),
+  },
+  // Relabeled from "VAS (Rs/Car)" — the underlying figure is still total
+  // VAS bill revenue ÷ GUS RO (vasAchievementForTheMonth), not spoTGloss.
+  { label: "TGloss/GUS (Rs/Car)", render: (r) => bandedPerRoCell(r.vasAchievementForTheMonth, r.gusRoMtd, TGLOSS_PER_RO_BANDS) },
   { label: "Parts Retail (Rs/Car)", render: (r) => perVehicleCell(r.partsRetailAchievementForTheMonth, r.gusRoMtd) },
   { label: "Offtake (Rs/Car)", render: (r) => perVehicleCell(r.offtakeAchievementForTheMonth, r.gusRoMtd) },
+];
 
-  // Relabeled from "VAS (Rs/Car)" to "TGloss/GUS (Rs/Car)" 2026-09-21, at the
-  // user's request — the underlying figure is still total VAS revenue ÷ GUS
-  // RO (vasAchievementForTheMonth), not spoTGloss; only the name changed.
-  { label: "TGloss/GUS (Rs/Car)", render: (r) => bandedPerRoCell(r.vasAchievementForTheMonth, r.gusRoMtd, TGLOSS_PER_RO_BANDS) },
+const BP_ONLY_COLUMNS: SectionColumn[] = [
   {
-    label: "Total Revenue (Rs/Car)",
-    render: (r) => {
-      const combinedRo = r.gusRoMtd !== null || r.bpuRoMtd !== null ? (r.gusRoMtd ?? 0) + (r.bpuRoMtd ?? 0) : null;
-      return perVehicleCell(r.totalRevenueStreamMtd, combinedRo);
-    },
+    label: "BPU (Rs/Car)",
+    render: (r) => (
+      <BpuCell
+        combined={achievementRatio((r.bpuPartsMtd ?? 0) + (r.bpuLabourMtd ?? 0), r.bpuRoMtd)}
+        parts={achievementRatio(r.bpuPartsMtd, r.bpuRoMtd)}
+        labour={achievementRatio(r.bpuLabourMtd, r.bpuRoMtd)}
+      />
+    ),
   },
 ];
 
 /** Company-wide row — sum/sum, not an average of each branch's own ratio
  * (same weighted-ratio convention as Service Gentan I, confirmed with the
  * user 2026-09-21 to avoid the averaging bug caught earlier this session).
- * Every field the COLUMNS above actually read must be summed here — a field
- * left out would silently fall back to whatever `branches[0]` happens to be,
- * which is wrong, not just incomplete. */
+ * Every field the COLUMNS above actually read must be summed here. */
 type SummableKey =
   | "gusPartsMtd"
   | "gusLabourMtd"
-  | "spoTGloss"
-  | "vasAchievementForTheMonth"
   | "gusRoMtd"
   | "bpuPartsMtd"
   | "bpuLabourMtd"
   | "bpuRoMtd"
+  | "vasAchievementForTheMonth"
   | "partsRetailAchievementForTheMonth"
-  | "offtakeAchievementForTheMonth"
-  | "totalRevenueStreamMtd";
+  | "offtakeAchievementForTheMonth";
 
 function sumField(branches: BranchReport[], key: SummableKey): number | null {
   let total = 0;
@@ -129,21 +132,18 @@ function buildAllBranchesRow(branches: BranchReport[]): BranchReport {
     gusRoMtd: sumField(branches, "gusRoMtd"),
     gusPartsMtd: sumField(branches, "gusPartsMtd"),
     gusLabourMtd: sumField(branches, "gusLabourMtd"),
-    spoTGloss: sumField(branches, "spoTGloss"),
     vasAchievementForTheMonth: sumField(branches, "vasAchievementForTheMonth"),
     bpuPartsMtd: sumField(branches, "bpuPartsMtd"),
     bpuLabourMtd: sumField(branches, "bpuLabourMtd"),
     bpuRoMtd: sumField(branches, "bpuRoMtd"),
     partsRetailAchievementForTheMonth: sumField(branches, "partsRetailAchievementForTheMonth"),
     offtakeAchievementForTheMonth: sumField(branches, "offtakeAchievementForTheMonth"),
-    totalRevenueStreamMtd: sumField(branches, "totalRevenueStreamMtd"),
   };
 }
 
-// Central, then South, then North — same order as REGIONS itself
-// (2026-09-21, at the user's request, replacing the old alphabetical sort).
-// A branch with no region (shouldn't happen with real BA Tool data) sorts
-// after every real region, alphabetical within its own group either way.
+// Central, then South, then North — same order as REGIONS itself. A branch
+// with no region sorts after every real region, alphabetical within its own
+// group either way.
 const REGION_ORDER: RegionName[] = Object.keys(REGIONS) as RegionName[];
 
 function regionSort(a: BranchReport, b: BranchReport): number {
@@ -156,7 +156,23 @@ function regionSort(a: BranchReport, b: BranchReport): number {
 }
 
 export function RevenuePerVehicleTable({ branches }: { branches: BranchReport[] }) {
-  const rows = [...branches].sort(regionSort);
-  const withTotal = rows.length > 0 ? [buildAllBranchesRow(branches), ...rows] : rows;
-  return <SectionTable title="Revenue Per Vehicle — MTD" subtitle="each stream ÷ its own RO count" branches={withTotal} columns={COLUMNS} />;
+  const generalBranches = branches.filter((b) => !isBodyPaintOnly(b.branch));
+  const bpOnlyBranches = branches.filter((b) => isBodyPaintOnly(b.branch));
+
+  const rows = [...generalBranches].sort(regionSort);
+  const withTotal = rows.length > 0 ? [buildAllBranchesRow(generalBranches), ...rows] : rows;
+
+  return (
+    <div className="space-y-3">
+      <SectionTable title="Revenue Per Vehicle — MTD" subtitle="each stream ÷ its own RO count" branches={withTotal} columns={COLUMNS} />
+      {bpOnlyBranches.length > 0 ? (
+        <SectionTable
+          title="Revenue Per Vehicle — MTD (Body & Paint only)"
+          subtitle="BPU stream only — ranked separately, not comparable to a mixed branch's"
+          branches={[...bpOnlyBranches].sort((a, b) => a.branch.localeCompare(b.branch))}
+          columns={BP_ONLY_COLUMNS}
+        />
+      ) : null}
+    </div>
+  );
 }

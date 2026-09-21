@@ -8,7 +8,6 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
-import { RevenuePerCarLeaderboard } from "../dashboard/revenue-per-car-leaderboard";
 import { RevenuePerVehicleTable } from "../dashboard/revenue-per-vehicle-table";
 
 export default async function BranchesPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
@@ -76,12 +75,8 @@ async function BranchesContent({
         isCompanyScope={data.isCompanyScope}
       />
       <div className="mt-4 space-y-4">
-        <RevenuePerCarLeaderboard
-          branches={data.filteredBranches}
-          highlightBranch={admin.role === "branch" ? admin.branch : null}
-        />
-        <BranchPerformanceHeatmap branches={data.filteredBranches} />
         <RevenuePerVehicleTable branches={data.filteredBranches} />
+        <BranchPerformanceHeatmap branches={data.filteredBranches} />
       </div>
     </div>
   );
