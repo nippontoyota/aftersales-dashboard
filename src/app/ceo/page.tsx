@@ -76,8 +76,9 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         asOfLabel={uploadedAtLabel}
       />
 
-      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <RevenueTile value={group.hero.totalRevenueStreamMtd} />
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <RevenueTile label="Total Revenue · MTD" value={group.hero.totalRevenueStreamMtd} sub="No revenue target configured yet" />
+        <RevenueTile label="Profit · MTD" value={group.hero.profitMtd} sub="Modelled from fixed margin assumptions" />
         <UtilizationTile
           label="GS Bay Utilization"
           sub="General Service"
@@ -123,17 +124,19 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         days ({data.workingDaysElapsed} so far this month) — pace-adjusted, not a flat monthly-target %. GS ideal capacity
         is bays × 5.85 jobs/bay/day; BP ideal capacity comes from each branch&apos;s 2025 job-mix-weighted cycle-time model.
         Revenue = GUS + BPU parts &amp; labour + External Sales + scrap/used oil, no target yet configured for this view.
+        Profit is a modelled figure, not an audited number: 20% of GUS + BPU Parts, 100% of GUS + BPU Labour, 20% of
+        External Sales, and 100% of scrap/used-oil revenue.
       </p>
     </div>
   );
 }
 
-function RevenueTile({ value }: { value: number | null }) {
+function RevenueTile({ label, value, sub }: { label: string; value: number | null; sub: string }) {
   return (
     <div className="rounded-xl border border-accent/30 bg-accent-soft/40 p-5 shadow-card">
-      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-fg-faint">Total Revenue · MTD</div>
+      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-fg-faint">{label}</div>
       <div className="mt-1.5 text-3xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(value)}</div>
-      <div className="mt-2 text-[11px] text-fg-faint">No revenue target configured yet</div>
+      <div className="mt-2 text-[11px] text-fg-faint">{sub}</div>
     </div>
   );
 }
@@ -186,7 +189,10 @@ function RegionCard({ region, date }: { region: CeoRegionRollup; date: string })
         </span>
         <span className="text-[11px] text-fg-faint">{region.branches.length} branches</span>
       </div>
-      <div className="mt-3 text-lg font-semibold tabular-nums text-fg">{formatCompactCurrency(region.hero.totalRevenueStreamMtd)}</div>
+      <div className="mt-3 flex items-baseline gap-2">
+        <span className="text-lg font-semibold tabular-nums text-fg">{formatCompactCurrency(region.hero.totalRevenueStreamMtd)}</span>
+        <span className="text-[11px] text-fg-subtle">· {formatCompactCurrency(region.hero.profitMtd)} profit</span>
+      </div>
       <div className="mt-3 space-y-1.5">
         <UtilizationBar label="GS" pct={region.utilization.gs?.utilizationPct ?? null} tone={gsTone} />
         <UtilizationBar label="BP" pct={region.utilization.bp?.utilizationPct ?? null} tone={bpTone} />

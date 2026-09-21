@@ -99,6 +99,7 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
             <tr className="[&>th]:border-b [&>th]:border-border">
               <th className="bg-surface py-2.5 pl-5 pr-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">Branch</th>
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Revenue MTD</th>
+              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Profit MTD</th>
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GS ROs</th>
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GS Utilization</th>
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">BP ROs</th>
@@ -113,6 +114,7 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
                 <tr key={branch.branch} className="border-t border-border-subtle hover:bg-surface-2/40">
                   <td className="whitespace-nowrap py-2 pl-5 pr-3 font-semibold text-fg">{branch.branch}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(branch.totalRevenueStreamMtd)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(branch.profitMtd)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{gs ? formatCompact(gs.actualRoMtd) : "—"}</td>
                   <td className={`px-4 py-2 text-right tabular-nums font-semibold ${TONE_TEXT[gsTone]}`}>
                     {gs ? formatPercent(gs.utilizationPct) : "—"}

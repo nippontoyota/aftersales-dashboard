@@ -155,6 +155,15 @@ export type BranchReport = {
   // resurrects a null total.
   totalRevenueStreamMtd: number | null;
   externalSalesPctOfSprInternal: number | null;
+
+  // Profit MTD (Rs) — a modelled figure from fixed margin assumptions the
+  // user gave directly (2026-09-21), not a books-reconciled accounting
+  // number: 20% of GUS Parts + 20% of BPU Parts + 100% of GUS Labour + 100%
+  // of BPU Labour + 20% of External Sales + 100% of scrap/used-oil revenue.
+  // Same null-guard as totalRevenueStreamMtd — null unless the five BA-Tool
+  // inputs are present; scrap/used-oil (always numeric) never resurrect a
+  // null total on their own. Used only by the CEO dashboard for now.
+  profitMtd: number | null;
 };
 
 export type Report = {
@@ -478,6 +487,17 @@ function computeBranchReport(
     externalSalesPctOfSprInternal:
       externalSalesMtd !== null && partsRetailAchievementForTheMonth !== null
         ? ratio(externalSalesMtd, partsRetailAchievementForTheMonth + externalSalesMtd)
+        : null,
+
+    profitMtd:
+      gusPartsMtd !== null && gusLabourMtd !== null && bpuPartsMtd !== null && bpuLabourMtd !== null && externalSalesMtd !== null
+        ? 0.2 * gusPartsMtd +
+          0.2 * bpuPartsMtd +
+          gusLabourMtd +
+          bpuLabourMtd +
+          0.2 * externalSalesMtd +
+          billRevenue.scrapRevenue +
+          billRevenue.usedOilRevenue
         : null,
   };
 }

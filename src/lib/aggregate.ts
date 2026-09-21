@@ -130,6 +130,8 @@ export type HeroSummary = {
   usedOilRevenueMtd: number | null;
   /** GUS Parts+Labour + BPU Parts+Labour + External Sales + scrap + used oil, MTD — the grand-total figure from the user's Revenue Stream reference, plus bill revenue. */
   totalRevenueStreamMtd: number | null;
+  /** Modelled profit MTD from fixed margin assumptions — see BranchReport.profitMtd in report.ts. */
+  profitMtd: number | null;
 };
 
 export function computeHeroSummary(branches: BranchReport[]): HeroSummary {
@@ -147,6 +149,7 @@ export function computeHeroSummary(branches: BranchReport[]): HeroSummary {
     scrapRevenueMtd: sumField(branches, "scrapRevenueMtd"),
     usedOilRevenueMtd: sumField(branches, "usedOilRevenueMtd"),
     totalRevenueStreamMtd: sumField(branches, "totalRevenueStreamMtd"),
+    profitMtd: sumField(branches, "profitMtd"),
   };
 }
 
