@@ -128,7 +128,7 @@ export async function POST(request: Request) {
     }
 
     if (type === "part-sale") {
-      const { counts, rawRows } = parsePartSaleWorkbook(buffer);
+      const { counts, rawRows } = await parsePartSaleWorkbook(buffer, branch, date);
       await savePartSaleSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts });
       await saveRawUploadRows({ reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
       return NextResponse.json({ success: true, type, date, branch, counts });

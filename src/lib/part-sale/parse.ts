@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { eligibleSameMonthFTypeRefDocs } from "./external-sales-eligibility";
 
 /**
  * Part Sale Report — one row per part sold. Unlike Service Info Report,
@@ -44,6 +45,14 @@ const BRAKE_CLEANING_SPRAY_PARTS = ["Z-9BCHP-00001"];
  * on file so far has an `A`-type RefDocNo. */
 const EXTERNAL_SALES_BILL_TYPE = "A";
 const EXTERNAL_SALES_RETURN_BILL_TYPE = "F";
+
+/** Whether an F-type row's original A-type bill is eligible to net against
+ * External Sales — same-calendar-month bills only (see
+ * external-sales-eligibility.ts). Defaults to "nothing is eligible" so a
+ * caller that forgets to supply a real resolver fails safe (excludes,
+ * doesn't wrongly include); the async `parsePartSaleWorkbook` path always
+ * supplies the real one. */
+export type FTypeEligibility = (refDocNo: string) => boolean;
 
 /** Opulent Auto Care Pvt Ltd is a vendor (buys parts from us for their own
  * use), not a revenue-generating customer — its rows never count toward
@@ -97,10 +106,12 @@ function toQty(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function isExternalSalesRow(billNo: string, refDocNo: string): boolean {
+function isExternalSalesRow(billNo: string, refDocNo: string, isFTypeEligible: FTypeEligibility): boolean {
   const billType = billNo.charAt(0).toUpperCase();
   if (billType === EXTERNAL_SALES_BILL_TYPE) return true;
-  if (billType === EXTERNAL_SALES_RETURN_BILL_TYPE) return refDocNo.charAt(0).toUpperCase() === EXTERNAL_SALES_BILL_TYPE;
+  if (billType === EXTERNAL_SALES_RETURN_BILL_TYPE) {
+    return refDocNo.charAt(0).toUpperCase() === EXTERNAL_SALES_BILL_TYPE && isFTypeEligible(refDocNo);
+  }
   return false;
 }
 
@@ -170,7 +181,10 @@ export type ParsedPartSale = {
   rawRows: Record<string, unknown>[];
 };
 
-export function parsePartSaleWorkbook(buffer: Buffer): ParsedPartSale {
+/** Parses the workbook into rows only — no counting — so the caller can
+ * build the F-type eligibility resolver (needs branch + upload date) before
+ * running the actual counts. */
+export function parsePartSaleRows(buffer: Buffer): Record<string, unknown>[] {
   const workbook = XLSX.read(looksBinaryWorkbook(buffer) ? buffer : repairCsvQuotes(buffer), { type: "buffer" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
@@ -182,12 +196,35 @@ export function parsePartSaleWorkbook(buffer: Buffer): ParsedPartSale {
     throw new Error(`Expected "${PART_NO_COLUMN}" and "${SALE_QTY_COLUMN}" columns — is this a Part Sale Report export?`);
   }
 
-  return { counts: partSaleCountsFromRows(rows), rawRows: rows };
+  return rows;
+}
+
+export async function parsePartSaleWorkbook(buffer: Buffer, branch: string, uploadDate: string): Promise<ParsedPartSale> {
+  const rows = parsePartSaleRows(buffer);
+  const isFTypeEligible = await buildFTypeEligibility(branch, uploadDate, rows);
+  return { counts: partSaleCountsFromRows(rows, isFTypeEligible), rawRows: rows };
+}
+
+async function buildFTypeEligibility(
+  branch: string,
+  uploadDate: string,
+  rows: Record<string, unknown>[]
+): Promise<FTypeEligibility> {
+  const refDocNos = rows
+    .filter((row) => normalizePart(row[BILL_NO_COLUMN]).charAt(0).toUpperCase() === EXTERNAL_SALES_RETURN_BILL_TYPE)
+    .map((row) => normalizePart(row[REF_DOC_NO_COLUMN]));
+  const eligible = await eligibleSameMonthFTypeRefDocs(branch, uploadDate, refDocNos);
+  return (refDocNo: string) => eligible.has(refDocNo);
 }
 
 /** The counting, split out from the workbook read so a re-parse can run
- * straight off the stored `raw_upload_rows` (see scripts/backfill-part-sale-*). */
-export function partSaleCountsFromRows(rows: Record<string, unknown>[]): PartSaleCounts {
+ * straight off the stored `raw_upload_rows` (see scripts/backfill-part-sale-*).
+ * `isFTypeEligible` decides, per RefDocNo, whether an F-type return's
+ * original A-type bill is in the same month as this upload (see
+ * external-sales-eligibility.ts) — callers must supply the real resolver;
+ * there's no permissive default, so a caller that forgets it fails loud
+ * rather than silently over- or under-counting. */
+export function partSaleCountsFromRows(rows: Record<string, unknown>[], isFTypeEligible: FTypeEligibility): PartSaleCounts {
   let engineFlush = 0;
   let injectorCleaner = 0;
   let syntheticOilRaw = 0;
@@ -207,7 +244,7 @@ export function partSaleCountsFromRows(rows: Record<string, unknown>[]): PartSal
     const billNo = normalizePart(row[BILL_NO_COLUMN]);
     const refDocNo = normalizePart(row[REF_DOC_NO_COLUMN]);
     const customerName = normalizePart(row[CUSTOMER_NAME_COLUMN]);
-    if (isExternalSalesRow(billNo, refDocNo) && !isExcludedCustomer(customerName)) {
+    if (isExternalSalesRow(billNo, refDocNo, isFTypeEligible) && !isExcludedCustomer(customerName)) {
       externalSales += toQty(row[NET_AMNT_COLUMN]);
     }
 

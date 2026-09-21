@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
   let counts, rawRows;
   try {
-    ({ counts, rawRows } = parsePartSaleWorkbook(buffer));
+    ({ counts, rawRows } = await parsePartSaleWorkbook(buffer, admin.branch, date));
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
