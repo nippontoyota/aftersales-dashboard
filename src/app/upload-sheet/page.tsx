@@ -17,6 +17,7 @@ export default async function UploadSheetPage({
   if (admin?.role === "vp_service") redirect("/vp");
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
+  if (admin?.role === "hq_viewer") redirect("/dashboard");
   if (!admin || admin.role !== "hq") {
     redirect("/upload");
   }

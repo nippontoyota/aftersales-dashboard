@@ -68,7 +68,7 @@ export default async function TkmTargetsPage({ searchParams }: { searchParams: P
   // Company-wide tools are HQ-only now — branch / regional get everything on
   // their own dashboard (slim nav, so there is no link here anyway; this
   // covers a bookmark or typed URL).
-  if (admin.role !== "hq") redirect("/dashboard");
+  if (admin.role !== "hq" && admin.role !== "hq_viewer") redirect("/dashboard");
   const identity = adminIdentityLabel(admin);
 
   return (

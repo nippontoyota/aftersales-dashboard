@@ -22,7 +22,7 @@ export default async function BranchesPage({ searchParams }: { searchParams: Pro
   // Company-wide tools are HQ-only now — branch / regional get everything on
   // their own dashboard (slim nav, so there is no link here anyway; this
   // covers a bookmark or typed URL).
-  if (admin.role !== "hq") redirect("/dashboard");
+  if (admin.role !== "hq" && admin.role !== "hq_viewer") redirect("/dashboard");
   const identity = adminIdentityLabel(admin);
 
   return (
