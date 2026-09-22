@@ -100,21 +100,21 @@ async function Overview({
         asOfLabel={uploadedAtLabel}
       />
 
-      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map((c) => (
           <div
             key={c.label}
-            className={`rounded-xl border p-4 shadow-card ${c.accent ? "border-accent/30 bg-accent-soft/40" : "border-border bg-surface"}`}
+            className={`rounded-2xl border border-border-subtle bg-surface p-6 ${c.accent ? "border-t-2 border-t-accent" : ""}`}
           >
-            <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-fg-faint">{c.label}</div>
+            <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">{c.label}</div>
             <div
-              className={`mt-1.5 text-2xl font-semibold tabular-nums tracking-tight ${
+              className={`mt-2 text-[28px] font-semibold tabular-nums tracking-tight ${
                 c.tone === "critical" ? "text-bad" : c.tone === "warn" ? "text-warn" : c.tone === "good" ? "text-good" : "text-fg"
               }`}
             >
               {c.value}
             </div>
-            {c.sub ? <div className="mt-0.5 text-[11px] text-fg-subtle">{c.sub}</div> : null}
+            {c.sub ? <div className="mt-1 text-[12px] text-fg-subtle">{c.sub}</div> : null}
           </div>
         ))}
       </div>
