@@ -52,7 +52,7 @@ const DEFAULT_METRICS: RankingMetricConfig[] = [
   { key: "injectorCleanerMtd", label: "Injector Cleaner MTD" },
   { key: "syntheticOilMtd", label: "Synthetic Oil (Ltrs) MTD" },
   { key: "brakeCleaningSprayMtd", label: "Brake Cleaning Spray MTD" },
-  { key: "vasAchievementForTheMonth", label: "VAS Achievement MTD (Rs)" },
+  { key: "vasAchievementForTheMonth", label: "T-Gloss Achievement MTD (Rs)" },
   { key: "externalSalesMtd", label: "External Sales MTD (Rs)" },
   { key: "scrapRevenueMtd", label: "Scrap Revenue MTD (Rs)" },
   { key: "usedOilRevenueMtd", label: "Used Oil Revenue MTD (Rs)" },

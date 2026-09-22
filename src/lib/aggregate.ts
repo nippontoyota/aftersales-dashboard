@@ -224,6 +224,6 @@ export const TKM_TRACKED_KPIS: TrackedKpi[] = [
  * (everything else moved to TKM_TRACKED_KPIS above, 2026-08-31) — used by
  * the Insights panel to know which KPIs to reason about. */
 export const TRACKED_KPIS: TrackedKpi[] = [
-  { key: "vas", label: "VAS Achievement", actual: "vasAchievementForTheMonth", target: "vasBillTarget" },
+  { key: "vas", label: "T-Gloss Achievement", actual: "vasAchievementForTheMonth", target: "vasBillTarget" },
   { key: "tGloss", label: "T-Gloss Penetration", actual: "penetrationTGlossService", target: FIXED_TGLOSS_TARGET },
 ];

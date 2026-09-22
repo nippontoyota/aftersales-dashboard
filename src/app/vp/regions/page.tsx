@@ -26,7 +26,7 @@ const METRICS: {
   { key: "gusro", label: "GUS RO MTD", fmt: "num", get: (r) => r.hero.gusRoMtd },
   { key: "bpuro", label: "BPU RO MTD", fmt: "num", get: (r) => r.hero.bpuRoMtd },
   { key: "ext", label: "External Sales MTD", fmt: "rs", get: (r) => r.hero.externalSalesMtd },
-  { key: "vaspct", label: "VAS achievement %", fmt: "pct", get: (r) => achievementRatio(r.kpis.vasAchievementForTheMonth, r.kpis.vasBillTarget) },
+  { key: "vaspct", label: "T-Gloss achievement %", fmt: "pct", get: (r) => achievementRatio(r.kpis.vasAchievementForTheMonth, r.kpis.vasBillTarget) },
 ];
 
 function fmt(v: number | null, kind: "num" | "rs" | "pct"): string {

@@ -251,7 +251,7 @@ export function HeroKpiStrip({
         <RichKpiCard
           icon={<StorefrontIcon />}
           color="indigo"
-          label="VAS Achievement"
+          label="T-Gloss Achievement"
           value={formatCompactCurrency(kpis.vasAchievementForTheMonth)}
           actual={kpis.vasAchievementForTheMonth}
           target={kpis.vasBillTarget}

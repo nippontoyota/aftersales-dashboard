@@ -37,7 +37,7 @@ const ROWS: Row[] = [
   { kind: "group", label: "VAS Bill · modelled" },
   { kind: "metric", label: "VAS bill — MTD", fmt: "rs", get: (c) => c.kpis.vasAchievementForTheMonth },
   { kind: "metric", label: "VAS bill — Target", fmt: "rs", get: (c) => c.kpis.vasBillTarget },
-  { kind: "metric", label: "VAS achievement", fmt: "pct", bar: true, get: (c) => achievementRatio(c.kpis.vasAchievementForTheMonth, c.kpis.vasBillTarget) },
+  { kind: "metric", label: "T-Gloss achievement", fmt: "pct", bar: true, get: (c) => achievementRatio(c.kpis.vasAchievementForTheMonth, c.kpis.vasBillTarget) },
 
   { kind: "group", label: "Revenue Stream" },
   { kind: "metric", label: "External Sales — MTD", fmt: "rs", get: (c) => c.hero.externalSalesMtd },
