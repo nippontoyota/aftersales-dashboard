@@ -1,12 +1,4 @@
-import {
-  aggregateBpUtilization,
-  aggregateGsUtilization,
-  BP_BAYS,
-  bpBayUtilization,
-  gsBayUtilization,
-  GS_BAYS,
-  type BayUtilization,
-} from "./bay-capacity";
+import { BP_BAYS, bpBayUtilization, gsBayUtilization, GS_BAYS, sumBayUtilization, type BayUtilization } from "./bay-capacity";
 import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, grossProfitPerRo, type HeroSummary, type KpiSummary } from "./aggregate";
 import { REGIONS, type RegionName } from "./regions";
 import { loadReportHolidaySet } from "./report-holidays/store";
@@ -106,10 +98,14 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * flagging noise on a day or two of normal variance. */
 const CALLOUT_THRESHOLD = 0.85;
 
-function rollupUtilization(branches: BranchReport[], workingDaysElapsed: number): CeoUtilization {
+/** Sums already-computed per-branch utilizations (see CeoBranchRow) — never
+ * recomputes gsBayUtilization/bpBayUtilization from raw branch data, so a
+ * branch's numbers are computed exactly once and reused for its own row,
+ * its region's rollup, and the group rollup alike. */
+function rollupUtilization(rows: CeoBranchRow[]): CeoUtilization {
   return {
-    gs: aggregateGsUtilization(branches.map((b) => ({ branch: b.branch, gusRoMtd: b.gusRoMtd })), workingDaysElapsed),
-    bp: aggregateBpUtilization(branches.map((b) => ({ branch: b.branch, bpuRoMtd: b.bpuRoMtd })), workingDaysElapsed),
+    gs: sumBayUtilization(rows.map((r) => r.gs)),
+    bp: sumBayUtilization(rows.map((r) => r.bp)),
   };
 }
 
@@ -160,14 +156,20 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
 
   const workingDaysElapsed = workingDaysElapsedInMonth(date, holidays);
 
+  // Each branch's BayUtilization is computed exactly once here, then reused
+  // for its region's rollup below and the group rollup further down — see
+  // rollupUtilization's doc comment.
+  const allRows: CeoBranchRow[] = report.branches.map((branch) => ({
+    branch,
+    gs: GS_BAYS[branch.branch] ? gsBayUtilization(branch.branch, branch.gusRoMtd, workingDaysElapsed) : null,
+    bp: BP_BAYS[branch.branch] ? bpBayUtilization(branch.branch, branch.bpuRoMtd, workingDaysElapsed) : null,
+  }));
+  const rowsByBranch = new Map(allRows.map((r) => [r.branch.branch, r]));
+
   const regions: CeoRegionRollup[] = (Object.keys(REGIONS) as RegionName[]).map((region) => {
     const branches = filterBranchesByRegion(report.branches, region);
-    const rows: CeoBranchRow[] = branches.map((branch) => ({
-      branch,
-      gs: GS_BAYS[branch.branch] ? gsBayUtilization(branch.branch, branch.gusRoMtd, workingDaysElapsed) : null,
-      bp: BP_BAYS[branch.branch] ? bpBayUtilization(branch.branch, branch.bpuRoMtd, workingDaysElapsed) : null,
-    }));
-    return { region, branches: rows, hero: computeHeroSummary(branches), utilization: rollupUtilization(branches, workingDaysElapsed) };
+    const rows = branches.map((branch) => rowsByBranch.get(branch.branch)!);
+    return { region, branches: rows, hero: computeHeroSummary(branches), utilization: rollupUtilization(rows) };
   });
 
   const gsRoTrend = computeTrendSeries(monthSnapshots, "All", "gus").map((p) => ({ date: p.date, actual: p.actual }));
@@ -182,7 +184,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     group: {
       hero: groupHero,
       kpis: computeKpiSummary(report.branches),
-      utilization: rollupUtilization(report.branches, workingDaysElapsed),
+      utilization: rollupUtilization(allRows),
       profit: computeProfitBreakdown(groupHero),
     },
     regions,

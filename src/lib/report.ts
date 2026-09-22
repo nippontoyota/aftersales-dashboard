@@ -385,6 +385,7 @@ function computeBranchReport(
   const partsRetailAchievementForTheMonth = t("sprInternal");
 
   const gusRoMtd = t("gus");
+  const bpuRoMtd = t("bpus");
   const vasBillTarget = gusRoMtd !== null ? gusRoMtd * VAS_BILL_TARGET_RO_SHARE * VAS_BILL_TARGET_PER_RO : null;
   const vasAchievementForTheMonth = sumBy(serviceInfoMonth, (s) => s.counts.vasRevenue);
 
@@ -414,7 +415,7 @@ function computeBranchReport(
     gusRoMtd,
 
     bpuRoBilledForTheDay: delta(t("bpus"), y("bpus")),
-    bpuRoMtd: t("bpus"),
+    bpuRoMtd,
 
     // "Tyre Actual"/"Battery Actuals" are already MTD-as-of-today in the BA
     // Tool file, same convention as GUS/BPUS/SPO Dealer/etc — read straight
@@ -534,8 +535,8 @@ function computeBranchReport(
         ? (gusLabourMtd + 0.2 * gusPartsMtd) / gusRoMtd
         : null,
     bpGrossProfitPerRoMtd:
-      bpuLabourMtd !== null && bpuPartsMtd !== null && t("bpus") !== null && t("bpus") !== 0
-        ? (bpuLabourMtd + 0.2 * bpuPartsMtd) / t("bpus")!
+      bpuLabourMtd !== null && bpuPartsMtd !== null && bpuRoMtd !== null && bpuRoMtd !== 0
+        ? (bpuLabourMtd + 0.2 * bpuPartsMtd) / bpuRoMtd
         : null,
   };
 }
