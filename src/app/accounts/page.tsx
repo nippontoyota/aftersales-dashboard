@@ -8,6 +8,7 @@ import { achievementRatio } from "@/lib/aggregate";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { requireAccountsAccess } from "./accounts-guard";
 import { AccountsHeader } from "./accounts-header";
+import { DraftWarning } from "@/components/draft-warning";
 
 const REGION_COLOR: Record<AccountsRegionRollup["region"], string> = {
   Central: "var(--color-cat-central)",
@@ -66,6 +67,9 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
 
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-8">
+      {!data.isPublished && (
+        <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} />
+      )}
       <AccountsHeader
         eyebrow="Nippon Group · Accounts"
         title="Executive Overview"

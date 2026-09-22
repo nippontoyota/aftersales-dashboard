@@ -14,6 +14,7 @@ import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatma
 import { MetricSyncProvider } from "../dashboard/metric-sync";
 import { RegionScorecard } from "../dashboard/region-scorecard";
 import { TrendChart } from "../dashboard/trend-chart";
+import { DraftWarning } from "@/components/draft-warning";
 import { requireCeoAccess } from "./ceo-guard";
 import { CeoHeader } from "./ceo-header";
 import { Sparkline } from "./sparkline";
@@ -95,6 +96,9 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
 
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-8">
+      {!data.isPublished && (
+        <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} />
+      )}
       <CeoHeader
         eyebrow="Nippon Group · Aftersales"
         title="Executive Overview"

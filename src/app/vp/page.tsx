@@ -9,6 +9,7 @@ import { FlagComposer } from "./flag-composer";
 import { requireVpAccess } from "./vp-guard";
 import { VpHeader } from "./vp-header";
 import { VpScoreboard } from "./vp-scoreboard";
+import { DraftWarning } from "@/components/draft-warning";
 
 export default async function VpOverviewPage({
   searchParams,
@@ -84,6 +85,9 @@ async function Overview({
 
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-8">
+      {!data.isPublished && (
+        <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} />
+      )}
       <VpHeader
         eyebrow="Nippon Group · Service"
         title="Executive Overview"

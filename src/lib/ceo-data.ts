@@ -5,6 +5,7 @@ import { loadReportHolidaySet } from "./report-holidays/store";
 import { workingDaysElapsedInMonth, workingDaysInMonth } from "./reporting-date";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { computeTrendSeries } from "./trend";
+import { isDatePublished } from "./publish-store";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
 import { loadIncentiveSlabTargets } from "./incentive-slabs/store";
 import { aggregateIncentiveSlabTargets } from "./incentive-slabs/aggregate";
@@ -106,6 +107,9 @@ export type CeoData = {
    * chart, and heatmap all need the raw month snapshots directly — same data
    * already loaded here for gsRoTrend/bpRoTrend, just also handed to the page. */
   monthSnapshots: Snapshot[];
+  isPublished: boolean;
+  uploadedBranchCount: number;
+  totalBranchCount: number;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -151,12 +155,14 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
 
   const month = date.substring(0, 7);
 
-  const [report, holidays, monthSnapshots, slabTargets] = await Promise.all([
+  const [report, holidays, monthSnapshots, slabTargets, published] = await Promise.all([
     buildReport(date),
     loadReportHolidaySet(),
     loadSnapshotsForMonthUpTo(date),
     loadIncentiveSlabTargets(month),
+    isDatePublished(date),
   ]);
+
   if (!report) {
     return {
       date,
@@ -170,6 +176,9 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
       bpRoTrend: [],
       callout: null,
       monthSnapshots: [],
+      isPublished: published,
+      uploadedBranchCount: 0,
+      totalBranchCount: 18,
     };
   }
 
@@ -211,6 +220,8 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     report.branches.map((b) => b.branch)
   );
 
+  const hasCo01c = report.branches.some((b) => b.branch === "CO01C");
+
   return {
     date,
     dates,
@@ -235,5 +246,8 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     bpRoTrend,
     callout: buildCallout(regions),
     monthSnapshots,
+    isPublished: published,
+    uploadedBranchCount: report.branches.length,
+    totalBranchCount: 18 + (hasCo01c ? 1 : 0),
   };
 }
