@@ -40,7 +40,7 @@ export function BranchLeaderboard({ branches, date }: { branches: BranchReport[]
           <Link
             key={b.branch}
             href={`/vp/branches?date=${date}&branch=${b.branch}`}
-            className="group rounded-xl border border-border bg-surface p-4 shadow-card transition-colors hover:border-border-strong hover:bg-surface-2/40"
+            className="group rounded-2xl border border-border-subtle bg-surface p-5 transition-colors hover:border-border-strong hover:bg-surface-2/30"
           >
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-2 text-sm font-semibold text-fg">
@@ -53,7 +53,7 @@ export function BranchLeaderboard({ branches, date }: { branches: BranchReport[]
             <div className="mt-3 text-xl font-semibold tabular-nums tracking-tight text-fg">
               {formatCompactCurrency(total)}
             </div>
-            <div className="text-[11px] uppercase tracking-[0.06em] text-fg-faint">Total revenue · MTD</div>
+            <div className="text-[10.5px] uppercase tracking-[0.1em] text-fg-faint">Total revenue · MTD</div>
 
             <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
               <Stat label="GUS RO" value={b.gusRoMtd?.toLocaleString("en-IN") ?? "—"} />
