@@ -2,7 +2,7 @@ import { BP_BAYS, bpBayUtilization, gsBayUtilization, GS_BAYS, sumBayUtilization
 import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, grossProfitPerRo, type HeroSummary, type KpiSummary } from "./aggregate";
 import { REGIONS, type RegionName } from "./regions";
 import { loadReportHolidaySet } from "./report-holidays/store";
-import { workingDaysElapsedInMonth } from "./reporting-date";
+import { workingDaysElapsedInMonth, workingDaysInMonth } from "./reporting-date";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { computeTrendSeries } from "./trend";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
@@ -80,7 +80,20 @@ export type CeoData = {
    * that's derived from `report` follows suit. */
   report: Report | null;
   workingDaysElapsed: number;
-  group: { hero: HeroSummary; kpis: KpiSummary; utilization: CeoUtilization; profit: CeoProfitBreakdown } | null;
+  group: {
+    hero: HeroSummary;
+    kpis: KpiSummary;
+    utilization: CeoUtilization;
+    profit: CeoProfitBreakdown;
+    /** GUS-for-the-month Target — GS bays x standard productivity/bay/day x
+     * *every* working day in the month (not just elapsed, unlike Bay
+     * Utilization's own ideal figure) — the same formula the user gave
+     * directly (2026-09-22), computed by reusing gsBayUtilization/
+     * sumBayUtilization with workingDaysInMonth in place of
+     * workingDaysElapsed rather than a separate formula. Null only when
+     * there's no report (see `report` above). */
+    gusMonthTarget: number | null;
+  } | null;
   regions: CeoRegionRollup[];
   revenueTrend: { date: string; actual: number | null }[];
   gsRoTrend: { date: string; actual: number | null }[];
@@ -156,6 +169,17 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
 
   const workingDaysElapsed = workingDaysElapsedInMonth(date, holidays);
 
+  // GUS-for-the-month Target: same per-branch formula as Bay Utilization's
+  // own ideal figure, just for every working day in the month rather than
+  // only the elapsed ones — gsBayUtilization's `workingDaysElapsed` param is
+  // really just "however many working days to project capacity for", so
+  // this reuses it (and sumBayUtilization for the group total) instead of
+  // duplicating the bays x productivity x days formula.
+  const monthDays = workingDaysInMonth(date, holidays);
+  const gusMonthTarget = sumBayUtilization(
+    report.branches.map((branch) => (GS_BAYS[branch.branch] ? gsBayUtilization(branch.branch, branch.gusRoMtd, monthDays) : null)),
+  )?.idealRoMtd ?? null;
+
   // Each branch's BayUtilization is computed exactly once here, then reused
   // for its region's rollup below and the group rollup further down — see
   // rollupUtilization's doc comment.
@@ -186,6 +210,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
       kpis: computeKpiSummary(report.branches),
       utilization: rollupUtilization(allRows),
       profit: computeProfitBreakdown(groupHero),
+      gusMonthTarget,
     },
     regions,
     // Total Revenue has no single BA Tool column (it's GUS+BPU parts/labour +

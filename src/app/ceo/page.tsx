@@ -75,6 +75,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
 
   const kpis = group.kpis;
   const pace = {
+    gus: computePace(data.date, kpis.gusRoMtd, group.gusMonthTarget),
     bpu: computePace(data.date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget),
     offtake: computePace(data.date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget),
     partsRetail: computePace(data.date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget),
@@ -83,6 +84,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
     battery: computePace(data.date, kpis.batterySalesForTheMonth, kpis.batteryTarget),
   };
   const tone = {
+    gus: paceTone(data.date, kpis.gusRoMtd, group.gusMonthTarget),
     bpu: paceTone(data.date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget),
     offtake: paceTone(data.date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget),
     partsRetail: paceTone(data.date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget),
@@ -219,11 +221,17 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
-          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">GUS for the Month</div>
-          <div className="mt-1.5 text-2xl font-semibold tabular-nums text-fg">{formatNumber(kpis.gusRoMtd)}</div>
-          <div className="mt-1 text-[11px] text-fg-faint">No target configured for this view yet</div>
-        </div>
+        <RichKpiCard
+          icon={<TargetIcon />}
+          color="red"
+          label="GUS for the Month"
+          value={formatNumber(kpis.gusRoMtd)}
+          actual={kpis.gusRoMtd}
+          target={group.gusMonthTarget}
+          hasPreviousUpload={data.report.hasPreviousSnapshot}
+          pace={pace.gus}
+          paceTone={tone.gus}
+        />
         <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
           <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Used Oil Revenue · MTD</div>
           <div className="mt-1.5 text-2xl font-semibold tabular-nums text-fg">{formatCompactCurrency(group.hero.usedOilRevenueMtd)}</div>
@@ -274,6 +282,8 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         Bay Utilization = actual GUS/BPU repair orders this month ÷ ideal capacity for the same number of elapsed working
         days ({data.workingDaysElapsed} so far this month) — pace-adjusted, not a flat monthly-target %. GS ideal capacity
         is bays × 5.85 jobs/bay/day; BP ideal capacity comes from each branch&apos;s 2025 job-mix-weighted cycle-time model.
+        GUS-for-the-Month Target = GS bays × 5.85 jobs/bay/day × every working day in the month (not just elapsed) —
+        same formula as Bay Utilization&apos;s ideal capacity, just for the whole month instead of pace-to-date.
         Revenue = GUS + BPU parts &amp; labour + External Sales + scrap/used oil, no target yet configured for this view.
         Gross Profit is a modelled figure, not an audited number: Total Parts Profit (20% of GUS + BPU Parts + External
         Sales) + Total Labour Profit (100% of GUS + BPU Labour) + TGLOSS Margin (38% of TGLOSS Revenue) + scrap/used-oil
