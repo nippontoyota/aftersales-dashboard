@@ -106,7 +106,15 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
       />
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <RevenueTile label="Total Revenue · MTD" value={group.hero.totalRevenueStreamMtd} sub="No revenue target configured yet" />
+        <RevenueTile
+          label="Total Revenue · MTD"
+          value={group.hero.totalRevenueStreamMtd}
+          sub={
+            group.revenueTargetSlabs
+              ? `Targets: S4: ${formatCompactCurrency(group.revenueTargetSlabs.slab4)} | S3: ${formatCompactCurrency(group.revenueTargetSlabs.slab3)} | S2: ${formatCompactCurrency(group.revenueTargetSlabs.slab2)} | S1: ${formatCompactCurrency(group.revenueTargetSlabs.slab1)}`
+              : "No revenue target configured yet"
+          }
+        />
         <RevenueTile label="Gross Profit · MTD" value={group.profit.grossProfitMtd} sub="Modelled from fixed margin assumptions" />
         <UtilizationTile
           label="GS Bay Utilization"
@@ -148,8 +156,8 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         ))}
       </div>
 
-      <h2 className="mt-8 text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">Group KPIs — MTD</h2>
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <h2 className="mt-10 text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">Group KPIs — MTD</h2>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <RichKpiCard
           icon={<WrenchIcon />}
           color="blue"
@@ -232,18 +240,18 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
           pace={pace.gus}
           paceTone={tone.gus}
         />
-        <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
-          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Used Oil Revenue · MTD</div>
-          <div className="mt-1.5 text-2xl font-semibold tabular-nums text-fg">{formatCompactCurrency(group.hero.usedOilRevenueMtd)}</div>
+        <div className="group relative overflow-hidden rounded-lg border border-border-subtle bg-surface/60 p-4 shadow-[0_4px_20px_rgb(0,0,0,0.02)] backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)]">
+          <div className="text-[10px] font-semibold tracking-wide text-fg-subtle">Used Oil Revenue · MTD</div>
+          <div className="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(group.hero.usedOilRevenueMtd)}</div>
         </div>
-        <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
-          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Other Scrap Revenue · MTD</div>
-          <div className="mt-1.5 text-2xl font-semibold tabular-nums text-fg">{formatCompactCurrency(group.hero.scrapRevenueMtd)}</div>
+        <div className="group relative overflow-hidden rounded-lg border border-border-subtle bg-surface/60 p-4 shadow-[0_4px_20px_rgb(0,0,0,0.02)] backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)]">
+          <div className="text-[10px] font-semibold tracking-wide text-fg-subtle">Other Scrap Revenue · MTD</div>
+          <div className="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(group.hero.scrapRevenueMtd)}</div>
         </div>
       </div>
 
-      <h2 className="mt-8 text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">Profit Breakdown — MTD</h2>
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <h2 className="mt-10 text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">Profit Breakdown — MTD</h2>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <ProfitTile label="Total Parts Profit" value={group.profit.partsProfitMtd} sub="20% of GUS + BPU Parts + External Sales" />
         <ProfitTile label="Total Labour Profit" value={group.profit.labourProfitMtd} sub="100% of GUS + BPU Labour" />
         <ProfitTile label="TGLOSS Margin" value={group.profit.tglossMarginMtd} sub="38% of TGLOSS Revenue" />
@@ -295,20 +303,26 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
 
 function RevenueTile({ label, value, sub }: { label: string; value: number | null; sub: string }) {
   return (
-    <div className="rounded-xl border border-accent/30 bg-accent-soft/40 p-5 shadow-card">
-      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-fg-faint">{label}</div>
-      <div className="mt-1.5 text-3xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(value)}</div>
-      <div className="mt-2 text-[11px] text-fg-faint">{sub}</div>
+    <div className="group relative overflow-hidden rounded-xl border border-accent/20 bg-accent-soft/30 bg-gradient-to-br from-accent/5 to-transparent p-5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+      <div className="text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">{label}</div>
+      <div className="mt-1.5 text-3xl font-semibold tabular-nums tracking-tighter text-fg">{formatCompactCurrency(value)}</div>
+      <div className="mt-2 text-[11px] text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">{sub}</div>
     </div>
   );
 }
 
 function ProfitTile({ label, value, sub, strong }: { label: string; value: number | null; sub: string; strong?: boolean }) {
   return (
-    <div className={`rounded-lg border p-4 shadow-card ${strong ? "border-accent/30 bg-accent-soft/30" : "border-border bg-surface"}`}>
-      <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">{label}</div>
-      <div className="mt-1.5 text-xl font-semibold tabular-nums text-fg">{formatCompactCurrency(value)}</div>
-      <div className="mt-1 text-[10.5px] text-fg-faint">{sub}</div>
+    <div
+      className={`group relative overflow-hidden rounded-lg border p-4 shadow-[0_4px_20px_rgb(0,0,0,0.02)] backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] ${
+        strong
+          ? "border-accent/20 bg-accent-soft/20 bg-gradient-to-br from-accent/5 to-transparent"
+          : "border-border-subtle bg-surface/60"
+      }`}
+    >
+      <div className="text-[10px] font-semibold tracking-wide text-fg-subtle">{label}</div>
+      <div className="mt-1.5 text-xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(value)}</div>
+      <div className="mt-1 text-[10.5px] text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">{sub}</div>
     </div>
   );
 }
@@ -326,21 +340,21 @@ function UtilizationTile({
 }) {
   const tone = achievementTone(utilization?.utilizationPct ?? null);
   return (
-    <div className="rounded-xl border border-border bg-surface p-5 shadow-card">
+    <div className="group relative overflow-hidden rounded-xl border border-border-subtle bg-surface/60 bg-gradient-to-br from-surface to-transparent p-5 shadow-[0_4px_20px_rgb(0,0,0,0.02)] backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)]">
       <div className="flex items-baseline justify-between">
-        <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-fg-faint">{label}</div>
-        <div className="text-[10px] text-fg-faint">{sub}</div>
+        <div className="text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">{label}</div>
+        <div className="text-[10px] text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">{sub}</div>
       </div>
-      <div className={`mt-1.5 text-3xl font-semibold tabular-nums tracking-tight ${TONE_TEXT[tone]}`}>
+      <div className={`mt-1.5 text-3xl font-semibold tabular-nums tracking-tighter ${TONE_TEXT[tone]}`}>
         {utilization ? formatPercent(utilization.utilizationPct) : "—"}
       </div>
       {utilization ? (
-        <div className="mt-1 text-[11px] text-fg-subtle">
+        <div className="mt-1 text-[11px] text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">
           {formatCompact(utilization.actualRoMtd)} ROs vs {formatCompact(utilization.idealRoMtd)} ideal
         </div>
       ) : null}
-      <div className={TONE_TEXT[tone]}>
-        <Sparkline points={trend} className="mt-2" />
+      <div className={`drop-shadow-sm ${TONE_TEXT[tone]}`}>
+        <Sparkline points={trend} className="mt-2 opacity-80 transition-opacity duration-200 group-hover:opacity-100" />
       </div>
     </div>
   );
@@ -352,20 +366,20 @@ function RegionCard({ region, date }: { region: CeoRegionRollup; date: string })
   return (
     <Link
       href={`/ceo/branches?date=${date}&region=${region.region}`}
-      className="block rounded-xl border border-border bg-surface p-4 shadow-card transition hover:border-accent/40 hover:bg-surface-2/40"
+      className="group block rounded-xl border border-border-subtle bg-surface/60 p-4 shadow-[0_4px_20px_rgb(0,0,0,0.02)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-accent/40 hover:bg-surface hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)]"
     >
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-semibold text-fg">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: REGION_COLOR[region.region] }} />
+        <span className="flex items-center gap-2 text-sm font-semibold tracking-tight text-fg">
+          <span className="h-2 w-2 rounded-full shadow-sm" style={{ background: REGION_COLOR[region.region] }} />
           {region.region}
         </span>
-        <span className="text-[11px] text-fg-faint">{region.branches.length} branches</span>
+        <span className="text-[11px] font-medium text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">{region.branches.length} branches</span>
       </div>
       <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-lg font-semibold tabular-nums text-fg">{formatCompactCurrency(region.hero.totalRevenueStreamMtd)}</span>
-        <span className="text-[11px] text-fg-subtle">· {formatCompactCurrency(region.hero.profitMtd)} profit</span>
+        <span className="text-xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(region.hero.totalRevenueStreamMtd)}</span>
+        <span className="text-[11px] text-fg-subtle transition-colors duration-200 group-hover:text-fg">· {formatCompactCurrency(region.hero.profitMtd)} profit</span>
       </div>
-      <div className="mt-3 space-y-1.5">
+      <div className="mt-4 space-y-2">
         <UtilizationBar label="GS" pct={region.utilization.gs?.utilizationPct ?? null} tone={gsTone} />
         <UtilizationBar label="BP" pct={region.utilization.bp?.utilizationPct ?? null} tone={bpTone} />
       </div>
@@ -377,10 +391,15 @@ function UtilizationBar({ label, pct, tone }: { label: string; pct: number | nul
   return (
     <div className="flex items-center gap-2 text-[11px]">
       <span className="w-6 shrink-0 font-medium text-fg-subtle">{label}</span>
-      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
-        <span className={`block h-full rounded-full ${TONE_BAR[tone]}`} style={{ width: `${Math.min(100, Math.round((pct ?? 0) * 100))}%` }} />
+      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2 shadow-inner">
+        <span
+          className={`block h-full rounded-full transition-all duration-1000 ease-out ${TONE_BAR[tone]}`}
+          style={{ width: `${Math.min(100, Math.round((pct ?? 0) * 100))}%` }}
+        />
       </span>
-      <span className={`w-9 shrink-0 text-right tabular-nums ${TONE_TEXT[tone]}`}>{pct === null ? "—" : `${Math.round(pct * 100)}%`}</span>
+      <span className={`w-9 shrink-0 text-right tabular-nums font-medium ${TONE_TEXT[tone]}`}>
+        {pct === null ? "—" : `${Math.round(pct * 100)}%`}
+      </span>
     </div>
   );
 }

@@ -6,6 +6,8 @@ import { workingDaysElapsedInMonth, workingDaysInMonth } from "./reporting-date"
 import { buildReport, type BranchReport, type Report } from "./report";
 import { computeTrendSeries } from "./trend";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
+import { loadIncentiveSlabTargets } from "./incentive-slabs/store";
+import { aggregateIncentiveSlabTargets } from "./incentive-slabs/aggregate";
 
 /**
  * The data foundation for the CEO executive view (/ceo). Company-wide only,
@@ -93,6 +95,7 @@ export type CeoData = {
      * workingDaysElapsed rather than a separate formula. Null only when
      * there's no report (see `report` above). */
     gusMonthTarget: number | null;
+    revenueTargetSlabs: { slab1: number; slab2: number; slab3: number; slab4: number } | null;
   } | null;
   regions: CeoRegionRollup[];
   revenueTrend: { date: string; actual: number | null }[];
@@ -146,10 +149,13 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
 
   const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
 
-  const [report, holidays, monthSnapshots] = await Promise.all([
+  const month = date.substring(0, 7);
+
+  const [report, holidays, monthSnapshots, slabTargets] = await Promise.all([
     buildReport(date),
     loadReportHolidaySet(),
     loadSnapshotsForMonthUpTo(date),
+    loadIncentiveSlabTargets(month),
   ]);
   if (!report) {
     return {
@@ -200,6 +206,11 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
   const bpRoTrend = computeTrendSeries(monthSnapshots, "All", "bpus").map((p) => ({ date: p.date, actual: p.actual }));
   const groupHero = computeHeroSummary(report.branches);
 
+  const aggregatedSlabs = aggregateIncentiveSlabTargets(
+    Object.fromEntries(slabTargets.entries()),
+    report.branches.map((b) => b.branch)
+  );
+
   return {
     date,
     dates,
@@ -211,6 +222,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
       utilization: rollupUtilization(allRows),
       profit: computeProfitBreakdown(groupHero),
       gusMonthTarget,
+      revenueTargetSlabs: aggregatedSlabs ?? null,
     },
     regions,
     // Total Revenue has no single BA Tool column (it's GUS+BPU parts/labour +
