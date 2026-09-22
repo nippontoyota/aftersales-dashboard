@@ -14,18 +14,20 @@ const NAV_ITEMS = [
   // `label` here is a fallback only — AppShell always overrides the dashboard
   // item's label with the `dashboardLabel` prop ("Executive Overview", or the
   // pre-publish "Daily Report" / "Regional Report").
-  { href: "/dashboard", label: "Executive Overview", key: "dashboard" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false },
-  { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false },
+  { href: "/dashboard", label: "Executive Overview", key: "dashboard" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false },
+  { href: "/tkm-targets", label: "TKM Targets", key: "tkm-targets" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false, alwaysVisible: false },
   // regionalVisible: shown even under slimNav for a regional admin — their
   // own HQ↔Regional query thread, unlike the other company-wide pages which
   // fold into the branch-first dashboard for them.
-  { href: "/queries", label: "Queries", key: "queries" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: true },
-  { href: "/branches", label: "Branch Performance", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false },
-  { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false },
-  // Not gated by publish (companyWide:false) — a branch admin should always be
-  // able to see its own cancellations; the page scopes rows to the account.
-  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false },
-  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false },
+  { href: "/queries", label: "Queries", key: "queries" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: true, alwaysVisible: false },
+  { href: "/branches", label: "Branch Performance", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false, alwaysVisible: false },
+  { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false, alwaysVisible: false },
+  // alwaysVisible: true — branch admins see their own bills and cancellations
+  // regardless of whether the latest date is published (these pages are about
+  // their own uploads, not the company-wide dashboard state).
+  { href: "/bills", label: "Bills", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true },
+  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true },
+  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false },
 ];
 
 /** The VP Service view (role `vp_service`) gets its own small nav and
@@ -67,7 +69,8 @@ type NavKey =
   | (typeof UTILITY_NAV_ITEMS)[number]["key"]
   | (typeof VP_NAV_ITEMS)[number]["key"]
   | (typeof CEO_NAV_ITEMS)[number]["key"]
-  | (typeof ACCOUNTS_NAV_ITEMS)[number]["key"];
+  | (typeof ACCOUNTS_NAV_ITEMS)[number]["key"]
+  | "bills";
 
 function DashboardIcon() {
   return (
@@ -116,6 +119,15 @@ function ReportsIcon() {
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
       <path d="M5 3.5h7l3 3v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z" strokeLinejoin="round" />
       <path d="M7 10h6M7 13h6M7 7h2.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function BillsIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <path d="M4 3.5h12a1 1 0 0 1 1 1v12l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5v-12a1 1 0 0 1 1-1z" strokeLinejoin="round" />
+      <path d="M7 8h6M7 11h4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -241,6 +253,7 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   queries: ChatIcon,
   branches: BranchesIcon,
   reports: ReportsIcon,
+  bills: BillsIcon,
   cancellations: CancellationsIcon,
   upload: UploadIcon,
   data: DataIcon,
@@ -324,7 +337,7 @@ export function AppShell({
     : NAV_ITEMS.filter(
         (item) =>
           (!item.requiresDashboard || showDashboardLink) &&
-          (!item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && isRegional)) &&
+          (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && isRegional)) &&
           (!item.uploadOnly || canUpload),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq && !vpNav && !ceoNav && !accountsNav ? UTILITY_NAV_ITEMS : [];
