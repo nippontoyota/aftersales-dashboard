@@ -51,6 +51,17 @@ const HISTORICAL_MONTH_END_EXCEPTIONS = new Set(["2026-01-31", "2026-02-28"]);
 
 /** Why a given date isn't a valid report date, or null if it is one. */
 export function invalidReportDateReason(iso: string, holidays: ReadonlySet<string>): string | null {
+  if (iso.startsWith("2025-")) {
+    const d = new Date(`${iso}T00:00:00Z`);
+    const year = d.getUTCFullYear();
+    const month = d.getUTCMonth();
+    const lastDayOfMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    if (d.getUTCDate() !== lastDayOfMonth) {
+      return "not a month-end — for 2025, only the last day of the month can be uploaded";
+    }
+    return null;
+  }
+
   if (HISTORICAL_MONTH_END_EXCEPTIONS.has(iso)) return null;
   if (holidays.has(iso)) return "flagged as a holiday";
   if (new Date(`${iso}T00:00:00Z`).getUTCDay() === SATURDAY) return "a Saturday — its data reaches us Monday, filed under the Sunday";
@@ -58,7 +69,7 @@ export function invalidReportDateReason(iso: string, holidays: ReadonlySet<strin
 }
 
 function isReportDate(iso: string, holidays: ReadonlySet<string>): boolean {
-  return !holidays.has(iso) && new Date(`${iso}T00:00:00Z`).getUTCDay() !== SATURDAY;
+  return invalidReportDateReason(iso, holidays) === null;
 }
 
 /**
