@@ -1,5 +1,7 @@
+"use client";
+
 import type { BranchReport } from "@/lib/report";
-import { isBodyPaintOnly } from "@/lib/report";
+import { isBodyPaintOnly } from "@/lib/body-paint-only";
 import { achievementRatio } from "@/lib/aggregate";
 import { regionForBranch } from "@/lib/regions";
 import { Board, type Row } from "./revenue-per-car-board";
@@ -28,11 +30,13 @@ import { Board, type Row } from "./revenue-per-car-board";
  * no RO count (or no revenue) yet this month for a given stream has no
  * ratio and drops out of that board's ranking.
  *
- * This half stays a server component — it calls the real isBodyPaintOnly
- * from @/lib/report, which (via that file's DB-backed neighbours) pulls in
- * server-only code. The interactive rendering (expand/collapse) lives in
- * revenue-per-car-board.tsx, a separate "use client" file that only ever
- * receives plain Row[] data, never a @/lib/report import.
+ * A client component (2026-09-22, previously server-only to avoid pulling
+ * report.ts's DB-backed code into the client bundle via isBodyPaintOnly) —
+ * now imports isBodyPaintOnly from body-paint-only.ts instead, which has no
+ * server-only dependencies, so Executive Overview's scoped wrapper
+ * (scoped-overview.tsx) can re-render this on the client as the Hero
+ * Figures scope changes. The interactive rendering (expand/collapse) still
+ * lives in revenue-per-car-board.tsx.
  */
 function revenuePerCar(parts: number | null, labour: number | null, roCount: number | null): number | null {
   const revenue = parts !== null || labour !== null ? (parts ?? 0) + (labour ?? 0) : null;

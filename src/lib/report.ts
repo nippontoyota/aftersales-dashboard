@@ -11,6 +11,7 @@ import type { CancelledAccessoriesAdjustment } from "./ssrv089/cancellation-adju
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import type { Scom205Snapshot } from "./scom205/store";
 import { loadBillRevenueByBranchForMonth, loadBillRevenueByBranchForDate } from "./bill/store";
+import { BODY_PAINT_ONLY_BRANCHES, isBodyPaintOnly } from "./body-paint-only";
 
 const FIXED_TGLOSS_SERVICE_TARGET = 0.38;
 
@@ -256,12 +257,13 @@ function excludeDeactivatedBranches(rows: BaToolBranchRow[]): BaToolBranchRow[] 
  * Exported so the upload surface stays in step: these branches never get the
  * GS-variant Service Info / Cost & Sales files, so the /upload page hides
  * those two forms for them and pending-uploads.ts drops them from the
- * required set (a BP-only branch is "complete" on 4 reports, not 6). */
-export const BODY_PAINT_ONLY_BRANCHES: ReadonlySet<string> = new Set(["CO01E", "KL01B", "TR01B"]);
-
-export function isBodyPaintOnly(branch: string): boolean {
-  return BODY_PAINT_ONLY_BRANCHES.has(branch);
-}
+ * required set (a BP-only branch is "complete" on 4 reports, not 6).
+ *
+ * Defined in body-paint-only.ts and re-exported here (imported above,
+ * alongside this file's other imports) — that file has no server-only
+ * imports, so client components can use it directly instead of pulling in
+ * this whole module's DB dependencies. */
+export { BODY_PAINT_ONLY_BRANCHES, isBodyPaintOnly };
 
 /** Branch codes that aren't real physical branches — their BA Tool row folds
  * into a parent branch's row and the code itself never appears downstream

@@ -13,7 +13,6 @@ import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { loadIncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
-import { computeVasTrendSeries } from "@/lib/trend";
 import { loadBranchView, loadRegionView } from "@/lib/branch-view-data";
 import { BranchAccountPage, RegionAccountPage } from "./branch/branch-page";
 import { BillDrilldown } from "./bill-drilldown";
@@ -24,8 +23,8 @@ import { HeroKpi } from "./hero-kpi";
 import { HeroKpiStrip } from "./hero-kpi-strip";
 import { InsightsPanel } from "./insights-panel";
 import { RegionScorecard } from "./region-scorecard";
-import { RevenuePerCarLeaderboard } from "./revenue-per-car-leaderboard";
-import { TrendChart } from "./trend-chart";
+import { ScopedRevenuePerCar, ScopedVasTrend } from "./scoped-overview";
+import { ScopeSyncProvider } from "./scope-sync";
 
 /** Full company-wide Executive Overview for everyone — HQ and branch
  * admins alike (2026-08-29's "locked to own branch, numbers only" reversed
@@ -198,13 +197,13 @@ async function DashboardContent({
   // as reliably as a plain object does, and HeroKpiStrip is "use client".
   const incentiveSlabTargets = Object.fromEntries(await loadIncentiveSlabTargets(date.slice(0, 7)));
 
-  const trendSeriesByMetric = { vas: computeVasTrendSeries(monthSnapshots, serviceInfoMonthSnapshots, region) };
-
   const vasGentani = achievementRatio(kpis.vasAchievementForTheMonth, kpis.gusRoMtd);
 
   // Only HQ reaches this point — branch and regional accounts returned above
-  // with their own branch-first view. The hero strip still defaults to the
-  // header region and can step through every branch.
+  // with their own branch-first view. `region` is always "All" here now that
+  // the header's region dropdown is gone (removed 2026-09-22 — see
+  // scope-sync.tsx); kept as the scope switcher's starting point rather than
+  // hardcoding "All" so a manually-edited ?region= URL still seeds it.
   const heroDefaultScope = region;
 
   const uploadedAtLabel = new Date(report.uploadedAt).toLocaleString("en-IN", {
@@ -230,69 +229,79 @@ async function DashboardContent({
         isPublished={isPublished}
         canPublish={canPublish}
         isCompanyScope={isCompanyScope}
+        showRegionSelect={false}
       />
 
-      <div className="mt-4">
-        <HeroKpiStrip
-          branches={report.branches}
-          date={date}
-          hasPreviousUpload={hasPreviousUpload}
-          defaultScope={heroDefaultScope}
-          incentiveSlabTargets={incentiveSlabTargets}
-        />
-      </div>
+      <ScopeSyncProvider initialScope={heroDefaultScope}>
+        <div className="mt-4">
+          <HeroKpiStrip
+            branches={report.branches}
+            date={date}
+            hasPreviousUpload={hasPreviousUpload}
+            defaultScope={heroDefaultScope}
+            incentiveSlabTargets={incentiveSlabTargets}
+          />
+        </div>
 
-      <div className="mt-4">
-        <DashboardTabs
-          overview={
-            <>
-              <HeroKpi branches={report.branches} compact />
-              <div className="mt-4">
-                <RevenuePerCarLeaderboard branches={filteredBranches} highlightBranch={null} compact />
-              </div>
-            </>
-          }
-          trends={<TrendChart seriesByMetric={trendSeriesByMetric} date={date} />}
-          regions={
-            <RegionScorecard
-              branches={report.branches}
-              monthSnapshots={monthSnapshots}
-              serviceInfoMonthSnapshots={serviceInfoMonthSnapshots}
-            />
-          }
-          insights={<InsightsPanel kpis={allKpis} branches={report.branches} date={date} />}
-          more={
-            <>
-              <CollapsibleCard title="Other KPIs" defaultOpen>
-                <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-2">
-                  <RichKpiCard icon={<PercentIcon />} color="violet" label="External Sales % on SPR I" value={formatPercent(kpis.externalSalesPctOfSprInternal)} sub="avg across branches" />
-                  <RichKpiCard icon={<TargetIcon />} color="indigo" label="VAS Gentani" value={formatCompactCurrency(vasGentani)} sub="VAS revenue per GUS RO" />
-                </div>
-              </CollapsibleCard>
-
-              {billTotals.length > 0 && (
+        <div className="mt-4">
+          <DashboardTabs
+            overview={
+              <>
+                <HeroKpi branches={report.branches} compact />
                 <div className="mt-4">
-                  <CollapsibleCard title="Bills — Taxable Value" defaultOpen>
-                    <div className="space-y-2 p-3">
-                      {billTotals.map((bt) => (
-                        <BillDrilldown
-                          key={bt.month}
-                          month={bt.month}
-                          total={bt.total}
-                          count={bt.count}
-                          scrapTotal={bt.scrapTotal}
-                          usedOilTotal={bt.usedOilTotal}
-                          untaggedTotal={bt.untaggedTotal}
-                        />
-                      ))}
-                    </div>
-                  </CollapsibleCard>
+                  <ScopedRevenuePerCar branches={report.branches} defaultScope={heroDefaultScope} />
                 </div>
-              )}
-            </>
-          }
-        />
-      </div>
+              </>
+            }
+            trends={
+              <ScopedVasTrend
+                monthSnapshots={monthSnapshots}
+                serviceInfoMonthSnapshots={serviceInfoMonthSnapshots}
+                date={date}
+                defaultScope={heroDefaultScope}
+              />
+            }
+            regions={
+              <RegionScorecard
+                branches={report.branches}
+                monthSnapshots={monthSnapshots}
+                serviceInfoMonthSnapshots={serviceInfoMonthSnapshots}
+              />
+            }
+            insights={<InsightsPanel kpis={allKpis} branches={report.branches} date={date} />}
+            more={
+              <>
+                <CollapsibleCard title="Other KPIs" defaultOpen>
+                  <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-2">
+                    <RichKpiCard icon={<PercentIcon />} color="violet" label="External Sales % on SPR I" value={formatPercent(kpis.externalSalesPctOfSprInternal)} sub="avg across branches" />
+                    <RichKpiCard icon={<TargetIcon />} color="indigo" label="VAS Gentani" value={formatCompactCurrency(vasGentani)} sub="VAS revenue per GUS RO" />
+                  </div>
+                </CollapsibleCard>
+
+                {billTotals.length > 0 && (
+                  <div className="mt-4">
+                    <CollapsibleCard title="Bills — Taxable Value" defaultOpen>
+                      <div className="space-y-2 p-3">
+                        {billTotals.map((bt) => (
+                          <BillDrilldown
+                            key={bt.month}
+                            month={bt.month}
+                            total={bt.total}
+                            count={bt.count}
+                            scrapTotal={bt.scrapTotal}
+                            usedOilTotal={bt.usedOilTotal}
+                            untaggedTotal={bt.untaggedTotal}
+                          />
+                        ))}
+                      </div>
+                    </CollapsibleCard>
+                  </div>
+                )}
+              </>
+            }
+          />
+        </div>
+      </ScopeSyncProvider>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-[11px] text-fg-faint">
         <span>Data as of: {uploadedAtLabel} IST</span>
