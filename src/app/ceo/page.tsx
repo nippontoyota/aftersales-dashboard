@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { StorefrontIcon, TargetIcon, WrenchIcon } from "@/components/dashboard-icons";
-import { achievementTone } from "@/lib/aggregate";
+import { achievementRatio, achievementTone } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { loadCeoData, type CeoRegionRollup } from "@/lib/ceo-data";
 import { formatCompact, formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
@@ -113,13 +113,15 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         <RevenueTile
           label="Total Revenue · MTD"
           value={group.hero.totalRevenueStreamMtd}
-          sub={
-            group.revenueTargetSlabs
-              ? `Targets: S4: ${formatCompactCurrency(group.revenueTargetSlabs.slab4)} | S3: ${formatCompactCurrency(group.revenueTargetSlabs.slab3)} | S2: ${formatCompactCurrency(group.revenueTargetSlabs.slab2)} | S1: ${formatCompactCurrency(group.revenueTargetSlabs.slab1)}`
-              : "No revenue target configured yet"
-          }
+          target={group.revenueTarget?.total ?? null}
+          fallbackSub="No revenue target configured yet"
         />
-        <RevenueTile label="Gross Profit · MTD" value={group.profit.grossProfitMtd} sub="Modelled from fixed margin assumptions" />
+        <RevenueTile
+          label="Gross Profit · MTD"
+          value={group.profit.grossProfitMtd}
+          target={group.profitTarget?.total ?? null}
+          fallbackSub="Modelled from fixed margin assumptions"
+        />
         <UtilizationTile
           label="GS Bay Utilization"
           sub="General Service"
@@ -256,9 +258,24 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
 
       <h2 className="mt-10 text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">Profit Breakdown — MTD</h2>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <ProfitTile label="Total Parts Profit" value={group.profit.partsProfitMtd} sub="20% of GUS + BPU Parts + External Sales" />
-        <ProfitTile label="Total Labour Profit" value={group.profit.labourProfitMtd} sub="100% of GUS + BPU Labour" />
-        <ProfitTile label="TGLOSS Margin" value={group.profit.tglossMarginMtd} sub="38% of TGLOSS Revenue" />
+        <ProfitTile
+          label="Total Parts Profit"
+          value={group.profit.partsProfitMtd}
+          target={group.profitTarget?.partsProfit ?? null}
+          sub="20% of GUS + BPU Parts + External Sales"
+        />
+        <ProfitTile
+          label="Total Labour Profit"
+          value={group.profit.labourProfitMtd}
+          target={group.profitTarget?.labourProfit ?? null}
+          sub="100% of GUS + BPU Labour"
+        />
+        <ProfitTile
+          label="TGLOSS Margin"
+          value={group.profit.tglossMarginMtd}
+          target={group.profitTarget?.tglossMargin ?? null}
+          sub="38% of TGLOSS Revenue"
+        />
         <ProfitTile label="GS Gross Profit / RO" value={group.profit.gsGrossProfitPerRo} sub="GS Labour + 20% GS Parts ÷ GUS ROs" />
         <ProfitTile label="BP Gross Profit / RO" value={group.profit.bpGrossProfitPerRo} sub="BP Labour + 20% BP Parts ÷ BPU ROs" />
         <ProfitTile label="Gross Profit / RO" value={group.profit.blendedGrossProfitPerRo} sub="Gross Profit ÷ total ROs, both channels" strong />
@@ -296,26 +313,54 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         is bays × 5.85 jobs/bay/day; BP ideal capacity comes from each branch&apos;s 2025 job-mix-weighted cycle-time model.
         GUS-for-the-Month Target = GS bays × 5.85 jobs/bay/day × every working day in the month (not just elapsed) —
         same formula as Bay Utilization&apos;s ideal capacity, just for the whole month instead of pace-to-date.
-        Revenue = GUS + BPU parts &amp; labour + External Sales + scrap/used oil, no target yet configured for this view.
+        Revenue = GUS + BPU parts &amp; labour + External Sales + scrap/used oil. Revenue Target (and the Target lines above)
+        derive from each branch&apos;s own Incentive Slab 3 target × 30/32, split 9.5:20.5 into a Labour bucket and a
+        Parts+ExtSales+TGLOSS bucket, then 66/34 GS/BP within Labour and 62/38 GS/BP within Parts (fixed ratios) — with
+        TGLOSS Target carved out as the existing VAS Bill Target (GUS RO MTD × 38% × Rs 3,000) and Ext Sales Target as 5%
+        of the branch&apos;s own Parts Retail target.
         Gross Profit is a modelled figure, not an audited number: Total Parts Profit (20% of GUS + BPU Parts + External
         Sales) + Total Labour Profit (100% of GUS + BPU Labour) + TGLOSS Margin (38% of TGLOSS Revenue) + scrap/used-oil
-        revenue. GS/BP Gross Profit per RO exclude External Sales and TGLOSS Margin, which aren&apos;t split by channel.
+        revenue — Profit Target follows the same formula against the Revenue Target components above, plus the same
+        actual scrap/used-oil figure on both sides. GS/BP Gross Profit per RO exclude External Sales and TGLOSS Margin,
+        which aren&apos;t split by channel.
       </p>
     </div>
   );
 }
 
-function RevenueTile({ label, value, sub }: { label: string; value: number | null; sub: string }) {
+function RevenueTile({ label, value, target, fallbackSub }: { label: string; value: number | null; target: number | null; fallbackSub: string }) {
+  const pct = achievementRatio(value, target);
+  const tone = achievementTone(pct);
   return (
     <div className="group relative overflow-hidden rounded-xl border border-accent/20 bg-accent-soft/30 bg-gradient-to-br from-accent/5 to-transparent p-5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
       <div className="text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">{label}</div>
       <div className="mt-1.5 text-3xl font-semibold tabular-nums tracking-tighter text-fg">{formatCompactCurrency(value)}</div>
-      <div className="mt-2 text-[11px] text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">{sub}</div>
+      {target !== null ? (
+        <div className={`mt-2 text-[11px] font-medium ${TONE_TEXT[tone]}`}>
+          {formatPercent(pct)} of {formatCompactCurrency(target)} target
+        </div>
+      ) : (
+        <div className="mt-2 text-[11px] text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">{fallbackSub}</div>
+      )}
     </div>
   );
 }
 
-function ProfitTile({ label, value, sub, strong }: { label: string; value: number | null; sub: string; strong?: boolean }) {
+function ProfitTile({
+  label,
+  value,
+  sub,
+  strong,
+  target,
+}: {
+  label: string;
+  value: number | null;
+  sub: string;
+  strong?: boolean;
+  target?: number | null;
+}) {
+  const pct = target !== undefined ? achievementRatio(value, target) : null;
+  const tone = achievementTone(pct);
   return (
     <div
       className={`group relative overflow-hidden rounded-lg border p-4 shadow-[0_4px_20px_rgb(0,0,0,0.02)] backdrop-blur-md transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] ${
@@ -327,6 +372,11 @@ function ProfitTile({ label, value, sub, strong }: { label: string; value: numbe
       <div className="text-[10px] font-semibold tracking-wide text-fg-subtle">{label}</div>
       <div className="mt-1.5 text-xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(value)}</div>
       <div className="mt-1 text-[10.5px] text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">{sub}</div>
+      {target !== undefined && target !== null ? (
+        <div className={`mt-1 text-[10.5px] font-medium ${TONE_TEXT[tone]}`}>
+          {formatPercent(pct)} of {formatCompactCurrency(target)} target
+        </div>
+      ) : null}
     </div>
   );
 }

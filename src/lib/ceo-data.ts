@@ -8,7 +8,14 @@ import { computeTrendSeries } from "./trend";
 import { isDatePublished } from "./publish-store";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
 import { loadIncentiveSlabTargets } from "./incentive-slabs/store";
-import { aggregateIncentiveSlabTargets } from "./incentive-slabs/aggregate";
+import {
+  computeBranchProfitTarget,
+  computeBranchRevenueTarget,
+  sumProfitTargets,
+  sumRevenueTargets,
+  type CeoProfitTarget,
+  type CeoRevenueTarget,
+} from "./ceo-revenue-target";
 
 /**
  * The data foundation for the CEO executive view (/ceo). Company-wide only,
@@ -27,6 +34,8 @@ export type CeoBranchRow = {
   branch: BranchReport;
   gs: BayUtilization | null;
   bp: BayUtilization | null;
+  revenueTarget: CeoRevenueTarget | null;
+  profitTarget: CeoProfitTarget | null;
 };
 
 export type CeoRegionRollup = {
@@ -34,6 +43,8 @@ export type CeoRegionRollup = {
   branches: CeoBranchRow[];
   hero: HeroSummary;
   utilization: CeoUtilization;
+  revenueTarget: CeoRevenueTarget | null;
+  profitTarget: CeoProfitTarget | null;
 };
 
 /** The Profit family, properly weighted at whatever scope (group/region) the
@@ -96,7 +107,8 @@ export type CeoData = {
      * workingDaysElapsed rather than a separate formula. Null only when
      * there's no report (see `report` above). */
     gusMonthTarget: number | null;
-    revenueTargetSlabs: { slab1: number; slab2: number; slab3: number; slab4: number } | null;
+    revenueTarget: CeoRevenueTarget | null;
+    profitTarget: CeoProfitTarget | null;
   } | null;
   regions: CeoRegionRollup[];
   revenueTrend: { date: string; actual: number | null }[];
@@ -195,30 +207,38 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     report.branches.map((branch) => (GS_BAYS[branch.branch] ? gsBayUtilization(branch.branch, branch.gusRoMtd, monthDays) : null)),
   )?.idealRoMtd ?? null;
 
-  // Each branch's BayUtilization is computed exactly once here, then reused
-  // for its region's rollup below and the group rollup further down — see
-  // rollupUtilization's doc comment.
-  const allRows: CeoBranchRow[] = report.branches.map((branch) => ({
-    branch,
-    gs: GS_BAYS[branch.branch] ? gsBayUtilization(branch.branch, branch.gusRoMtd, workingDaysElapsed) : null,
-    bp: BP_BAYS[branch.branch] ? bpBayUtilization(branch.branch, branch.bpuRoMtd, workingDaysElapsed) : null,
-  }));
+  // Each branch's BayUtilization and Revenue/Profit Target is computed
+  // exactly once here, then reused for its region's rollup below and the
+  // group rollup further down — see rollupUtilization's doc comment (same
+  // reasoning applies to sumRevenueTargets/sumProfitTargets).
+  const allRows: CeoBranchRow[] = report.branches.map((branch) => {
+    const revenueTarget = computeBranchRevenueTarget(branch, slabTargets.get(branch.branch)?.slab3);
+    return {
+      branch,
+      gs: GS_BAYS[branch.branch] ? gsBayUtilization(branch.branch, branch.gusRoMtd, workingDaysElapsed) : null,
+      bp: BP_BAYS[branch.branch] ? bpBayUtilization(branch.branch, branch.bpuRoMtd, workingDaysElapsed) : null,
+      revenueTarget,
+      profitTarget: revenueTarget ? computeBranchProfitTarget(revenueTarget, branch.scrapRevenueMtd + branch.usedOilRevenueMtd) : null,
+    };
+  });
   const rowsByBranch = new Map(allRows.map((r) => [r.branch.branch, r]));
 
   const regions: CeoRegionRollup[] = (Object.keys(REGIONS) as RegionName[]).map((region) => {
     const branches = filterBranchesByRegion(report.branches, region);
     const rows = branches.map((branch) => rowsByBranch.get(branch.branch)!);
-    return { region, branches: rows, hero: computeHeroSummary(branches), utilization: rollupUtilization(rows) };
+    return {
+      region,
+      branches: rows,
+      hero: computeHeroSummary(branches),
+      utilization: rollupUtilization(rows),
+      revenueTarget: sumRevenueTargets(rows.map((r) => r.revenueTarget)),
+      profitTarget: sumProfitTargets(rows.map((r) => r.profitTarget)),
+    };
   });
 
   const gsRoTrend = computeTrendSeries(monthSnapshots, "All", "gus").map((p) => ({ date: p.date, actual: p.actual }));
   const bpRoTrend = computeTrendSeries(monthSnapshots, "All", "bpus").map((p) => ({ date: p.date, actual: p.actual }));
   const groupHero = computeHeroSummary(report.branches);
-
-  const aggregatedSlabs = aggregateIncentiveSlabTargets(
-    Object.fromEntries(slabTargets.entries()),
-    report.branches.map((b) => b.branch)
-  );
 
   const hasCo01c = report.branches.some((b) => b.branch === "CO01C");
 
@@ -233,7 +253,8 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
       utilization: rollupUtilization(allRows),
       profit: computeProfitBreakdown(groupHero),
       gusMonthTarget,
-      revenueTargetSlabs: aggregatedSlabs ?? null,
+      revenueTarget: sumRevenueTargets(allRows.map((r) => r.revenueTarget)),
+      profitTarget: sumProfitTargets(allRows.map((r) => r.profitTarget)),
     },
     regions,
     // Total Revenue has no single BA Tool column (it's GUS+BPU parts/labour +
