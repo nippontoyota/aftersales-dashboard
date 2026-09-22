@@ -19,8 +19,8 @@ import { countOpenVpFlags } from "./vp-flags/store";
 export async function loadNavState(
   admin: AdminAccount,
 ): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean; slimNav: boolean; queriesBadge: number }> {
-  const canUpload = admin.role !== "regional";
-  if (admin.role === "hq") {
+  const canUpload = admin.role !== "regional" && admin.role !== "hq_viewer";
+  if (admin.role === "hq" || admin.role === "hq_viewer") {
     const [vpOpen, regionActionable] = await Promise.all([countOpenVpFlags(), countActionableForHq()]);
     return { companyTabs: true, dashboardLabel: "Executive Overview", canUpload, slimNav: false, queriesBadge: vpOpen + regionActionable };
   }

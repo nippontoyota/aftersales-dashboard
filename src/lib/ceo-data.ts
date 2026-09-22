@@ -1,19 +1,13 @@
-import {
-  aggregateBpUtilization,
-  aggregateGsUtilization,
-  BP_BAYS,
-  bpBayUtilization,
-  gsBayUtilization,
-  GS_BAYS,
-  type BayUtilization,
-} from "./bay-capacity";
-import { computeHeroSummary, filterBranchesByRegion, type HeroSummary } from "./aggregate";
+import { BP_BAYS, bpBayUtilization, gsBayUtilization, GS_BAYS, sumBayUtilization, type BayUtilization } from "./bay-capacity";
+import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, grossProfitPerRo, type HeroSummary, type KpiSummary } from "./aggregate";
 import { REGIONS, type RegionName } from "./regions";
 import { loadReportHolidaySet } from "./report-holidays/store";
-import { workingDaysElapsedInMonth } from "./reporting-date";
+import { workingDaysElapsedInMonth, workingDaysInMonth } from "./reporting-date";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { computeTrendSeries } from "./trend";
-import { listSnapshotDates, loadSnapshotsForMonthUpTo } from "./snapshot-store";
+import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
+import { loadIncentiveSlabTargets } from "./incentive-slabs/store";
+import { aggregateIncentiveSlabTargets } from "./incentive-slabs/aggregate";
 
 /**
  * The data foundation for the CEO executive view (/ceo). Company-wide only,
@@ -41,6 +35,34 @@ export type CeoRegionRollup = {
   utilization: CeoUtilization;
 };
 
+/** The Profit family, properly weighted at whatever scope (group/region) the
+ * caller sums branches to — see BranchReport's profit fields in report.ts
+ * for the formulas, all verified against the user's "Critical KPI" reference
+ * sheet. The per-RO figures are NOT averages of each branch's own ratio (see
+ * aggregate.ts's grossProfitPerRo doc comment). */
+export type CeoProfitBreakdown = {
+  partsProfitMtd: number | null;
+  labourProfitMtd: number | null;
+  tglossMarginMtd: number | null;
+  grossProfitMtd: number | null;
+  gsGrossProfitPerRo: number | null;
+  bpGrossProfitPerRo: number | null;
+  blendedGrossProfitPerRo: number | null;
+};
+
+function computeProfitBreakdown(hero: HeroSummary): CeoProfitBreakdown {
+  const totalRo = hero.gusRoMtd !== null && hero.bpuRoMtd !== null ? hero.gusRoMtd + hero.bpuRoMtd : null;
+  return {
+    partsProfitMtd: hero.partsProfitMtd,
+    labourProfitMtd: hero.labourProfitMtd,
+    tglossMarginMtd: hero.tglossMarginMtd,
+    grossProfitMtd: hero.profitMtd,
+    gsGrossProfitPerRo: grossProfitPerRo(hero.gusLabourMtd, hero.gusPartsMtd, hero.gusRoMtd),
+    bpGrossProfitPerRo: grossProfitPerRo(hero.bpuLabourMtd, hero.bpuPartsMtd, hero.bpuRoMtd),
+    blendedGrossProfitPerRo: hero.profitMtd !== null && totalRo !== null && totalRo !== 0 ? hero.profitMtd / totalRo : null,
+  };
+}
+
 /** Rule-based callout — the worst-pacing bay-utilization line across regions
  * (Group excluded, since "which region" is the useful signal), named down to
  * its lowest branch. Null when nothing is meaningfully behind. */
@@ -60,12 +82,30 @@ export type CeoData = {
    * that's derived from `report` follows suit. */
   report: Report | null;
   workingDaysElapsed: number;
-  group: { hero: HeroSummary; utilization: CeoUtilization } | null;
+  group: {
+    hero: HeroSummary;
+    kpis: KpiSummary;
+    utilization: CeoUtilization;
+    profit: CeoProfitBreakdown;
+    /** GUS-for-the-month Target — GS bays x standard productivity/bay/day x
+     * *every* working day in the month (not just elapsed, unlike Bay
+     * Utilization's own ideal figure) — the same formula the user gave
+     * directly (2026-09-22), computed by reusing gsBayUtilization/
+     * sumBayUtilization with workingDaysInMonth in place of
+     * workingDaysElapsed rather than a separate formula. Null only when
+     * there's no report (see `report` above). */
+    gusMonthTarget: number | null;
+    revenueTargetSlabs: { slab1: number; slab2: number; slab3: number; slab4: number } | null;
+  } | null;
   regions: CeoRegionRollup[];
   revenueTrend: { date: string; actual: number | null }[];
   gsRoTrend: { date: string; actual: number | null }[];
   bpRoTrend: { date: string; actual: number | null }[];
   callout: CeoCallout | null;
+  /** BPU/Offtake/Parts Retail/PM+OC/Tyre/Battery region scorecard, trend
+   * chart, and heatmap all need the raw month snapshots directly — same data
+   * already loaded here for gsRoTrend/bpRoTrend, just also handed to the page. */
+  monthSnapshots: Snapshot[];
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -74,10 +114,14 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * flagging noise on a day or two of normal variance. */
 const CALLOUT_THRESHOLD = 0.85;
 
-function rollupUtilization(branches: BranchReport[], workingDaysElapsed: number): CeoUtilization {
+/** Sums already-computed per-branch utilizations (see CeoBranchRow) — never
+ * recomputes gsBayUtilization/bpBayUtilization from raw branch data, so a
+ * branch's numbers are computed exactly once and reused for its own row,
+ * its region's rollup, and the group rollup alike. */
+function rollupUtilization(rows: CeoBranchRow[]): CeoUtilization {
   return {
-    gs: aggregateGsUtilization(branches.map((b) => ({ branch: b.branch, gusRoMtd: b.gusRoMtd })), workingDaysElapsed),
-    bp: aggregateBpUtilization(branches.map((b) => ({ branch: b.branch, bpuRoMtd: b.bpuRoMtd })), workingDaysElapsed),
+    gs: sumBayUtilization(rows.map((r) => r.gs)),
+    bp: sumBayUtilization(rows.map((r) => r.bp)),
   };
 }
 
@@ -105,36 +149,81 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
 
   const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
 
-  const [report, holidays, monthSnapshots] = await Promise.all([
+  const month = date.substring(0, 7);
+
+  const [report, holidays, monthSnapshots, slabTargets] = await Promise.all([
     buildReport(date),
     loadReportHolidaySet(),
     loadSnapshotsForMonthUpTo(date),
+    loadIncentiveSlabTargets(month),
   ]);
   if (!report) {
-    return { date, dates, report: null, workingDaysElapsed: 0, group: null, regions: [], revenueTrend: [], gsRoTrend: [], bpRoTrend: [], callout: null };
+    return {
+      date,
+      dates,
+      report: null,
+      workingDaysElapsed: 0,
+      group: null,
+      regions: [],
+      revenueTrend: [],
+      gsRoTrend: [],
+      bpRoTrend: [],
+      callout: null,
+      monthSnapshots: [],
+    };
   }
 
   const workingDaysElapsed = workingDaysElapsedInMonth(date, holidays);
 
+  // GUS-for-the-month Target: same per-branch formula as Bay Utilization's
+  // own ideal figure, just for every working day in the month rather than
+  // only the elapsed ones — gsBayUtilization's `workingDaysElapsed` param is
+  // really just "however many working days to project capacity for", so
+  // this reuses it (and sumBayUtilization for the group total) instead of
+  // duplicating the bays x productivity x days formula.
+  const monthDays = workingDaysInMonth(date, holidays);
+  const gusMonthTarget = sumBayUtilization(
+    report.branches.map((branch) => (GS_BAYS[branch.branch] ? gsBayUtilization(branch.branch, branch.gusRoMtd, monthDays) : null)),
+  )?.idealRoMtd ?? null;
+
+  // Each branch's BayUtilization is computed exactly once here, then reused
+  // for its region's rollup below and the group rollup further down — see
+  // rollupUtilization's doc comment.
+  const allRows: CeoBranchRow[] = report.branches.map((branch) => ({
+    branch,
+    gs: GS_BAYS[branch.branch] ? gsBayUtilization(branch.branch, branch.gusRoMtd, workingDaysElapsed) : null,
+    bp: BP_BAYS[branch.branch] ? bpBayUtilization(branch.branch, branch.bpuRoMtd, workingDaysElapsed) : null,
+  }));
+  const rowsByBranch = new Map(allRows.map((r) => [r.branch.branch, r]));
+
   const regions: CeoRegionRollup[] = (Object.keys(REGIONS) as RegionName[]).map((region) => {
     const branches = filterBranchesByRegion(report.branches, region);
-    const rows: CeoBranchRow[] = branches.map((branch) => ({
-      branch,
-      gs: GS_BAYS[branch.branch] ? gsBayUtilization(branch.branch, branch.gusRoMtd, workingDaysElapsed) : null,
-      bp: BP_BAYS[branch.branch] ? bpBayUtilization(branch.branch, branch.bpuRoMtd, workingDaysElapsed) : null,
-    }));
-    return { region, branches: rows, hero: computeHeroSummary(branches), utilization: rollupUtilization(branches, workingDaysElapsed) };
+    const rows = branches.map((branch) => rowsByBranch.get(branch.branch)!);
+    return { region, branches: rows, hero: computeHeroSummary(branches), utilization: rollupUtilization(rows) };
   });
 
   const gsRoTrend = computeTrendSeries(monthSnapshots, "All", "gus").map((p) => ({ date: p.date, actual: p.actual }));
   const bpRoTrend = computeTrendSeries(monthSnapshots, "All", "bpus").map((p) => ({ date: p.date, actual: p.actual }));
+  const groupHero = computeHeroSummary(report.branches);
+
+  const aggregatedSlabs = aggregateIncentiveSlabTargets(
+    Object.fromEntries(slabTargets.entries()),
+    report.branches.map((b) => b.branch)
+  );
 
   return {
     date,
     dates,
     report,
     workingDaysElapsed,
-    group: { hero: computeHeroSummary(report.branches), utilization: rollupUtilization(report.branches, workingDaysElapsed) },
+    group: {
+      hero: groupHero,
+      kpis: computeKpiSummary(report.branches),
+      utilization: rollupUtilization(allRows),
+      profit: computeProfitBreakdown(groupHero),
+      gusMonthTarget,
+      revenueTargetSlabs: aggregatedSlabs ?? null,
+    },
     regions,
     // Total Revenue has no single BA Tool column (it's GUS+BPU parts/labour +
     // external + scrap/oil, assembled in report.ts) — a real day-by-day trend
@@ -145,5 +234,6 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     gsRoTrend,
     bpRoTrend,
     callout: buildCallout(regions),
+    monthSnapshots,
   };
 }

@@ -36,13 +36,17 @@ export type AdminAccount =
   | { username: string; passwordHash: string; salt: string; role: "ceo"; canViewDashboard: true }
   // Read-only Accounts — its own finance-only executive view at /accounts,
   // same shape again (company-wide, no branch/region/publish gate, no uploads).
-  | { username: string; passwordHash: string; salt: string; role: "accounts"; canViewDashboard: true };
+  | { username: string; passwordHash: string; salt: string; role: "accounts"; canViewDashboard: true }
+  // Read-only HQ viewer — sees every HQ dashboard page (Dashboard, TKM Targets,
+  // Queries, Branch Performance, Reports, Cancellations) but has no upload
+  // surface, no publish control, and no write actions on any page.
+  | { username: string; passwordHash: string; salt: string; role: "hq_viewer"; canViewDashboard: true };
 
 type AdminRow = {
   username: string;
   password_hash: string;
   salt: string;
-  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts";
+  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer";
   branch: string | null;
   region: string | null;
 };
@@ -54,6 +58,7 @@ function toAccount(row: AdminRow): AdminAccount {
   if (row.role === "vp_service") return { ...base, role: "vp_service" };
   if (row.role === "ceo") return { ...base, role: "ceo" };
   if (row.role === "accounts") return { ...base, role: "accounts" };
+  if (row.role === "hq_viewer") return { ...base, role: "hq_viewer" };
   return { ...base, role: "hq" };
 }
 
@@ -61,6 +66,7 @@ function toAccount(row: AdminRow): AdminAccount {
  * branch", "North regional manager". */
 export function adminIdentityLabel(admin: AdminAccount): string {
   if (admin.role === "hq") return "HQ admin";
+  if (admin.role === "hq_viewer") return "HQ admin";
   if (admin.role === "regional") return `${admin.region} regional manager`;
   if (admin.role === "vp_service") return "VP Service";
   if (admin.role === "ceo") return "CEO";

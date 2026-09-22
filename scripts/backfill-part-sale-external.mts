@@ -6,6 +6,7 @@
 //   npx tsx scripts/backfill-part-sale-external.mts [--commit]
 import "./load-env.mjs";
 import { partSaleCountsFromRows } from "../src/lib/part-sale/parse";
+import { eligibleSameMonthFTypeRefDocs } from "../src/lib/part-sale/external-sales-eligibility";
 import { savePartSaleSnapshot } from "../src/lib/part-sale/store";
 import { pool } from "../src/lib/db";
 
@@ -34,7 +35,12 @@ for (const s of snaps) {
     console.log(`${s.branch} ${s.date}  — no raw rows on file, skipping`);
     continue;
   }
-  const counts = partSaleCountsFromRows(raw.map((r) => r.row_data));
+  const rawRows = raw.map((r) => r.row_data);
+  const refDocNos = rawRows
+    .filter((row) => String(row["BillNo"] ?? "").trim().charAt(0).toUpperCase() === "F")
+    .map((row) => String(row["RefDocNo"] ?? "").trim());
+  const eligible = await eligibleSameMonthFTypeRefDocs(s.branch, s.date, refDocNos);
+  const counts = partSaleCountsFromRows(rawRows, (refDocNo) => eligible.has(refDocNo));
   const before = Number(s.external_sales);
   const after = counts.externalSales;
   const mark = before.toFixed(2) !== after.toFixed(2) ? "  *" : "";

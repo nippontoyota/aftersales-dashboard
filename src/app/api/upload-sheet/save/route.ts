@@ -2,16 +2,19 @@ import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { listBranchCodes } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
+import { hashRows } from "@/lib/duplicate-detection";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { savePartSaleSnapshot } from "@/lib/part-sale/store";
+import { checkBillOverlap } from "@/lib/part-sale/upload-validation";
 import { saveRawReportUpload } from "@/lib/raw-report-uploads/store";
-import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { detectReportType } from "@/lib/report-sniffer";
 import { ONLINE_STORE_CODES } from "@/lib/report";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
 import { saveScom205Snapshot } from "@/lib/scom205/store";
 import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoSnapshot } from "@/lib/service-info/store";
+import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { saveSsrv089Snapshot } from "@/lib/ssrv089/store";
@@ -104,13 +107,54 @@ export async function POST(request: Request) {
       }
       const svcInfoStaffNames = await listAccessoriesStaffNamesForBranch(branch);
       const { counts, rawRows } = parseServiceInfoWorkbook(buffer, branch, svcInfoStaffNames);
+
+      // Same two checks as the branch's own upload route (2026-09-19, after
+      // the CO01A/KL01A incidents — both went through this exact tool,
+      // which previously had no validation of any kind) — see
+      // service-info/upload-validation.ts.
+      const dateSanity = checkInvoiceDateSanity(rawRows, date);
+      if (!dateSanity.ok) {
+        return NextResponse.json({ error: dateSanity.error }, { status: 422 });
+      }
+      const confirmed = formData.get("confirmDuplicate") === "true";
+      if (!confirmed) {
+        const overlap = await checkRoOverlap(branch, rawRows, date);
+        if (overlap.duplicate) {
+          return NextResponse.json({ duplicate: true, message: overlap.message });
+        }
+      }
+
       await saveServiceInfoSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts });
       await saveRawUploadRows({ reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
       return NextResponse.json({ success: true, type, variant, date, branch, counts });
     }
 
     if (type === "part-sale") {
-      const { counts, rawRows } = parsePartSaleWorkbook(buffer);
+      const { counts, rawRows } = await parsePartSaleWorkbook(buffer, branch, date);
+
+      // Same two duplicate checks as the branch's own upload route
+      // (2026-09-21, after IR01A's "17 Sep" mislabeled partial-pull incident
+      // went through this exact tool, which previously had no duplicate
+      // check at all for Part Sale) — see part-sale/upload-validation.ts.
+      const confirmed = formData.get("confirmDuplicate") === "true";
+      if (!confirmed) {
+        const priorUploads = await loadAllRawUploadRowsBefore("part_sale", branch, date);
+        const newHash = hashRows(rawRows);
+        const match = priorUploads.find((u) => hashRows(u.rows) === newHash);
+        if (match) {
+          return NextResponse.json({
+            duplicate: true,
+            previousDate: match.date,
+            message: `This file looks identical to the ${match.date} upload — same rows. Are you sure this is ${date}'s file?`,
+          });
+        }
+
+        const overlap = await checkBillOverlap(branch, rawRows, date);
+        if (overlap.duplicate) {
+          return NextResponse.json({ duplicate: true, message: overlap.message });
+        }
+      }
+
       await savePartSaleSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts });
       await saveRawUploadRows({ reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
       return NextResponse.json({ success: true, type, date, branch, counts });

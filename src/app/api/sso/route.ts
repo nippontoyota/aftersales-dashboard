@@ -27,18 +27,18 @@ export async function GET(request: Request) {
     const expiresAt = Date.now() + 12 * 60 * 60 * 1000;
     const payload = `${username}.${expiresAt}`;
     const secret = process.env.SESSION_SECRET;
-    
+
     if (!secret) {
       console.error("SESSION_SECRET is missing!");
       return new NextResponse('Server Configuration Error', { status: 500 });
     }
-    
+
     const signature = createHmac("sha256", secret).update(payload).digest("hex");
     const sessionToken = `${payload}.${signature}`;
-    
+
     // 3. Create the redirect response
     const response = NextResponse.redirect(new URL('/ceo', request.url));
-    
+
     // 4. Force the cookie explicitly onto the redirect response object
     // This bypasses the Next.js bug and forces SameSite=None + Secure
     response.cookies.set(SESSION_COOKIE_NAME, sessionToken, {
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
       path: '/',
       expires: new Date(expiresAt),
     });
-    
+
     return response;
   }
 

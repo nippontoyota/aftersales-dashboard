@@ -28,12 +28,13 @@ const isHq = args.includes("--hq");
 const isVp = args.includes("--vp");
 const isCeo = args.includes("--ceo");
 const isAccounts = args.includes("--accounts");
+const isHqViewer = args.includes("--hq-viewer");
 
 const VALID_REGIONS = ["North", "Central", "South"];
 
-if (!username || !password || (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts)) {
+if (!username || !password || (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts && !isHqViewer)) {
   console.error(
-    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --region <North|Central|South> | --vp | --ceo | --accounts)",
+    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --hq-viewer | --region <North|Central|South> | --vp | --ceo | --accounts)",
   );
   process.exit(1);
 }
@@ -48,7 +49,7 @@ function hash(pw, salt) {
 
 const salt = randomBytes(16).toString("hex");
 const passwordHash = hash(password, salt);
-const role = isHq ? "hq" : isVp ? "vp_service" : isCeo ? "ceo" : isAccounts ? "accounts" : region ? "regional" : "branch";
+const role = isHqViewer ? "hq_viewer" : isHq ? "hq" : isVp ? "vp_service" : isCeo ? "ceo" : isAccounts ? "accounts" : region ? "regional" : "branch";
 
 const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await client.connect();

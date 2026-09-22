@@ -111,34 +111,19 @@ export function bpBayUtilization(branch: string, bpuRoMtd: number | null, workin
   return { actualRoMtd: bpuRoMtd, bays, idealRoMtd, utilizationPct: idealRoMtd > 0 ? bpuRoMtd / idealRoMtd : 0 };
 }
 
-/** Group/region roll-up: sums actual ROs and ideal capacity across branches,
- * then ratios — never an average of per-branch percentages. */
-export function aggregateGsUtilization(
-  rows: { branch: string; gusRoMtd: number | null }[],
-  workingDaysElapsed: number,
-): { utilizationPct: number; actualRoMtd: number; idealRoMtd: number } | null {
+/**
+ * Group/region roll-up: sums actual ROs and ideal capacity across a set of
+ * already-computed per-branch utilizations, then ratios once — never an
+ * average of per-branch percentages, and never re-derives each branch's
+ * BayUtilization from scratch (the caller computes each branch's once — see
+ * ceo-data.ts — and reuses that same object here and for the branch table,
+ * rather than three independent recomputations of the same numbers).
+ */
+export function sumBayUtilization(utils: (BayUtilization | null)[]): { utilizationPct: number; actualRoMtd: number; idealRoMtd: number } | null {
   let actual = 0;
   let ideal = 0;
   let any = false;
-  for (const r of rows) {
-    const u = gsBayUtilization(r.branch, r.gusRoMtd, workingDaysElapsed);
-    if (!u) continue;
-    any = true;
-    actual += u.actualRoMtd;
-    ideal += u.idealRoMtd;
-  }
-  return any && ideal > 0 ? { utilizationPct: actual / ideal, actualRoMtd: actual, idealRoMtd: ideal } : null;
-}
-
-export function aggregateBpUtilization(
-  rows: { branch: string; bpuRoMtd: number | null }[],
-  workingDaysElapsed: number,
-): { utilizationPct: number; actualRoMtd: number; idealRoMtd: number } | null {
-  let actual = 0;
-  let ideal = 0;
-  let any = false;
-  for (const r of rows) {
-    const u = bpBayUtilization(r.branch, r.bpuRoMtd, workingDaysElapsed);
+  for (const u of utils) {
     if (!u) continue;
     any = true;
     actual += u.actualRoMtd;

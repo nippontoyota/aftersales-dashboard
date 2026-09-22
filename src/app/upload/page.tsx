@@ -29,10 +29,11 @@ export default async function UploadPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const admin = await getCurrentAdmin();
-  // Regional managers and the VP are read-only — no upload surface at all.
+  // Regional managers, VP, CEO, Accounts, and HQ viewer are read-only — no upload surface at all.
   if (admin?.role === "vp_service") redirect("/vp");
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
+  if (admin?.role === "hq_viewer") redirect("/dashboard");
   if (admin?.role === "regional") redirect("/dashboard");
   const identity = admin ? adminIdentityLabel(admin) : "";
   const nav = admin

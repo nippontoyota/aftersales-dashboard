@@ -30,10 +30,11 @@ export type HeatmapMetricConfig = {
 
 /** BPU/Offtake/Parts Retail/PM+OC moved to their own heatmap on the TKM
  * Targets page (2026-08-31) — this default is what's left on the main
- * dashboard's heatmap. */
+ * dashboard's heatmap. The T-Gloss (penetration %) column was dropped
+ * 2026-09-21, at the user's request, and VAS relabeled to "TGloss Revenue"
+ * — same figures (vasAchievementForTheMonth vs vasBillTarget), name only. */
 const DEFAULT_METRICS: HeatmapMetricConfig[] = [
-  { label: "VAS", actual: "vasAchievementForTheMonth", target: "vasBillTarget" },
-  { label: "T-Gloss", actual: "penetrationTGlossService", target: 0.38 },
+  { label: "TGloss Revenue", actual: "vasAchievementForTheMonth", target: "vasBillTarget" },
 ];
 
 const CELL_BG: Record<AchievementTone, string> = {
@@ -110,7 +111,7 @@ function MetricCell({
 
   return (
     <div
-      className={`flex h-8 items-center justify-center rounded font-semibold tabular-nums ${activityOnly ? NO_TARGET_ACTIVITY_BG : CELL_BG[tone]}`}
+      className={`flex h-8 w-28 items-center justify-center rounded font-semibold tabular-nums ${activityOnly ? NO_TARGET_ACTIVITY_BG : CELL_BG[tone]}`}
       title={tooltip}
     >
       {ratio !== null ? formatPercent(ratio) : activityOnly ? (date ? "No target" : formatCompact(actual)) : "—"}
@@ -269,8 +270,14 @@ export function BranchPerformanceHeatmap({
     });
   };
 
+  // The card itself, not just the table, was filling the full grid-cell
+  // width regardless of how few metric columns it actually had — capping
+  // it here (not just shrinking the table inside) is what removes the
+  // empty space to the right with 1-2 metrics.
+  const compactCard = metrics.length <= 2;
+
   return (
-    <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
+    <div className={`rounded-lg border border-border bg-surface p-4 shadow-card ${compactCard ? "inline-block" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch Performance Heatmap — Achievement %</h2>
         {paceMode ? (
@@ -285,7 +292,12 @@ export function BranchPerformanceHeatmap({
         ) : null}
       </div>
       <div className="mt-3 max-h-[420px] overflow-auto">
-        <table className="w-full min-w-[560px] border-separate border-spacing-1 text-xs">
+        {/* Metric columns stretch to fill a `w-full` table — fine with 4
+            columns (TKM Targets), but with just 1 or 2 (the main dashboard's
+            default, since T-Gloss was dropped 2026-09-21) that stretched a
+            single achievement cell into one giant bar per row. Below that
+            threshold the table shrinks to its content instead. */}
+        <table className={`border-separate border-spacing-1 text-xs ${metrics.length <= 2 ? "w-auto" : "w-full min-w-[560px]"}`}>
           <thead className={paceMode ? "sticky top-0 z-10 bg-surface" : undefined}>
             <tr>
               <th className="w-24 pb-1 text-left text-[11px] font-medium text-fg-faint">Branch</th>

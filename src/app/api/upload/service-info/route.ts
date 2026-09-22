@@ -5,6 +5,7 @@ import { hashRows } from "@/lib/duplicate-detection";
 import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-info/store";
+import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -55,11 +56,21 @@ export async function POST(request: Request) {
     );
   }
 
-  // Warn-and-allow duplicate check (2026-09-16, at the user's request) — see
-  // scom205's upload route for the full rationale. This report is a daily
-  // row list, not a cumulative total, so the signal is an exact row-content
-  // match — checked against every prior upload this month, not just the
-  // most recent one (see raw-upload-rows/store.ts for why).
+  // Date-sanity check (2026-09-19, after the CO01A/KL01A incidents — see
+  // upload-validation.ts) — a hard block, not a warn-and-confirm: a file
+  // whose invoices mostly belong to a different month than the picked date
+  // is never a legitimate upload, so there's nothing to confirm through.
+  const dateSanity = checkInvoiceDateSanity(rawRows, date);
+  if (!dateSanity.ok) {
+    return NextResponse.json({ error: dateSanity.error }, { status: 422 });
+  }
+
+  // Warn-and-allow duplicate checks (2026-09-16, extended 2026-09-19) — see
+  // scom205's upload route for the full rationale on the exact-hash check,
+  // and upload-validation.ts for the RO-overlap check added alongside it
+  // (catches a *partial* re-upload the exact-hash check would miss — see
+  // TI01B's incident). Both checked against every prior upload ever made,
+  // not just this month, since a mislabeled backfill can land months away.
   const confirmed = formData.get("confirmDuplicate") === "true";
   if (!confirmed) {
     const priorUploads = await loadAllRawUploadRowsBefore("service_info", admin.branch, date);
@@ -71,6 +82,11 @@ export async function POST(request: Request) {
         previousDate: match.date,
         message: `This file looks identical to your upload from ${match.date} — same rows. Are you sure this is ${date}'s file?`,
       });
+    }
+
+    const overlap = await checkRoOverlap(admin.branch, rawRows, date);
+    if (overlap.duplicate) {
+      return NextResponse.json({ duplicate: true, message: overlap.message });
     }
   }
 

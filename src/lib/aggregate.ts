@@ -74,6 +74,10 @@ export type KpiSummary = {
    * caught 2026-09-19) — computed as summed serviceRevenue ÷ summed
    * serviceUnits, the same weighted-ratio construction as "VAS Gentani." */
   serviceGentanI: number | null;
+  batterySalesForTheMonth: number | null;
+  tireSalesForTheMonth: number | null;
+  batteryTarget: number | null;
+  tireTarget: number | null;
 };
 
 export function computeKpiSummary(branches: BranchReport[]): KpiSummary {
@@ -103,6 +107,10 @@ export function computeKpiSummary(branches: BranchReport[]): KpiSummary {
     serviceRevenue: sumField(branches, "serviceRevenue"),
     serviceUnits: sumField(branches, "serviceUnits"),
     serviceGentanI: achievementRatio(sumField(branches, "serviceRevenue"), sumField(branches, "serviceUnits")),
+    batterySalesForTheMonth: sumField(branches, "batterySalesForTheMonth"),
+    tireSalesForTheMonth: sumField(branches, "tireSalesForTheMonth"),
+    batteryTarget: sumField(branches, "batteryTarget"),
+    tireTarget: sumField(branches, "tireTarget"),
   };
 }
 
@@ -126,6 +134,11 @@ export type HeroSummary = {
   usedOilRevenueMtd: number | null;
   /** GUS Parts+Labour + BPU Parts+Labour + External Sales + scrap + used oil, MTD — the grand-total figure from the user's Revenue Stream reference, plus bill revenue. */
   totalRevenueStreamMtd: number | null;
+  /** Profit family — modelled figures from fixed margin assumptions, see the matching fields on BranchReport in report.ts for the formulas. */
+  partsProfitMtd: number | null;
+  labourProfitMtd: number | null;
+  tglossMarginMtd: number | null;
+  profitMtd: number | null;
 };
 
 export function computeHeroSummary(branches: BranchReport[]): HeroSummary {
@@ -143,7 +156,24 @@ export function computeHeroSummary(branches: BranchReport[]): HeroSummary {
     scrapRevenueMtd: sumField(branches, "scrapRevenueMtd"),
     usedOilRevenueMtd: sumField(branches, "usedOilRevenueMtd"),
     totalRevenueStreamMtd: sumField(branches, "totalRevenueStreamMtd"),
+    partsProfitMtd: sumField(branches, "partsProfitMtd"),
+    labourProfitMtd: sumField(branches, "labourProfitMtd"),
+    tglossMarginMtd: sumField(branches, "tglossMarginMtd"),
+    profitMtd: sumField(branches, "profitMtd"),
   };
+}
+
+/**
+ * GS/BP Gross Profit per RO at group/region level — (channel Labour + 20% ×
+ * channel Parts) ÷ channel RO count, computed from already-summed HeroSummary
+ * fields. NOT an average of each branch's own per-branch ratio (that would
+ * weight every branch equally regardless of volume, the same bug class
+ * documented on KpiSummary.serviceGentanI) — sum the numerator and
+ * denominator across branches first, then divide once.
+ */
+export function grossProfitPerRo(labourMtd: number | null, partsMtd: number | null, roMtd: number | null): number | null {
+  if (labourMtd === null || partsMtd === null || roMtd === null || roMtd === 0) return null;
+  return (labourMtd + 0.2 * partsMtd) / roMtd;
 }
 
 export type AchievementTone = "good" | "warn" | "critical" | "neutral";

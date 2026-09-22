@@ -43,7 +43,7 @@ console.log(`${BRANCH} accessories roster: ${staff.join(", ") || "(none)"}\n`);
 
 const si = parseServiceInfoWorkbook(read(F.siGs), BRANCH, staff);
 const ss = parseSsrv089Workbook(read(F.ssGs), staff);
-const ps = parsePartSaleWorkbook(read(F.ps));
+const ps = await parsePartSaleWorkbook(read(F.ps), BRANCH, DATE);
 const scom = parseScom205Workbook(read(F.scom));
 
 console.log("Parsed from the correct SEP 07 daily files:");

@@ -26,7 +26,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
   if (!admin?.canViewDashboard) redirect("/upload");
-  if (admin.role !== "hq" && admin.role !== "regional") redirect("/dashboard");
+  if (admin.role !== "hq" && admin.role !== "hq_viewer" && admin.role !== "regional") redirect("/dashboard");
 
   const nav = await loadNavState(admin);
   const identity = adminIdentityLabel(admin);

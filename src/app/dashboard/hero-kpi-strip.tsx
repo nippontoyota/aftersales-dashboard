@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion } from "@/lib/aggregate";
 import { formatCompactCurrency, formatNumber } from "@/lib/format";
 import { aggregateIncentiveSlabTargets } from "@/lib/incentive-slabs/aggregate";
@@ -12,6 +12,7 @@ import { eyebrow } from "@/lib/ui";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { RevenueIcon, StorefrontIcon, WrenchIcon } from "@/components/dashboard-icons";
 import { IncentiveSlabIndicator } from "./incentive-slab-indicator";
+import { useSyncedScope } from "./scope-sync";
 
 type Option = { value: string; label: string; region: RegionName | null; kind: "all" | "region" | "branch" };
 
@@ -26,13 +27,16 @@ type Option = { value: string; label: string; region: RegionName | null; kind: "
 const CO01B_SLAB_COMBINED_BRANCHES = ["CO01B", "CO01E"];
 
 /**
- * The five Executive Overview hero cards, with a scope switcher that drives
- * *only these cards* — the rest of the page still follows the header's
- * region filter. HQ / regional managers land on the same All-or-region view
- * they had before (existing behaviour); a branch admin lands on their own
- * branch. Either can then step through every other branch (dropdown, or the
- * ‹ › arrows). Scope is local UI state — it resets on reload, and switching
- * the header date/region re-mounts this with a fresh default.
+ * The five Executive Overview hero cards, with a scope switcher that now
+ * drives the whole page (2026-09-22: previously *only these cards*, with the
+ * rest of the page following a separate header region dropdown — that
+ * dropdown was removed for being a second "All" control doing an
+ * overlapping job, and this switcher's scope, shared via ScopeSyncProvider/
+ * scope-sync.tsx, took over as the page's one live filter). HQ / regional
+ * managers land on the same All-or-region view they had before (existing
+ * behaviour); a branch admin lands on their own branch. Either can then step
+ * through every other branch (dropdown, or the ‹ › arrows). Scope resets on
+ * reload, and switching the header date re-mounts this with a fresh default.
  */
 export function HeroKpiStrip({
   branches,
@@ -74,9 +78,7 @@ export function HeroKpiStrip({
     return opts;
   }, [branches]);
 
-  const [scope, setScope] = useState<string>(() =>
-    options.some((o) => o.value === defaultScope) ? defaultScope : "All",
-  );
+  const [scope, setScope] = useSyncedScope(options.some((o) => o.value === defaultScope) ? defaultScope : "All");
 
   const idx = Math.max(0, options.findIndex((o) => o.value === scope));
   const current = options[idx];
@@ -219,7 +221,6 @@ export function HeroKpiStrip({
                 slabs={scopeSlabs}
                 date={date}
                 showActual={false}
-                variant="circles"
               />
             ) : undefined
           }

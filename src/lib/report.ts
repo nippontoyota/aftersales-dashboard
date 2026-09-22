@@ -11,6 +11,7 @@ import type { CancelledAccessoriesAdjustment } from "./ssrv089/cancellation-adju
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import type { Scom205Snapshot } from "./scom205/store";
 import { loadBillRevenueByBranchForMonth, loadBillRevenueByBranchForDate } from "./bill/store";
+import { BODY_PAINT_ONLY_BRANCHES, isBodyPaintOnly } from "./body-paint-only";
 
 const FIXED_TGLOSS_SERVICE_TARGET = 0.38;
 
@@ -155,6 +156,33 @@ export type BranchReport = {
   // resurrects a null total.
   totalRevenueStreamMtd: number | null;
   externalSalesPctOfSprInternal: number | null;
+
+  // Profit family (Rs) — modelled figures from fixed margin assumptions the
+  // user gave directly (2026-09-21, extended 2026-09-22 with TGLOSS Margin),
+  // not books-reconciled accounting numbers. Verified against the user's
+  // "Critical KPI" reference sheet row for row (2026-09-21/22) — every
+  // formula below matched the sheet's own Target and MTD columns exactly.
+  //
+  //   Total Parts Profit = 20% × (GUS Parts + BPU Parts + External Sales)
+  //   Total Labour Profit = 100% × (GUS Labour + BPU Labour)
+  //   TGLOSS Margin = 38% of TGLOSS Revenue (vasAchievementForTheMonth)
+  //   Gross Profit (profitMtd) = Parts Profit + Labour Profit + TGLOSS Margin
+  //                              + scrap + used-oil revenue
+  //   GS/BP Gross Profit per RO = (channel Labour + 20% × channel Parts) ÷
+  //                               channel RO count — External Sales and
+  //                               TGLOSS Margin aren't split by channel, so
+  //                               they're excluded from these two.
+  //
+  // Same null-guard throughout as totalRevenueStreamMtd — null unless the
+  // five BA-Tool inputs (+ vasAchievementForTheMonth for Gross Profit) are
+  // present; scrap/used-oil (always numeric) never resurrect a null total on
+  // their own. Used only by the CEO dashboard for now.
+  partsProfitMtd: number | null;
+  labourProfitMtd: number | null;
+  tglossMarginMtd: number | null;
+  profitMtd: number | null;
+  gsGrossProfitPerRoMtd: number | null;
+  bpGrossProfitPerRoMtd: number | null;
 };
 
 export type Report = {
@@ -229,12 +257,13 @@ function excludeDeactivatedBranches(rows: BaToolBranchRow[]): BaToolBranchRow[] 
  * Exported so the upload surface stays in step: these branches never get the
  * GS-variant Service Info / Cost & Sales files, so the /upload page hides
  * those two forms for them and pending-uploads.ts drops them from the
- * required set (a BP-only branch is "complete" on 4 reports, not 6). */
-export const BODY_PAINT_ONLY_BRANCHES: ReadonlySet<string> = new Set(["CO01E", "KL01B", "TR01B"]);
-
-export function isBodyPaintOnly(branch: string): boolean {
-  return BODY_PAINT_ONLY_BRANCHES.has(branch);
-}
+ * required set (a BP-only branch is "complete" on 4 reports, not 6).
+ *
+ * Defined in body-paint-only.ts and re-exported here (imported above,
+ * alongside this file's other imports) — that file has no server-only
+ * imports, so client components can use it directly instead of pulling in
+ * this whole module's DB dependencies. */
+export { BODY_PAINT_ONLY_BRANCHES, isBodyPaintOnly };
 
 /** Branch codes that aren't real physical branches — their BA Tool row folds
  * into a parent branch's row and the code itself never appears downstream
@@ -358,6 +387,7 @@ function computeBranchReport(
   const partsRetailAchievementForTheMonth = t("sprInternal");
 
   const gusRoMtd = t("gus");
+  const bpuRoMtd = t("bpus");
   const vasBillTarget = gusRoMtd !== null ? gusRoMtd * VAS_BILL_TARGET_RO_SHARE * VAS_BILL_TARGET_PER_RO : null;
   const vasAchievementForTheMonth = sumBy(serviceInfoMonth, (s) => s.counts.vasRevenue);
 
@@ -387,7 +417,7 @@ function computeBranchReport(
     gusRoMtd,
 
     bpuRoBilledForTheDay: delta(t("bpus"), y("bpus")),
-    bpuRoMtd: t("bpus"),
+    bpuRoMtd,
 
     // "Tyre Actual"/"Battery Actuals" are already MTD-as-of-today in the BA
     // Tool file, same convention as GUS/BPUS/SPO Dealer/etc — read straight
@@ -478,6 +508,37 @@ function computeBranchReport(
     externalSalesPctOfSprInternal:
       externalSalesMtd !== null && partsRetailAchievementForTheMonth !== null
         ? ratio(externalSalesMtd, partsRetailAchievementForTheMonth + externalSalesMtd)
+        : null,
+
+    partsProfitMtd:
+      gusPartsMtd !== null && bpuPartsMtd !== null && externalSalesMtd !== null
+        ? 0.2 * (gusPartsMtd + bpuPartsMtd + externalSalesMtd)
+        : null,
+    labourProfitMtd: gusLabourMtd !== null && bpuLabourMtd !== null ? gusLabourMtd + bpuLabourMtd : null,
+    tglossMarginMtd: vasAchievementForTheMonth !== null ? 0.38 * vasAchievementForTheMonth : null,
+    profitMtd:
+      gusPartsMtd !== null &&
+      gusLabourMtd !== null &&
+      bpuPartsMtd !== null &&
+      bpuLabourMtd !== null &&
+      externalSalesMtd !== null &&
+      vasAchievementForTheMonth !== null
+        ? 0.2 * gusPartsMtd +
+          0.2 * bpuPartsMtd +
+          gusLabourMtd +
+          bpuLabourMtd +
+          0.2 * externalSalesMtd +
+          0.38 * vasAchievementForTheMonth +
+          billRevenue.scrapRevenue +
+          billRevenue.usedOilRevenue
+        : null,
+    gsGrossProfitPerRoMtd:
+      gusLabourMtd !== null && gusPartsMtd !== null && gusRoMtd !== null && gusRoMtd !== 0
+        ? (gusLabourMtd + 0.2 * gusPartsMtd) / gusRoMtd
+        : null,
+    bpGrossProfitPerRoMtd:
+      bpuLabourMtd !== null && bpuPartsMtd !== null && bpuRoMtd !== null && bpuRoMtd !== 0
+        ? (bpuLabourMtd + 0.2 * bpuPartsMtd) / bpuRoMtd
         : null,
   };
 }
