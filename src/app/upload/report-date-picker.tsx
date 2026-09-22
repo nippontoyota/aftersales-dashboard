@@ -25,8 +25,16 @@ export function ReportDatePicker({ selected, holidays }: { selected: string; hol
         value={selected}
         max={new Date().toISOString().split("T")[0]}
         onChange={(e) => {
-          const value = e.target.value;
+          let value = e.target.value;
           if (!value) return;
+
+          // Auto-correct any 2025 date to the last day of its month
+          if (value.startsWith("2025-")) {
+            const [year, month] = value.split("-");
+            const lastDay = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
+            value = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
+          }
+
           const reason = invalidReportDateReason(value, holidaySet);
           if (reason) {
             setError(`${value} is ${reason}. Pick another date.`);
