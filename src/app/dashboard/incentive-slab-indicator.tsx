@@ -24,9 +24,10 @@ import { computePace } from "@/lib/pace";
  * rings rendered dashed green because they were merely on-track per
  * computePace()'s projection — a projected number must never paint a
  * still-pending ring green. Forecast now only ever appears as the
- * `forecastText` line below the rings and inside each pending ring's
- * tooltip, both explicitly labelled as a forecast/projection, never as
- * achievement status — see ringTooltip() below. Projection reuses
+ * `forecastText` line below the rings and inside each not-yet-achieved
+ * ring's tooltip (pending or on-track/"projected" alike), both explicitly
+ * labelled as a forecast/projection, never as achievement status — see
+ * ringTooltip() below. Projection reuses
  * computePace() as-is (simple actual÷daysElapsed×daysInMonth run rate, the
  * same math already driving the VAS Bill target card elsewhere on this page)
  * rather than a working-day-aware variant.
@@ -76,12 +77,16 @@ type RingStatus = "achieved" | "projected" | "pending";
 
 function ringTooltip(slabNumber: 1 | 2 | 3 | 4, target: number, actual: number | null, projectedEom: number | null, status: RingStatus): string {
   // The forecast line is always labelled "Forecast" and always separate from
-  // Status — it describes a still-pending ring's trajectory, never its
-  // current achievement. Shown for every pending ring with a forecast
-  // available, not just ones on track to clear — a ring that's short of pace
-  // (like CO01B's, confirmed 2026-09-18) needs the projected figure just as
-  // much, so it's clear *why* it's pending, not just that it is.
-  const forecastLine = status === "pending" && projectedEom !== null ? `\nForecast (projected month-end): ${currencyFull(projectedEom)}` : "";
+  // Status — it describes a still-unachieved ring's trajectory, never its
+  // current achievement. Shown for every not-yet-achieved ring with a
+  // forecast available — both "pending" (off pace) and "projected" (on pace,
+  // the dashed green ring) rings, not just one or the other: a ring that's
+  // short of pace (like CO01B's, confirmed 2026-09-18) needs the projected
+  // figure to show *why* it's pending, and an on-track ring needs it to show
+  // *by how much* it clears — hiding it there (2026-09-22 bug, confirmed by
+  // the user: every row read "On Track" with no number) left the one status
+  // where the figure matters most blank.
+  const forecastLine = status !== "achieved" && projectedEom !== null ? `\nForecast (projected month-end): ${currencyFull(projectedEom)}` : "";
   return `Slab ${slabNumber}\n\nTarget: ${currencyFull(target)}\nActual: ${currencyFull(actual)}${forecastLine}\nStatus: ${status === "achieved" ? "Achieved" : status === "projected" ? "Projected (On Track)" : "Pending"}`;
 }
 
@@ -274,7 +279,7 @@ export function IncentiveSlabIndicator({
                       <div className="text-right tabular-nums text-fg">{currencyFull(t)}</div>
                       <div className="text-right text-[11px] font-medium">{statusBadge}</div>
                       <div className="text-right tabular-nums text-fg-subtle">
-                        {status === "pending" && projectedEom ? currencyFull(projectedEom) : "—"}
+                        {status !== "achieved" && projectedEom ? currencyFull(projectedEom) : "—"}
                       </div>
                     </div>
                   );
