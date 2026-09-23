@@ -15,7 +15,7 @@ import { BODY_PAINT_ONLY_BRANCHES, isBodyPaintOnly } from "./body-paint-only";
 
 const FIXED_TGLOSS_SERVICE_TARGET = 0.38;
 
-// VAS Bill Target = GUS RO MTD × 38% × Rs 3,000 — fixed constants across
+// TGLOSS Target = GUS RO MTD × 38% × Rs 3,000 — fixed constants across
 // every branch and tier (confirmed with the user 2026-08-31; the 38% here
 // is a separate, coincidentally-identical constant from
 // FIXED_TGLOSS_SERVICE_TARGET above, which grades a different BA Tool field).
@@ -74,7 +74,7 @@ export type BranchReport = {
   pmOcForTheDay: number | null;
   pmOcAchievementForTheMonth: number | null;
 
-  // VAS Bill (T-Gloss/Lexus revenue) — Target = GUS RO MTD × 38% × Rs 3,000
+  // TGLOSS (T-Gloss/Lexus revenue) — Target = GUS RO MTD × 38% × Rs 3,000
   // (see VAS_BILL_TARGET_RO_SHARE/PER_RO above); Achievement = Service
   // Info Report TGLOSS+LEXUS rows matched against the price list (see
   // service-info/parse.ts), same sum-of-daily-uploads MTD convention as
@@ -84,7 +84,7 @@ export type BranchReport = {
   vasAchievementForTheMonth: number | null;
   /** Achievement / Target. */
   vasAchievementPercent: number | null;
-  /** "VAS Gentani" (user's own term) — Achievement / GUS RO MTD, i.e. average VAS revenue per GUS repair order. Not a target-graded ratio. */
+  /** "TGLOSS Gentani" (user's own term) — Achievement / GUS RO MTD, i.e. average TGLOSS revenue per GUS repair order. Not a target-graded ratio. */
   vasGentani: number | null;
 
   // Value-added services from Service Info Report — same "today's direct

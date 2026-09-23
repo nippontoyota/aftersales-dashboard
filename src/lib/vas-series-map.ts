@@ -2,7 +2,7 @@ import type { VasSize } from "./vas-price-list";
 
 /**
  * Maps a Service Info Report "Series" value (vehicle model, e.g. "INNOVA
- * HYCROSS", "URBAN CRUISER HYRYDER") to the T-Gloss size class it prices
+ * HYCROSS", "URBAN CRUISER HYRYDER") to the TGLOSS size class it prices
  * against. Matches whole words, most-specific first — plain substring
  * matching would wrongly catch "CROSS" inside "HYCROSS".
  *

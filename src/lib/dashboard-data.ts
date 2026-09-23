@@ -70,7 +70,7 @@ export type DashboardData = {
   kpis: KpiSummary;
   hasPreviousUpload: boolean;
   monthSnapshots: Snapshot[];
-  /** Every branch's Service Info Report snapshots this month, up to `date` — for the VAS Bill trend line (see trend.ts's computeVasTrendSeries), which needs day-by-day Service Info data no other page-level fetch already loads. */
+  /** Every branch's Service Info Report snapshots this month, up to `date` — for the TGLOSS trend line (see trend.ts's computeVasTrendSeries), which needs day-by-day Service Info data no other page-level fetch already loads. */
   serviceInfoMonthSnapshots: ServiceInfoSnapshot[];
   currentHrefBase: string;
   isCompanyScope: boolean;

@@ -56,7 +56,7 @@ export type BranchView = {
 
   ranks: Record<BranchMetricKey, BranchRank>;
 
-  /** VAS Bill + the four TKM target metrics (BPU, Offtake, Parts Retail, PM+OC). */
+  /** TGLOSS + the four TKM target metrics (BPU, Offtake, Parts Retail, PM+OC). */
   targetStats: TargetStat[];
 
   workingDays: { elapsed: number; total: number };

@@ -11,9 +11,9 @@ import { SectionTable, type SectionColumn } from "./section-table";
  * branch, replacing the earlier 7-board ranked-list layout (2026-09-21, at
  * the user's request — that layout was too much scrolling, "way too
  * messed up"). Columns, left to right: GUS Parts, GUS Labour, BPU (combined,
- * click to split Parts/Labour), TGloss/GUS, Parts Retail, Offtake — no
+ * click to split Parts/Labour), TGLOSS/GUS, Parts Retail, Offtake — no
  * Total Revenue column (dropped at the user's request). GUS Parts/Labour
- * and TGloss/GUS are banded against fixed per-RO targets; BPU/Parts
+ * and TGLOSS/GUS are banded against fixed per-RO targets; BPU/Parts
  * Retail/Offtake have no fixed target yet, so they're plain figures.
  *
  * Body & Paint-only branches (CO01E/KL01B/TR01B) are shown in their own

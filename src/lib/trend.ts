@@ -5,11 +5,11 @@ import { REGIONS, type RegionName } from "./regions";
 
 /**
  * Day-by-day trend series for one BA Tool actual/target field pair, summed
- * (or averaged, for percentage-shaped fields like T-Gloss penetration —
+ * (or averaged, for percentage-shaped fields like TGLOSS penetration —
  * summing a % across branches is meaningless, same rule as aggregate.ts's
  * avgField) across whichever branches match the region filter. Built from
  * the same monthSnapshots already loaded for MTD accumulation elsewhere
- * (Tyre/Battery, VAS) — no extra DB round trip. Only fields that exist
+ * (Tyre/Battery, TGLOSS) — no extra DB round trip. Only fields that exist
  * directly on the BA Tool row work here — real cumulative/daily values
  * already in the file, never a derived/estimated figure.
  */
@@ -36,7 +36,7 @@ export function computeTrendSeries(
   actualKey: keyof BaToolBranchRow,
   /** Omit for a metric with no real confirmed target (e.g. GUS RO) — every point's `target` comes back null rather than a misleading stand-in. */
   targetKey?: keyof BaToolBranchRow,
-  /** "avg" for percentage-shaped fields (T-Gloss penetration); "sum" (default) for everything else. */
+  /** "avg" for percentage-shaped fields (TGLOSS penetration); "sum" (default) for everything else. */
   aggregate: "sum" | "avg" = "sum",
   /** Locks the series to exactly one branch, ignoring `region` — for a
    * branch admin's own dashboard, where "region" doesn't apply. */
@@ -78,7 +78,7 @@ const VAS_BILL_TARGET_RO_SHARE = 0.38;
 const VAS_BILL_TARGET_PER_RO = 3000;
 
 /**
- * Day-by-day VAS Bill trend — unlike computeTrendSeries above, VAS has no
+ * Day-by-day TGLOSS trend — unlike computeTrendSeries above, TGLOSS has no
  * single raw BA Tool field for either side: Target is derived per day from
  * that day's GUS RO MTD (a real BA Tool field), and Actual is the
  * cumulative sum of Service Info Report VAS revenue up to and including
