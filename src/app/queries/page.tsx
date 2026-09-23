@@ -39,6 +39,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
       isRegional={admin.role === "regional"}
+      slimNav={nav.slimNav}
       queriesBadge={nav.queriesBadge}
       identity={identity}
     >

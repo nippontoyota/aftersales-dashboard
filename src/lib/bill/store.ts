@@ -41,6 +41,7 @@ export type BillMonthTotal = {
 
 export type BillListItem = {
   id: number;
+  branch: string;
   invoiceNumber: string;
   taxableValue: number;
   category: BillCategory | null;
@@ -121,7 +122,19 @@ export async function loadBillByInvoiceNumber(invoiceNumber: string): Promise<Bi
   return rows[0] ? toBillUpload(rows[0]) : null;
 }
 
-export async function loadBillTotalsByMonth(branch?: string): Promise<BillMonthTotal[]> {
+/** A single branch (a branch admin's own scope) or a list of branches (a
+ * regional manager's whole region) — `undefined` means every branch (HQ). */
+export type BillBranchScope = string | readonly string[] | undefined;
+
+/** A bare `branch = ...` condition (no leading `where`/`and`) plus its bind
+ * param — `condition` is `null` when `scope` is `undefined` (no filter). */
+function branchScopeCondition(scope: BillBranchScope, paramIndex: number): { condition: string | null; param: string | string[] | undefined } {
+  if (scope === undefined) return { condition: null, param: undefined };
+  if (typeof scope === "string") return { condition: `branch = $${paramIndex}`, param: scope };
+  return { condition: `branch = any($${paramIndex}::text[])`, param: [...scope] };
+}
+
+export async function loadBillTotalsByMonth(branch?: BillBranchScope): Promise<BillMonthTotal[]> {
   const select = `select to_char(${BILL_DATE}, 'YYYY-MM') as month,
               sum(taxable_value) as total,
               count(*)::int as count,
@@ -129,9 +142,8 @@ export async function loadBillTotalsByMonth(branch?: string): Promise<BillMonthT
               coalesce(sum(taxable_value) filter (where category = 'used_oil'), 0) as used_oil_total,
               coalesce(sum(taxable_value) filter (where category is null), 0)      as untagged_total
        from bill_uploads`;
-  const query = branch
-    ? `${select} where branch = $1 group by month order by month desc`
-    : `${select} group by month order by month desc`;
+  const { condition, param } = branchScopeCondition(branch, 1);
+  const query = `${select} ${condition ? `where ${condition}` : ""} group by month order by month desc`;
 
   const { rows } = await pool.query<{
     month: string;
@@ -140,7 +152,7 @@ export async function loadBillTotalsByMonth(branch?: string): Promise<BillMonthT
     scrap_total: string;
     used_oil_total: string;
     untagged_total: string;
-  }>(query, branch ? [branch] : []);
+  }>(query, param !== undefined ? [param] : []);
   return rows.map((r) => ({
     month: r.month,
     total: Number(r.total),
@@ -151,27 +163,26 @@ export async function loadBillTotalsByMonth(branch?: string): Promise<BillMonthT
   }));
 }
 
-export async function loadBillsForMonth(month: string, branch?: string): Promise<BillListItem[]> {
-  const cols = "id, invoice_number, taxable_value, category, invoice_date::text as invoice_date, source_file_name, uploaded_at";
-  const query = branch
-    ? `select ${cols} from bill_uploads
-       where to_char(${BILL_DATE}, 'YYYY-MM') = $1 and branch = $2
-       order by uploaded_at desc`
-    : `select ${cols} from bill_uploads
-       where to_char(${BILL_DATE}, 'YYYY-MM') = $1
-       order by uploaded_at desc`;
+export async function loadBillsForMonth(month: string, branch?: BillBranchScope): Promise<BillListItem[]> {
+  const cols = "id, branch, invoice_number, taxable_value, category, invoice_date::text as invoice_date, source_file_name, uploaded_at";
+  const { condition, param } = branchScopeCondition(branch, 2);
+  const query = `select ${cols} from bill_uploads
+     where to_char(${BILL_DATE}, 'YYYY-MM') = $1 ${condition ? `and ${condition}` : ""}
+     order by uploaded_at desc`;
 
   const { rows } = await pool.query<{
     id: string;
+    branch: string;
     invoice_number: string;
     taxable_value: string;
     category: string | null;
     invoice_date: string | null;
     source_file_name: string;
     uploaded_at: string;
-  }>(query, branch ? [month, branch] : [month]);
+  }>(query, param !== undefined ? [month, param] : [month]);
   return rows.map((r) => ({
     id: Number(r.id),
+    branch: r.branch,
     invoiceNumber: r.invoice_number,
     taxableValue: Number(r.taxable_value),
     category: (r.category as BillCategory | null) ?? null,
