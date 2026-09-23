@@ -156,10 +156,10 @@ export async function loadBillsForMonth(month: string, branch?: string): Promise
   const query = branch
     ? `select ${cols} from bill_uploads
        where to_char(${BILL_DATE}, 'YYYY-MM') = $1 and branch = $2
-       order by ${BILL_DATE} desc, uploaded_at desc`
+       order by uploaded_at desc`
     : `select ${cols} from bill_uploads
        where to_char(${BILL_DATE}, 'YYYY-MM') = $1
-       order by ${BILL_DATE} desc, uploaded_at desc`;
+       order by uploaded_at desc`;
 
   const { rows } = await pool.query<{
     id: string;
