@@ -1,5 +1,4 @@
 import * as XLSX from "xlsx";
-import { eligibleSameMonthFTypeRefDocs } from "./external-sales-eligibility";
 
 /**
  * Part Sale Report — one row per part sold. Unlike Service Info Report,
@@ -46,13 +45,16 @@ const BRAKE_CLEANING_SPRAY_PARTS = ["Z-9BCHP-00001"];
 const EXTERNAL_SALES_BILL_TYPE = "A";
 const EXTERNAL_SALES_RETURN_BILL_TYPE = "F";
 
-/** Whether an F-type row's original A-type bill is eligible to net against
- * External Sales — same-calendar-month bills only (see
- * external-sales-eligibility.ts). Defaults to "nothing is eligible" so a
- * caller that forgets to supply a real resolver fails safe (excludes,
- * doesn't wrongly include); the async `parsePartSaleWorkbook` path always
- * supplies the real one. */
+/** Whether an F-type row's original A-type bill should net against External
+ * Sales. Always returns true — an FK return lands in the month it appears,
+ * regardless of which month the original A-type bill was in. Since prior
+ * months are locked once closed, a cross-month return has nowhere else to go
+ * (2026-09-23, replaces the same-calendar-month-only rule added 2026-09-21). */
 export type FTypeEligibility = (refDocNo: string) => boolean;
+
+/** The resolver used at parse time and in backfill scripts: every F-type
+ * return whose RefDocNo points to an A-type bill is always eligible. */
+export const alwaysEligible: FTypeEligibility = () => true;
 
 /** Opulent Auto Care Pvt Ltd is a vendor (buys parts from us for their own
  * use), not a revenue-generating customer — its rows never count toward
@@ -201,20 +203,7 @@ export function parsePartSaleRows(buffer: Buffer): Record<string, unknown>[] {
 
 export async function parsePartSaleWorkbook(buffer: Buffer, branch: string, uploadDate: string): Promise<ParsedPartSale> {
   const rows = parsePartSaleRows(buffer);
-  const isFTypeEligible = await buildFTypeEligibility(branch, uploadDate, rows);
-  return { counts: partSaleCountsFromRows(rows, isFTypeEligible), rawRows: rows };
-}
-
-async function buildFTypeEligibility(
-  branch: string,
-  uploadDate: string,
-  rows: Record<string, unknown>[]
-): Promise<FTypeEligibility> {
-  const refDocNos = rows
-    .filter((row) => normalizePart(row[BILL_NO_COLUMN]).charAt(0).toUpperCase() === EXTERNAL_SALES_RETURN_BILL_TYPE)
-    .map((row) => normalizePart(row[REF_DOC_NO_COLUMN]));
-  const eligible = await eligibleSameMonthFTypeRefDocs(branch, uploadDate, refDocNos);
-  return (refDocNo: string) => eligible.has(refDocNo);
+  return { counts: partSaleCountsFromRows(rows, alwaysEligible), rawRows: rows };
 }
 
 /** The counting, split out from the workbook read so a re-parse can run
