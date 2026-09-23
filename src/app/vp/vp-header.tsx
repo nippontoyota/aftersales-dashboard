@@ -41,13 +41,13 @@ export function VpHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <header className="border-b border-border pb-5">
+    <header className="border-b border-border-subtle pb-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           {backHref ? (
             <Link
               href={backHref}
-              className="mb-2 inline-flex items-center gap-1 text-[12px] font-medium text-fg-subtle hover:text-accent-text print:hidden"
+              className="mb-2.5 inline-flex items-center gap-1 text-[12px] font-medium text-fg-subtle hover:text-accent-text print:hidden"
             >
               <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                 <path d="M10 3 5 8l5 5" strokeLinecap="round" strokeLinejoin="round" />
@@ -55,9 +55,9 @@ export function VpHeader({
               {backLabel ?? "Back"}
             </Link>
           ) : null}
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-text">{eyebrow}</div>
-          <h1 className="mt-1.5 text-[26px] font-semibold leading-tight tracking-tight text-fg">{title}</h1>
-          {subtitle ? <p className="mt-1.5 max-w-xl text-[13px] text-fg-subtle">{subtitle}</p> : null}
+          <div className="text-[10.5px] font-medium uppercase tracking-[0.2em] text-fg-faint">{eyebrow}</div>
+          <h1 className="mt-2 text-[28px] font-semibold leading-tight tracking-tight text-fg">{title}</h1>
+          {subtitle ? <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-fg-subtle">{subtitle}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           {children}
@@ -69,7 +69,7 @@ export function VpHeader({
         </div>
       </div>
       {asOfLabel ? (
-        <p className="mt-3 text-[11px] uppercase tracking-[0.08em] text-fg-faint">Data as of {asOfLabel} IST</p>
+        <p className="mt-4 text-[10.5px] uppercase tracking-[0.1em] text-fg-faint">Data as of {asOfLabel} IST</p>
       ) : null}
     </header>
   );

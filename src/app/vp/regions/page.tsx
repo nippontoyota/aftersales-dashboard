@@ -11,6 +11,7 @@ import { DAILY_REPORT_ROWS, branchCell, regionTotalCell } from "../../dashboard/
 import { BranchLeaderboard } from "../branch-leaderboard";
 import { FlagComposer } from "../flag-composer";
 import { KeralaMap, type BranchPin } from "../kerala-map";
+import { tglossText } from "@/components/tgloss-text";
 import { MetricSelect } from "../metric-select";
 import { requireVpAccess } from "../vp-guard";
 import { VpHeader } from "../vp-header";
@@ -26,7 +27,7 @@ const METRICS: {
   { key: "gusro", label: "GUS RO MTD", fmt: "num", get: (r) => r.hero.gusRoMtd },
   { key: "bpuro", label: "BPU RO MTD", fmt: "num", get: (r) => r.hero.bpuRoMtd },
   { key: "ext", label: "External Sales MTD", fmt: "rs", get: (r) => r.hero.externalSalesMtd },
-  { key: "vaspct", label: "VAS achievement %", fmt: "pct", get: (r) => achievementRatio(r.kpis.vasAchievementForTheMonth, r.kpis.vasBillTarget) },
+  { key: "vaspct", label: "TGLOSS achievement %", fmt: "pct", get: (r) => achievementRatio(r.kpis.vasAchievementForTheMonth, r.kpis.vasBillTarget) },
 ];
 
 function fmt(v: number | null, kind: "num" | "rs" | "pct"): string {
@@ -153,17 +154,17 @@ async function Regions({
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: REGION_COLOR[chosen.region] }} />
                 {chosen.region} — {chosen.branches.length} branches
               </h2>
-              <div className="mt-3 max-h-[calc(100dvh-14rem)] overflow-auto rounded-xl border border-border bg-surface shadow-card">
+              <div className="mt-3 max-h-[calc(100dvh-14rem)] overflow-auto rounded-2xl border border-border-subtle bg-surface">
             <table className="border-separate border-spacing-0 text-[13px]">
               <thead>
-                <tr className="[&>th]:sticky [&>th]:top-0 [&>th]:z-20 [&>th]:border-b [&>th]:border-border">
-                  <th className="sticky left-0 z-30 bg-surface py-2.5 pl-5 pr-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">
+                <tr className="[&>th]:sticky [&>th]:top-0 [&>th]:z-20 [&>th]:border-b [&>th]:border-border-subtle">
+                  <th className="sticky left-0 z-30 bg-surface py-3 pl-6 pr-3 text-left text-[10.5px] font-medium uppercase tracking-[0.12em] text-fg-faint">
                     Metric
                   </th>
                   {chosen.branches.map((b) => (
                     <th
                       key={b.branch}
-                      className="whitespace-nowrap bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle"
+                      className="whitespace-nowrap bg-surface px-4 py-3 text-right text-[10.5px] font-medium uppercase tracking-[0.1em] text-fg-faint"
                     >
                       <Link
                         href={`/vp/branches?date=${data.date}&branch=${b.branch}&region=${chosen.region}`}
@@ -173,7 +174,7 @@ async function Regions({
                       </Link>
                     </th>
                   ))}
-                  <th className="whitespace-nowrap bg-accent-soft/50 px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-accent-text">
+                  <th className="whitespace-nowrap bg-accent-soft/20 px-4 py-3 text-right text-[10.5px] font-medium uppercase tracking-[0.1em] text-accent-text">
                     {chosen.region}
                   </th>
                 </tr>
@@ -185,32 +186,32 @@ async function Regions({
                       <tr key={`g${i}`}>
                         <td
                           colSpan={chosen.branches.length + 2}
-                          className="border-t border-border bg-surface-2/70 py-2 pl-5 pr-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-subtle"
+                          className="border-t border-border-subtle bg-surface-2/30 py-2.5 pl-6 pr-3 text-[10px] font-medium uppercase tracking-[0.14em] text-fg-subtle"
                         >
-                          <span className="border-l-2 border-accent pl-2">{row.label}</span>
+                          <span className="border-l-2 border-accent/70 pl-2.5">{tglossText(row.label)}</span>
                         </td>
                       </tr>
                     );
                   }
                   const totalCell = regionTotalCell(row, chosen.branches);
                   return (
-                    <tr key={`m${i}`} className="border-t border-border-subtle hover:bg-surface-2/40">
+                    <tr key={`m${i}`} className="border-t border-border-subtle hover:bg-surface-2/30">
                       <td
-                        className={`sticky left-0 z-10 whitespace-nowrap bg-surface py-2 pl-5 pr-3 ${
+                        className={`sticky left-0 z-10 whitespace-nowrap bg-surface py-2.5 pl-6 pr-3 ${
                           row.strong ? "font-semibold text-fg" : "text-fg-muted"
                         }`}
                       >
-                        {row.label}
+                        {tglossText(row.label)}
                       </td>
                       {chosen.branches.map((b) => {
                         const cell = branchCell(row, b);
                         return (
-                          <td key={b.branch} className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg">
+                          <td key={b.branch} className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-fg">
                             {cell.display == null ? <span className="text-fg-faint">—</span> : row.fmt(cell.display)}
                           </td>
                         );
                       })}
-                      <td className="whitespace-nowrap bg-accent-soft/30 px-4 py-2 text-right font-semibold tabular-nums text-fg">
+                      <td className="whitespace-nowrap bg-accent-soft/10 px-4 py-2.5 text-right font-semibold tabular-nums text-fg">
                         {totalCell.display == null ? <span className="text-fg-faint">—</span> : row.fmt(totalCell.display)}
                       </td>
                     </tr>
@@ -234,8 +235,8 @@ async function Regions({
         </div>
       </div>
 
-      <div className="mt-6 rounded-xl border border-dashed border-border-strong bg-surface p-5">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">VAS business — 3M vs Db outlets</div>
+      <div className="mt-6 rounded-2xl border border-dashed border-border-strong bg-surface p-5">
+        <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-subtle">VAS business — 3M vs Db outlets</div>
         <p className="mt-1.5 text-sm italic text-fg-faint">
           Coming soon — needs the 3M / Db outlet classification and the conversion &amp; TUS definitions from the VAS team.
         </p>

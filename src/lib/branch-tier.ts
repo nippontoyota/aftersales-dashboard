@@ -1,5 +1,5 @@
 /**
- * City tier (A/B) per branch — determines which T-Gloss retail price a
+ * City tier (A/B) per branch — determines which TGLOSS retail price a
  * branch's VAS sales get matched against (see vas-price-list.ts). Provided
  * directly by the user, 2026-08-31. CO01E (Kalamassery Body & Paint) has no
  * VAS sales of its own (it doesn't upload a Service Info Report), but is

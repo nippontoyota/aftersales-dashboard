@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { achievementRatio, achievementTone } from "@/lib/aggregate";
@@ -13,6 +13,7 @@ import { BranchPicker } from "../branch-picker";
 import { FlagComposer } from "../flag-composer";
 import { requireVpAccess } from "../vp-guard";
 import { VpHeader } from "../vp-header";
+import { tglossText } from "@/components/tgloss-text";
 
 const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg" } as const;
 const TONE_BAR = { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" } as const;
@@ -114,21 +115,21 @@ async function Branch({
         <MiniStat label="GUS RO · MTD" value={branch.gusRoMtd?.toLocaleString("en-IN") ?? "—"} />
         <MiniStat label="BPU RO · MTD" value={branch.bpuRoMtd?.toLocaleString("en-IN") ?? "—"} />
         <MiniStat
-          label="TGLOSS"
+          label={tglossText("TGLOSS")}
           value={formatPercent(achievementRatio(branch.vasAchievementForTheMonth, branch.vasBillTarget))}
         />
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-surface shadow-card">
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
         <table className="w-full border-separate border-spacing-0 text-[13px]">
           <thead>
-            <tr className="[&>th]:border-b [&>th]:border-border">
-              <th className="bg-surface py-2.5 pl-5 pr-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">Metric</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Today</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">MTD</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Target</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Ach.</th>
-              <th className="bg-accent-soft/40 px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-accent-text">Pace →EoM</th>
+            <tr className="[&>th]:border-b [&>th]:border-border-subtle">
+              <th className="bg-surface py-3 pl-6 pr-3 text-left text-[10.5px] font-medium uppercase tracking-[0.12em] text-fg-faint">Metric</th>
+              <th className="bg-surface px-4 py-3 text-right text-[10.5px] font-medium uppercase tracking-[0.1em] text-fg-faint">Today</th>
+              <th className="bg-surface px-4 py-3 text-right text-[10.5px] font-medium uppercase tracking-[0.1em] text-fg-faint">MTD</th>
+              <th className="bg-surface px-4 py-3 text-right text-[10.5px] font-medium uppercase tracking-[0.1em] text-fg-faint">Target</th>
+              <th className="bg-surface px-4 py-3 text-right text-[10.5px] font-medium uppercase tracking-[0.1em] text-fg-faint">Ach.</th>
+              <th className="bg-accent-soft/15 px-4 py-3 text-right text-[10.5px] font-medium uppercase tracking-[0.1em] text-accent-text">Pace →EoM</th>
               <th className="w-8 bg-surface print:hidden" />
             </tr>
           </thead>
@@ -137,8 +138,8 @@ async function Branch({
               if (row.kind === "group") {
                 return (
                   <tr key={`g${i}`}>
-                    <td colSpan={7} className="border-t border-border bg-surface-2/70 py-2 pl-5 pr-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-subtle">
-                      <span className="border-l-2 border-accent pl-2">{row.label}</span>
+                    <td colSpan={7} className="border-t border-border-subtle bg-surface-2/30 py-2.5 pl-6 pr-3 text-[10px] font-medium uppercase tracking-[0.14em] text-fg-subtle">
+                      <span className="border-l-2 border-accent/70 pl-2.5">{tglossText(row.label)}</span>
                     </td>
                   </tr>
                 );
@@ -147,14 +148,14 @@ async function Branch({
               const pace = row.summable ? paceProjection(cell.mtd, data.date) : null;
               const tone = achievementTone(cell.ratio);
               return (
-                <tr key={`m${i}`} className={`border-t border-border-subtle hover:bg-surface-2/40 ${row.strong ? "bg-accent-soft/25" : ""}`}>
-                  <td className={`whitespace-nowrap py-2 pl-5 pr-3 ${row.strong ? "font-semibold text-fg" : "text-fg-muted"}`}>{row.label}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{cell.today == null ? "—" : row.fmt(cell.today)}</td>
-                  <td className={`px-4 py-2 text-right tabular-nums ${row.strong ? "font-semibold text-fg" : "text-fg"}`}>
+                <tr key={`m${i}`} className={`border-t border-border-subtle hover:bg-surface-2/30 ${row.strong ? "bg-accent-soft/10" : ""}`}>
+                  <td className={`whitespace-nowrap py-2.5 pl-6 pr-3 ${row.strong ? "font-semibold text-fg" : "text-fg-muted"}`}>{tglossText(row.label)}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-fg-subtle">{cell.today == null ? "—" : row.fmt(cell.today)}</td>
+                  <td className={`px-4 py-2.5 text-right tabular-nums ${row.strong ? "font-semibold text-fg" : "text-fg"}`}>
                     {cell.mtd == null ? "—" : row.fmt(cell.mtd)}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{cell.target == null ? "—" : row.fmt(cell.target)}</td>
-                  <td className={`px-4 py-2 text-right tabular-nums ${cell.ratio == null ? "text-fg-faint" : TONE_TEXT[tone]}`}>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-fg-subtle">{cell.target == null ? "—" : row.fmt(cell.target)}</td>
+                  <td className={`px-4 py-2.5 text-right tabular-nums ${cell.ratio == null ? "text-fg-faint" : TONE_TEXT[tone]}`}>
                     {cell.ratio == null ? (
                       "—"
                     ) : (
@@ -166,7 +167,7 @@ async function Branch({
                       </span>
                     )}
                   </td>
-                  <td className="bg-accent-soft/20 px-4 py-2 text-right tabular-nums text-fg-subtle">{pace == null ? "—" : row.fmt(pace)}</td>
+                  <td className="bg-accent-soft/10 px-4 py-2.5 text-right tabular-nums text-fg-subtle">{pace == null ? "—" : row.fmt(pace)}</td>
                   <td className="px-2 text-right print:hidden">
                     <Link
                       href={`${flagBase}&fbranch=${branch.branch}&fmetric=${encodeURIComponent(row.label)}&fvalue=${encodeURIComponent(cell.mtd == null ? "" : row.fmt(cell.mtd))}&flag=1`}
@@ -195,11 +196,11 @@ async function Branch({
   );
 }
 
-function MiniStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function MiniStat({ label, value, accent }: { label: ReactNode; value: string; accent?: boolean }) {
   return (
-    <div className={`rounded-xl border p-3.5 shadow-card ${accent ? "border-accent/30 bg-accent-soft/40" : "border-border bg-surface"}`}>
-      <div className="text-[11px] font-medium uppercase tracking-[0.07em] text-fg-faint">{label}</div>
-      <div className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-fg">{value}</div>
+    <div className={`rounded-2xl border border-border-subtle bg-surface p-4 ${accent ? "border-t-2 border-t-accent" : ""}`}>
+      <div className="text-[10.5px] font-medium uppercase tracking-[0.12em] text-fg-faint">{label}</div>
+      <div className="mt-1.5 text-xl font-semibold tabular-nums tracking-tight text-fg">{value}</div>
     </div>
   );
 }

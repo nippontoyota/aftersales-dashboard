@@ -8,6 +8,7 @@ import { formatCompact, formatNumber, formatPercent } from "@/lib/format";
 import { computeTrendSeries, type TrendPoint } from "@/lib/trend";
 import type { Snapshot } from "@/lib/snapshot-store";
 import type { BaToolBranchRow } from "@/lib/ba-tool/parse";
+import { tglossText } from "@/components/tgloss-text";
 import { Sparkline } from "@/components/sparkline";
 import { useSyncedMetric } from "./metric-sync";
 
@@ -19,7 +20,7 @@ export type HeatmapMetricConfig = {
    * wraps this component in a <MetricSyncProvider>, the shared dropdown
    * sorts the heatmap by this column (2026-09-19, at the user's request).
    * Omit for a metric that isn't part of the shared selection (e.g. the main
-   * Dashboard's VAS/T-Gloss columns, which have no shared dropdown at all). */
+   * Dashboard's TGLOSS columns, which have no shared dropdown at all). */
   syncKey?: string;
   /** Raw BA Tool fields for this metric's trend line — only needed for the
    * branch-drilldown sparkline (paceMode only). Omit to skip the sparkline
@@ -31,10 +32,10 @@ export type HeatmapMetricConfig = {
 /** BPU/Offtake/Parts Retail/PM+OC moved to their own heatmap on the TKM
  * Targets page (2026-08-31) — this default is what's left on the main
  * dashboard's heatmap. The T-Gloss (penetration %) column was dropped
- * 2026-09-21, at the user's request, and VAS relabeled to "TGloss Revenue"
+ * 2026-09-21, at the user's request, and VAS relabeled to "TGLOSS Revenue"
  * — same figures (vasAchievementForTheMonth vs vasBillTarget), name only. */
 const DEFAULT_METRICS: HeatmapMetricConfig[] = [
-  { label: "TGloss Revenue", actual: "vasAchievementForTheMonth", target: "vasBillTarget" },
+  { label: "TGLOSS Revenue", actual: "vasAchievementForTheMonth", target: "vasBillTarget" },
 ];
 
 const CELL_BG: Record<AchievementTone, string> = {
@@ -153,7 +154,7 @@ function DrilldownMetricRow({
   return (
     <div className="rounded-md border border-border-subtle bg-surface-2 p-2.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold text-fg-subtle">{metric.label}</span>
+        <span className="text-[11px] font-semibold text-fg-subtle">{tglossText(metric.label)}</span>
         {series && series.filter((p) => p.actual !== null).length >= 2 ? (
           <div className="w-16"><Sparkline values={series.map((p) => p.actual)} /></div>
         ) : null}
@@ -199,7 +200,7 @@ export function BranchPerformanceHeatmap({
   monthSnapshots,
 }: {
   branches: BranchReport[];
-  /** Defaults to the main dashboard's own set (VAS + T-Gloss); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics instead. */
+  /** Defaults to the main dashboard's own set (TGLOSS Revenue); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics instead. */
   metrics?: HeatmapMetricConfig[];
   /** Opts into pace mode — see doc comment above. */
   date?: string;
@@ -313,11 +314,11 @@ export function BranchPerformanceHeatmap({
                         className="inline-flex items-center gap-1 hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         title={`Sort by ${m.label}`}
                       >
-                        {m.label}
+                        {tglossText(m.label)}
                         <SortIcon direction={direction} />
                       </button>
                     ) : (
-                      m.label
+                      tglossText(m.label)
                     )}
                   </th>
                 );

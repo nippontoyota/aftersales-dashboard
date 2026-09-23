@@ -66,9 +66,7 @@ export default async function BillsPage({
         {allMonths.length === 0 ? (
           <div className="mt-6 rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
             No bills have been uploaded yet.{" "}
-            {admin.role !== "hq" && admin.role !== "hq_viewer"
-              ? "Upload PDF invoices from the Upload page."
-              : ""}
+            {admin.role === "branch" ? "Upload PDF invoices from the Upload page." : ""}
           </div>
         ) : (
           <BillsPageClient months={allMonths} initialMonth={month} />

@@ -19,7 +19,7 @@ export type BranchMetricKey = "totalRevenue" | "revenuePerCar" | "vasPct";
 export const BRANCH_METRIC_LABELS: Record<BranchMetricKey, string> = {
   totalRevenue: "Total Revenue Stream MTD",
   revenuePerCar: "Revenue per Car (MTD)",
-  vasPct: "VAS Bill — % of target",
+  vasPct: "TGLOSS — % of target",
 };
 
 export type BranchRank = { rank: number; of: number } | null;
@@ -33,7 +33,7 @@ export type TargetStat = {
   mtd: number | null;
   target: number | null;
   ratio: number | null;
-  /** VAS Bill's target is itself month-to-date (scales with RO count), so
+  /** TGLOSS's target is itself month-to-date (scales with RO count), so
    * `ratio` already grades it correctly. The four TKM metrics have a fixed
    * *month-end* target, so `ratio` alone reads alarmingly low early in the
    * month — `paceRatio` (ratio ÷ fraction of working days elapsed) is the
@@ -56,7 +56,7 @@ export type BranchView = {
 
   ranks: Record<BranchMetricKey, BranchRank>;
 
-  /** VAS Bill + the four TKM target metrics (BPU, Offtake, Parts Retail, PM+OC). */
+  /** TGLOSS + the four TKM target metrics (BPU, Offtake, Parts Retail, PM+OC). */
   targetStats: TargetStat[];
 
   workingDays: { elapsed: number; total: number };
@@ -207,7 +207,7 @@ function buildView(branch: string, shared: Shared): BranchView | null {
   // ---- target-graded stat cards (VAS + the four TKM metrics) ----
   // The elapsed fraction is computed below with workingDays; forward-declare.
   const TARGET_DEFS: { key: string; label: string; actual: keyof BranchReport; target: keyof BranchReport; mtdTarget: boolean }[] = [
-    { key: "vas", label: "VAS Bill", actual: "vasAchievementForTheMonth", target: "vasBillTarget", mtdTarget: true },
+    { key: "vas", label: "TGLOSS", actual: "vasAchievementForTheMonth", target: "vasBillTarget", mtdTarget: true },
     { key: "bpu", label: "BPU", actual: "bpuAchievementForTheMonth", target: "bpuTarget", mtdTarget: false },
     { key: "offtake", label: "Offtake", actual: "offtakeAchievementForTheMonth", target: "offtakeTarget", mtdTarget: false },
     { key: "partsRetail", label: "Parts Retail", actual: "partsRetailAchievementForTheMonth", target: "partsRetailTarget", mtdTarget: false },

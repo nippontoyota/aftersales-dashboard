@@ -10,7 +10,7 @@ export type BarsMetricConfig = { key: string; label: string; actual: keyof Branc
 /** BPU/Offtake/Parts Retail/PM+OC moved to their own bars on the TKM
  * Targets page (2026-08-31) — this default is what's left on the main
  * dashboard's bars. */
-const DEFAULT_METRICS: BarsMetricConfig[] = [{ key: "vas", label: "VAS (Rs)", actual: "vasAchievementForTheMonth", target: "vasBillTarget" }];
+const DEFAULT_METRICS: BarsMetricConfig[] = [{ key: "vas", label: "TGLOSS (Rs)", actual: "vasAchievementForTheMonth", target: "vasBillTarget" }];
 
 const TONE_BAR: Record<AchievementTone, string> = {
   good: "bg-good-solid",

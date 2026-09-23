@@ -90,12 +90,12 @@ export function KeralaMap({
   placed.sort((a, b) => radius(b.pin.value) - radius(a.pin.value));
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-4 shadow-card">
+    <div className="rounded-2xl border border-border-subtle bg-surface p-5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">Regions</span>
+        <span className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">Regions</span>
         {metricControl}
       </div>
-      <div className="mt-1 text-[10px] uppercase tracking-[0.08em] text-fg-faint">bubble size · {metricLabel}</div>
+      <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-fg-faint">bubble size · {metricLabel}</div>
 
       <div className="mt-2 flex justify-center">
         <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="h-[470px] w-auto max-w-full" role="img" aria-label={`Kerala, branch locations sized by ${metricLabel}`}>
@@ -146,7 +146,7 @@ export function KeralaMap({
               type="button"
               onClick={() => go(active ? `/vp/regions?date=${date}` : `/vp/regions?date=${date}&region=${r}`)}
               className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
-                active ? "border-accent bg-accent-soft/50" : "border-border hover:bg-surface-2/60"
+                active ? "border-accent/60 bg-accent-soft/20" : "border-border-subtle hover:bg-surface-2/50"
               }`}
             >
               <div className="flex items-center gap-2">

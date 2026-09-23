@@ -3,6 +3,7 @@ import { formatPercent } from "@/lib/format";
 import type { BranchReport } from "@/lib/report";
 import { DateSelect } from "./date-select";
 import { DAILY_REPORT_ROWS, branchCell, type ValueFmt } from "./daily-report-rows";
+import { tglossText } from "@/components/tgloss-text";
 
 /**
  * Branch admin's pre-publish view: their own branch's raw numbers as a plain
@@ -84,7 +85,7 @@ export function BranchDailyReport({
                       colSpan={5}
                       className="border-t border-border bg-surface-2 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-subtle"
                     >
-                      {row.label}
+                      {tglossText(row.label)}
                     </td>
                   </tr>
                 );
@@ -96,7 +97,7 @@ export function BranchDailyReport({
               return (
                 <tr key={`m-${i}`} className="border-t border-border-subtle">
                   <td className={`whitespace-nowrap py-1.5 pl-4 pr-3 ${row.strong ? "font-semibold text-fg" : "text-fg-muted"}`}>
-                    {row.label}
+                    {tglossText(row.label)}
                   </td>
                   <Cell value={cell.today} fmt={row.fmt} className="text-fg-subtle" />
                   <Cell value={cell.mtd} fmt={row.fmt} className={row.strong ? "font-semibold text-fg" : "text-fg"} />

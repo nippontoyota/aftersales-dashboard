@@ -13,7 +13,7 @@ export type TrendMetricConfig = { key: string; label: string; isCurrency?: boole
 /** BPU/Offtake/Parts Retail/PM+OC moved to their own trend chart on the TKM
  * Targets page (2026-08-31) — this default is what's left on the main
  * dashboard's chart. */
-const DEFAULT_METRICS: TrendMetricConfig[] = [{ key: "vas", label: "VAS Bill (Rs)" }];
+const DEFAULT_METRICS: TrendMetricConfig[] = [{ key: "vas", label: "TGLOSS (Rs)" }];
 
 // Stable reference (not `[]` inline at the call site) so a missing metric
 // key doesn't hand useMemo a new array identity on every render.
@@ -316,7 +316,7 @@ export function TrendChart({
   const firstTargetValue = points.find((p) => p.target !== null)?.target ?? null;
 
   // Most targets on this chart are a fixed monthly figure repeated on every
-  // day's row (BPU, Offtake, Parts Retail, PM+OC) — but VAS Bill's target is
+  // day's row (BPU, Offtake, Parts Retail, PM+OC) — but TGLOSS's target is
   // a moving benchmark recomputed daily from GUS RO MTD (see
   // computeVasTrendSeries), so it legitimately grows through the month like
   // actual does. Distinguish by shape rather than hardcoding a metric key:
@@ -486,7 +486,7 @@ export function TrendChart({
 
   // pace.projectedAchievementRatio divides the projected actual by *today's*
   // target-to-date — correct for a fixed target (projectedTargetEom equals
-  // it exactly, so this reduces to the same thing), but VAS Bill's target
+  // it exactly, so this reduces to the same thing), but TGLOSS's target
   // itself grows day by day (tied to GUS RO MTD, see trend.ts), so for a
   // moving target that would compare a month-end actual against a
   // still-partial target and wildly overstate achievement (confirmed live:

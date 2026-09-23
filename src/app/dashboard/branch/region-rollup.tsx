@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
 import type { RegionRollup } from "@/lib/branch-view-data";
 import { achievementTone, type AchievementTone } from "@/lib/aggregate";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import type { RegionName } from "@/lib/regions";
 import { eyebrow } from "@/lib/ui";
+import { tglossText } from "@/components/tgloss-text";
 
 const TONE_TEXT: Record<AchievementTone, string> = {
   good: "text-good",
@@ -16,7 +18,7 @@ const REGION_COLOR: Record<RegionName, string> = {
   North: "var(--color-cat-north)",
 };
 
-function Stat({ label, value, sub, subClass }: { label: string; value: string; sub?: string; subClass?: string }) {
+function Stat({ label, value, sub, subClass }: { label: ReactNode; value: string; sub?: string; subClass?: string }) {
   return (
     <div>
       <div className="text-[10px] font-semibold uppercase tracking-wide text-fg-faint">{label}</div>
@@ -41,8 +43,8 @@ export function RegionRollup({ rollup }: { rollup: RegionRollup }) {
 
       <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Stat label="Total Revenue" value={formatCompactCurrency(rollup.totalRevenue)} sub={`Projected ${formatCompactCurrency(rollup.projectedTotalRevenue)}`} />
-        <Stat label="VAS Bill" value={formatCompactCurrency(rollup.vasActual)} sub={`Target ${formatCompactCurrency(rollup.vasTarget)}`} />
-        <Stat label="VAS % of target" value={formatPercent(rollup.vasPct)} sub="month-to-date" subClass={TONE_TEXT[vasTone]} />
+        <Stat label={tglossText("TGLOSS")} value={formatCompactCurrency(rollup.vasActual)} sub={`Target ${formatCompactCurrency(rollup.vasTarget)}`} />
+        <Stat label={tglossText("TGLOSS % of target")} value={formatPercent(rollup.vasPct)} sub="month-to-date" subClass={TONE_TEXT[vasTone]} />
         <Stat label="Working days" value={`${rollup.workingDays.elapsed} / ${rollup.workingDays.total}`} sub="elapsed / total" />
       </div>
 

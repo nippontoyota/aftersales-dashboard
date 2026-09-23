@@ -40,7 +40,7 @@ export function VpFlagThread({
   ].filter(Boolean);
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
+    <div className="rounded-2xl border border-border-subtle bg-surface p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_BADGE[flag.status]}`}>
           {flag.status}

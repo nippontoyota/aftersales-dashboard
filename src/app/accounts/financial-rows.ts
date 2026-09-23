@@ -5,7 +5,7 @@ import { DAILY_REPORT_ROWS, type RowDef } from "../dashboard/daily-report-rows";
  * (the app's one source of truth for revenue-stream metrics), trimmed to
  * what's actually money (Rs) rather than operational volume (RO counts,
  * Tyre/Battery units, DIY counts, etc). User-agreed scope (2026-09-12): GUS/
- * BPU parts & labour, External Sales, VAS Bill, Scrap/Used Oil, Total
+ * BPU parts & labour, External Sales, TGLOSS, Scrap/Used Oil, Total
  * Revenue. Reuses the same MetricDef objects (and so the exact same
  * branchCell/regionTotalCell math) rather than re-deriving anything — no
  * risk of drifting from what CEO/VP already show for the same figures.
@@ -16,13 +16,13 @@ const FINANCIAL_LABELS = new Set([
   "BPU Parts MTD (Rs)",
   "BPU Labour MTD (Rs)",
   "External Sales MTD (Rs)",
-  "VAS Bill",
+  "TGLOSS",
   "Scrap Revenue (without tax)",
   "Used Oil Revenue (without tax)",
   "Total MTD (Rs)",
 ]);
 
-const GROUP_LABELS = new Set(["GUS", "BPU", "Revenue Stream", "VAS Bill", "Scrap & Used Oil"]);
+const GROUP_LABELS = new Set(["GUS", "BPU", "Revenue Stream", "TGLOSS", "Scrap & Used Oil"]);
 
 export const FINANCIAL_ROWS: RowDef[] = DAILY_REPORT_ROWS.filter(
   (row) => (row.kind === "group" && GROUP_LABELS.has(row.label)) || (row.kind === "metric" && FINANCIAL_LABELS.has(row.label)),

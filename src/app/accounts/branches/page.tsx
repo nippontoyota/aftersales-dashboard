@@ -9,6 +9,7 @@ import { branchCell, regionTotalCell } from "../../dashboard/daily-report-rows";
 import { requireAccountsAccess } from "../accounts-guard";
 import { AccountsHeader } from "../accounts-header";
 import { FINANCIAL_ROWS } from "../financial-rows";
+import { tglossText } from "@/components/tgloss-text";
 
 export default async function AccountsBranchesPage({
   searchParams,
@@ -112,7 +113,7 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
                       colSpan={rollup.branches.length + 2}
                       className="border-t border-border bg-surface-2/70 py-2 pl-5 pr-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-subtle"
                     >
-                      <span className="border-l-2 border-accent pl-2">{row.label}</span>
+                      <span className="border-l-2 border-accent pl-2">{tglossText(row.label)}</span>
                     </td>
                   </tr>
                 );
@@ -121,7 +122,7 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
               return (
                 <tr key={`m${i}`} className="border-t border-border-subtle hover:bg-surface-2/40">
                   <td className={`sticky left-0 z-10 whitespace-nowrap bg-surface py-2 pl-5 pr-3 ${row.strong ? "font-semibold text-fg" : "text-fg-muted"}`}>
-                    {row.label}
+                    {tglossText(row.label)}
                   </td>
                   {rollup.branches.map((b) => {
                     const cell = branchCell(row, b);

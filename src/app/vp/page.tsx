@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { achievementRatio, achievementTone } from "@/lib/aggregate";
@@ -9,6 +9,8 @@ import { FlagComposer } from "./flag-composer";
 import { requireVpAccess } from "./vp-guard";
 import { VpHeader } from "./vp-header";
 import { VpScoreboard } from "./vp-scoreboard";
+import { DraftWarning } from "@/components/draft-warning";
+import { tglossText } from "@/components/tgloss-text";
 
 export default async function VpOverviewPage({
   searchParams,
@@ -67,7 +69,7 @@ async function Overview({
 
   const vasRatio = achievementRatio(group.kpis.vasAchievementForTheMonth, group.kpis.vasBillTarget);
 
-  const cards: { label: string; value: string; accent?: boolean; sub?: string; tone?: ReturnType<typeof achievementTone> }[] = [
+  const cards: { label: ReactNode; value: string; accent?: boolean; sub?: string; tone?: ReturnType<typeof achievementTone> }[] = [
     { label: "Total Revenue · MTD", value: formatCompactCurrency(group.hero.totalRevenueStreamMtd), accent: true },
     {
       label: "GUS RO · MTD",
@@ -79,11 +81,14 @@ async function Overview({
       value: group.hero.bpuRoMtd?.toLocaleString("en-IN") ?? "—",
       sub: `${group.hero.bpuRoBilledForTheDay?.toLocaleString("en-IN") ?? "—"} today`,
     },
-    { label: "TGLOSS", value: formatPercent(vasRatio), tone: achievementTone(vasRatio) },
+    { label: tglossText("TGLOSS"), value: formatPercent(vasRatio), tone: achievementTone(vasRatio) },
   ];
 
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-8">
+      {!data.isPublished && (
+        <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} />
+      )}
       <VpHeader
         eyebrow="Nippon Group · Service"
         title="Executive Overview"
@@ -96,21 +101,21 @@ async function Overview({
         asOfLabel={uploadedAtLabel}
       />
 
-      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {cards.map((c) => (
+      <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {cards.map((c, i) => (
           <div
-            key={c.label}
-            className={`rounded-xl border p-4 shadow-card ${c.accent ? "border-accent/30 bg-accent-soft/40" : "border-border bg-surface"}`}
+            key={i}
+            className={`rounded-2xl border border-border-subtle bg-surface p-6 ${c.accent ? "border-t-2 border-t-accent" : ""}`}
           >
-            <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-fg-faint">{c.label}</div>
+            <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">{c.label}</div>
             <div
-              className={`mt-1.5 text-2xl font-semibold tabular-nums tracking-tight ${
+              className={`mt-2 text-[28px] font-semibold tabular-nums tracking-tight ${
                 c.tone === "critical" ? "text-bad" : c.tone === "warn" ? "text-warn" : c.tone === "good" ? "text-good" : "text-fg"
               }`}
             >
               {c.value}
             </div>
-            {c.sub ? <div className="mt-0.5 text-[11px] text-fg-subtle">{c.sub}</div> : null}
+            {c.sub ? <div className="mt-1 text-[12px] text-fg-subtle">{c.sub}</div> : null}
           </div>
         ))}
       </div>
@@ -120,8 +125,8 @@ async function Overview({
       </div>
 
       <p className="mt-4 max-w-3xl text-[11px] leading-relaxed text-fg-faint">
-        VAS bill is the modelled figure — T-Gloss / Lexus jobs priced at the master list, the same number shown across the
-        dashboard. Total Revenue = GUS + BPU parts &amp; labour + External Sales + scrap / used oil.
+        {tglossText("TGLOSS is the modelled figure — TGLOSS / Lexus jobs priced at the master list, the same number shown across the")}
+        {" "}dashboard. Total Revenue = GUS + BPU parts &amp; labour + External Sales + scrap / used oil.
       </p>
 
       <FlagComposer page="overview" date={data.date} />

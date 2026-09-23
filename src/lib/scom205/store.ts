@@ -108,3 +108,16 @@ export async function loadAllScom205SnapshotsForDate(date: string): Promise<Scom
     },
   }));
 }
+
+/** How many distinct branches have uploaded their scom205 for `date` — the
+ * real "uploaded branch count" for the DraftWarning banner. Unlike
+ * report.branches.length (which counts BA Tool rows, always all 18/19 since
+ * HQ uploads a single file covering everyone), this counts per-branch
+ * uploads and correctly returns e.g. 12 when only 12 branches have filed. */
+export async function countScom205BranchesForDate(date: string): Promise<number> {
+  const { rows } = await pool.query<{ count: string }>(
+    `select count(*)::text as count from scom205_snapshots where date = $1`,
+    [date]
+  );
+  return Number(rows[0]?.count ?? 0);
+}

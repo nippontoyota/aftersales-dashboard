@@ -2,12 +2,13 @@ import Link from "next/link";
 import { achievementRatio, achievementTone, type HeroSummary, type KpiSummary } from "@/lib/aggregate";
 import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/format";
 import type { VpData } from "@/lib/vp-data";
+import { tglossText } from "@/components/tgloss-text";
 
 /**
  * The company scoreboard — the "Service daily report" the VP gets in Excel,
  * rebuilt live. Metrics down the rows; Central / South / North / Group
  * across. Everything is month-to-date bar the two "for the day" RO counts.
- * VAS bill is our modelled figure (T-Gloss/Lexus jobs priced at list).
+ * TGLOSS is our modelled figure (TGLOSS/Lexus jobs priced at list).
  *
  * Month-over-month / year-over-year rows are stubbed until the historical
  * baselines are wired in.
@@ -34,10 +35,10 @@ const ROWS: Row[] = [
   { kind: "metric", label: "Parts — MTD", fmt: "rs", get: (c) => c.hero.bpuPartsMtd },
   { kind: "metric", label: "Labour — MTD", fmt: "rs", get: (c) => c.hero.bpuLabourMtd },
 
-  { kind: "group", label: "VAS Bill · modelled" },
-  { kind: "metric", label: "VAS bill — MTD", fmt: "rs", get: (c) => c.kpis.vasAchievementForTheMonth },
-  { kind: "metric", label: "VAS bill — Target", fmt: "rs", get: (c) => c.kpis.vasBillTarget },
-  { kind: "metric", label: "VAS achievement", fmt: "pct", bar: true, get: (c) => achievementRatio(c.kpis.vasAchievementForTheMonth, c.kpis.vasBillTarget) },
+  { kind: "group", label: "TGLOSS · modelled" },
+  { kind: "metric", label: "TGLOSS — MTD", fmt: "rs", get: (c) => c.kpis.vasAchievementForTheMonth },
+  { kind: "metric", label: "TGLOSS — Target", fmt: "rs", get: (c) => c.kpis.vasBillTarget },
+  { kind: "metric", label: "TGLOSS achievement", fmt: "pct", bar: true, get: (c) => achievementRatio(c.kpis.vasAchievementForTheMonth, c.kpis.vasBillTarget) },
 
   { kind: "group", label: "Revenue Stream" },
   { kind: "metric", label: "External Sales — MTD", fmt: "rs", get: (c) => c.hero.externalSalesMtd },
@@ -67,18 +68,18 @@ export function VpScoreboard({ data, flagBase }: { data: VpData & { group: NonNu
   ];
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-card">
+    <div className="overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
       <table className="w-full border-separate border-spacing-0 text-[13px]">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 border-b border-border bg-surface py-2.5 pl-5 pr-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">
+            <th className="sticky left-0 z-10 border-b border-border-subtle bg-surface py-3 pl-6 pr-3 text-left text-[10.5px] font-medium uppercase tracking-[0.12em] text-fg-faint">
               Metric
             </th>
             {cols.map((c) => (
               <th
                 key={c.key}
-                className={`border-b border-border px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] ${
-                  c.key === "Group" ? "bg-accent-soft/50 text-accent-text" : "text-fg-subtle"
+                className={`border-b border-border-subtle px-4 py-3 text-right text-[10.5px] font-medium uppercase tracking-[0.12em] ${
+                  c.key === "Group" ? "bg-accent-soft/20 text-accent-text" : "text-fg-faint"
                 }`}
               >
                 {c.label}
@@ -93,9 +94,9 @@ export function VpScoreboard({ data, flagBase }: { data: VpData & { group: NonNu
                 <tr key={`g${i}`}>
                   <td
                     colSpan={cols.length + 1}
-                    className="border-t border-border bg-surface-2/70 py-2 pl-5 pr-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-fg-subtle"
+                    className="border-t border-border-subtle bg-surface-2/30 py-2.5 pl-6 pr-3 text-[10px] font-medium uppercase tracking-[0.14em] text-fg-subtle"
                   >
-                    <span className="border-l-2 border-accent pl-2">{row.label}</span>
+                    <span className="border-l-2 border-accent/70 pl-2.5">{tglossText(row.label)}</span>
                   </td>
                 </tr>
               );
@@ -103,8 +104,8 @@ export function VpScoreboard({ data, flagBase }: { data: VpData & { group: NonNu
             if (row.kind === "stub") {
               return (
                 <tr key={`s${i}`} className="border-t border-border-subtle">
-                  <td className="sticky left-0 z-10 whitespace-nowrap bg-surface py-2 pl-5 pr-3 text-fg-muted">{row.label}</td>
-                  <td colSpan={cols.length} className="px-4 py-2 text-right text-[11px] italic text-fg-faint">
+                  <td className="sticky left-0 z-10 whitespace-nowrap bg-surface py-2.5 pl-6 pr-3 text-fg-muted">{row.label}</td>
+                  <td colSpan={cols.length} className="px-4 py-2.5 text-right text-[11px] italic text-fg-faint">
                     coming soon — {row.note}
                   </td>
                 </tr>
@@ -113,15 +114,15 @@ export function VpScoreboard({ data, flagBase }: { data: VpData & { group: NonNu
             return (
               <tr
                 key={`m${i}`}
-                className={`group/row border-t border-border-subtle transition-colors hover:bg-surface-2/40 ${
-                  row.strong ? "bg-accent-soft/25" : ""
+                className={`group/row border-t border-border-subtle transition-colors hover:bg-surface-2/30 ${
+                  row.strong ? "bg-accent-soft/15" : ""
                 }`}
               >
                 <td
-                  className={`sticky left-0 z-10 whitespace-nowrap py-2 pl-5 pr-3 ${row.strong ? "bg-accent-soft/25 font-semibold text-fg" : "bg-surface text-fg-muted"} group-hover/row:bg-surface-2/40`}
+                  className={`sticky left-0 z-10 whitespace-nowrap py-2.5 pl-6 pr-3 ${row.strong ? "bg-accent-soft/15 font-semibold text-fg" : "bg-surface text-fg-muted"} group-hover/row:bg-surface-2/30`}
                 >
                   <span className="inline-flex items-center gap-1.5">
-                    {row.label}
+                    {tglossText(row.label)}
                     <Link
                       href={`${flagBase}&flag=1&fmetric=${encodeURIComponent(row.label)}`}
                       title={`Raise a query about "${row.label}"`}
@@ -137,8 +138,8 @@ export function VpScoreboard({ data, flagBase }: { data: VpData & { group: NonNu
                   return (
                     <td
                       key={c.key}
-                      className={`whitespace-nowrap px-4 py-2 text-right tabular-nums ${
-                        c.key === "Group" ? "bg-accent-soft/30 font-semibold" : ""
+                      className={`whitespace-nowrap px-4 py-2.5 text-right tabular-nums ${
+                        c.key === "Group" ? "bg-accent-soft/10 font-semibold" : ""
                       } ${row.fmt === "pct" ? TONE_TEXT[tone] : "text-fg"}`}
                     >
                       {row.bar && v != null ? (

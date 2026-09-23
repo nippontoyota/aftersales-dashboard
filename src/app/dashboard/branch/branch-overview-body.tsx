@@ -1,6 +1,7 @@
 import type { BranchView } from "@/lib/branch-view-data";
 import { formatCompactCurrency } from "@/lib/format";
 import { eyebrow } from "@/lib/ui";
+import { tglossText } from "@/components/tgloss-text";
 import { HeroKpi } from "../hero-kpi";
 import { TrendChart } from "../trend-chart";
 import { BranchHero } from "./branch-hero";
@@ -19,7 +20,7 @@ function SinceLastUpload({ view }: { view: BranchView }) {
           Revenue booked <span className="font-semibold tabular-nums text-fg">{formatCompactCurrency(s.revenue)}</span>
         </span>
         <span className="text-sm text-fg-subtle">
-          VAS Bill booked <span className="font-semibold tabular-nums text-fg">{formatCompactCurrency(s.vasBill)}</span>
+          {tglossText("TGLOSS")} booked <span className="font-semibold tabular-nums text-fg">{formatCompactCurrency(s.vasBill)}</span>
         </span>
       </div>
     </div>
@@ -45,7 +46,7 @@ export function BranchOverviewBody({ view, date }: { view: BranchView; date: str
           seriesByMetric={{ total: view.trend.total, vas: view.trend.vas }}
           metrics={[
             { key: "total", label: "Total Revenue Stream (Rs)" },
-            { key: "vas", label: "VAS Bill (Rs)" },
+            { key: "vas", label: "TGLOSS (Rs)" },
           ]}
           compactCurrency
           date={date}

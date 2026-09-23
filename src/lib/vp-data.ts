@@ -8,6 +8,8 @@ import {
 import { REGIONS, regionForBranch, type RegionName } from "./regions";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { listSnapshotDates } from "./snapshot-store";
+import { isDatePublished } from "./publish-store";
+import { countScom205BranchesForDate } from "./scom205/store";
 
 /**
  * The data foundation for the VP Service view (/vp). Deliberately separate
@@ -32,6 +34,9 @@ export type VpData = {
   report: Report | null;
   group: { hero: HeroSummary; kpis: KpiSummary } | null;
   regions: VpRegionRollup[];
+  isPublished: boolean;
+  uploadedBranchCount: number;
+  totalBranchCount: number;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -41,13 +46,16 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
   if (dates.length === 0) return null;
 
   const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
-  const report = await buildReport(date);
-  if (!report) return { date, dates, report: null, group: null, regions: [] };
+  const [report, published, scom205Count] = await Promise.all([buildReport(date), isDatePublished(date), countScom205BranchesForDate(date)]);
+
+  if (!report) return { date, dates, report: null, group: null, regions: [], isPublished: published, uploadedBranchCount: 0, totalBranchCount: 18 };
 
   const regions: VpRegionRollup[] = (Object.keys(REGIONS) as RegionName[]).map((region) => {
     const branches = filterBranchesByRegion(report.branches, region);
     return { region, branches, hero: computeHeroSummary(branches), kpis: computeKpiSummary(branches) };
   });
+
+  const hasCo01c = report.branches.some((b) => b.branch === "CO01C");
 
   return {
     date,
@@ -55,6 +63,9 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
     report,
     group: { hero: computeHeroSummary(report.branches), kpis: computeKpiSummary(report.branches) },
     regions,
+    isPublished: published,
+    uploadedBranchCount: scom205Count,
+    totalBranchCount: 18 + (hasCo01c ? 1 : 0),
   };
 }
 

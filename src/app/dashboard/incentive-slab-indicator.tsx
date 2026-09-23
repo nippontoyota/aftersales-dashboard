@@ -29,7 +29,7 @@ import { computePace } from "@/lib/pace";
  * labelled as a forecast/projection, never as achievement status — see
  * ringTooltip() below. Projection reuses
  * computePace() as-is (simple actual÷daysElapsed×daysInMonth run rate, the
- * same math already driving the VAS Bill target card elsewhere on this page)
+ * same math already driving the TGLOSS target card elsewhere on this page)
  * rather than a working-day-aware variant.
  */
 

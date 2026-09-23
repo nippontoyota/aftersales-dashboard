@@ -72,7 +72,7 @@ export type KpiSummary = {
   /** Rs-per-RO figure. NOT an average of each branch's own Service Gentan I
    * (that would weight every branch equally regardless of volume — a bug
    * caught 2026-09-19) — computed as summed serviceRevenue ÷ summed
-   * serviceUnits, the same weighted-ratio construction as "VAS Gentani." */
+   * serviceUnits, the same weighted-ratio construction as "TGLOSS Gentani." */
   serviceGentanI: number | null;
   batterySalesForTheMonth: number | null;
   tireSalesForTheMonth: number | null;
@@ -224,6 +224,6 @@ export const TKM_TRACKED_KPIS: TrackedKpi[] = [
  * (everything else moved to TKM_TRACKED_KPIS above, 2026-08-31) — used by
  * the Insights panel to know which KPIs to reason about. */
 export const TRACKED_KPIS: TrackedKpi[] = [
-  { key: "vas", label: "VAS Achievement", actual: "vasAchievementForTheMonth", target: "vasBillTarget" },
-  { key: "tGloss", label: "T-Gloss Penetration", actual: "penetrationTGlossService", target: FIXED_TGLOSS_TARGET },
+  { key: "vas", label: "TGLOSS Achievement", actual: "vasAchievementForTheMonth", target: "vasBillTarget" },
+  { key: "tGloss", label: "TGLOSS Penetration", actual: "penetrationTGlossService", target: FIXED_TGLOSS_TARGET },
 ];
