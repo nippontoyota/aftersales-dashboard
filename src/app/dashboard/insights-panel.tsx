@@ -6,6 +6,7 @@ import { formatNumber, formatPercent } from "@/lib/format";
 import { computePace } from "@/lib/pace";
 import { REGIONS, type RegionName } from "@/lib/regions";
 import type { BranchReport } from "@/lib/report";
+import { tglossText } from "@/components/tgloss-text";
 
 function LightbulbIcon() {
   return (
@@ -21,11 +22,11 @@ type Insight = string;
 export type RegionGapMetric = { actual: keyof BranchReport; target: keyof BranchReport; label: string };
 type PerBranchMetric = { actual: keyof BranchReport; target: keyof BranchReport };
 
-/** Defaults match the main dashboard's own remaining tracked KPIs (VAS +
- * T-Gloss) — the TKM Targets page passes its own BPU/Offtake/Parts
- * Retail/PM+OC versions of all three (2026-08-31). */
+/** Defaults match the main dashboard's own remaining tracked KPIs (TGLOSS
+ * Achievement + TGLOSS Penetration) — the TKM Targets page passes its own
+ * BPU/Offtake/Parts Retail/PM+OC versions of all three (2026-08-31). */
 const DEFAULT_PER_BRANCH_METRICS: PerBranchMetric[] = [{ actual: "vasAchievementForTheMonth", target: "vasBillTarget" }];
-const DEFAULT_REGION_GAP_METRIC: RegionGapMetric = { actual: "vasAchievementForTheMonth", target: "vasBillTarget", label: "VAS" };
+const DEFAULT_REGION_GAP_METRIC: RegionGapMetric = { actual: "vasAchievementForTheMonth", target: "vasBillTarget", label: "TGLOSS" };
 
 /** Every sentence here is generated from real, already-computed numbers —
  * run-rate/gap (lib/pace.ts) and achievement ratios (lib/aggregate.ts) —
@@ -127,7 +128,7 @@ export function InsightsPanel({
   kpis: KpiSummary;
   branches: BranchReport[];
   date: string;
-  /** Which KPIs to reason about — defaults to the main dashboard's own set (VAS + T-Gloss); the TKM Targets page passes TKM_TRACKED_KPIS instead. */
+  /** Which KPIs to reason about — defaults to the main dashboard's own set (TGLOSS Achievement + TGLOSS Penetration); the TKM Targets page passes TKM_TRACKED_KPIS instead. */
   trackedKpis?: TrackedKpi[];
   perBranchMetrics?: PerBranchMetric[];
   regionGapMetric?: RegionGapMetric;
@@ -158,7 +159,7 @@ export function InsightsPanel({
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-info-soft text-info">
                   <LightbulbIcon />
                 </span>
-                <span className="min-w-0 flex-1">{text}</span>
+                <span className="min-w-0 flex-1">{tglossText(text)}</span>
               </li>
             ))}
           </ul>

@@ -27,7 +27,7 @@ export type RegionMetricConfig = {
  * TKM Targets page (2026-08-31) — this default is what's left on the main
  * dashboard's scorecard. */
 const DEFAULT_METRICS: RegionMetricConfig[] = [
-  { key: "vas", label: "VAS (Rs)", actual: "vasAchievementForTheMonth", target: "vasBillTarget", isCurrency: true },
+  { key: "vas", label: "TGLOSS (Rs)", actual: "vasAchievementForTheMonth", target: "vasBillTarget", isCurrency: true },
 ];
 
 // Theme tokens, not raw hex — the dark palette lifts these for contrast on

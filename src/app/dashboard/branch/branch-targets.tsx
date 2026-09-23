@@ -2,6 +2,7 @@ import type { TargetStat } from "@/lib/branch-view-data";
 import { achievementTone, type AchievementTone } from "@/lib/aggregate";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { eyebrow } from "@/lib/ui";
+import { tglossText } from "@/components/tgloss-text";
 
 const TONE_TEXT: Record<AchievementTone, string> = {
   good: "text-good",
@@ -37,7 +38,7 @@ function Card({ s }: { s: TargetStat }) {
   return (
     <div className="rounded-md border border-border-subtle p-2.5">
       <div className="flex items-baseline justify-between gap-1">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-fg-faint">{s.label}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-fg-faint">{tglossText(s.label)}</span>
         {s.rank ? (
           <span className="text-[9px] tabular-nums text-fg-faint">
             #{s.rank.rank}/{s.rank.of}

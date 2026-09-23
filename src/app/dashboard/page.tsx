@@ -6,6 +6,7 @@ import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { TargetIcon, PercentIcon } from "@/components/dashboard-icons";
 import { RichKpiCard } from "@/components/rich-kpi-card";
+import { tglossText } from "@/components/tgloss-text";
 import { achievementRatio, computeKpiSummary } from "@/lib/aggregate";
 import { getCurrentAdmin } from "@/lib/auth";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
@@ -274,7 +275,14 @@ async function DashboardContent({
                 <CollapsibleCard title="Other KPIs" defaultOpen>
                   <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-2">
                     <RichKpiCard icon={<PercentIcon />} color="violet" label="External Sales % on SPR I" value={formatPercent(kpis.externalSalesPctOfSprInternal)} sub="avg across branches" />
-                    <RichKpiCard icon={<TargetIcon />} color="indigo" label="VAS Gentani" value={formatCompactCurrency(vasGentani)} sub="VAS revenue per GUS RO" />
+                    <RichKpiCard
+                      icon={<TargetIcon />}
+                      color="indigo"
+                      label="TGLOSS Gentani"
+                      visualLabel={tglossText("TGLOSS Gentani")}
+                      value={formatCompactCurrency(vasGentani)}
+                      sub="TGLOSS revenue per GUS RO"
+                    />
                   </div>
                 </CollapsibleCard>
 

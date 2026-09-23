@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { achievementRatio, achievementTone } from "@/lib/aggregate";
@@ -13,6 +13,7 @@ import { BranchPicker } from "../branch-picker";
 import { FlagComposer } from "../flag-composer";
 import { requireVpAccess } from "../vp-guard";
 import { VpHeader } from "../vp-header";
+import { tglossText } from "@/components/tgloss-text";
 
 const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg" } as const;
 const TONE_BAR = { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" } as const;
@@ -114,7 +115,7 @@ async function Branch({
         <MiniStat label="GUS RO · MTD" value={branch.gusRoMtd?.toLocaleString("en-IN") ?? "—"} />
         <MiniStat label="BPU RO · MTD" value={branch.bpuRoMtd?.toLocaleString("en-IN") ?? "—"} />
         <MiniStat
-          label="TGLOSS"
+          label={tglossText("TGLOSS")}
           value={formatPercent(achievementRatio(branch.vasAchievementForTheMonth, branch.vasBillTarget))}
         />
       </div>
@@ -138,7 +139,7 @@ async function Branch({
                 return (
                   <tr key={`g${i}`}>
                     <td colSpan={7} className="border-t border-border-subtle bg-surface-2/30 py-2.5 pl-6 pr-3 text-[10px] font-medium uppercase tracking-[0.14em] text-fg-subtle">
-                      <span className="border-l-2 border-accent/70 pl-2.5">{row.label}</span>
+                      <span className="border-l-2 border-accent/70 pl-2.5">{tglossText(row.label)}</span>
                     </td>
                   </tr>
                 );
@@ -148,7 +149,7 @@ async function Branch({
               const tone = achievementTone(cell.ratio);
               return (
                 <tr key={`m${i}`} className={`border-t border-border-subtle hover:bg-surface-2/30 ${row.strong ? "bg-accent-soft/10" : ""}`}>
-                  <td className={`whitespace-nowrap py-2.5 pl-6 pr-3 ${row.strong ? "font-semibold text-fg" : "text-fg-muted"}`}>{row.label}</td>
+                  <td className={`whitespace-nowrap py-2.5 pl-6 pr-3 ${row.strong ? "font-semibold text-fg" : "text-fg-muted"}`}>{tglossText(row.label)}</td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-fg-subtle">{cell.today == null ? "—" : row.fmt(cell.today)}</td>
                   <td className={`px-4 py-2.5 text-right tabular-nums ${row.strong ? "font-semibold text-fg" : "text-fg"}`}>
                     {cell.mtd == null ? "—" : row.fmt(cell.mtd)}
@@ -195,7 +196,7 @@ async function Branch({
   );
 }
 
-function MiniStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function MiniStat({ label, value, accent }: { label: ReactNode; value: string; accent?: boolean }) {
   return (
     <div className={`rounded-2xl border border-border-subtle bg-surface p-4 ${accent ? "border-t-2 border-t-accent" : ""}`}>
       <div className="text-[10.5px] font-medium uppercase tracking-[0.12em] text-fg-faint">{label}</div>

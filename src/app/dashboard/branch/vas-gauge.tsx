@@ -2,6 +2,7 @@ import type { BranchView } from "@/lib/branch-view-data";
 import { achievementTone, type AchievementTone } from "@/lib/aggregate";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { eyebrow } from "@/lib/ui";
+import { tglossText } from "@/components/tgloss-text";
 
 const TONE_HEX: Record<AchievementTone, string> = {
   good: "var(--color-good-solid)",
@@ -44,12 +45,12 @@ export function VasGauge({ view, date }: { view: BranchView; date: string }) {
   return (
     <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
       <div className="flex items-baseline justify-between">
-        <h2 className={eyebrow}>VAS Bill — Target Achievement</h2>
+        <h2 className={eyebrow}>{tglossText("TGLOSS — Target Achievement")}</h2>
         <span className="text-[10px] text-fg-faint">MTD, as of {date}</span>
       </div>
 
       <div className="mt-1 flex flex-col items-center">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[248px]" role="img" aria-label={`VAS at ${formatPercent(ratio)} of the month-to-date target`}>
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[248px]" role="img" aria-label={`TGLOSS at ${formatPercent(ratio)} of the month-to-date target`}>
           <path d={arc(0, 1)} fill="none" stroke="var(--color-border)" strokeWidth={STROKE} strokeLinecap="round" />
           {ratio !== null ? <path d={arc(0, fillPct)} fill="none" stroke={TONE_HEX[tone]} strokeWidth={STROKE} strokeLinecap="round" /> : null}
           <text x={CX} y={CY - 22} textAnchor="middle" className="fill-fg" style={{ fontSize: 26, fontWeight: 700 }}>

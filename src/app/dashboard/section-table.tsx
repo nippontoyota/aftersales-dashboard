@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { BranchReport } from "@/lib/report";
 import { formatCompact, formatNumber } from "@/lib/format";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { tglossText } from "@/components/tgloss-text";
 
 /** Shared by report-table.tsx (Value-Added Services) and
  * tkm-report-table.tsx (TKM Targets, 2026-08-31) — the same per-branch
@@ -45,7 +46,7 @@ export function SectionTable({
               <th className="sticky left-0 whitespace-nowrap bg-surface-2 px-3 py-2">Branch</th>
               {columns.map((c) => (
                 <th key={c.label} className="whitespace-nowrap px-3 py-2">
-                  {c.label}
+                  {tglossText(c.label)}
                 </th>
               ))}
             </tr>

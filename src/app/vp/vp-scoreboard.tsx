@@ -2,12 +2,13 @@ import Link from "next/link";
 import { achievementRatio, achievementTone, type HeroSummary, type KpiSummary } from "@/lib/aggregate";
 import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/format";
 import type { VpData } from "@/lib/vp-data";
+import { tglossText } from "@/components/tgloss-text";
 
 /**
  * The company scoreboard — the "Service daily report" the VP gets in Excel,
  * rebuilt live. Metrics down the rows; Central / South / North / Group
  * across. Everything is month-to-date bar the two "for the day" RO counts.
- * VAS bill is our modelled figure (T-Gloss/Lexus jobs priced at list).
+ * TGLOSS is our modelled figure (TGLOSS/Lexus jobs priced at list).
  *
  * Month-over-month / year-over-year rows are stubbed until the historical
  * baselines are wired in.
@@ -34,10 +35,10 @@ const ROWS: Row[] = [
   { kind: "metric", label: "Parts — MTD", fmt: "rs", get: (c) => c.hero.bpuPartsMtd },
   { kind: "metric", label: "Labour — MTD", fmt: "rs", get: (c) => c.hero.bpuLabourMtd },
 
-  { kind: "group", label: "VAS Bill · modelled" },
-  { kind: "metric", label: "VAS bill — MTD", fmt: "rs", get: (c) => c.kpis.vasAchievementForTheMonth },
-  { kind: "metric", label: "VAS bill — Target", fmt: "rs", get: (c) => c.kpis.vasBillTarget },
-  { kind: "metric", label: "T-Gloss achievement", fmt: "pct", bar: true, get: (c) => achievementRatio(c.kpis.vasAchievementForTheMonth, c.kpis.vasBillTarget) },
+  { kind: "group", label: "TGLOSS · modelled" },
+  { kind: "metric", label: "TGLOSS — MTD", fmt: "rs", get: (c) => c.kpis.vasAchievementForTheMonth },
+  { kind: "metric", label: "TGLOSS — Target", fmt: "rs", get: (c) => c.kpis.vasBillTarget },
+  { kind: "metric", label: "TGLOSS achievement", fmt: "pct", bar: true, get: (c) => achievementRatio(c.kpis.vasAchievementForTheMonth, c.kpis.vasBillTarget) },
 
   { kind: "group", label: "Revenue Stream" },
   { kind: "metric", label: "External Sales — MTD", fmt: "rs", get: (c) => c.hero.externalSalesMtd },
@@ -95,7 +96,7 @@ export function VpScoreboard({ data, flagBase }: { data: VpData & { group: NonNu
                     colSpan={cols.length + 1}
                     className="border-t border-border-subtle bg-surface-2/30 py-2.5 pl-6 pr-3 text-[10px] font-medium uppercase tracking-[0.14em] text-fg-subtle"
                   >
-                    <span className="border-l-2 border-accent/70 pl-2.5">{row.label}</span>
+                    <span className="border-l-2 border-accent/70 pl-2.5">{tglossText(row.label)}</span>
                   </td>
                 </tr>
               );
@@ -121,7 +122,7 @@ export function VpScoreboard({ data, flagBase }: { data: VpData & { group: NonNu
                   className={`sticky left-0 z-10 whitespace-nowrap py-2.5 pl-6 pr-3 ${row.strong ? "bg-accent-soft/15 font-semibold text-fg" : "bg-surface text-fg-muted"} group-hover/row:bg-surface-2/30`}
                 >
                   <span className="inline-flex items-center gap-1.5">
-                    {row.label}
+                    {tglossText(row.label)}
                     <Link
                       href={`${flagBase}&flag=1&fmetric=${encodeURIComponent(row.label)}`}
                       title={`Raise a query about "${row.label}"`}

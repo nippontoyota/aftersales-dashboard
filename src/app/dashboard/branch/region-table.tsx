@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import { achievementTone } from "@/lib/aggregate";
 import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/format";
+import { tglossText } from "@/components/tgloss-text";
 
 export type RegionTableRow = {
   branch: string;
@@ -45,7 +46,7 @@ export function RegionTable({ rows, bodies }: { rows: RegionTableRow[]; bodies: 
               <th className="pl-3 text-right font-medium">Total Rev</th>
               <th className="pl-3 text-right font-medium">Rank</th>
               <th className="pl-3 text-right font-medium">Rev / car</th>
-              <th className="pl-3 text-right font-medium">VAS %</th>
+              <th className="pl-3 text-right font-medium">{tglossText("TGLOSS %")}</th>
               <th className="pl-3 text-right font-medium">GUS RO</th>
               <th className="pl-3 pr-4 text-right font-medium">BPU RO</th>
             </tr>

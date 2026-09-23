@@ -8,6 +8,7 @@ import { computeTrendSeries } from "./trend";
 import { isDatePublished } from "./publish-store";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
 import { loadIncentiveSlabTargets } from "./incentive-slabs/store";
+import { countScom205BranchesForDate } from "./scom205/store";
 import {
   computeBranchProfitTarget,
   computeBranchRevenueTarget,
@@ -167,12 +168,13 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
 
   const month = date.substring(0, 7);
 
-  const [report, holidays, monthSnapshots, slabTargets, published] = await Promise.all([
+  const [report, holidays, monthSnapshots, slabTargets, published, scom205Count] = await Promise.all([
     buildReport(date),
     loadReportHolidaySet(),
     loadSnapshotsForMonthUpTo(date),
     loadIncentiveSlabTargets(month),
     isDatePublished(date),
+    countScom205BranchesForDate(date),
   ]);
 
   if (!report) {
@@ -268,7 +270,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     callout: buildCallout(regions),
     monthSnapshots,
     isPublished: published,
-    uploadedBranchCount: report.branches.length,
+    uploadedBranchCount: scom205Count,
     totalBranchCount: 18 + (hasCo01c ? 1 : 0),
   };
 }

@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { StorefrontIcon, TargetIcon, WrenchIcon } from "@/components/dashboard-icons";
+import { tglossText } from "@/components/tgloss-text";
 import { achievementRatio, achievementTone } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { loadCeoData, type CeoRegionRollup } from "@/lib/ceo-data";
@@ -271,10 +272,10 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
           sub="100% of GUS + BPU Labour"
         />
         <ProfitTile
-          label="TGLOSS Margin"
+          label={tglossText("TGLOSS Margin")}
           value={group.profit.tglossMarginMtd}
           target={group.profitTarget?.tglossMargin ?? null}
-          sub="38% of TGLOSS Revenue"
+          sub={tglossText("38% of TGLOSS Revenue")}
         />
         <ProfitTile label="GS Gross Profit / RO" value={group.profit.gsGrossProfitPerRo} sub="GS Labour + 20% GS Parts ÷ GUS ROs" />
         <ProfitTile label="BP Gross Profit / RO" value={group.profit.bpGrossProfitPerRo} sub="BP Labour + 20% BP Parts ÷ BPU ROs" />
@@ -310,21 +311,23 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
       <details className="mt-4 max-w-3xl text-[11px] text-fg-faint">
         <summary className="cursor-pointer select-none font-medium text-fg-subtle hover:text-fg">How these numbers are calculated</summary>
         <p className="mt-2 leading-relaxed">
-          Bay Utilization = actual GUS/BPU repair orders this month ÷ ideal capacity for the same number of elapsed working
-          days ({data.workingDaysElapsed} so far this month) — pace-adjusted, not a flat monthly-target %. GS ideal capacity
-          is bays × 5.85 jobs/bay/day; BP ideal capacity comes from each branch&apos;s 2025 job-mix-weighted cycle-time model.
-          GUS-for-the-Month Target = GS bays × 5.85 jobs/bay/day × every working day in the month (not just elapsed) —
-          same formula as Bay Utilization&apos;s ideal capacity, just for the whole month instead of pace-to-date.
-          Revenue = GUS + BPU parts &amp; labour + External Sales + scrap/used oil. Revenue Target (and the Target lines above)
-          derive from each branch&apos;s own Incentive Slab 3 target × 30/32, split 9.5:20.5 into a Labour bucket and a
-          Parts+ExtSales+TGLOSS bucket, then 66/34 GS/BP within Labour and 62/38 GS/BP within Parts (fixed ratios) — with
-          TGLOSS Target carved out as the existing VAS Bill Target (GUS RO MTD × 38% × Rs 3,000) and Ext Sales Target as 5%
-          of the branch&apos;s own Parts Retail target.
-          Gross Profit is a modelled figure, not an audited number: Total Parts Profit (20% of GUS + BPU Parts + External
-          Sales) + Total Labour Profit (100% of GUS + BPU Labour) + TGLOSS Margin (38% of TGLOSS Revenue) + scrap/used-oil
-          revenue — Profit Target follows the same formula against the Revenue Target components above, plus the same
-          actual scrap/used-oil figure on both sides. GS/BP Gross Profit per RO exclude External Sales and TGLOSS Margin,
-          which aren&apos;t split by channel.
+          {tglossText(
+            `Bay Utilization = actual GUS/BPU repair orders this month ÷ ideal capacity for the same number of elapsed working ` +
+              `days (${data.workingDaysElapsed} so far this month) — pace-adjusted, not a flat monthly-target %. GS ideal capacity ` +
+              `is bays × 5.85 jobs/bay/day; BP ideal capacity comes from each branch's 2025 job-mix-weighted cycle-time model. ` +
+              `GUS-for-the-Month Target = GS bays × 5.85 jobs/bay/day × every working day in the month (not just elapsed) — ` +
+              `same formula as Bay Utilization's ideal capacity, just for the whole month instead of pace-to-date. ` +
+              `Revenue = GUS + BPU parts & labour + External Sales + scrap/used oil. Revenue Target (and the Target lines above) ` +
+              `derive from each branch's own Incentive Slab 3 target × 30/32, split 9.5:20.5 into a Labour bucket and a ` +
+              `Parts+ExtSales+TGLOSS bucket, then 66/34 GS/BP within Labour and 62/38 GS/BP within Parts (fixed ratios) — ` +
+              `TGLOSS Target reuses the existing formula (GUS RO MTD × 38% × Rs 3,000) and Ext Sales Target is 5% ` +
+              `of the branch's own Parts Retail target. ` +
+              `Gross Profit is a modelled figure, not an audited number: Total Parts Profit (20% of GUS + BPU Parts + External ` +
+              `Sales) + Total Labour Profit (100% of GUS + BPU Labour) + TGLOSS Margin (38% of TGLOSS Revenue) + scrap/used-oil ` +
+              `revenue — Profit Target follows the same formula against the Revenue Target components above, plus the same ` +
+              `actual scrap/used-oil figure on both sides. GS/BP Gross Profit per RO exclude External Sales and TGLOSS Margin, ` +
+              `which aren't split by channel.`,
+          )}
         </p>
       </details>
     </div>
@@ -356,9 +359,9 @@ function ProfitTile({
   strong,
   target,
 }: {
-  label: string;
+  label: ReactNode;
   value: number | null;
-  sub: string;
+  sub: ReactNode;
   strong?: boolean;
   target?: number | null;
 }) {

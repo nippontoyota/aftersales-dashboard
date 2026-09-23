@@ -1,8 +1,10 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { achievementRatio, achievementTone } from "@/lib/aggregate";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { regionForBranch, type RegionName } from "@/lib/regions";
 import type { BranchReport } from "@/lib/report";
+import { tglossText } from "@/components/tgloss-text";
 
 const REGION_COLOR: Record<RegionName, string> = {
   Central: "var(--color-cat-central)",
@@ -58,7 +60,7 @@ export function BranchLeaderboard({ branches, date }: { branches: BranchReport[]
             <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
               <Stat label="GUS RO" value={b.gusRoMtd?.toLocaleString("en-IN") ?? "—"} />
               <Stat label="BPU RO" value={b.bpuRoMtd?.toLocaleString("en-IN") ?? "—"} />
-              <Stat label="VAS %" value={vasRatio == null ? "—" : formatPercent(vasRatio)} />
+              <Stat label={tglossText("TGLOSS %")} value={vasRatio == null ? "—" : formatPercent(vasRatio)} />
             </dl>
 
             {vasRatio != null ? (
@@ -66,7 +68,7 @@ export function BranchLeaderboard({ branches, date }: { branches: BranchReport[]
                 <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
                   <div className={`h-full rounded-full ${BAR_TONE[tone]}`} style={{ width: `${Math.min(100, Math.round(vasRatio * 100))}%` }} />
                 </div>
-                <div className="mt-1 text-[10px] uppercase tracking-[0.06em] text-fg-faint">VAS vs target</div>
+                <div className="mt-1 text-[10px] uppercase tracking-[0.06em] text-fg-faint">{tglossText("TGLOSS Target")}</div>
               </div>
             ) : null}
           </Link>
@@ -76,7 +78,7 @@ export function BranchLeaderboard({ branches, date }: { branches: BranchReport[]
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value }: { label: ReactNode; value: string }) {
   return (
     <div className="rounded-md bg-surface-2/60 py-1.5">
       <div className="text-[13px] font-semibold tabular-nums text-fg">{value}</div>

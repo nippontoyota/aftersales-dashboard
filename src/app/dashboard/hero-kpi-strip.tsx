@@ -10,6 +10,7 @@ import { REGIONS, type RegionName } from "@/lib/regions";
 import type { BranchReport } from "@/lib/report";
 import { eyebrow } from "@/lib/ui";
 import { RichKpiCard } from "@/components/rich-kpi-card";
+import { tglossText } from "@/components/tgloss-text";
 import { RevenueIcon, StorefrontIcon, WrenchIcon } from "@/components/dashboard-icons";
 import { IncentiveSlabIndicator } from "./incentive-slab-indicator";
 import { useSyncedScope } from "./scope-sync";
@@ -251,7 +252,8 @@ export function HeroKpiStrip({
         <RichKpiCard
           icon={<StorefrontIcon />}
           color="indigo"
-          label="T-Gloss Achievement"
+          label="TGLOSS Achievement"
+          visualLabel={tglossText("TGLOSS Achievement")}
           value={formatCompactCurrency(kpis.vasAchievementForTheMonth)}
           actual={kpis.vasAchievementForTheMonth}
           target={kpis.vasBillTarget}

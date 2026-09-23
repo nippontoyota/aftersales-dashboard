@@ -44,13 +44,13 @@ export function ReportTable({ branches, daysSincePrevious }: { branches: BranchR
             render: (r) => <ProgressCell actual={r.batterySalesForTheMonth} target={r.batteryTarget} caption={`today ${formatCompact(r.batterySales)}`} formatValue={formatCompact} />,
           },
           {
-            label: "T-Gloss Penetration",
+            label: "TGLOSS Penetration",
             render: (r) => (
               <ProgressCell actual={r.penetrationTGlossService} target={r.targetTGlossService} formatValue={formatPercent} />
             ),
           },
           {
-            label: "T-Gloss SPO",
+            label: "TGLOSS SPO",
             render: (r) => <ProgressCell actual={r.tGlossSpo} target={1} formatValue={formatPercent} />,
           },
         ]}
@@ -62,7 +62,7 @@ export function ReportTable({ branches, daysSincePrevious }: { branches: BranchR
         branches={branches}
         columns={[
           {
-            label: "VAS Bill",
+            label: "TGLOSS",
             render: (r) => (
               <ProgressCell
                 actual={r.vasAchievementForTheMonth}
@@ -73,7 +73,7 @@ export function ReportTable({ branches, daysSincePrevious }: { branches: BranchR
             ),
           },
           {
-            label: "VAS Gentani",
+            label: "TGLOSS Gentani",
             render: (r) => <div className="w-20 whitespace-nowrap text-sm font-semibold tabular-nums text-fg">{formatCompact(r.vasGentani)}</div>,
           },
         ]}

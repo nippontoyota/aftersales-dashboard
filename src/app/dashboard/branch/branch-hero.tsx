@@ -2,6 +2,7 @@ import type { BranchView } from "@/lib/branch-view-data";
 import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/format";
 import { achievementTone } from "@/lib/aggregate";
 import { eyebrow } from "@/lib/ui";
+import { tglossText } from "@/components/tgloss-text";
 
 function RankBadge({ rank }: { rank: { rank: number; of: number } | null }) {
   if (!rank) return null;
@@ -44,7 +45,7 @@ function BigCard({
   );
 }
 
-function SmallCard({ label, value, sub }: { label: string; value: string; sub?: React.ReactNode }) {
+function SmallCard({ label, value, sub }: { label: React.ReactNode; value: string; sub?: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-border bg-surface p-3 shadow-card">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-fg-faint">{label}</p>
@@ -125,7 +126,7 @@ export function BranchHero({ view }: { view: BranchView }) {
           }
         />
         <SmallCard
-          label="VAS Bill — MTD"
+          label={tglossText("TGLOSS — MTD")}
           value={formatCompactCurrency(report.vasAchievementForTheMonth)}
           sub={
             <span

@@ -3,6 +3,7 @@ import type { BranchReport } from "@/lib/report";
 import type { RegionName } from "@/lib/regions";
 import { DateSelect } from "./date-select";
 import { DAILY_REPORT_ROWS, branchCell, regionTotalCell, type MetricDef, type ReportCell } from "./daily-report-rows";
+import { tglossText } from "@/components/tgloss-text";
 
 // Same categorical hues as the rest of the dashboard — theme tokens so the
 // dark palette's lifted variants apply.
@@ -122,7 +123,7 @@ export function RegionDailyReport({
                       colSpan={branchCodes.length + 2}
                       className="border-t border-border bg-surface-2 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-subtle"
                     >
-                      {row.label}
+                      {tglossText(row.label)}
                     </td>
                   </tr>
                 );
@@ -135,7 +136,7 @@ export function RegionDailyReport({
                       row.strong ? "font-semibold text-fg" : "text-fg-muted"
                     }`}
                   >
-                    {row.label}
+                    {tglossText(row.label)}
                   </td>
                   {branches.map((b) => (
                     <DataCell key={b.branch} def={row} cell={branchCell(row, b)} label={row.label} scope={b.branch} />

@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { achievementRatio, achievementTone } from "@/lib/aggregate";
@@ -10,6 +10,7 @@ import { requireVpAccess } from "./vp-guard";
 import { VpHeader } from "./vp-header";
 import { VpScoreboard } from "./vp-scoreboard";
 import { DraftWarning } from "@/components/draft-warning";
+import { tglossText } from "@/components/tgloss-text";
 
 export default async function VpOverviewPage({
   searchParams,
@@ -68,7 +69,7 @@ async function Overview({
 
   const vasRatio = achievementRatio(group.kpis.vasAchievementForTheMonth, group.kpis.vasBillTarget);
 
-  const cards: { label: string; value: string; accent?: boolean; sub?: string; tone?: ReturnType<typeof achievementTone> }[] = [
+  const cards: { label: ReactNode; value: string; accent?: boolean; sub?: string; tone?: ReturnType<typeof achievementTone> }[] = [
     { label: "Total Revenue · MTD", value: formatCompactCurrency(group.hero.totalRevenueStreamMtd), accent: true },
     {
       label: "GUS RO · MTD",
@@ -80,7 +81,7 @@ async function Overview({
       value: group.hero.bpuRoMtd?.toLocaleString("en-IN") ?? "—",
       sub: `${group.hero.bpuRoBilledForTheDay?.toLocaleString("en-IN") ?? "—"} today`,
     },
-    { label: "TGLOSS", value: formatPercent(vasRatio), tone: achievementTone(vasRatio) },
+    { label: tglossText("TGLOSS"), value: formatPercent(vasRatio), tone: achievementTone(vasRatio) },
   ];
 
   return (
@@ -101,9 +102,9 @@ async function Overview({
       />
 
       <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {cards.map((c) => (
+        {cards.map((c, i) => (
           <div
-            key={c.label}
+            key={i}
             className={`rounded-2xl border border-border-subtle bg-surface p-6 ${c.accent ? "border-t-2 border-t-accent" : ""}`}
           >
             <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">{c.label}</div>
@@ -124,8 +125,8 @@ async function Overview({
       </div>
 
       <p className="mt-4 max-w-3xl text-[11px] leading-relaxed text-fg-faint">
-        VAS bill is the modelled figure — T-Gloss / Lexus jobs priced at the master list, the same number shown across the
-        dashboard. Total Revenue = GUS + BPU parts &amp; labour + External Sales + scrap / used oil.
+        {tglossText("TGLOSS is the modelled figure — TGLOSS / Lexus jobs priced at the master list, the same number shown across the")}
+        {" "}dashboard. Total Revenue = GUS + BPU parts &amp; labour + External Sales + scrap / used oil.
       </p>
 
       <FlagComposer page="overview" date={data.date} />

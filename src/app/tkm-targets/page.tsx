@@ -5,6 +5,7 @@ import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { TargetIcon, WrenchIcon, StorefrontIcon } from "@/components/dashboard-icons";
 import { RichKpiCard } from "@/components/rich-kpi-card";
+import { tglossText } from "@/components/tgloss-text";
 import { achievementRatio, computeKpiSummary, TKM_TRACKED_KPIS } from "@/lib/aggregate";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
@@ -219,7 +220,7 @@ async function TkmTargetsContent({
               <dd className="text-sm font-semibold tabular-nums text-fg">{formatPercent(kpis.penetrationTGlossService)}</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-xs text-fg-faint">T-Gloss SPO</dt>
+              <dt className="text-xs text-fg-faint">{tglossText("TGLOSS SPO")}</dt>
               <dd className="text-sm font-semibold tabular-nums text-fg">{formatPercent(achievementRatio(kpis.spoTGloss, kpis.spoTGlossTarget))}</dd>
             </div>
           </dl>

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { achievementRatio, achievementTone, type AchievementTone } from "@/lib/aggregate";
 import { formatNumber } from "@/lib/format";
 import type { Pace } from "@/lib/pace";
@@ -48,6 +49,7 @@ export function RichKpiCard({
   icon,
   color,
   label,
+  visualLabel,
   value,
   sub,
   actual,
@@ -63,6 +65,11 @@ export function RichKpiCard({
   icon: React.ReactNode;
   color: keyof typeof ACCENT;
   label: string;
+  /** Styled version of `label` for the visible card (e.g. the TGLOSS
+   * red-T/black-GLOSS treatment) — `label` itself stays plain text and keeps
+   * driving the title-attribute tooltip, which can't render JSX. Defaults to
+   * `label` when omitted. */
+  visualLabel?: ReactNode;
   value: string;
   sub?: string;
   /** Omit both to show a plain card with no target bar (e.g. GUS RO MTD, which has no confirmed target). */
@@ -103,7 +110,7 @@ export function RichKpiCard({
 
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">{label}</div>
+          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">{visualLabel ?? label}</div>
           <div className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums text-fg">{value}</div>
         </div>
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${accent.chip}`}>{icon}</div>

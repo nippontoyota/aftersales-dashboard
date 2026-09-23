@@ -4,12 +4,13 @@ import { REGIONS, type RegionName } from "./regions";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { listSnapshotDates } from "./snapshot-store";
 import { isDatePublished } from "./publish-store";
+import { countScom205BranchesForDate } from "./scom205/store";
 
 /**
  * The data foundation for the Accounts (finance) executive view (/accounts).
  * Company-wide only, like /vp and /ceo — no branch/region/publish gate.
  * Purely financial: revenue-stream breakdown (GUS/BPU parts & labour,
- * External Sales, VAS Bill, Scrap/Used Oil) plus Cancellations shown as its
+ * External Sales, TGLOSS, Scrap/Used Oil) plus Cancellations shown as its
  * own line — gross revenue, never netted (see cancellation/store.ts: "control/
  * audit only — nothing here feeds a revenue figure").
  */
@@ -54,7 +55,7 @@ export async function loadAccountsData(requestedDate?: string): Promise<Accounts
   const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
   const month = date.slice(0, 7);
 
-  const [report, allCancellationSummaries, published] = await Promise.all([buildReport(date), loadCancellationMonthSummaries(), isDatePublished(date)]);
+  const [report, allCancellationSummaries, published, scom205Count] = await Promise.all([buildReport(date), loadCancellationMonthSummaries(), isDatePublished(date), countScom205BranchesForDate(date)]);
 
   if (!report) {
     return { date, dates, month, report: null, group: null, regions: [], cancellationsByBranch: new Map(), isPublished: published, uploadedBranchCount: 0, totalBranchCount: 18 };
@@ -86,7 +87,7 @@ export async function loadAccountsData(requestedDate?: string): Promise<Accounts
     regions,
     cancellationsByBranch,
     isPublished: published,
-    uploadedBranchCount: report.branches.length,
+    uploadedBranchCount: scom205Count,
     totalBranchCount: 18 + (hasCo01c ? 1 : 0),
   };
 }

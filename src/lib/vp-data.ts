@@ -9,6 +9,7 @@ import { REGIONS, regionForBranch, type RegionName } from "./regions";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { listSnapshotDates } from "./snapshot-store";
 import { isDatePublished } from "./publish-store";
+import { countScom205BranchesForDate } from "./scom205/store";
 
 /**
  * The data foundation for the VP Service view (/vp). Deliberately separate
@@ -45,7 +46,7 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
   if (dates.length === 0) return null;
 
   const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
-  const [report, published] = await Promise.all([buildReport(date), isDatePublished(date)]);
+  const [report, published, scom205Count] = await Promise.all([buildReport(date), isDatePublished(date), countScom205BranchesForDate(date)]);
 
   if (!report) return { date, dates, report: null, group: null, regions: [], isPublished: published, uploadedBranchCount: 0, totalBranchCount: 18 };
 
@@ -63,7 +64,7 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
     group: { hero: computeHeroSummary(report.branches), kpis: computeKpiSummary(report.branches) },
     regions,
     isPublished: published,
-    uploadedBranchCount: report.branches.length,
+    uploadedBranchCount: scom205Count,
     totalBranchCount: 18 + (hasCo01c ? 1 : 0),
   };
 }

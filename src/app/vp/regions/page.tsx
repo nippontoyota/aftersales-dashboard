@@ -11,6 +11,7 @@ import { DAILY_REPORT_ROWS, branchCell, regionTotalCell } from "../../dashboard/
 import { BranchLeaderboard } from "../branch-leaderboard";
 import { FlagComposer } from "../flag-composer";
 import { KeralaMap, type BranchPin } from "../kerala-map";
+import { tglossText } from "@/components/tgloss-text";
 import { MetricSelect } from "../metric-select";
 import { requireVpAccess } from "../vp-guard";
 import { VpHeader } from "../vp-header";
@@ -26,7 +27,7 @@ const METRICS: {
   { key: "gusro", label: "GUS RO MTD", fmt: "num", get: (r) => r.hero.gusRoMtd },
   { key: "bpuro", label: "BPU RO MTD", fmt: "num", get: (r) => r.hero.bpuRoMtd },
   { key: "ext", label: "External Sales MTD", fmt: "rs", get: (r) => r.hero.externalSalesMtd },
-  { key: "vaspct", label: "T-Gloss achievement %", fmt: "pct", get: (r) => achievementRatio(r.kpis.vasAchievementForTheMonth, r.kpis.vasBillTarget) },
+  { key: "vaspct", label: "TGLOSS achievement %", fmt: "pct", get: (r) => achievementRatio(r.kpis.vasAchievementForTheMonth, r.kpis.vasBillTarget) },
 ];
 
 function fmt(v: number | null, kind: "num" | "rs" | "pct"): string {
@@ -187,7 +188,7 @@ async function Regions({
                           colSpan={chosen.branches.length + 2}
                           className="border-t border-border-subtle bg-surface-2/30 py-2.5 pl-6 pr-3 text-[10px] font-medium uppercase tracking-[0.14em] text-fg-subtle"
                         >
-                          <span className="border-l-2 border-accent/70 pl-2.5">{row.label}</span>
+                          <span className="border-l-2 border-accent/70 pl-2.5">{tglossText(row.label)}</span>
                         </td>
                       </tr>
                     );
@@ -200,7 +201,7 @@ async function Regions({
                           row.strong ? "font-semibold text-fg" : "text-fg-muted"
                         }`}
                       >
-                        {row.label}
+                        {tglossText(row.label)}
                       </td>
                       {chosen.branches.map((b) => {
                         const cell = branchCell(row, b);

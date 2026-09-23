@@ -9,7 +9,7 @@ import { eyebrow } from "@/lib/ui";
 const METRICS: { key: BranchMetricKey; label: string; fmt: (v: number | null) => string }[] = [
   { key: "revenuePerCar", label: "Revenue per Car", fmt: formatCompactCurrency },
   { key: "totalRevenue", label: "Total Revenue Stream", fmt: formatCompactCurrency },
-  { key: "vasPct", label: "VAS Bill — % of target", fmt: formatPercent },
+  { key: "vasPct", label: "TGLOSS — % of target", fmt: formatPercent },
 ];
 
 const REGION_DOT: Record<RegionName, string> = {

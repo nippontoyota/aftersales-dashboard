@@ -78,8 +78,8 @@ const COLUMNS: SectionColumn[] = [
     ),
   },
   // Relabeled from "VAS (Rs/Car)" — the underlying figure is still total
-  // VAS bill revenue ÷ GUS RO (vasAchievementForTheMonth), not spoTGloss.
-  { label: "TGloss/GUS (Rs/Car)", render: (r) => bandedPerRoCell(r.vasAchievementForTheMonth, r.gusRoMtd, TGLOSS_PER_RO_BANDS) },
+  // TGLOSS revenue ÷ GUS RO (vasAchievementForTheMonth), not spoTGloss.
+  { label: "TGLOSS/GUS (Rs/Car)", render: (r) => bandedPerRoCell(r.vasAchievementForTheMonth, r.gusRoMtd, TGLOSS_PER_RO_BANDS) },
   { label: "Parts Retail (Rs/Car)", render: (r) => perVehicleCell(r.partsRetailAchievementForTheMonth, r.gusRoMtd) },
   { label: "Offtake (Rs/Car)", render: (r) => perVehicleCell(r.offtakeAchievementForTheMonth, r.gusRoMtd) },
 ];

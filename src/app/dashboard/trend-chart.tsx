@@ -13,7 +13,7 @@ export type TrendMetricConfig = { key: string; label: string; isCurrency?: boole
 /** BPU/Offtake/Parts Retail/PM+OC moved to their own trend chart on the TKM
  * Targets page (2026-08-31) — this default is what's left on the main
  * dashboard's chart. */
-const DEFAULT_METRICS: TrendMetricConfig[] = [{ key: "vas", label: "VAS Bill (Rs)" }];
+const DEFAULT_METRICS: TrendMetricConfig[] = [{ key: "vas", label: "TGLOSS (Rs)" }];
 
 // Stable reference (not `[]` inline at the call site) so a missing metric
 // key doesn't hand useMemo a new array identity on every render.

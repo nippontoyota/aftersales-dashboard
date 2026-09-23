@@ -6,6 +6,7 @@ import { achievementTone } from "@/lib/aggregate";
 import { formatPercent } from "@/lib/format";
 import type { BranchReport } from "@/lib/report";
 import { eyebrow } from "@/lib/ui";
+import { tglossText } from "@/components/tgloss-text";
 
 /** The rows shown before "Show all metrics" is expanded — the day-to-day
  * essentials, in the reference-sheet order. */
@@ -16,7 +17,7 @@ const KEY_LABELS = new Set([
   "GUS Labour MTD (Rs)",
   "BPU RO",
   "External Sales MTD (Rs)",
-  "VAS Bill",
+  "TGLOSS",
   "Tyre",
   "Battery",
 ]);
@@ -80,7 +81,7 @@ export function CondensedMetrics({
                 return (
                   <tr key={`g-${i}`}>
                     <td colSpan={6} className="border-t border-border-subtle bg-surface-2/40 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-fg-faint">
-                      {row.label}
+                      {tglossText(row.label)}
                     </td>
                   </tr>
                 );
@@ -93,7 +94,7 @@ export function CondensedMetrics({
 
               return (
                 <tr key={row.label} className="border-t border-border-subtle">
-                  <td className={`whitespace-nowrap py-1.5 pl-4 pr-3 ${row.strong ? "font-semibold text-fg" : "text-fg-subtle"}`}>{row.label}</td>
+                  <td className={`whitespace-nowrap py-1.5 pl-4 pr-3 ${row.strong ? "font-semibold text-fg" : "text-fg-subtle"}`}>{tglossText(row.label)}</td>
                   <td className="whitespace-nowrap py-1.5 pl-3 text-right tabular-nums text-fg-subtle">
                     {cell.today === null ? <span className="text-fg-faint">—</span> : row.fmt(cell.today)}
                   </td>

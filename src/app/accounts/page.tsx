@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { adminIdentityLabel } from "@/lib/admin-store";
@@ -9,6 +9,7 @@ import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { requireAccountsAccess } from "./accounts-guard";
 import { AccountsHeader } from "./accounts-header";
 import { DraftWarning } from "@/components/draft-warning";
+import { tglossText } from "@/components/tgloss-text";
 
 const REGION_COLOR: Record<AccountsRegionRollup["region"], string> = {
   Central: "var(--color-cat-central)",
@@ -86,7 +87,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         <Tile label="BPU Parts + Labour · MTD" value={formatCompactCurrency(bpuMtd)} />
         <Tile label="External Sales · MTD" value={formatCompactCurrency(group.hero.externalSalesMtd)} />
         <Tile
-          label="VAS Bill · MTD"
+          label={tglossText("TGLOSS · MTD")}
           value={formatCompactCurrency(group.kpis.vasAchievementForTheMonth)}
           sub={`${formatPercent(achievementRatio(group.kpis.vasAchievementForTheMonth, group.kpis.vasBillTarget))} of target`}
         />
@@ -113,7 +114,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
   );
 }
 
-function Tile({ label, value, sub, accent, warn }: { label: string; value: string; sub?: string; accent?: boolean; warn?: boolean }) {
+function Tile({ label, value, sub, accent, warn }: { label: ReactNode; value: string; sub?: string; accent?: boolean; warn?: boolean }) {
   return (
     <div
       className={`rounded-xl border p-4 shadow-card ${

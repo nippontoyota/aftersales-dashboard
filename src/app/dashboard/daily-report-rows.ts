@@ -78,8 +78,8 @@ export const DAILY_REPORT_ROWS: RowDef[] = [
   m("External Sales MTD (Rs)", { mtd: (b) => b.externalSalesMtd, fmt: rs, summable: true }),
   m("% on SPR I", { mtd: (b) => b.externalSalesPctOfSprInternal, pct: NONE, fmt: pctFmt, summable: false }),
 
-  { kind: "group", label: "VAS Bill" },
-  m("VAS Bill", {
+  { kind: "group", label: "TGLOSS" },
+  m("TGLOSS", {
     today: (b) => b.vasAchievementForTheDay,
     mtd: (b) => b.vasAchievementForTheMonth,
     target: (b) => b.vasBillTarget,
@@ -87,7 +87,7 @@ export const DAILY_REPORT_ROWS: RowDef[] = [
     fmt: rs,
     summable: true,
   }),
-  m("VAS Gentani (Rs/RO)", { mtd: (b) => b.vasGentani, fmt: rs, summable: false }),
+  m("TGLOSS Gentani (Rs/RO)", { mtd: (b) => b.vasGentani, fmt: rs, summable: false }),
 
   { kind: "group", label: "Value-Added Services" },
   m("Wheel Balancing", { today: (b) => b.wheelBalancingForTheDay, mtd: (b) => b.wheelBalancingMtd, fmt: num, summable: true }),
@@ -127,8 +127,8 @@ export const DAILY_REPORT_ROWS: RowDef[] = [
     summable: true,
   }),
   m("PM + OC", { today: (b) => b.pmOcForTheDay, mtd: (b) => b.pmOcAchievementForTheMonth, target: (b) => b.pmOcTarget, fmt: num, summable: true }),
-  m("T-Gloss Service Penetration", { mtd: (b) => b.penetrationTGlossService, target: (b) => b.targetTGlossService, fmt: pctFmt, summable: false }),
-  m("T-Gloss SPO (Rs)", {
+  m("TGLOSS Service Penetration", { mtd: (b) => b.penetrationTGlossService, target: (b) => b.targetTGlossService, fmt: pctFmt, summable: false }),
+  m("TGLOSS SPO (Rs)", {
     mtd: (b) => b.spoTGloss,
     target: (b) => b.spoTGlossTarget,
     pct: (b) => b.tGlossSpo,
