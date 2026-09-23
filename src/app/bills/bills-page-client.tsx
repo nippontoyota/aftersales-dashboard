@@ -146,29 +146,26 @@ export function BillsPageClient({
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-border-subtle text-left text-fg-subtle">
-                        <th className="pb-2 font-medium">Invoice No</th>
-                        <th className="pb-2 font-medium">Type</th>
-                        <th className="pb-2 font-medium text-right">Taxable Value</th>
-                        <th className="pb-2 font-medium">Invoice Date</th>
-                        <th className="pb-2 font-medium hidden sm:table-cell">File</th>
-                        <th className="pb-2 font-medium"></th>
+                        <th className="py-2 pr-4 font-medium">Invoice No</th>
+                        <th className="py-2 pr-4 font-medium">Type</th>
+                        <th className="py-2 pr-4 font-medium text-right">Taxable Value</th>
+                        <th className="py-2 pr-4 font-medium">Invoice Date</th>
+                        <th className="py-2 pr-4 font-medium">Uploaded</th>
+                        <th className="py-2 pr-4 font-medium hidden sm:table-cell">File</th>
+                        <th className="py-2 font-medium"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {bills.map((b) => (
-                        <tr
-                          key={b.id}
-                          className="border-b border-border-subtle last:border-0"
-                          title={`Uploaded ${new Date(b.uploadedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
-                        >
-                          <td className="py-2 font-medium text-fg">{b.invoiceNumber}</td>
-                          <td className={`py-2 ${b.category ? "text-fg-muted" : "text-warn"}`}>
+                        <tr key={b.id} className="border-b border-border-subtle last:border-0">
+                          <td className="py-2 pr-4 font-medium text-fg">{b.invoiceNumber}</td>
+                          <td className={`py-2 pr-4 ${b.category ? "text-fg-muted" : "text-warn"}`}>
                             {b.category ? CATEGORY_LABEL[b.category] : "Untagged"}
                           </td>
-                          <td className="py-2 text-right text-fg-muted">
+                          <td className="py-2 pr-4 text-right text-fg-muted">
                             Rs {b.taxableValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-2 text-fg-subtle">
+                          <td className="py-2 pr-4 text-fg-subtle">
                             {b.invoiceDate
                               ? new Date(`${b.invoiceDate}T00:00:00`).toLocaleDateString("en-IN", {
                                   day: "numeric",
@@ -177,7 +174,10 @@ export function BillsPageClient({
                                 })
                               : "—"}
                           </td>
-                          <td className="py-2 text-fg-subtle max-w-[140px] truncate hidden sm:table-cell">
+                          <td className="py-2 pr-4 text-fg-subtle">
+                            {new Date(b.uploadedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                          </td>
+                          <td className="py-2 pr-4 text-fg-subtle max-w-[140px] truncate hidden sm:table-cell">
                             {b.sourceFileName}
                           </td>
                           <td className="py-2">
