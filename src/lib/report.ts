@@ -139,6 +139,15 @@ export type BranchReport = {
   // Paint-only branch (see BODY_PAINT_ONLY_BRANCHES below).
   externalSalesMtd: number | null;
 
+  // BA Tool's raw "SPR External" column, MTD-cumulative as reported each day
+  // — the figure externalSalesMtd above replaced on 2026-09-15 (see its own
+  // comment). Kept here as a separate, clearly-labelled field only for
+  // branches/views that want to see BA Tool's own number alongside our Part
+  // Sale Report one (added 2026-09-24 for the Central regional dashboard,
+  // which tracks both) — never folded into totalRevenueStreamMtd or any
+  // other total.
+  sprExternalMtd: number | null;
+
   // Scrap and used-oil revenue (Rs, without tax) — sum of PDF bill taxable
   // values for this branch, split by the category chosen on upload. Always a
   // number (0 when no bills), never null: bills are optional and their
@@ -416,6 +425,7 @@ function computeBranchReport(
   const bpuPartsMtd = scom205Today?.totals.bpuSpRevMtd ?? null;
   const bpuLabourMtd = scom205Today?.totals.bpuLabRevMtd ?? null;
   const externalSalesMtd = externalSalesFromPartsMtd ?? (bodyPaintOnly ? 0 : null);
+  const sprExternalMtd = t("sprExternal");
 
   return {
     branch,
@@ -505,6 +515,7 @@ function computeBranchReport(
     srLinesTotalPct: scom205Today?.stockAndServiceRate?.srLinesTotalPct ?? null,
 
     externalSalesMtd,
+    sprExternalMtd,
 
     scrapRevenueForTheDay: billRevenueForTheDay.scrapRevenue,
     scrapRevenueMtd: billRevenue.scrapRevenue,

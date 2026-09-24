@@ -517,3 +517,23 @@ create table if not exists incentive_slab_targets (
   source_file_name  text        not null,
   primary key (month, branch)
 );
+
+-- Region revenue targets, per branch per calendar month (2026-09-24, at the
+-- Central RM's request, to replace his personal Excel tracker). Unlike
+-- incentive_slab_targets above (HQ-uploaded), these are set directly by a
+-- regional manager for their own region's branches — GS/BP/Ext Sales are
+-- HQ-communicated figures with no BA Tool/SCOM205 field of their own, so
+-- there's nothing to upload from a file; a regional manager just types them
+-- in for their branches. Month-scoped and full-row-replace-on-save (same
+-- shape as incentive_slab_targets) so a past month's dashboard keeps
+-- reflecting what was actually targeted that month.
+create table if not exists region_revenue_targets (
+  month       text        not null, -- 'YYYY-MM'
+  branch      text        not null,
+  gs_target   numeric     not null,
+  bp_target   numeric     not null,
+  ext_target  numeric     not null,
+  set_by      text        not null,
+  set_at      timestamptz not null default now(),
+  primary key (month, branch)
+);
