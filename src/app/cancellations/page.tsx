@@ -22,6 +22,7 @@ const monthLabel = (m: string) => {
   return new Date(Date.UTC(y, mo - 1, 1)).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 };
 const STATUS_LABEL: Record<ReconcileStatus, string> = {
+  adjusted: "Adjusted — replacement excluded",
   replaced: "Replaced — absorbed",
   stale: "Still in SSRV089",
   after_kpi_cutoff: "After last KPI pull",
@@ -110,6 +111,7 @@ export default async function CancellationsPage({
   const flaggedValue = flagged.reduce((s, r) => s + r.beforeTax, 0);
   const accessoriesImpacted = flagged.filter((r) => r.accessoriesImpact);
   const accessoriesImpactedValue = accessoriesImpacted.reduce((s, r) => s + r.beforeTax, 0);
+  const adjusted = reconcile.rows.filter((r) => r.status === "adjusted" && (!scopeSet || scopeSet.has(r.branch)));
 
   const totalCount = kpis.reduce((s, k) => s + k.count, 0);
   const totalValue = kpis.reduce((s, k) => s + k.beforeTaxTotal, 0);
@@ -211,6 +213,38 @@ export default async function CancellationsPage({
           </div>
         )}
       </div>
+
+      {/* Cross-month replacements — a cancelled invoice's job re-invoiced in a
+          later month, whose value has been excluded from that later month's
+          revenue rather than double-counted on top of the original (earlier)
+          month, which already has it. Informational, not a flag — the
+          adjustment is already applied. */}
+      {adjusted.length > 0 ? (
+        <div className="mt-6">
+          <div className={eyebrow}>Cross-month replacements — adjusted</div>
+          <div className="mt-2 rounded-md border border-border bg-surface-subtle p-3 text-sm">
+            <div className="text-fg-muted">
+              {adjusted.length} cancellation{adjusted.length === 1 ? "" : "s"} {adjusted.length === 1 ? "was" : "were"} re-invoiced under a new
+              invoice number in a later month. That job&apos;s revenue is already counted in its original month, so the replacement&apos;s value
+              has been excluded from the month it landed in instead of being double-counted.
+            </div>
+            <ul className="mt-2 space-y-1 text-fg-muted">
+              {adjusted.map((r) => (
+                <li key={r.docNo}>
+                  <span className="font-medium text-fg">{r.branch}</span> · {r.docNo}
+                  {r.refDocNo ? ` (RO ${r.refDocNo})` : ""} · {inr(r.beforeTax)} · {r.cancelReason} ·{" "}
+                  <span className="text-fg-subtle">{statusLabel(r)}</span>
+                  {r.crossMonthReplacement
+                    ? ` — replaced by ${r.crossMonthReplacement.replacementDocNo} in ${monthLabel(r.crossMonthReplacement.replacementMonth)}, ${inr(
+                        r.crossMonthReplacement.partSale + r.crossMonthReplacement.labourSale
+                      )} excluded from that month (${inr(r.crossMonthReplacement.partSale)} parts, ${inr(r.crossMonthReplacement.labourSale)} labour)`
+                    : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
 
       {/* Per-branch summary */}
       {kpis.length > 1 ? (

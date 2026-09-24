@@ -1,4 +1,5 @@
 import { pool } from "../db";
+import { loadCrossMonthReplacements } from "./cross-month-replacement";
 
 /**
  * Option A — the reconciliation check. For each cancelled invoice in a month,
@@ -29,6 +30,7 @@ import { pool } from "../db";
  */
 
 export type ReconcileStatus =
+  | "adjusted" //  a same-RO replacement in a later month was found and excluded from that month's revenue — see cross-month-replacement.ts
   | "replaced" //  a different invoice now sits on the same RO — cancellation absorbed
   | "stale" //     the cancelled invoice number is still in SSRV089
   | "after_kpi_cutoff" // cancelled after the last scom205 pull this month
@@ -54,6 +56,10 @@ export type ReconcileRow = {
   /** ISO timestamp — the freshest scom205 read for the branch this month
    * (latest report date vs. last upload). Null when no scom205 on file. */
   lastKpiCutoff: string | null;
+  /** Only set when status === "adjusted" — the replacement invoice found on
+   * the same RO in a later month, and the Parts/Labour value excluded from
+   * that month's revenue because of it. See cross-month-replacement.ts. */
+  crossMonthReplacement?: { replacementDocNo: string; replacementMonth: string; partSale: number; labourSale: number };
 };
 
 export type ReconcileResult = {
@@ -150,9 +156,16 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
     [month, branch ?? null, monthStart, monthEndExclusive],
   );
 
+  // Keyed by cancelledDocNo — cross-month-replacement.ts already dedupes by
+  // replacement invoice, but a reconciliation row is per cancelled doc, so
+  // this is looked up per doc, not per replacement.
+  const crossMonthByDocNo = new Map((await loadCrossMonthReplacements()).map((r) => [r.cancelledDocNo, r]));
+
   const out: ReconcileRow[] = rows.map((r) => {
+    const crossMonth = crossMonthByDocNo.get(r.doc_no);
     let status: ReconcileStatus;
-    if (r.still_present) status = "stale";
+    if (crossMonth) status = "adjusted";
+    else if (r.still_present) status = "stale";
     else if (r.after_last_kpi) status = "after_kpi_cutoff";
     else if (r.has_replacement || r.ro_in_ssrv) status = "replaced";
     else status = "unverified";
@@ -171,6 +184,14 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
       flagged: status === "stale" || status === "after_kpi_cutoff",
       accessoriesImpact: status === "stale" && r.accessories_stale,
       lastKpiCutoff: r.last_kpi_cutoff ? new Date(r.last_kpi_cutoff).toISOString() : null,
+      crossMonthReplacement: crossMonth
+        ? {
+            replacementDocNo: crossMonth.replacementDocNo,
+            replacementMonth: crossMonth.replacementMonth,
+            partSale: crossMonth.partSale,
+            labourSale: crossMonth.labourSale,
+          }
+        : undefined,
     };
   });
 

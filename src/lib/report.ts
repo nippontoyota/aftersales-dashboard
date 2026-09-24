@@ -8,6 +8,8 @@ import { loadAllSsrv089SnapshotsForMonthUpTo } from "./ssrv089/store";
 import type { Ssrv089Snapshot } from "./ssrv089/store";
 import { loadCancelledAccessoriesAdjustmentForMonth } from "./ssrv089/cancellation-adjustment";
 import type { CancelledAccessoriesAdjustment } from "./ssrv089/cancellation-adjustment";
+import { loadCrossMonthReplacementAdjustmentForMonth } from "./cancellation/cross-month-replacement";
+import type { CrossMonthReplacementAdjustment } from "./cancellation/cross-month-replacement";
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import type { Scom205Snapshot } from "./scom205/store";
 import { loadBillRevenueByBranchForMonth, loadBillRevenueByBranchForDate } from "./bill/store";
@@ -381,7 +383,8 @@ function computeBranchReport(
   scom205Today: Scom205Snapshot | undefined,
   billRevenue: { scrapRevenue: number; usedOilRevenue: number },
   billRevenueForTheDay: { scrapRevenue: number; usedOilRevenue: number },
-  cancelledAccessoriesAdjustment: CancelledAccessoriesAdjustment | undefined
+  cancelledAccessoriesAdjustment: CancelledAccessoriesAdjustment | undefined,
+  crossMonthReplacementAdjustment: CrossMonthReplacementAdjustment | undefined
 ): BranchReport {
   const y = (key: keyof BaToolBranchRow) => (yesterday ? num(yesterday[key] as number | string | null) : null);
   const t = (key: keyof BaToolBranchRow) => (today ? num(today[key] as number | string | null) : null);
@@ -412,15 +415,20 @@ function computeBranchReport(
   // Part Sale reports the normal null-guards wait for.
   const bodyPaintOnly = BODY_PAINT_ONLY_BRANCHES.has(branch);
 
+  // Cross-month-replacement adjustment (2026-09-24, KT01A only for now — see
+  // cross-month-replacement.ts): a cancelled invoice's job re-invoiced in a
+  // later month than its own revenue month has its replacement's value
+  // excluded from the month it landed in, since the job's revenue is already
+  // frozen in its original (earlier) month's figures.
   const gusPartsMtd = bodyPaintOnly
     ? 0
     : scom205Today && accessoriesPartSaleMtd !== null
-      ? scom205Today.totals.gusSpRevMtd - accessoriesPartSaleMtd
+      ? scom205Today.totals.gusSpRevMtd - accessoriesPartSaleMtd - (crossMonthReplacementAdjustment?.partSale ?? 0)
       : null;
   const gusLabourMtd = bodyPaintOnly
     ? 0
     : scom205Today && accessoriesLabourSaleMtd !== null
-      ? scom205Today.totals.gusLabRevMtd - accessoriesLabourSaleMtd
+      ? scom205Today.totals.gusLabRevMtd - accessoriesLabourSaleMtd - (crossMonthReplacementAdjustment?.labourSale ?? 0)
       : null;
   const bpuPartsMtd = scom205Today?.totals.bpuSpRevMtd ?? null;
   const bpuLabourMtd = scom205Today?.totals.bpuLabRevMtd ?? null;
@@ -592,6 +600,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     billRevenueList,
     billRevenueDayList,
     cancelledAccessoriesAdjustment,
+    crossMonthReplacementAdjustment,
   ] = await Promise.all([
     loadPreviousSnapshot(date),
     loadCombinedServiceInfoSnapshotsForDate(date),
@@ -603,6 +612,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     loadBillRevenueByBranchForMonth(date.slice(0, 7)),
     loadBillRevenueByBranchForDate(date),
     loadCancelledAccessoriesAdjustmentForMonth(date),
+    loadCrossMonthReplacementAdjustmentForMonth(date),
   ]);
 
   // Only needed for the !today branch-discovery set below — derived from the
@@ -673,7 +683,8 @@ export async function buildReport(date: string): Promise<Report | null> {
         scom205Today.get(branch),
         billRevenue.get(branch) ?? NO_BILL_REVENUE,
         billRevenueDay.get(branch) ?? NO_BILL_REVENUE,
-        cancelledAccessoriesAdjustment.get(branch)
+        cancelledAccessoriesAdjustment.get(branch),
+        crossMonthReplacementAdjustment.get(branch)
       )
     );
 
@@ -734,7 +745,8 @@ export async function buildReport(date: string): Promise<Report | null> {
       scom205Today.get(branchRow.branch),
       billRevenue.get(branchRow.branch) ?? NO_BILL_REVENUE,
       billRevenueDay.get(branchRow.branch) ?? NO_BILL_REVENUE,
-      cancelledAccessoriesAdjustment.get(branchRow.branch)
+      cancelledAccessoriesAdjustment.get(branchRow.branch),
+      crossMonthReplacementAdjustment.get(branchRow.branch)
     );
     const onlineStoreBreakdown = onlineStoreBreakdowns.get(branchRow.branch);
     return onlineStoreBreakdown ? { ...branchReport, onlineStoreBreakdown } : branchReport;
