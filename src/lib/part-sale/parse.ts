@@ -16,6 +16,37 @@ const NET_AMNT_COLUMN = "NetAmnt";
 const REF_DOC_NO_COLUMN = "RefDocNo";
 const CUSTOMER_NAME_COLUMN = "CustomerName";
 
+/** Some branches' exports use a differently-punctuated header row for the
+ * same columns (confirmed 2026-09-24, TR01B's "Parts Sales Report" file —
+ * spaced/period-separated names instead of the standard SPRT014 ones, on an
+ * otherwise identical row shape). Renamed to the canonical column name right
+ * after the sheet is read so the rest of the parser never needs to know. */
+const COLUMN_ALIASES: Record<string, string> = {
+  "Part No.": PART_NO_COLUMN,
+  "Qty.": SALE_QTY_COLUMN,
+  "Bill No.": BILL_NO_COLUMN,
+  "Net Amt.": NET_AMNT_COLUMN,
+  "Ref. Doc. No.": REF_DOC_NO_COLUMN,
+  "Cust. Name": CUSTOMER_NAME_COLUMN,
+};
+
+function applyColumnAliases(row: Record<string, unknown>): Record<string, unknown> {
+  let hasAlias = false;
+  for (const alias in COLUMN_ALIASES) {
+    if (alias in row) {
+      hasAlias = true;
+      break;
+    }
+  }
+  if (!hasAlias) return row;
+
+  const renamed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    renamed[COLUMN_ALIASES[key] ?? key] = value;
+  }
+  return renamed;
+}
+
 const ENGINE_FLUSH_PARTS = ["A-08814-80061", "A-08814-80090"];
 const INJECTOR_CLEANER_PARTS = ["A-08813-80100", "A-08813-80019"];
 const SYNTHETIC_OIL_PARTS = [
@@ -189,7 +220,7 @@ export type ParsedPartSale = {
 export function parsePartSaleRows(buffer: Buffer): Record<string, unknown>[] {
   const workbook = XLSX.read(looksBinaryWorkbook(buffer) ? buffer : repairCsvQuotes(buffer), { type: "buffer" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" }).map(applyColumnAliases);
 
   if (rows.length === 0) {
     throw new Error("No rows found — is this a Part Sale Report export?");
