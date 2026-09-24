@@ -74,7 +74,7 @@ async function ReportsContent({
         isCompanyScope={data.isCompanyScope}
       />
       <div className="mt-4">
-        <ReportTable branches={data.filteredBranches} daysSincePrevious={data.report.daysSincePrevious} />
+        <ReportTable branches={data.filteredBranches} daysSincePrevious={data.report.daysSincePrevious} date={data.date} />
       </div>
     </div>
   );

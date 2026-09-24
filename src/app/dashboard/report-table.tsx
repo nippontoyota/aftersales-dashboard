@@ -1,6 +1,7 @@
 import type { BranchReport } from "@/lib/report";
 import { achievementRatio } from "@/lib/aggregate";
 import { formatCompact, formatPercent } from "@/lib/format";
+import { computePace } from "@/lib/pace";
 import { ProgressCell } from "@/components/progress-bar";
 import { DayMonthPair, SectionTable, dayLabel } from "./section-table";
 
@@ -12,6 +13,25 @@ function penetrationVsPmLine(salesMtd: number | null, pmActualMtd: number | null
   return <div className="mt-1 whitespace-nowrap text-[10px] tabular-nums text-fg-faint">PM Pen: {formatPercent(achievementRatio(salesMtd, pmActualMtd))}</div>;
 }
 
+/** Engine Flush/Injector Cleaner's target is 20% of PM+OC actual MTD
+ * (2026-09-24, at the user's request) — unlike Tire/Battery's ungraded PM
+ * Pen line above, this one has an actual target, so it gets the normal
+ * ProgressCell current-% badge/bar plus a forecasted-% line (computePace's
+ * run-rate-to-month-end projection, same methodology used everywhere else
+ * pacing is shown — see lib/pace.ts) underneath instead of a plain ratio. */
+const ENGINE_FLUSH_INJECTOR_PM_TARGET_SHARE = 0.2;
+
+function pmTargetShareCell(actualMtd: number | null, pmActualMtd: number | null, date: string) {
+  const target = pmActualMtd !== null ? pmActualMtd * ENGINE_FLUSH_INJECTOR_PM_TARGET_SHARE : null;
+  const forecastRatio = computePace(date, actualMtd, target).projectedAchievementRatio;
+  return (
+    <div>
+      <ProgressCell actual={actualMtd} target={target} formatValue={formatCompact} />
+      <div className="mt-1 whitespace-nowrap text-[10px] tabular-nums text-fg-faint">Forecast: {formatPercent(forecastRatio)}</div>
+    </div>
+  );
+}
+
 /** CPU/BPU/Offtake/Parts Retail/PM+OC moved to their own "TKM Targets" page
  * (2026-08-31, at the user's request — see tkm-targets/page.tsx and
  * tkm-report-table.tsx) — the sections here now cover only VAS/TGLOSS,
@@ -19,8 +39,18 @@ function penetrationVsPmLine(salesMtd: number | null, pmActualMtd: number | null
  * the user's request: "Revenue Stream Performance" (ex "Value-Added
  * Services — Targets") keeps only Tire/Battery; TGLOSS Penetration/SPO
  * moved into "TGLOSS Achievement" (ex "Targets & Achievement") alongside
- * the existing TGLOSS/TGLOSS Gentani columns. */
-export function ReportTable({ branches, daysSincePrevious }: { branches: BranchReport[]; daysSincePrevious: number | null }) {
+ * the existing TGLOSS/TGLOSS Gentani columns. Engine Flush/Injector
+ * Cleaner/Synthetic Oil moved out of Revenue Stream — Volume into Revenue
+ * Stream Performance the same day, at the user's request. */
+export function ReportTable({
+  branches,
+  daysSincePrevious,
+  date,
+}: {
+  branches: BranchReport[];
+  daysSincePrevious: number | null;
+  date: string;
+}) {
   const asOf = dayLabel(daysSincePrevious);
 
   return (
@@ -33,10 +63,7 @@ export function ReportTable({ branches, daysSincePrevious }: { branches: BranchR
           { label: "Wheel Balancing", render: (r) => <DayMonthPair day={r.wheelBalancingForTheDay} month={r.wheelBalancingMtd} /> },
           { label: "Wheel Alignment", render: (r) => <DayMonthPair day={r.wheelAlignmentForTheDay} month={r.wheelAlignmentMtd} /> },
           { label: "Brake Skimming", render: (r) => <DayMonthPair day={r.brakeSkimmingForTheDay} month={r.brakeSkimmingMtd} /> },
-          { label: "Engine Flush", render: (r) => <DayMonthPair day={r.engineFlushForTheDay} month={r.engineFlushMtd} /> },
           { label: "Evaporator Cleaning", render: (r) => <DayMonthPair day={r.evaporatorCleaningForTheDay} month={r.evaporatorCleaningMtd} /> },
-          { label: "Injector Cleaner Diesel/Petrol", render: (r) => <DayMonthPair day={r.injectorCleanerForTheDay} month={r.injectorCleanerMtd} /> },
-          { label: "Synthetic Oil (Ltrs)", render: (r) => <DayMonthPair day={r.syntheticOilForTheDay} month={r.syntheticOilMtd} /> },
           { label: "Brake Cleaning Spray", render: (r) => <DayMonthPair day={r.brakeCleaningSprayForTheDay} month={r.brakeCleaningSprayMtd} /> },
           { label: "DIY Count", render: (r) => <DayMonthPair day={r.diyCountForTheDay} month={r.diyCountMtd} /> },
           { label: "DIY Revenue (Rs)", render: (r) => <DayMonthPair day={r.diyRevenueForTheDay} month={r.diyRevenueMtd} format={formatCompact} /> },
@@ -65,6 +92,18 @@ export function ReportTable({ branches, daysSincePrevious }: { branches: BranchR
                 {penetrationVsPmLine(r.batterySalesForTheMonth, r.pmOcAchievementForTheMonth)}
               </div>
             ),
+          },
+          {
+            label: "Engine Flush",
+            render: (r) => pmTargetShareCell(r.engineFlushMtd, r.pmOcAchievementForTheMonth, date),
+          },
+          {
+            label: "Injector Cleaner Diesel/Petrol",
+            render: (r) => pmTargetShareCell(r.injectorCleanerMtd, r.pmOcAchievementForTheMonth, date),
+          },
+          {
+            label: "Synthetic Oil (Ltrs)",
+            render: (r) => <DayMonthPair day={r.syntheticOilForTheDay} month={r.syntheticOilMtd} />,
           },
         ]}
       />
