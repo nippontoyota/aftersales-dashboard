@@ -67,8 +67,10 @@ export function checkDateColumnSanity(
   let withDate = 0;
   let matching = 0;
   const monthCounts = new Map<string, number>();
+  let sawColumn = false;
 
   for (const row of rawRows) {
+    if (dateColumn in row) sawColumn = true;
     const month = parseDateToYearMonth(row[dateColumn]);
     if (!month) continue;
     withDate++;
@@ -76,9 +78,24 @@ export function checkDateColumnSanity(
     monthCounts.set(month, (monthCounts.get(month) ?? 0) + 1);
   }
 
-  // Nothing to check against (every row blank/unparseable) — don't block on
-  // a signal we don't have.
-  if (withDate === 0) return { ok: true };
+  // The column exists but every value in it is blank/unparseable — don't
+  // block on a signal we don't have; that's a data-quality issue in the
+  // file itself, not evidence it's the wrong file.
+  if (withDate === 0 && sawColumn) return { ok: true };
+
+  // The column doesn't exist AT ALL (2026-09-24, after a CO01B test upload:
+  // an old-format Parts Sales export used "Sale Date" instead of the current
+  // template's "SaleDate", so every row silently missed the check entirely
+  // and a stray external-sales figure from an unrelated Feb 2025 file landed
+  // in real data). A wholly missing expected column is a much stronger "this
+  // might be the wrong report" signal than a few blank cells, and one worth
+  // rejecting rather than silently trusting.
+  if (withDate === 0 && !sawColumn) {
+    return {
+      ok: false,
+      error: `Couldn't find a "${dateColumn}" column in this file — is this the right report? Check the file and try again.`,
+    };
+  }
 
   if (matching / withDate >= 0.5) return { ok: true };
 
