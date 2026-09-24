@@ -26,12 +26,19 @@ export function ProgressCell({
   target,
   caption,
   formatValue = formatNumber,
+  secondaryLine,
 }: {
   actual: number | null;
   target: number | null;
   /** Shown only in the hover tooltip now, e.g. "+42 vs previous upload". */
   caption?: string | null;
   formatValue?: (value: number | null) => string;
+  /** Appended after the actual value on the same line (e.g. "PM 4%") instead
+   * of a separate stacked line — keeps every cell the same three-line shape
+   * (badge, bar, one text line) no matter how many extra metrics it carries
+   * (2026-09-24, at the user's request — a 4th stacked line read as
+   * cluttered). */
+  secondaryLine?: string | null;
 }) {
   const ratio = achievementRatio(actual, target);
   const tone = achievementTone(ratio);
@@ -53,7 +60,10 @@ export function ProgressCell({
       <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface-2">
         <div className={`h-full rounded-full ${styles.fill}`} style={{ width: `${widthPct}%` }} />
       </div>
-      <div className="mt-0.5 text-[10px] tabular-nums text-fg-faint">{formatValue(actual)}</div>
+      <div className="mt-0.5 whitespace-nowrap text-[10px] tabular-nums text-fg-faint">
+        {formatValue(actual)}
+        {secondaryLine ? ` · ${secondaryLine}` : ""}
+      </div>
     </div>
   );
 }

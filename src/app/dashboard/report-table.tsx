@@ -5,31 +5,35 @@ import { computePace } from "@/lib/pace";
 import { ProgressCell } from "@/components/progress-bar";
 import { DayMonthPair, SectionTable, dayLabel } from "./section-table";
 
+/** Whole-number percent, matching ProgressCell's own badge (always
+ * Math.round, no decimals) — used for the secondary metrics below so a
+ * cell's two percentages read as one consistent style instead of the
+ * badge's "123%" next to a decimal-precision "4.1%". */
+function pct0(ratio: number | null): string {
+  return ratio === null ? "—" : `${Math.round(ratio * 100)}%`;
+}
+
 /** Tire/Battery sales MTD ÷ PM+OC actual MTD — how much of the branch's PM
  * traffic also bought a tire/battery, not graded against any target (none
- * defined yet), just shown as a plain percentage under the existing
- * progress bar (2026-09-24, at the user's request). */
-function penetrationVsPmLine(salesMtd: number | null, pmActualMtd: number | null) {
-  return <div className="mt-1 whitespace-nowrap text-[10px] tabular-nums text-fg-faint">PM Pen: {formatPercent(achievementRatio(salesMtd, pmActualMtd))}</div>;
+ * defined yet). Appended to ProgressCell's own actual-value line via
+ * secondaryLine rather than a separate stacked line (2026-09-24, at the
+ * user's request — a 4th stacked line per cell read as cluttered). */
+function pmPenText(salesMtd: number | null, pmActualMtd: number | null): string {
+  return `PM ${pct0(achievementRatio(salesMtd, pmActualMtd))}`;
 }
 
 /** Engine Flush/Injector Cleaner's target is 20% of PM+OC actual MTD
  * (2026-09-24, at the user's request) — unlike Tire/Battery's ungraded PM
  * Pen line above, this one has an actual target, so it gets the normal
- * ProgressCell current-% badge/bar plus a forecasted-% line (computePace's
+ * ProgressCell current-% badge/bar, with a forecasted-% (computePace's
  * run-rate-to-month-end projection, same methodology used everywhere else
- * pacing is shown — see lib/pace.ts) underneath instead of a plain ratio. */
+ * pacing is shown — see lib/pace.ts) appended to the actual-value line. */
 const ENGINE_FLUSH_INJECTOR_PM_TARGET_SHARE = 0.2;
 
 function pmTargetShareCell(actualMtd: number | null, pmActualMtd: number | null, date: string) {
   const target = pmActualMtd !== null ? pmActualMtd * ENGINE_FLUSH_INJECTOR_PM_TARGET_SHARE : null;
   const forecastRatio = computePace(date, actualMtd, target).projectedAchievementRatio;
-  return (
-    <div>
-      <ProgressCell actual={actualMtd} target={target} formatValue={formatCompact} />
-      <div className="mt-1 whitespace-nowrap text-[10px] tabular-nums text-fg-faint">Forecast: {formatPercent(forecastRatio)}</div>
-    </div>
-  );
+  return <ProgressCell actual={actualMtd} target={target} formatValue={formatCompact} secondaryLine={`Fcst ${pct0(forecastRatio)}`} />;
 }
 
 /** CPU/BPU/Offtake/Parts Retail/PM+OC moved to their own "TKM Targets" page
@@ -78,19 +82,25 @@ export function ReportTable({
           {
             label: "Tire (MTD)",
             render: (r) => (
-              <div>
-                <ProgressCell actual={r.tireSalesForTheMonth} target={r.tireTarget} caption={`today ${formatCompact(r.tireSales)}`} formatValue={formatCompact} />
-                {penetrationVsPmLine(r.tireSalesForTheMonth, r.pmOcAchievementForTheMonth)}
-              </div>
+              <ProgressCell
+                actual={r.tireSalesForTheMonth}
+                target={r.tireTarget}
+                caption={`today ${formatCompact(r.tireSales)}`}
+                formatValue={formatCompact}
+                secondaryLine={pmPenText(r.tireSalesForTheMonth, r.pmOcAchievementForTheMonth)}
+              />
             ),
           },
           {
             label: "Battery (MTD)",
             render: (r) => (
-              <div>
-                <ProgressCell actual={r.batterySalesForTheMonth} target={r.batteryTarget} caption={`today ${formatCompact(r.batterySales)}`} formatValue={formatCompact} />
-                {penetrationVsPmLine(r.batterySalesForTheMonth, r.pmOcAchievementForTheMonth)}
-              </div>
+              <ProgressCell
+                actual={r.batterySalesForTheMonth}
+                target={r.batteryTarget}
+                caption={`today ${formatCompact(r.batterySales)}`}
+                formatValue={formatCompact}
+                secondaryLine={pmPenText(r.batterySalesForTheMonth, r.pmOcAchievementForTheMonth)}
+              />
             ),
           },
           {
