@@ -173,8 +173,8 @@ export async function POST(request: Request) {
     }
 
     // type === "scom205"
-    const { totals, rawRows } = parseScom205Workbook(buffer);
-    await saveScom205Snapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals });
+    const { totals, rawRows, stockAndServiceRate } = parseScom205Workbook(buffer);
+    await saveScom205Snapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals, stockAndServiceRate });
     await saveRawUploadRows({ reportType: "scom205", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
     return NextResponse.json({ success: true, type, date, branch, totals });
   } catch (err) {

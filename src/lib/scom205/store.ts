@@ -1,5 +1,5 @@
 import { pool } from "../db";
-import type { Scom205Totals } from "./parse";
+import type { Scom205StockAndServiceRate, Scom205Totals } from "./parse";
 
 /** scom205_snapshots — one row per branch per date. Values are already MTD-cumulative in the source file, so a given date's row is just that day's read — no accumulation across days needed. */
 export type Scom205Snapshot = {
@@ -8,20 +8,26 @@ export type Scom205Snapshot = {
   uploadedAt: string; // ISO timestamp
   sourceFileName: string;
   totals: Scom205Totals;
+  /** From sheet 3 ("Service Parts Sales & Stock") — null when that sheet was
+   * missing/unrecognized at upload time, or for rows saved before this field
+   * existed (see db/schema.sql). */
+  stockAndServiceRate: Scom205StockAndServiceRate | null;
 };
 
 export async function saveScom205Snapshot(snapshot: Scom205Snapshot): Promise<void> {
   await pool.query(
     `insert into scom205_snapshots
-       (date, branch, uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
+       (date, branch, uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd, stock_month_tgp, sr_lines_total_pct)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      on conflict (date, branch) do update set
        uploaded_at = excluded.uploaded_at,
        source_file_name = excluded.source_file_name,
        gus_sp_rev_mtd = excluded.gus_sp_rev_mtd,
        gus_lab_rev_mtd = excluded.gus_lab_rev_mtd,
        bpu_sp_rev_mtd = excluded.bpu_sp_rev_mtd,
-       bpu_lab_rev_mtd = excluded.bpu_lab_rev_mtd`,
+       bpu_lab_rev_mtd = excluded.bpu_lab_rev_mtd,
+       stock_month_tgp = excluded.stock_month_tgp,
+       sr_lines_total_pct = excluded.sr_lines_total_pct`,
     [
       snapshot.date,
       snapshot.branch,
@@ -31,13 +37,23 @@ export async function saveScom205Snapshot(snapshot: Scom205Snapshot): Promise<vo
       snapshot.totals.gusLabRevMtd,
       snapshot.totals.bpuSpRevMtd,
       snapshot.totals.bpuLabRevMtd,
+      snapshot.stockAndServiceRate?.stockMonthTgp ?? null,
+      snapshot.stockAndServiceRate?.srLinesTotalPct ?? null,
     ]
   );
 }
 
+function rowToStockAndServiceRate(r: {
+  stock_month_tgp: string | null;
+  sr_lines_total_pct: string | null;
+}): Scom205StockAndServiceRate | null {
+  if (r.stock_month_tgp === null || r.sr_lines_total_pct === null) return null;
+  return { stockMonthTgp: Number(r.stock_month_tgp), srLinesTotalPct: Number(r.sr_lines_total_pct) };
+}
+
 export async function loadScom205Snapshot(date: string, branch: string): Promise<Scom205Snapshot | null> {
   const { rows } = await pool.query(
-    `select uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd
+    `select uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd, stock_month_tgp, sr_lines_total_pct
      from scom205_snapshots where date = $1 and branch = $2`,
     [date, branch]
   );
@@ -55,6 +71,7 @@ export async function loadScom205Snapshot(date: string, branch: string): Promise
       bpuSpRevMtd: Number(r.bpu_sp_rev_mtd),
       bpuLabRevMtd: Number(r.bpu_lab_rev_mtd),
     },
+    stockAndServiceRate: rowToStockAndServiceRate(r),
   };
 }
 
@@ -68,8 +85,18 @@ export async function loadScom205Snapshot(date: string, branch: string): Promise
  * exact match against any earlier day is just as strong a signal as a fresh
  * one. */
 export async function loadAllScom205SnapshotsBefore(date: string, branch: string): Promise<Scom205Snapshot[]> {
-  const { rows } = await pool.query<{ date: string; uploaded_at: Date; source_file_name: string; gus_sp_rev_mtd: string; gus_lab_rev_mtd: string; bpu_sp_rev_mtd: string; bpu_lab_rev_mtd: string }>(
-    `select date::text as date, uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd
+  const { rows } = await pool.query<{
+    date: string;
+    uploaded_at: Date;
+    source_file_name: string;
+    gus_sp_rev_mtd: string;
+    gus_lab_rev_mtd: string;
+    bpu_sp_rev_mtd: string;
+    bpu_lab_rev_mtd: string;
+    stock_month_tgp: string | null;
+    sr_lines_total_pct: string | null;
+  }>(
+    `select date::text as date, uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd, stock_month_tgp, sr_lines_total_pct
      from scom205_snapshots where branch = $1 and date < $2
      order by date desc`,
     [branch, date]
@@ -85,13 +112,14 @@ export async function loadAllScom205SnapshotsBefore(date: string, branch: string
       bpuSpRevMtd: Number(r.bpu_sp_rev_mtd),
       bpuLabRevMtd: Number(r.bpu_lab_rev_mtd),
     },
+    stockAndServiceRate: rowToStockAndServiceRate(r),
   }));
 }
 
 /** All branches' snapshots for exactly one date — one query instead of one per branch, used when building the full dashboard report. Values are already MTD-cumulative, so unlike the other sources there's no "for the month" bulk loader needed. */
 export async function loadAllScom205SnapshotsForDate(date: string): Promise<Scom205Snapshot[]> {
   const { rows } = await pool.query(
-    `select branch, uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd
+    `select branch, uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd, stock_month_tgp, sr_lines_total_pct
      from scom205_snapshots where date = $1`,
     [date]
   );
@@ -106,6 +134,7 @@ export async function loadAllScom205SnapshotsForDate(date: string): Promise<Scom
       bpuSpRevMtd: Number(r.bpu_sp_rev_mtd),
       bpuLabRevMtd: Number(r.bpu_lab_rev_mtd),
     },
+    stockAndServiceRate: rowToStockAndServiceRate(r),
   }));
 }
 

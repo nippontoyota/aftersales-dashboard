@@ -264,6 +264,15 @@ alter table part_sale_snapshots add column if not exists diy_revenue numeric not
 -- the user 2026-08-31.
 alter table service_info_snapshots add column if not exists vas_revenue numeric not null default 0;
 
+-- scom205 sheet 3 ("Service Parts Sales & Stock"): Stock Month row's TGP
+-- (Rs.) value, and the Service Rate (S/R) table's Total row's S/R Lines (%)
+-- — added after scom205_snapshots already existed in production, for the
+-- Branch Performance page (see src/lib/scom205/parse.ts). Nullable: older
+-- rows were saved before this sheet was parsed, and a given upload's sheet 3
+-- can fail to match the expected layout.
+alter table scom205_snapshots add column if not exists stock_month_tgp numeric;
+alter table scom205_snapshots add column if not exists sr_lines_total_pct numeric;
+
 -- A date is "published" once HQ has reviewed the day's compiled dashboard
 -- and explicitly released it — only then can branch admins see the full
 -- company-wide dashboard for that date (2026-08-31, at the user's request:

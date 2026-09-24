@@ -9,6 +9,7 @@ import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
 import { RevenuePerVehicleTable } from "../dashboard/revenue-per-vehicle-table";
+import { StockServiceRateTable } from "../dashboard/stock-service-rate-table";
 
 export default async function BranchesPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
   const admin = await getCurrentAdmin();
@@ -76,6 +77,7 @@ async function BranchesContent({
       />
       <div className="mt-4 space-y-4">
         <RevenuePerVehicleTable branches={data.filteredBranches} />
+        <StockServiceRateTable branches={data.filteredBranches} />
         <BranchPerformanceHeatmap branches={data.filteredBranches} />
       </div>
     </div>

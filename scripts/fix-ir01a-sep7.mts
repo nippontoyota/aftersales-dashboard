@@ -70,7 +70,7 @@ await saveRawUploadRows({ reportType: "ssrv089", date: DATE, uploadedAt: at, sou
 await savePartSaleSnapshot({ date: DATE, branch: BRANCH, uploadedAt: at, sourceFileName: base(F.ps), counts: ps.counts });
 await saveRawUploadRows({ reportType: "part_sale", date: DATE, uploadedAt: at, sourceFileName: base(F.ps), rows: ps.rawRows.map((data) => ({ branch: BRANCH, data })) });
 
-await saveScom205Snapshot({ date: DATE, branch: BRANCH, uploadedAt: at, sourceFileName: base(F.scom), totals: scom.totals });
+await saveScom205Snapshot({ date: DATE, branch: BRANCH, uploadedAt: at, sourceFileName: base(F.scom), totals: scom.totals, stockAndServiceRate: scom.stockAndServiceRate });
 await saveRawUploadRows({ reportType: "scom205", date: DATE, uploadedAt: at, sourceFileName: base(F.scom), rows: scom.rawRows.map((data) => ({ branch: BRANCH, data })) });
 
 await saveRawReportUpload({ date: DATE, branch: BRANCH, reportType: "service_info_bp", uploadedAt: at, sourceFileName: base(F.siBp), fileData: read(F.siBp) });

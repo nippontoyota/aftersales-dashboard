@@ -34,11 +34,25 @@ const TOTAL_GROUP_HEADER = "Total";
  * some later data cell from being mistaken for a header. */
 const HEADER_SEARCH_ROWS = 12;
 
+/** Sheet 3, "Service Parts Sales & Stock" — the "Stock Month" row (TGP column)
+ * and the Service Rate (S/R) table's "Total" row (S/R Lines % column). Row
+ * positions vary (extra/missing rows above them), so both are located by
+ * label text rather than a fixed cell reference. */
+const STOCK_MONTH_LABEL = "Stock Month";
+const SR_TOTAL_LABEL = "Total";
+const TGP_HEADER = "TGP (Rs.)";
+const SR_LINES_PCT_HEADER = "S/R Lines (%)";
+
 export type Scom205Totals = {
   gusSpRevMtd: number;
   gusLabRevMtd: number;
   bpuSpRevMtd: number;
   bpuLabRevMtd: number;
+};
+
+export type Scom205StockAndServiceRate = {
+  stockMonthTgp: number;
+  srLinesTotalPct: number;
 };
 
 function findRowByLabel(rows: unknown[][], label: string): unknown[] | null {
@@ -104,6 +118,10 @@ function readAmount(row: unknown[], groups: ColumnGroup[], field: "lab" | "sp"):
 
 export type ParsedScom205 = {
   totals: Scom205Totals;
+  /** From sheet 3 ("Service Parts Sales & Stock"); null if that sheet is
+   * missing or doesn't match the expected layout — callers decide whether
+   * that's fatal. */
+  stockAndServiceRate: Scom205StockAndServiceRate | null;
   /** Every row exactly as read from the file — this report has no reliable
    * column headers (see the module doc comment above), so each raw row is
    * kept as its raw cell array rather than a keyed object (2026-09-01, at
@@ -115,7 +133,77 @@ export function parseScom205Workbook(buffer: Buffer): ParsedScom205 {
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: true });
-  return { totals: scom205TotalsFromRows(rows), rawRows: rows };
+
+  let stockAndServiceRate: Scom205StockAndServiceRate | null = null;
+  const sheet3Name = workbook.SheetNames[2];
+  if (sheet3Name) {
+    const sheet3 = workbook.Sheets[sheet3Name];
+    const sheet3Rows: unknown[][] = XLSX.utils.sheet_to_json(sheet3, { header: 1, defval: "", blankrows: true });
+    try {
+      stockAndServiceRate = scom205StockAndServiceRateFromRows(sheet3Rows);
+    } catch {
+      stockAndServiceRate = null;
+    }
+  }
+
+  return { totals: scom205TotalsFromRows(rows), stockAndServiceRate, rawRows: rows };
+}
+
+/** Row range searched above/after an anchor row (Stock Month / S/R Lines (%)
+ * header) when locating the paired header or "Total" row — generous enough
+ * to survive extra rows, tight enough not to wander into an unrelated
+ * section that happens to reuse the word "Total". */
+const NEARBY_ROW_SEARCH_RANGE = 10;
+
+function findHeaderColumn(row: unknown[], headerText: string): number {
+  return row.findIndex((cell) => String(cell ?? "").trim() === headerText);
+}
+
+/** Sheet 3 extraction, split out from the workbook read for the same reason
+ * as scom205TotalsFromRows — allows re-parsing from stored raw rows. */
+export function scom205StockAndServiceRateFromRows(rows: unknown[][]): Scom205StockAndServiceRate {
+  const stockMonthRowIdx = rows.findIndex((row) => String(row[0] ?? "").trim() === STOCK_MONTH_LABEL);
+  if (stockMonthRowIdx === -1) {
+    throw new Error(`Could not find the "${STOCK_MONTH_LABEL}" row — is this the "Service Parts Sales & Stock" sheet?`);
+  }
+  let tgpCol = -1;
+  for (let i = stockMonthRowIdx; i >= Math.max(0, stockMonthRowIdx - NEARBY_ROW_SEARCH_RANGE); i--) {
+    const col = findHeaderColumn(rows[i], TGP_HEADER);
+    if (col !== -1) {
+      tgpCol = col;
+      break;
+    }
+  }
+  if (tgpCol === -1) {
+    throw new Error(`Could not find the "${TGP_HEADER}" column above the "${STOCK_MONTH_LABEL}" row.`);
+  }
+  const stockMonthTgp = Number(String(rows[stockMonthRowIdx][tgpCol] ?? "").replace(/,/g, "").trim());
+  if (!Number.isFinite(stockMonthTgp)) {
+    throw new Error(`"${STOCK_MONTH_LABEL}" TGP value isn't numeric.`);
+  }
+
+  const srHeaderRowIdx = rows.findIndex((row) => findHeaderColumn(row, SR_LINES_PCT_HEADER) !== -1);
+  if (srHeaderRowIdx === -1) {
+    throw new Error(`Could not find the "${SR_LINES_PCT_HEADER}" column — is this the "Service Parts Sales & Stock" sheet?`);
+  }
+  const srLinesCol = findHeaderColumn(rows[srHeaderRowIdx], SR_LINES_PCT_HEADER);
+
+  let srTotalRowIdx = -1;
+  for (let i = srHeaderRowIdx + 1; i < Math.min(rows.length, srHeaderRowIdx + 1 + NEARBY_ROW_SEARCH_RANGE); i++) {
+    if (String(rows[i][0] ?? "").trim() === SR_TOTAL_LABEL) {
+      srTotalRowIdx = i;
+      break;
+    }
+  }
+  if (srTotalRowIdx === -1) {
+    throw new Error(`Could not find the Service Rate (S/R) "${SR_TOTAL_LABEL}" row below its header.`);
+  }
+  const srLinesTotalPct = Number(String(rows[srTotalRowIdx][srLinesCol] ?? "").replace(/,/g, "").trim());
+  if (!Number.isFinite(srLinesTotalPct)) {
+    throw new Error(`Service Rate (S/R) "${SR_TOTAL_LABEL}" S/R Lines (%) value isn't numeric.`);
+  }
+
+  return { stockMonthTgp, srLinesTotalPct };
 }
 
 /** The revenue extraction, split out from the workbook read so a re-parse

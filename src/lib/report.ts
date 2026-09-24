@@ -123,6 +123,13 @@ export type BranchReport = {
   bpuPartsMtd: number | null;
   bpuLabourMtd: number | null;
 
+  // scom205 sheet 3 ("Service Parts Sales & Stock") — TGP column's Stock
+  // Month row, and the Service Rate (S/R) table's Total row's S/R Lines (%).
+  // Null whenever scom205 hasn't been uploaded for this branch/date yet, or
+  // its sheet 3 didn't match the expected layout.
+  stockMonthTgp: number | null;
+  srLinesTotalPct: number | null;
+
   // External Sales MTD (Rs) = the branch's cumulative Part Sale Report
   // "External Sales" filter alone (every row on an `A`-type bill, plus
   // matching `F`-type returns — see part-sale/parse.ts). BA Tool's SPR
@@ -493,6 +500,9 @@ function computeBranchReport(
     gusLabourMtd,
     bpuPartsMtd,
     bpuLabourMtd,
+
+    stockMonthTgp: scom205Today?.stockAndServiceRate?.stockMonthTgp ?? null,
+    srLinesTotalPct: scom205Today?.stockAndServiceRate?.srLinesTotalPct ?? null,
 
     externalSalesMtd,
 

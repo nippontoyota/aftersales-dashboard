@@ -43,9 +43,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not read the uploaded file." }, { status: 400 });
   }
 
-  let totals, rawRows;
+  let totals, rawRows, stockAndServiceRate;
   try {
-    ({ totals, rawRows } = parseScom205Workbook(buffer));
+    ({ totals, rawRows, stockAndServiceRate } = parseScom205Workbook(buffer));
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
@@ -84,6 +84,7 @@ export async function POST(request: Request) {
     uploadedAt,
     sourceFileName: file.name,
     totals,
+    stockAndServiceRate,
   });
   await saveRawUploadRows({
     reportType: "scom205",
