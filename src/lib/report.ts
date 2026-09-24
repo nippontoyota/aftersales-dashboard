@@ -10,6 +10,7 @@ import { loadCancelledAccessoriesAdjustmentForMonth } from "./ssrv089/cancellati
 import type { CancelledAccessoriesAdjustment } from "./ssrv089/cancellation-adjustment";
 import { loadCrossMonthReplacementAdjustmentForMonth } from "./cancellation/cross-month-replacement";
 import type { CrossMonthReplacementAdjustment } from "./cancellation/cross-month-replacement";
+import { targetOverrideFor } from "./target-overrides";
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import type { Scom205Snapshot } from "./scom205/store";
 import { loadBillRevenueByBranchForMonth, loadBillRevenueByBranchForDate } from "./bill/store";
@@ -373,6 +374,7 @@ function mergeOnlineStoreBranches(rows: BaToolBranchRow[]): { rows: BaToolBranch
  */
 function computeBranchReport(
   branch: string,
+  date: string,
   today: BaToolBranchRow | undefined,
   yesterday: BaToolBranchRow | undefined,
   serviceInfoToday: ServiceInfoSnapshot | undefined,
@@ -414,6 +416,7 @@ function computeBranchReport(
   // Labour is 0 (not "unknown"), and it never files the SSRV089-General /
   // Part Sale reports the normal null-guards wait for.
   const bodyPaintOnly = BODY_PAINT_ONLY_BRANCHES.has(branch);
+  const targetOverride = targetOverrideFor(branch, date);
 
   // Cross-month-replacement adjustment (2026-09-24, KT01A only for now — see
   // cross-month-replacement.ts): a cancelled invoice's job re-invoiced in a
@@ -470,15 +473,15 @@ function computeBranchReport(
     cpuForTheDay: delta(t("cpus"), y("cpus")),
     cpuAchievementForTheMonth: t("cpus"),
 
-    bpuTarget: t("bpusTarget"),
+    bpuTarget: targetOverride?.bpuTarget ?? t("bpusTarget"),
     bpuForTheDay: delta(t("bpus"), y("bpus")),
     bpuAchievementForTheMonth: t("bpus"),
 
-    offtakeTarget: t("spoDealerTarget"),
+    offtakeTarget: targetOverride?.offtakeTarget ?? t("spoDealerTarget"),
     offtakeForThePreviousDay: delta(t("spoDealer"), y("spoDealer")),
     offtakeAchievementForTheMonth: t("spoDealer"),
 
-    partsRetailTarget: t("sprInternalTarget"),
+    partsRetailTarget: targetOverride?.partsRetailTarget ?? t("sprInternalTarget"),
     partsRetailForTheDay: delta(t("sprInternal"), y("sprInternal")),
     partsRetailAchievementForTheMonth,
 
@@ -673,6 +676,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     const branches = [...branchesWithData].sort().map((branch) =>
       computeBranchReport(
         branch,
+        date,
         undefined,
         undefined,
         serviceInfoToday.get(branch),
@@ -735,6 +739,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     const yesterdayRow = previousBranches?.find((b) => b.branch === branchRow.branch);
     const branchReport = computeBranchReport(
       branchRow.branch,
+      date,
       branchRow,
       yesterdayRow,
       serviceInfoToday.get(branchRow.branch),
