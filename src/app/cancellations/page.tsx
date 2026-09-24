@@ -6,7 +6,13 @@ import { loadNavState } from "@/lib/dashboard-data";
 import { REGIONS } from "@/lib/regions";
 import { eyebrow } from "@/lib/ui";
 import { formatCompactCurrency } from "@/lib/format";
-import { loadCancellationMonths, loadCancellationKpis, loadCancellationMonthSummaries } from "@/lib/cancellation/store";
+import {
+  loadCancellationMonths,
+  loadCancellationKpis,
+  loadCancellationMonthSummaries,
+  listCancellationFiles,
+  type CancellationFileInfo,
+} from "@/lib/cancellation/store";
 import { reconcileCancellations, type ReconcileStatus } from "@/lib/cancellation/reconcile";
 import { MonthSelect, BranchSelect } from "./month-select";
 
@@ -89,11 +95,15 @@ export default async function CancellationsPage({
     );
   }
 
-  const [kpis, reconcile, summaries] = await Promise.all([
+  const [kpis, reconcile, summaries, files] = await Promise.all([
     loadCancellationKpis(month, branchFilter ? [branchFilter] : scopeBranches ?? undefined),
     reconcileCancellations(month, branchFilter),
     loadCancellationMonthSummaries(scopeBranches?.length === 1 ? scopeBranches[0] : undefined),
+    listCancellationFiles(month, branchFilter ? [branchFilter] : scopeBranches ?? undefined),
   ]);
+
+  const filesByBranch = new Map<string, CancellationFileInfo[]>();
+  for (const f of files) filesByBranch.set(f.branch, [...(filesByBranch.get(f.branch) ?? []), f]);
 
   const monthSummaries = summaries.filter((s) => s.month === month && (!scopeSet || scopeSet.has(s.branch)));
   const flagged = reconcile.rows.filter((r) => r.flagged && (!scopeSet || scopeSet.has(r.branch)));
@@ -108,7 +118,9 @@ export default async function CancellationsPage({
 
   const branchOptions = [...new Set(monthSummaries.map((s) => s.branch))].sort();
   const soloBranch = branchFilter ?? (branchOptions.length === 1 ? branchOptions[0] : undefined);
-  const pdfHref = (b: string) => `/api/cancellations/${b}/${month}/pdf`;
+  const pdfHref = (b: string, id: number) => `/api/cancellations/${b}/${month}/pdf/${id}`;
+  const uploadLabel = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
 
   return shell(
     <>
@@ -138,14 +150,30 @@ export default async function CancellationsPage({
         <Tile label="Cancelled for warranty" value={String(totalWarranty)} />
       </div>
 
-      {soloBranch ? (
-        <a href={pdfHref(soloBranch)} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-sm text-accent-text hover:underline">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
-            <path d="M10 3v9M6.5 8.5 10 12l3.5-3.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M4 14v1.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V14" strokeLinecap="round" />
-          </svg>
-          Open the {soloBranch} report (PDF) — the full per-invoice detail is there
-        </a>
+      {soloBranch && filesByBranch.has(soloBranch) ? (
+        <div className="mt-3 text-sm">
+          <span className="text-fg-subtle">
+            {soloBranch} report{filesByBranch.get(soloBranch)!.length === 1 ? "" : "s"} (full per-invoice detail
+            {filesByBranch.get(soloBranch)!.length > 1 ? " — uploaded in multiple rounds, each PDF below" : ""}):
+          </span>{" "}
+          {filesByBranch.get(soloBranch)!.map((f, i) => (
+            <span key={f.id}>
+              {i > 0 ? <span className="mx-1.5 text-fg-faint">·</span> : null}
+              <a
+                href={pdfHref(f.branch, f.id)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 align-middle text-accent-text hover:underline"
+              >
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+                  <path d="M10 3v9M6.5 8.5 10 12l3.5-3.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4 14v1.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V14" strokeLinecap="round" />
+                </svg>
+                {uploadLabel(f.uploadedAt)} (PDF)
+              </a>
+            </span>
+          ))}
+        </div>
       ) : null}
 
       {/* Reconciliation flag */}
@@ -165,7 +193,7 @@ export default async function CancellationsPage({
             {accessoriesImpacted.length > 0 ? (
               <div className="mt-1 font-medium text-bad">
                 {accessoriesImpacted.length} of those ({inr(accessoriesImpactedValue)}) {accessoriesImpacted.length === 1 ? "is" : "are"} confirmed
-                still being deducted from Total Revenue right now (Accessories-staff-closed, still in SSRV089) — not just "might be," this one moves the number every day it's unresolved.
+                still being deducted from Total Revenue right now (Accessories-staff-closed, still in SSRV089) — not just &quot;might be,&quot; this one moves the number every day it&apos;s unresolved.
               </div>
             ) : null}
             <ul className="mt-2 space-y-1 text-fg-muted">
@@ -208,10 +236,14 @@ export default async function CancellationsPage({
                       </span>
                     ))}
                 </div>
-                {monthSummaries.some((s) => s.branch === k.branch) ? (
-                  <a href={pdfHref(k.branch)} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-accent-text hover:underline">
-                    Open report (PDF)
-                  </a>
+                {filesByBranch.has(k.branch) ? (
+                  <div className="mt-2 flex flex-wrap gap-x-1.5 gap-y-1 text-xs">
+                    {filesByBranch.get(k.branch)!.map((f) => (
+                      <a key={f.id} href={pdfHref(f.branch, f.id)} target="_blank" rel="noreferrer" className="text-accent-text hover:underline">
+                        {filesByBranch.get(k.branch)!.length > 1 ? `${uploadLabel(f.uploadedAt)} (PDF)` : "Open report (PDF)"}
+                      </a>
+                    ))}
+                  </div>
                 ) : null}
               </div>
             ))}

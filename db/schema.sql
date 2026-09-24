@@ -412,7 +412,11 @@ create index if not exists idx_bill_uploads_branch_invoice_date
 -- and removes nothing — a cancellation is terminal (it never un-cancels),
 -- so a partial-range upload accumulates and a re-upload just refreshes.
 -- `month` is each row's own cancel-date month. invoice_cancellation_files
--- keeps the latest uploaded PDF per (branch, month).
+-- keeps every uploaded PDF per (branch, month) — a branch uploading
+-- incrementally through the month gets one file per round, not just the
+-- latest (see the alter table below; fixed 2026-09-23 after a branch's
+-- earlier upload silently vanished from the PDF link when a later,
+-- smaller catch-up file overwrote it).
 create table if not exists invoice_cancellations (
   doc_no          text        primary key,           -- the cancelled invoice number (TXA…/BSA…/INA…/ASA…)
   branch          text        not null,
@@ -445,19 +449,29 @@ create index if not exists idx_invoice_cancellations_ref_doc
 -- Added after the table already existed in production.
 alter table invoice_cancellations add column if not exists cancel_at timestamptz;
 
--- Retains the uploaded PDF bytes, one per (branch, month), so the source is
--- there to look at later — same pattern as raw_report_uploads. Kept in its
--- own table rather than a bytea column on invoice_cancellations because that
--- table has one row PER cancelled invoice, not one per file.
+-- Retains the uploaded PDF bytes, one row PER UPLOAD (not per branch/month —
+-- see the id primary key below), so the source is there to look at later —
+-- same pattern as raw_report_uploads. Kept in its own table rather than a
+-- bytea column on invoice_cancellations because that table has one row PER
+-- cancelled invoice, not one per file.
 create table if not exists invoice_cancellation_files (
+  id               bigserial   primary key,
   branch           text        not null,
   month            text        not null,
   uploaded_at      timestamptz not null,
   uploaded_by      text        not null,
   source_file_name text        not null,
-  file_data        bytea       not null,
-  primary key (branch, month)
+  file_data        bytea       not null
 );
+create index if not exists idx_invoice_cancellation_files_branch_month
+  on invoice_cancellation_files (branch, month);
+-- Migrated 2026-09-23 from one row per (branch, month) — keyed so the
+-- latest upload silently overwrote every earlier one's file — to one row
+-- per upload, keyed by its own id. Safe to re-run: drops+recreates the same
+-- default-named pkey each time rather than erroring if already migrated.
+alter table invoice_cancellation_files add column if not exists id bigserial;
+alter table invoice_cancellation_files drop constraint if exists invoice_cancellation_files_pkey;
+alter table invoice_cancellation_files add primary key (id);
 
 -- Report holidays (2026-09-09, at the user's request). HQ flags a date as a
 -- non-working day; the branch upload page then computes ONE report date for
