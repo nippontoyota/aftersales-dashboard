@@ -15,12 +15,18 @@ const BILL_NO_COLUMN = "BillNo";
 const NET_AMNT_COLUMN = "NetAmnt";
 const REF_DOC_NO_COLUMN = "RefDocNo";
 const CUSTOMER_NAME_COLUMN = "CustomerName";
+/** Matches SALE_DATE_COLUMN in part-sale/upload-validation.ts — that check
+ * reads this same post-alias column name, never the file's original header. */
+const SALE_DATE_COLUMN = "SaleDate";
 
 /** Some branches' exports use a differently-punctuated header row for the
  * same columns (confirmed 2026-09-24, TR01B's "Parts Sales Report" file —
  * spaced/period-separated names instead of the standard SPRT014 ones, on an
  * otherwise identical row shape). Renamed to the canonical column name right
- * after the sheet is read so the rest of the parser never needs to know. */
+ * after the sheet is read so the rest of the parser never needs to know.
+ * "Sale Date" added 2026-09-24 alongside the others, at the user's request,
+ * after a differently-spaced date header came up while testing the new
+ * upload-validation checks. */
 const COLUMN_ALIASES: Record<string, string> = {
   "Part No.": PART_NO_COLUMN,
   "Qty.": SALE_QTY_COLUMN,
@@ -28,6 +34,7 @@ const COLUMN_ALIASES: Record<string, string> = {
   "Net Amt.": NET_AMNT_COLUMN,
   "Ref. Doc. No.": REF_DOC_NO_COLUMN,
   "Cust. Name": CUSTOMER_NAME_COLUMN,
+  "Sale Date": SALE_DATE_COLUMN,
 };
 
 function applyColumnAliases(row: Record<string, unknown>): Record<string, unknown> {
