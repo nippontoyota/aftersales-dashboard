@@ -91,7 +91,7 @@ export function CentralRegionDashboard({
       ext: view.totals.ext,
       totalMonthlyTarget: view.totals.totalMonthlyTarget,
       totalAchieved: view.totals.totalAchieved,
-      slabActual: view.totals.totalAchieved,
+      includesCo01e: false,
       slab: undefined,
     },
   ];
@@ -144,6 +144,7 @@ export function CentralRegionDashboard({
                 <th key={c.branch} className="pb-2 pr-4 text-left">
                   <div className="text-[12px] font-semibold text-fg">{c.branch === "Central Rgn" ? tglossText("Central Rgn") : c.label}</div>
                   {c.branch !== "Central Rgn" ? <div className="text-[10px] text-fg-faint">{c.branch}</div> : null}
+                  {c.includesCo01e ? <div className="text-[9px] font-medium text-accent-text">Includes CO01E</div> : null}
                 </th>
               ))}
             </tr>
@@ -157,7 +158,7 @@ export function CentralRegionDashboard({
               cells={columns.map((c) => ({
                 key: c.branch,
                 block: c.ext,
-                title: `External Sales (Part Sale Report, reference only): ${formatCompactCurrency(c.ext.partSaleReference)}`,
+                title: `SPR External (BA Tool, reference only): ${formatCompactCurrency(c.ext.sprExternalReference)}`,
               }))}
             />
             <tr className="border-t border-border-subtle">
@@ -170,22 +171,18 @@ export function CentralRegionDashboard({
             </tr>
             <tr className="border-t border-border-subtle">
               <td className="py-3 pr-3 text-[12px] font-semibold text-fg">Slab</td>
-              {columns.map((c) => {
-                const co01eFoldedIn = c.branch === "CO01B" && !view.branches.some((b) => b.branch === "CO01E");
-                return (
-                  <td key={c.branch} className="py-3 pr-4">
-                    <IncentiveSlabIndicator
-                      scopeLabel={c.label}
-                      actual={c.slabActual}
-                      slabs={c.branch === "Central Rgn" ? view.regionSlab : c.slab}
-                      date={view.date}
-                      size={64}
-                      showActual={false}
-                    />
-                    {co01eFoldedIn ? <div className="mt-1 max-w-[110px] text-center text-[9px] leading-tight text-fg-faint">Includes CO01E</div> : null}
-                  </td>
-                );
-              })}
+              {columns.map((c) => (
+                <td key={c.branch} className="py-3 pr-4">
+                  <IncentiveSlabIndicator
+                    scopeLabel={c.label}
+                    actual={c.totalAchieved}
+                    slabs={c.branch === "Central Rgn" ? view.regionSlab : c.slab}
+                    date={view.date}
+                    size={64}
+                    showActual={false}
+                  />
+                </td>
+              ))}
             </tr>
           </tbody>
         </table>

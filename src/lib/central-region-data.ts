@@ -16,10 +16,10 @@ import { sundayOffWorkingDaysElapsedInMonth, sundayOffWorkingDaysInMonth } from 
  */
 
 /** CO01E (a Body & Paint-only satellite, run out of Tower/CO01B) gets its
- * own column starting this month — before it, its revenue is folded into
- * CO01B's own Slab ring only (its incentive slab threshold already assumes
- * CO01E's contribution; see loadCentralRegionView's co01ePreSplitAchieved).
- * Confirmed with the user 2026-09-24. */
+ * own column starting this month — before it, ALL of its revenue (GS/BP/Ext
+ * Sales, not just the Slab comparison) is folded into CO01B's own figures,
+ * since September's targets were set with CO01E's contribution already
+ * assumed inside CO01B's target (confirmed with the user 2026-09-25). */
 const CO01E_SPLIT_MONTH = "2026-10";
 
 /** Column order — CO01E sits right after Tower/CO01B, where it's folded
@@ -67,10 +67,12 @@ export type CentralMetricBlock = {
 };
 
 export type CentralExtSalesBlock = CentralMetricBlock & {
-  /** externalSalesMtd (Part Sale Report) shown for reference alongside SPR
-   * External — no target of its own, so no MTD Target/Achievement%/forecast
-   * here, just the raw figure for comparison. */
-  partSaleReference: number | null;
+  /** `achieved` above is now externalSalesMtd (Part Sale Report) — the same
+   * External Sales figure used everywhere else in the app (switched
+   * 2026-09-25, at the user's request; it had been BA Tool's SPR External).
+   * SPR External is kept here as a reference-only figure since it doesn't
+   * share a target with anything, just shown for comparison. */
+  sprExternalReference: number | null;
 };
 
 export type CentralBranchRow = {
@@ -81,10 +83,9 @@ export type CentralBranchRow = {
   ext: CentralExtSalesBlock;
   totalMonthlyTarget: number | null;
   totalAchieved: number | null;
-  /** What's compared against `slab` below — equal to totalAchieved, except
-   * CO01B before CO01E's split, where CO01E's own totalAchieved is folded
-   * in too (see the module comment above). */
-  slabActual: number | null;
+  /** True for CO01B while CO01E hasn't split out yet — every figure in gs/bp/ext
+   * above already has CO01E's own revenue added in (see the module comment). */
+  includesCo01e: boolean;
   slab: IncentiveSlabTargets | undefined;
 };
 
@@ -141,15 +142,29 @@ function sumOrNull(values: (number | null)[]): number | null {
   return present.length ? present.reduce((a, b) => a + b, 0) : null;
 }
 
+type BranchAchieved = { gs: number | null; bp: number | null; ext: number | null; sprExternal: number | null };
+
 /** GS/BP/Ext-Sales achieved for one branch's report row, same formula used
- * everywhere on this dashboard — pulled out so CO01B's pre-split Slab
- * fold-in (which needs CO01E's total without CO01E being a displayed
- * branch) can reuse it instead of duplicating the math. */
-function branchAchieved(b: BranchReport | undefined): { gs: number | null; bp: number | null; ext: number | null; total: number | null } {
+ * everywhere on this dashboard — pulled out so CO01B's pre-split fold-in
+ * (which needs CO01E's own figures added in, component by component) can
+ * reuse it instead of duplicating the math. `ext` is externalSalesMtd (Part
+ * Sale Report) — the same External Sales figure the rest of the app uses;
+ * `sprExternal` (BA Tool) is kept separately, reference-only. */
+function branchAchieved(b: BranchReport | undefined): BranchAchieved {
   const gs = b && b.gusPartsMtd !== null && b.gusLabourMtd !== null ? b.gusPartsMtd + b.gusLabourMtd : null;
   const bp = b && b.bpuPartsMtd !== null && b.bpuLabourMtd !== null ? b.bpuPartsMtd + b.bpuLabourMtd : null;
-  const ext = b?.sprExternalMtd ?? null;
-  return { gs, bp, ext, total: sumOrNull([gs, bp, ext]) };
+  const ext = b?.externalSalesMtd ?? null;
+  const sprExternal = b?.sprExternalMtd ?? null;
+  return { gs, bp, ext, sprExternal };
+}
+
+function addAchieved(a: BranchAchieved, b: BranchAchieved): BranchAchieved {
+  return {
+    gs: sumOrNull([a.gs, b.gs]),
+    bp: sumOrNull([a.bp, b.bp]),
+    ext: sumOrNull([a.ext, b.ext]),
+    sprExternal: sumOrNull([a.sprExternal, b.sprExternal]),
+  };
 }
 
 export async function loadCentralRegionView(date: string, report: Report): Promise<CentralRegionView> {
@@ -168,22 +183,18 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
   const workingDays = { elapsed, total, remaining: Math.max(0, total - elapsed) };
 
   const byBranch = new Map(report.branches.map((b) => [b.branch, b]));
-  // Read regardless of whether CO01E is a displayed branch this month — its
-  // total is only used for CO01B's slabActual fold-in below when it isn't.
-  const co01eAchieved = branchAchieved(byBranch.get("CO01E")).total;
 
   const branches: CentralBranchRow[] = displayedBranches.map((branch) => {
     const b: BranchReport | undefined = byBranch.get(branch);
     const t: RegionRevenueTargets | undefined = targets.get(branch);
-    const achieved = branchAchieved(b);
+
+    const includesCo01e = branch === "CO01B" && !co01eIsSplit;
+    const achieved = includesCo01e ? addAchieved(branchAchieved(b), branchAchieved(byBranch.get("CO01E"))) : branchAchieved(b);
 
     const gs = metricBlock(t?.gsTarget ?? null, achieved.gs, elapsed, total);
     const bp = metricBlock(t?.bpTarget ?? null, achieved.bp, elapsed, total);
     const extBase = metricBlock(t?.extTarget ?? null, achieved.ext, elapsed, total);
-    const ext: CentralExtSalesBlock = { ...extBase, partSaleReference: b?.externalSalesMtd ?? null };
-
-    const totalAchieved = sumOrNull([gs.achieved, bp.achieved, ext.achieved]);
-    const slabActual = branch === "CO01B" && !co01eIsSplit ? sumOrNull([totalAchieved, co01eAchieved]) : totalAchieved;
+    const ext: CentralExtSalesBlock = { ...extBase, sprExternalReference: achieved.sprExternal };
 
     return {
       branch,
@@ -192,8 +203,8 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
       bp,
       ext,
       totalMonthlyTarget: sumOrNull([gs.target, bp.target, ext.target]),
-      totalAchieved,
-      slabActual,
+      totalAchieved: sumOrNull([gs.achieved, bp.achieved, ext.achieved]),
+      includesCo01e,
       slab: slabs.get(branch),
     };
   });
@@ -203,7 +214,7 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
   const gsTotals = totalsFor((r) => r.gs);
   const bpTotals = totalsFor((r) => r.bp);
   const extTotalsBase = totalsFor((r) => r.ext);
-  const extTotals: CentralExtSalesBlock = { ...extTotalsBase, partSaleReference: sumOrNull(branches.map((r) => r.ext.partSaleReference)) };
+  const extTotals: CentralExtSalesBlock = { ...extTotalsBase, sprExternalReference: sumOrNull(branches.map((r) => r.ext.sprExternalReference)) };
 
   const totalAchieved = sumOrNull([gsTotals.achieved, bpTotals.achieved, extTotals.achieved]);
   const slab4Total = sumOrNull(branches.map((r) => r.slab?.slab4 ?? null));
