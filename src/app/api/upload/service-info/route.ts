@@ -65,29 +65,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: dateSanity.error }, { status: 422 });
   }
 
-  // Warn-and-allow duplicate checks (2026-09-16, extended 2026-09-19) — see
-  // scom205's upload route for the full rationale on the exact-hash check,
-  // and upload-validation.ts for the RO-overlap check added alongside it
-  // (catches a *partial* re-upload the exact-hash check would miss — see
-  // TI01B's incident). Both checked against every prior upload ever made,
-  // not just this month, since a mislabeled backfill can land months away.
-  const confirmed = formData.get("confirmDuplicate") === "true";
-  if (!confirmed) {
-    const priorUploads = await loadAllRawUploadRowsBefore("service_info", admin.branch, date);
-    const newHash = hashRows(rawRows);
-    const match = priorUploads.find((u) => hashRows(u.rows) === newHash);
-    if (match) {
-      return NextResponse.json({
-        duplicate: true,
-        previousDate: match.date,
-        message: `This file looks identical to your upload from ${match.date} — same rows. Are you sure this is ${date}'s file?`,
-      });
-    }
+  // Hard-blocking duplicate checks (2026-09-16, extended 2026-09-19; upgraded
+  // from warn-and-allow to a hard reject 2026-09-24, at the user's request —
+  // "only then it is accepted") — see scom205's upload route for the full
+  // rationale on the exact-hash check, and upload-validation.ts for the
+  // RO-overlap check added alongside it (catches a *partial* re-upload the
+  // exact-hash check would miss — see TI01B's incident). Both checked
+  // against every prior upload ever made, not just this month, since a
+  // mislabeled backfill can land months away. A genuine false positive now
+  // needs HQ (Upload Sheet) to push it through — there's no more self-service
+  // click-through.
+  const priorUploads = await loadAllRawUploadRowsBefore("service_info", admin.branch, date);
+  const newHash = hashRows(rawRows);
+  const exactMatch = priorUploads.find((u) => hashRows(u.rows) === newHash);
+  if (exactMatch) {
+    return NextResponse.json(
+      { error: `This file looks identical to your upload from ${exactMatch.date} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
+      { status: 422 }
+    );
+  }
 
-    const overlap = await checkRoOverlap(admin.branch, rawRows, date);
-    if (overlap.duplicate) {
-      return NextResponse.json({ duplicate: true, message: overlap.message });
-    }
+  const overlap = await checkRoOverlap(admin.branch, rawRows, date);
+  if (overlap.duplicate) {
+    return NextResponse.json({ error: `${overlap.message} If this really is new data, contact HQ (Upload Sheet).` }, { status: 422 });
   }
 
   const uploadedAt = new Date().toISOString();

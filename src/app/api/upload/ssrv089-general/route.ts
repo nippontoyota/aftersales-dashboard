@@ -5,6 +5,7 @@ import { hashRows } from "@/lib/duplicate-detection";
 import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { loadSsrv089Snapshot, saveSsrv089Snapshot } from "@/lib/ssrv089/store";
+import { checkInvoiceDocDateSanity } from "@/lib/ssrv089/upload-validation";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -55,25 +56,30 @@ export async function POST(request: Request) {
     );
   }
 
-  // Warn-and-allow duplicate check (2026-09-16, at the user's request) — see
-  // scom205's upload route for the full rationale. This is the report type
+  // Date-sanity check (2026-09-24, same month-level logic Service Info has
+  // had since 2026-09-19 — see upload-date-sanity.ts / ssrv089/
+  // upload-validation.ts).
+  const dateSanity = checkInvoiceDocDateSanity(rawRows, date);
+  if (!dateSanity.ok) {
+    return NextResponse.json({ error: dateSanity.error }, { status: 422 });
+  }
+
+  // Hard-blocking duplicate check (2026-09-16, at the user's request; upgraded
+  // from warn-and-allow to a hard reject 2026-09-24). This is the report type
   // that caused the most repeat trouble this month — TI01C resent the same
   // Cost & Sales file on the 11th and 13th, then *again* on the 15th
   // against the 10th specifically, skipping right over a real upload on the
   // 14th, which is exactly why every prior date is checked here now, not
-  // just the most recent one.
-  const confirmed = formData.get("confirmDuplicate") === "true";
-  if (!confirmed) {
-    const priorUploads = await loadAllRawUploadRowsBefore("ssrv089", admin.branch, date);
-    const newHash = hashRows(rawRows);
-    const match = priorUploads.find((u) => hashRows(u.rows) === newHash);
-    if (match) {
-      return NextResponse.json({
-        duplicate: true,
-        previousDate: match.date,
-        message: `This file looks identical to your upload from ${match.date} — same rows. Are you sure this is ${date}'s file?`,
-      });
-    }
+  // just the most recent one. A genuine false positive now needs HQ
+  // (Upload Sheet).
+  const priorUploads = await loadAllRawUploadRowsBefore("ssrv089", admin.branch, date);
+  const newHash = hashRows(rawRows);
+  const exactMatch = priorUploads.find((u) => hashRows(u.rows) === newHash);
+  if (exactMatch) {
+    return NextResponse.json(
+      { error: `This file looks identical to your upload from ${exactMatch.date} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
+      { status: 422 }
+    );
   }
 
   const uploadedAt = new Date().toISOString();
