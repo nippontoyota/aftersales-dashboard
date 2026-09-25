@@ -125,6 +125,9 @@ async function DashboardContent({
       minute: "2-digit",
       timeZone: "Asia/Kolkata",
     });
+    // Incentive slab progress (2026-09-25, at the user's request — every
+    // branch should be able to see their own slab, published or not).
+    const branchSlabTargets = (await loadIncentiveSlabTargets(data.date.slice(0, 7))).get(branchReport.branch);
     return (
       <BranchDailyReport
         report={branchReport}
@@ -133,6 +136,7 @@ async function DashboardContent({
         dates={data.dates}
         uploadedAtLabel={uploadedAtLabel}
         daysSincePrevious={data.report.daysSincePrevious}
+        incentiveSlabs={branchSlabTargets}
       />
     );
   }
@@ -190,8 +194,13 @@ async function DashboardContent({
   // HQ keeps the company Executive Overview below. (Pre-publish is already
   // handled by showBranchDailyReport / showRegionDailyReport above.)
   if (admin.role === "branch") {
-    const view = await loadBranchView(admin.branch, date, report, monthSnapshots, serviceInfoMonthSnapshots);
-    return <BranchAccountPage view={view} branch={admin.branch} date={date} dates={dates} uploadedAt={report.uploadedAt} />;
+    const [view, branchSlabTargets] = await Promise.all([
+      loadBranchView(admin.branch, date, report, monthSnapshots, serviceInfoMonthSnapshots),
+      loadIncentiveSlabTargets(date.slice(0, 7)).then((m) => m.get(admin.branch)),
+    ]);
+    return (
+      <BranchAccountPage view={view} branch={admin.branch} date={date} dates={dates} uploadedAt={report.uploadedAt} incentiveSlabs={branchSlabTargets} />
+    );
   }
   if (admin.role === "regional" && admin.region === "Central") {
     const view = await loadCentralRegionView(date, report);
