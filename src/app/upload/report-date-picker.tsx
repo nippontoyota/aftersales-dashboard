@@ -28,9 +28,13 @@ export function ReportDatePicker({ selected, holidays }: { selected: string; hol
           let value = e.target.value;
           if (!value) return;
 
-          // Auto-correct any 2025 date to the last day of its month
-          if (value.startsWith("2025-")) {
-            const [year, month] = value.split("-");
+          // Auto-correct any 2025 date, or a Jan-Aug 2026 date, to the last
+          // day of its month (2026-09-25, at the user's request — these are
+          // backfill-only months now, same as 2025; September 2026 onward
+          // stays pickable day by day, being the current live month).
+          const [year, month] = value.split("-");
+          const isBackfillOnlyMonth = year === "2025" || (year === "2026" && Number(month) <= 8);
+          if (isBackfillOnlyMonth) {
             const lastDay = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
             value = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
           }
