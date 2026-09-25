@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { BranchReport } from "@/lib/report";
 import { isBodyPaintOnly } from "@/lib/report";
 import { achievementRatio } from "@/lib/aggregate";
@@ -26,21 +27,21 @@ function perVehicleCell(revenue: number | null, roCount: number | null) {
   return <div className="w-20 whitespace-nowrap text-right text-sm font-semibold tabular-nums text-fg">{formatCompact(value)}</div>;
 }
 
-type Band = { min: number; className: string };
+export type Band = { min: number; className: string };
 
-const BAND_COLORS = {
+export const BAND_COLORS = {
   green: "bg-emerald-500 text-white",
   yellow: "bg-yellow-400 text-black",
   orange: "bg-orange-500 text-white",
   red: "bg-red-500 text-white",
 };
 
-const PARTS_PER_RO_BANDS: Band[] = [
+export const PARTS_PER_RO_BANDS: Band[] = [
   { min: 7000, className: BAND_COLORS.green },
   { min: 6000, className: BAND_COLORS.yellow },
   { min: 5000, className: BAND_COLORS.orange },
 ];
-const LABOUR_PER_RO_BANDS: Band[] = [
+export const LABOUR_PER_RO_BANDS: Band[] = [
   { min: 4000, className: BAND_COLORS.green },
   { min: 3500, className: BAND_COLORS.yellow },
   { min: 3000, className: BAND_COLORS.orange },
@@ -51,38 +52,88 @@ const TGLOSS_PER_RO_BANDS: Band[] = [
   { min: 700, className: BAND_COLORS.orange },
 ];
 
+export function bandClassName(value: number | null, bands: Band[]): string {
+  return value === null ? "bg-surface-2 text-fg-faint" : (bands.find((b) => value >= b.min)?.className ?? BAND_COLORS.red);
+}
+
 function bandedPerRoCell(numerator: number | null, gusRoMtd: number | null, bands: Band[]) {
   if (gusRoMtd === null || gusRoMtd === 0) {
     return <div className="w-20 whitespace-nowrap text-center text-sm text-fg-faint">—</div>;
   }
   const value = achievementRatio(numerator, gusRoMtd);
-  const className = value === null ? "bg-surface-2 text-fg-faint" : (bands.find((b) => value >= b.min)?.className ?? BAND_COLORS.red);
   return (
-    <div className={`flex h-8 w-20 items-center justify-center whitespace-nowrap rounded text-sm font-semibold tabular-nums ${className}`}>
+    <div className={`flex h-8 w-20 items-center justify-center whitespace-nowrap rounded text-sm font-semibold tabular-nums ${bandClassName(value, bands)}`}>
       {formatCompact(value)}
     </div>
   );
 }
 
-const COLUMNS: SectionColumn[] = [
-  { label: "GUS Parts (Rs/Car)", render: (r) => bandedPerRoCell(r.gusPartsMtd, r.gusRoMtd, PARTS_PER_RO_BANDS) },
-  { label: "GUS Labour (Rs/Car)", render: (r) => bandedPerRoCell(r.gusLabourMtd, r.gusRoMtd, LABOUR_PER_RO_BANDS) },
-  {
-    label: "BPU (Rs/Car)",
-    render: (r) => (
-      <BpuCell
-        combined={achievementRatio((r.bpuPartsMtd ?? 0) + (r.bpuLabourMtd ?? 0), r.bpuRoMtd)}
-        parts={achievementRatio(r.bpuPartsMtd, r.bpuRoMtd)}
-        labour={achievementRatio(r.bpuLabourMtd, r.bpuRoMtd)}
-      />
-    ),
-  },
-  // Relabeled from "VAS (Rs/Car)" — the underlying figure is still total
-  // TGLOSS revenue ÷ GUS RO (vasAchievementForTheMonth), not spoTGloss.
-  { label: "TGLOSS/GUS (Rs/Car)", render: (r) => bandedPerRoCell(r.vasAchievementForTheMonth, r.gusRoMtd, TGLOSS_PER_RO_BANDS) },
-  { label: "Parts Retail (Rs/Car)", render: (r) => perVehicleCell(r.partsRetailAchievementForTheMonth, r.gusRoMtd) },
-  { label: "Offtake (Rs/Car)", render: (r) => perVehicleCell(r.offtakeAchievementForTheMonth, r.gusRoMtd) },
-];
+/** Lets a caller (the VP's Regions page) swap the plain GUS Parts/Labour
+ * badges for a clickable cell of its own — e.g. one that opens a rank +
+ * trend detail modal — without this shared table knowing anything about
+ * that feature. Falls back to the two args it would've used to render the
+ * plain badge, so a caller with nothing special to show can just re-render
+ * the same thing. Only GUS Parts/Labour get this hook (2026-09-25, at the
+ * VP's request) — BPU and TGLOSS/GUS stay plain for now. */
+export type GusCellRenderer = (
+  row: BranchReport,
+  metric: "parts" | "labour",
+  value: number | null,
+  plain: () => ReactNode
+) => ReactNode;
+
+function gusPartsColumn(renderGusCell?: GusCellRenderer): SectionColumn {
+  return {
+    label: "GUS Parts (Rs/Car)",
+    render: (r) => {
+      const plain = () => bandedPerRoCell(r.gusPartsMtd, r.gusRoMtd, PARTS_PER_RO_BANDS);
+      if (!renderGusCell) return plain();
+      const value = r.gusRoMtd === null || r.gusRoMtd === 0 ? null : achievementRatio(r.gusPartsMtd, r.gusRoMtd);
+      return renderGusCell(r, "parts", value, plain);
+    },
+  };
+}
+
+function gusLabourColumn(renderGusCell?: GusCellRenderer): SectionColumn {
+  return {
+    label: "GUS Labour (Rs/Car)",
+    render: (r) => {
+      const plain = () => bandedPerRoCell(r.gusLabourMtd, r.gusRoMtd, LABOUR_PER_RO_BANDS);
+      if (!renderGusCell) return plain();
+      const value = r.gusRoMtd === null || r.gusRoMtd === 0 ? null : achievementRatio(r.gusLabourMtd, r.gusRoMtd);
+      return renderGusCell(r, "labour", value, plain);
+    },
+  };
+}
+
+/** First 4 entries are GUS Parts, GUS Labour, BPU, TGLOSS/GUS — what the VP
+ * view shows (its own "compact" variant below); Parts Retail and Offtake
+ * are HQ-dashboard-only additions the VP doesn't need (confirmed 2026-09-25). */
+function buildColumns(renderGusCell?: GusCellRenderer): SectionColumn[] {
+  return [
+    gusPartsColumn(renderGusCell),
+    gusLabourColumn(renderGusCell),
+    {
+      label: "BPU (Rs/Car)",
+      render: (r) => (
+        <BpuCell
+          combined={achievementRatio((r.bpuPartsMtd ?? 0) + (r.bpuLabourMtd ?? 0), r.bpuRoMtd)}
+          parts={achievementRatio(r.bpuPartsMtd, r.bpuRoMtd)}
+          labour={achievementRatio(r.bpuLabourMtd, r.bpuRoMtd)}
+        />
+      ),
+    },
+    // Relabeled from "VAS (Rs/Car)" — the underlying figure is still total
+    // TGLOSS revenue ÷ GUS RO (vasAchievementForTheMonth), not spoTGloss.
+    { label: "TGLOSS/GUS (Rs/Car)", render: (r) => bandedPerRoCell(r.vasAchievementForTheMonth, r.gusRoMtd, TGLOSS_PER_RO_BANDS) },
+    { label: "Parts Retail (Rs/Car)", render: (r) => perVehicleCell(r.partsRetailAchievementForTheMonth, r.gusRoMtd) },
+    { label: "Offtake (Rs/Car)", render: (r) => perVehicleCell(r.offtakeAchievementForTheMonth, r.gusRoMtd) },
+  ];
+}
+
+/** The plain (non-interactive) HQ dashboard columns — kept as a stable
+ * export in case anything still imports COLUMNS directly. */
+export const COLUMNS: SectionColumn[] = buildColumns();
 
 const BP_ONLY_COLUMNS: SectionColumn[] = [
   {
@@ -155,7 +206,24 @@ function regionSort(a: BranchReport, b: BranchReport): number {
   return a.branch.localeCompare(b.branch);
 }
 
-export function RevenuePerVehicleTable({ branches }: { branches: BranchReport[] }) {
+export function RevenuePerVehicleTable({
+  branches,
+  /** "compact" drops Parts Retail and Offtake — the VP's own view
+   * (regions/page.tsx), which only wants GUS Parts, GUS Labour, BPU and
+   * TGLOSS/GUS. Defaults to the full 6-column HQ dashboard set. */
+  variant = "full",
+  defaultOpen,
+  /** See GusCellRenderer above — lets the VP's Regions page make the GUS
+   * Parts/Labour cells open its own rank + trend detail modal. */
+  renderGusCell,
+}: {
+  branches: BranchReport[];
+  variant?: "full" | "compact";
+  defaultOpen?: boolean;
+  renderGusCell?: GusCellRenderer;
+}) {
+  const allColumns = buildColumns(renderGusCell);
+  const columns = variant === "compact" ? allColumns.slice(0, 4) : allColumns;
   const generalBranches = branches.filter((b) => !isBodyPaintOnly(b.branch));
   const bpOnlyBranches = branches.filter((b) => isBodyPaintOnly(b.branch));
 
@@ -164,13 +232,20 @@ export function RevenuePerVehicleTable({ branches }: { branches: BranchReport[] 
 
   return (
     <div className="space-y-3">
-      <SectionTable title="Revenue Per Vehicle — MTD" subtitle="each stream ÷ its own RO count" branches={withTotal} columns={COLUMNS} />
+      <SectionTable
+        title="Revenue Per Vehicle — MTD"
+        subtitle="each stream ÷ its own RO count"
+        branches={withTotal}
+        columns={columns}
+        defaultOpen={defaultOpen}
+      />
       {bpOnlyBranches.length > 0 ? (
         <SectionTable
           title="Revenue Per Vehicle — MTD (Body & Paint only)"
           subtitle="BPU stream only — ranked separately, not comparable to a mixed branch's"
           branches={[...bpOnlyBranches].sort((a, b) => a.branch.localeCompare(b.branch))}
           columns={BP_ONLY_COLUMNS}
+          defaultOpen={defaultOpen}
         />
       ) : null}
     </div>

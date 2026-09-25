@@ -1,16 +1,13 @@
-import { Suspense, type ReactNode } from "react";
+import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
-import { achievementRatio, achievementTone } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
-import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { loadVpData } from "@/lib/vp-data";
 import { FlagComposer } from "./flag-composer";
 import { requireVpAccess } from "./vp-guard";
+import { RevenueStreamGrid } from "./revenue-stream-grid";
 import { VpHeader } from "./vp-header";
-import { VpScoreboard } from "./vp-scoreboard";
 import { DraftWarning } from "@/components/draft-warning";
-import { tglossText } from "@/components/tgloss-text";
 
 export default async function VpOverviewPage({
   searchParams,
@@ -57,7 +54,6 @@ async function Overview({
     );
   }
 
-  const { group, report } = data;
   const flagBase = `/vp?date=${data.date}`;
   const uploadedAtLabel = new Date(data.report.uploadedAt).toLocaleString("en-IN", {
     day: "numeric",
@@ -66,23 +62,6 @@ async function Overview({
     minute: "2-digit",
     timeZone: "Asia/Kolkata",
   });
-
-  const vasRatio = achievementRatio(group.kpis.vasAchievementForTheMonth, group.kpis.vasBillTarget);
-
-  const cards: { label: ReactNode; value: string; accent?: boolean; sub?: string; tone?: ReturnType<typeof achievementTone> }[] = [
-    { label: "Total Revenue · MTD", value: formatCompactCurrency(group.hero.totalRevenueStreamMtd), accent: true },
-    {
-      label: "GUS RO · MTD",
-      value: group.hero.gusRoMtd?.toLocaleString("en-IN") ?? "—",
-      sub: `${group.hero.gusRoBilledForTheDay?.toLocaleString("en-IN") ?? "—"} today`,
-    },
-    {
-      label: "BPU RO · MTD",
-      value: group.hero.bpuRoMtd?.toLocaleString("en-IN") ?? "—",
-      sub: `${group.hero.bpuRoBilledForTheDay?.toLocaleString("en-IN") ?? "—"} today`,
-    },
-    { label: tglossText("TGLOSS"), value: formatPercent(vasRatio), tone: achievementTone(vasRatio) },
-  ];
 
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-8">
@@ -101,32 +80,13 @@ async function Overview({
         asOfLabel={uploadedAtLabel}
       />
 
-      <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {cards.map((c, i) => (
-          <div
-            key={i}
-            className={`rounded-2xl border border-border-subtle bg-surface p-6 ${c.accent ? "border-t-2 border-t-accent" : ""}`}
-          >
-            <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">{c.label}</div>
-            <div
-              className={`mt-2 text-[28px] font-semibold tabular-nums tracking-tight ${
-                c.tone === "critical" ? "text-bad" : c.tone === "warn" ? "text-warn" : c.tone === "good" ? "text-good" : "text-fg"
-              }`}
-            >
-              {c.value}
-            </div>
-            {c.sub ? <div className="mt-1 text-[12px] text-fg-subtle">{c.sub}</div> : null}
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-6">
-        <VpScoreboard data={{ ...data, report, group }} flagBase={flagBase} />
+      <div className="mt-8">
+        <RevenueStreamGrid scopes={data.scopes} date={data.date} />
       </div>
 
       <p className="mt-4 max-w-3xl text-[11px] leading-relaxed text-fg-faint">
-        {tglossText("TGLOSS is the modelled figure — TGLOSS / Lexus jobs priced at the master list, the same number shown across the")}
-        {" "}dashboard. Total Revenue = GUS + BPU parts &amp; labour + External Sales + scrap / used oil.
+        Total Revenue Stream = GUS + BPU parts &amp; labour + External Sales + scrap / used oil. Incentive slab progress is
+        graded against Total Revenue Stream, using each scope&apos;s combined Slab 1–4 targets.
       </p>
 
       <FlagComposer page="overview" date={data.date} />

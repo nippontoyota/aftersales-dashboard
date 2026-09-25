@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { RegionName } from "@/lib/regions";
 
@@ -9,8 +9,18 @@ import type { RegionName } from "@/lib/regions";
  * SVG (equirectangular, bounds N13/S8/W74.5/E78) — so branch towns, given
  * as lat/long, project straight onto it. Pin colour is the *business*
  * region, which doesn't always track geography (a Kottayam branch is in the
- * company's "North"), hence the caption. Below the map, each region's total
- * for the selected metric doubles as the region selector.
+ * company's "North").
+ *
+ * Reworked 2026-09-25 into a small corner thumbnail that opens an enlarged
+ * view on click (at the VP's request — "only for view, not something he is
+ * going to check constantly"; the earlier full-width map plus its
+ * region-total buttons used to be the page's actual region filter, but that
+ * filter went away with the old wide branch table it drove — see
+ * regions/page.tsx). Bubble size is fixed to GUS Revenue/Car (GUS Parts +
+ * Labour ÷ GUS RO, switched 2026-09-25 from Total Revenue MTD — see
+ * gusRevenuePerCar() in regions/page.tsx); the old metric switcher went
+ * with it, since a thumbnail glanced at occasionally doesn't need a live
+ * control.
  */
 
 const REGION_COLOR: Record<RegionName, string> = {
@@ -46,30 +56,9 @@ const BRANCH_TOWN: Record<string, keyof typeof TOWN> = {
 };
 
 export type BranchPin = { branch: string; region: RegionName; value: number | null; display: string };
-export type RegionSummary = { region: RegionName; display: string; share: number | null; branches: number };
+export type RegionSummary = { region: RegionName; display: string; branches: number };
 
-export function KeralaMap({
-  pins,
-  regionSummaries,
-  metricLabel,
-  metricControl,
-  date,
-  selectedRegion,
-}: {
-  pins: BranchPin[];
-  regionSummaries: RegionSummary[];
-  metricLabel: string;
-  metricControl?: ReactNode;
-  date: string;
-  selectedRegion: RegionName | null;
-}) {
-  const router = useRouter();
-  const go = (href: string) => router.push(href);
-  const byRegion = new Map(regionSummaries.map((s) => [s.region, s]));
-
-  const max = Math.max(1, ...pins.map((p) => p.value ?? 0));
-  const radius = (v: number | null) => (v == null || v <= 0 ? 3 : 3.5 + Math.sqrt(Math.max(0, v) / max) * 9);
-
+function placePins(pins: BranchPin[]) {
   const byTown = new Map<string, BranchPin[]>();
   for (const p of pins) {
     const t = BRANCH_TOWN[p.branch];
@@ -78,99 +67,153 @@ export function KeralaMap({
     if (list) list.push(p);
     else byTown.set(t, [p]);
   }
-  const placed = [...byTown.entries()].flatMap(([town, list]) => {
+  return [...byTown.entries()].flatMap(([town, list]) => {
     const [lon, lat] = TOWN[town];
     const x0 = px(lon), y0 = py(lat);
-    return list.map((p, i) => ({
-      pin: p,
-      cx: x0 + (i - (list.length - 1) / 2) * 10,
-      cy: y0 + (i % 2 === 0 ? 0 : 4),
-    }));
+    return list.map((p, i) => ({ pin: p, cx: x0 + (i - (list.length - 1) / 2) * 10, cy: y0 + (i % 2 === 0 ? 0 : 4) }));
   });
-  placed.sort((a, b) => radius(b.pin.value) - radius(a.pin.value));
+}
+
+/** The map SVG itself, shared by the thumbnail and the enlarged modal —
+ * `interactive` gates pin click/hover/tooltip (off in the thumbnail, where
+ * pins are too small to hit reliably) and `heightClass` sizes the two views. */
+function MapSvg({ pins, interactive, heightClass, onPinClick }: { pins: BranchPin[]; interactive: boolean; heightClass: string; onPinClick?: (branch: string) => void }) {
+  const max = Math.max(1, ...pins.map((p) => p.value ?? 0));
+  const radius = (v: number | null) => (v == null || v <= 0 ? 3 : 3.5 + Math.sqrt(Math.max(0, v) / max) * 9);
+  const placed = placePins(pins).sort((a, b) => radius(b.pin.value) - radius(a.pin.value));
 
   return (
-    <div className="rounded-2xl border border-border-subtle bg-surface p-5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">Regions</span>
-        {metricControl}
-      </div>
-      <div className="mt-1 text-[10px] uppercase tracking-[0.1em] text-fg-faint">bubble size · {metricLabel}</div>
+    <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className={`w-auto max-w-full ${heightClass}`} role="img" aria-label="Kerala, branch locations sized by GUS Revenue per Car">
+      <defs>
+        <linearGradient id="keralaFill" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="var(--color-surface-2)" />
+          <stop offset="1" stopColor="var(--color-surface-3)" />
+        </linearGradient>
+        {interactive ? (
+          <filter id="pinShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="1" stdDeviation="1.1" floodOpacity="0.35" />
+          </filter>
+        ) : null}
+      </defs>
 
-      <div className="mt-2 flex justify-center">
-        <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="h-[470px] w-auto max-w-full" role="img" aria-label={`Kerala, branch locations sized by ${metricLabel}`}>
-          <defs>
-            <linearGradient id="keralaFill" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="var(--color-surface-2)" />
-              <stop offset="1" stopColor="var(--color-surface-3)" />
-            </linearGradient>
-            <filter id="pinShadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="1" stdDeviation="1.1" floodOpacity="0.35" />
-            </filter>
-          </defs>
+      <path d={KERALA_PATH} fill="url(#keralaFill)" stroke="var(--color-border-strong)" strokeWidth="1.1" strokeLinejoin="round" />
 
-          <path d={KERALA_PATH} fill="url(#keralaFill)" stroke="var(--color-border-strong)" strokeWidth="1.1" strokeLinejoin="round" />
+      {placed.map(({ pin, cx, cy }) => (
+        <circle
+          key={pin.branch}
+          cx={cx}
+          cy={cy}
+          r={radius(pin.value)}
+          fill={REGION_COLOR[pin.region]}
+          fillOpacity={0.92}
+          stroke="var(--color-surface)"
+          strokeWidth="1.2"
+          filter={interactive ? "url(#pinShadow)" : undefined}
+          className={interactive ? "cursor-pointer transition-[fill-opacity] hover:fill-opacity-100" : undefined}
+          onClick={interactive && onPinClick ? () => onPinClick(pin.branch) : undefined}
+        >
+          {interactive ? (
+            <title>
+              {pin.branch} · {pin.region} · {pin.display}
+            </title>
+          ) : null}
+        </circle>
+      ))}
+    </svg>
+  );
+}
 
-          {placed.map(({ pin, cx, cy }) => {
-            const dim = selectedRegion !== null && pin.region !== selectedRegion;
-            return (
-              <circle
-                key={pin.branch}
-                cx={cx}
-                cy={cy}
-                r={radius(pin.value)}
-                fill={REGION_COLOR[pin.region]}
-                fillOpacity={dim ? 0.16 : 0.92}
-                stroke="var(--color-surface)"
-                strokeWidth="1.2"
-                filter={dim ? undefined : "url(#pinShadow)"}
-                className="cursor-pointer transition-[fill-opacity]"
-                onClick={() => go(`/vp/branches?date=${date}&branch=${pin.branch}${selectedRegion ? `&region=${selectedRegion}` : ""}`)}
-              >
-                <title>
-                  {pin.branch} · {pin.region} · {pin.display}
-                </title>
-              </circle>
-            );
-          })}
+/**
+ * A single small icon button in the page header's action row (2026-09-25 —
+ * the earlier 168px thumbnail card sat in its own full-width row and left a
+ * large empty gap beside it). Click opens the full map in a modal with each
+ * region's GUS Revenue/Car listed below it — a glance-only geographic
+ * reference, not a working tool. Bubble size is GUS Parts + Labour ÷ GUS RO,
+ * same metric as the Revenue Per Vehicle table beside it (switched
+ * 2026-09-25 from Total Revenue MTD, at the VP's request).
+ */
+export function KeralaMapCard({ pins, regionSummaries, date }: { pins: BranchPin[]; regionSummaries: RegionSummary[]; date: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const byRegion = new Map(regionSummaries.map((s) => [s.region, s]));
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="View the regional map"
+        aria-label="View the regional map"
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border-strong bg-surface text-fg-muted transition-colors hover:bg-surface-2 hover:text-accent-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+          <path d="M10 18s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10z" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="10" cy="8" r="2.2" />
         </svg>
-      </div>
+      </button>
 
-      <div className="mt-1 space-y-1.5">
-        {REGION_ORDER.map((r) => {
-          const s = byRegion.get(r);
-          const active = selectedRegion === r;
-          return (
-            <button
-              key={r}
-              type="button"
-              onClick={() => go(active ? `/vp/regions?date=${date}` : `/vp/regions?date=${date}&region=${r}`)}
-              className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
-                active ? "border-accent/60 bg-accent-soft/20" : "border-border-subtle hover:bg-surface-2/50"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: REGION_COLOR[r] }} />
-                <span className="text-[13px] font-semibold text-fg">{r}</span>
-                <span className="text-[10px] text-fg-faint">· {s?.branches ?? 0}</span>
-                <span className="ml-auto text-[13px] font-semibold tabular-nums text-fg">{s?.display ?? "—"}</span>
+      {open ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="relative max-h-[90dvh] w-full max-w-sm overflow-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">Regions</div>
+                <div className="mt-0.5 text-[10px] uppercase tracking-[0.1em] text-fg-faint">bubble size · GUS Revenue/Car</div>
               </div>
-              {s && s.share != null ? (
-                <div className="mt-1.5 flex items-center gap-2">
-                  <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
-                    <span className="block h-full rounded-full" style={{ width: `${Math.round(s.share * 100)}%`, background: REGION_COLOR[r] }} />
-                  </span>
-                  <span className="w-9 text-right text-[10px] text-fg-faint">{Math.round(s.share * 100)}%</span>
-                </div>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded p-1 text-fg-muted hover:bg-surface-2 hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
 
-      <p className="mt-2 text-center text-[10px] text-fg-faint">
-        Pins at branch towns · colour = business region · click a pin for that branch
-      </p>
-    </div>
+            <div className="mt-2 flex justify-center">
+              <MapSvg
+                pins={pins}
+                interactive
+                heightClass="h-[420px]"
+                onPinClick={(branch) => router.push(`/vp/branches?date=${date}&branch=${branch}`)}
+              />
+            </div>
+
+            <div className="mt-3 space-y-1.5">
+              {REGION_ORDER.map((r) => {
+                const s = byRegion.get(r);
+                return (
+                  <div key={r} className="flex items-center gap-2 rounded-lg border border-border-subtle px-3 py-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: REGION_COLOR[r] }} />
+                    <span className="text-[13px] font-semibold text-fg">{r}</span>
+                    <span className="text-[10px] text-fg-faint">· {s?.branches ?? 0}</span>
+                    <span className="ml-auto text-[13px] font-semibold tabular-nums text-fg">{s?.display ?? "—"}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="mt-3 text-center text-[10px] text-fg-faint">Pins at branch towns · colour = business region · click a pin for that branch</p>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
