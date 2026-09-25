@@ -16,13 +16,17 @@
  * ba-tool/parse.ts uses for the same reason (Number() rejects the comma). */
 const THOUSANDS_SEPARATED = /^-?\d{1,3}(,\d{3})+(\.\d+)?$/;
 
-/** Which slash-date convention a report type's text dates use — confirmed
- * 2026-09-25 by sampling real stored data per report type, after a Part
- * Sale upload was wrongly rejected: "15/09/2026" and "23/07/2026" (day-first,
- * unambiguous since no month is > 12) for Part Sale and SSRV089, in both
- * their .csv and .xlsx exports alike, vs. "09/15/2026" (month-first) for
- * Service Info's .xlsx export — the convention is per report TEMPLATE, not
- * per file extension. */
+/** Which day/month component order a report type's text dates use —
+ * confirmed 2026-09-25 by sampling real stored data per report type, after
+ * a Part Sale upload was wrongly rejected: "15/09/2026" and "23/07/2026"
+ * (day-first, unambiguous since no month is > 12) for Part Sale and
+ * SSRV089, in both their .csv and .xlsx exports alike, vs. "09/15/2026"
+ * (month-first) for Service Info's .xlsx export — the convention is per
+ * report TEMPLATE, not per file extension. Named after the slash separator
+ * these were first sampled with, but the actual separator character in a
+ * file can be "-" just as often (confirmed 2026-09-25 against a real
+ * SSRV089 export using "02-03-2026") — parseDateToYearMonth/
+ * detectSlashDateFormat below match either. */
 export type SlashDateFormat = "MM/DD/YYYY" | "DD/MM/YYYY";
 
 /**
@@ -50,10 +54,11 @@ export function parseDateToYearMonth(raw: unknown, format: SlashDateFormat = "MM
     return d.toISOString().slice(0, 7);
   }
 
-  // Slash-separated text (also tolerates single-digit day/month)
-  const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  // Slash- or dash-separated text (also tolerates single-digit day/month).
+  // Both separators must match within one date — "02-03/2026" never matches.
+  const match = str.match(/^(\d{1,2})([-/])(\d{1,2})\2(\d{4})$/);
   if (match) {
-    const [, first, second, yyyy] = match;
+    const [, first, , second, yyyy] = match;
     const mm = format === "MM/DD/YYYY" ? first : second;
     return `${yyyy}-${mm.padStart(2, "0")}`;
   }
@@ -79,10 +84,10 @@ export function parseDateToYearMonth(raw: unknown, format: SlashDateFormat = "MM
 function detectSlashDateFormat(rawRows: Record<string, unknown>[], dateColumn: string, fallback: SlashDateFormat): SlashDateFormat {
   for (const row of rawRows) {
     const str = String(row[dateColumn] ?? "").trim();
-    const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const match = str.match(/^(\d{1,2})([-/])(\d{1,2})\2(\d{4})$/);
     if (!match) continue;
     const first = Number(match[1]);
-    const second = Number(match[2]);
+    const second = Number(match[3]);
     if (first > 12 && second <= 12) return "DD/MM/YYYY";
     if (second > 12 && first <= 12) return "MM/DD/YYYY";
   }

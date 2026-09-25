@@ -227,7 +227,17 @@ export type ParsedPartSale = {
 export function parsePartSaleRows(buffer: Buffer): Record<string, unknown>[] {
   const workbook = XLSX.read(looksBinaryWorkbook(buffer) ? buffer : repairCsvQuotes(buffer), { type: "buffer" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" }).map(applyColumnAliases);
+  // raw: false (2026-09-25) — without it, xlsx's own CSV type-guessing
+  // silently mis-parses an ambiguous dash/slash SaleDate as MM-DD-YYYY
+  // whenever the day is ≤12, corrupting it before this code (and
+  // upload-validation.ts's checkSaleDateSanity) ever sees it — see
+  // ssrv089/parse.ts's fix note for the full story. Doesn't touch
+  // TI01C/IR01A's separately-known non-standard SaleDate encoding, which
+  // stays excluded from the sanity check regardless (see
+  // SALE_DATE_CHECK_EXCLUDED_BRANCHES). Confirmed safe for amount columns
+  // elsewhere in this codebase (toAmount() already tolerates a numeric
+  // string same as a number).
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false }).map(applyColumnAliases);
 
   if (rows.length === 0) {
     throw new Error("No rows found — is this a Part Sale Report export?");
