@@ -11,5 +11,9 @@ import { checkDateColumnSanity, type DateSanityResult } from "../upload-date-san
 const INVOICE_DOC_DATE_COLUMN = "Invoice Doc Date";
 
 export function checkInvoiceDocDateSanity(rawRows: Record<string, unknown>[], claimedDate: string): DateSanityResult {
-  return checkDateColumnSanity(rawRows, INVOICE_DOC_DATE_COLUMN, claimedDate, "invoice");
+  // Invoice Doc Date is day-first (DD/MM/YYYY) — confirmed 2026-09-25
+  // against real stored data ("14/01/2026" = 14 Jan), unlike Service Info's
+  // month-first convention. See part-sale/upload-validation.ts for the
+  // incident that surfaced this.
+  return checkDateColumnSanity(rawRows, INVOICE_DOC_DATE_COLUMN, claimedDate, "invoice", "DD/MM/YYYY");
 }

@@ -16,15 +16,26 @@
  * ba-tool/parse.ts uses for the same reason (Number() rejects the comma). */
 const THOUSANDS_SEPARATED = /^-?\d{1,3}(,\d{3})+(\.\d+)?$/;
 
+/** Which slash-date convention a report type's text dates use — confirmed
+ * 2026-09-25 by sampling real stored data per report type, after a Part
+ * Sale upload was wrongly rejected: "15/09/2026" and "23/07/2026" (day-first,
+ * unambiguous since no month is > 12) for Part Sale and SSRV089, in both
+ * their .csv and .xlsx exports alike, vs. "09/15/2026" (month-first) for
+ * Service Info's .xlsx export — the convention is per report TEMPLATE, not
+ * per file extension. */
+export type SlashDateFormat = "MM/DD/YYYY" | "DD/MM/YYYY";
+
 /**
- * These report's date columns come through as either a raw Excel serial
- * number (e.g. "46023", from .xlsx/.xls uploads) or "MM/DD/YYYY" text (from
- * .csv uploads) — confirmed 2026-09-19 by sampling real Service Info data
- * across branches, no single format holds; the same two formats are used by
- * every other report type's date columns. Returns a YYYY-MM string (just
- * the month, which is all these checks need) or null if unparseable/blank.
+ * These reports' date columns come through as either a raw Excel serial
+ * number (e.g. "46023", from .xlsx/.xls uploads) or slash-separated text
+ * (from .csv uploads, and sometimes .xlsx too) — confirmed 2026-09-19 by
+ * sampling real Service Info data across branches, no single format holds.
+ * `format` picks which slash convention to apply to the text case; see
+ * SlashDateFormat's doc comment for how that's determined per report type.
+ * Returns a YYYY-MM string (just the month, which is all these checks need)
+ * or null if unparseable/blank.
  */
-export function parseDateToYearMonth(raw: unknown): string | null {
+export function parseDateToYearMonth(raw: unknown, format: SlashDateFormat = "MM/DD/YYYY"): string | null {
   const str = String(raw ?? "").trim();
   if (!str) return null;
 
@@ -39,10 +50,11 @@ export function parseDateToYearMonth(raw: unknown): string | null {
     return d.toISOString().slice(0, 7);
   }
 
-  // "MM/DD/YYYY" (also tolerates single-digit month/day)
+  // Slash-separated text (also tolerates single-digit day/month)
   const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (match) {
-    const [, mm, , yyyy] = match;
+    const [, first, second, yyyy] = match;
+    const mm = format === "MM/DD/YYYY" ? first : second;
     return `${yyyy}-${mm.padStart(2, "0")}`;
   }
 
@@ -61,7 +73,8 @@ export function checkDateColumnSanity(
   rawRows: Record<string, unknown>[],
   dateColumn: string,
   claimedDate: string,
-  itemNoun = "row"
+  itemNoun = "row",
+  format: SlashDateFormat = "MM/DD/YYYY"
 ): DateSanityResult {
   const claimedMonth = claimedDate.slice(0, 7);
   let withDate = 0;
@@ -71,7 +84,7 @@ export function checkDateColumnSanity(
 
   for (const row of rawRows) {
     if (dateColumn in row) sawColumn = true;
-    const month = parseDateToYearMonth(row[dateColumn]);
+    const month = parseDateToYearMonth(row[dateColumn], format);
     if (!month) continue;
     withDate++;
     if (month === claimedMonth) matching++;

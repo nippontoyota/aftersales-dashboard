@@ -30,7 +30,11 @@ const SALE_DATE_CHECK_EXCLUDED_BRANCHES = new Set(["TI01C", "IR01A"]);
 
 export function checkSaleDateSanity(branch: string, rawRows: Record<string, unknown>[], claimedDate: string): DateSanityResult {
   if (SALE_DATE_CHECK_EXCLUDED_BRANCHES.has(branch)) return { ok: true };
-  return checkDateColumnSanity(rawRows, SALE_DATE_COLUMN, claimedDate, "sale");
+  // SaleDate is day-first (DD/MM/YYYY) — confirmed 2026-09-25 against real
+  // stored data in both .csv and .xlsx exports ("15/09/2026" = 15 Sept),
+  // unlike Service Info's month-first convention. A month-first read wrongly
+  // rejected a real upload dated 24/09/2026 (misread as month "24").
+  return checkDateColumnSanity(rawRows, SALE_DATE_COLUMN, claimedDate, "sale", "DD/MM/YYYY");
 }
 
 export type BillOverlapResult = { duplicate: false } | { duplicate: true; message: string };
