@@ -61,21 +61,52 @@ export function parseDateToYearMonth(raw: unknown, format: SlashDateFormat = "MM
   return null;
 }
 
+/**
+ * Finds the slash-date convention from the file's OWN data rather than
+ * trusting a single fixed assumption per report type (2026-09-25, after a
+ * second incident — a Cost & Sales Report backfill was wrongly rejected
+ * even after SSRV089 had already been pinned to day-first 2026-09-25: that
+ * assumption held for every file sampled at the time, but not for this
+ * one, and a report "type" turns out not to guarantee one convention
+ * across every branch's export/backfill). A day/month pair is unambiguous
+ * whenever one component is > 12 — that component can only be a day, never
+ * a month — so the first such row in the file settles it. Only falls back
+ * to `fallback` (the report type's usual convention) when every row in the
+ * file is ambiguous (day ≤ 12 throughout, e.g. a backfill confined to the
+ * first third of a month) — there's no way to tell from the data alone
+ * then.
+ */
+function detectSlashDateFormat(rawRows: Record<string, unknown>[], dateColumn: string, fallback: SlashDateFormat): SlashDateFormat {
+  for (const row of rawRows) {
+    const str = String(row[dateColumn] ?? "").trim();
+    const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) continue;
+    const first = Number(match[1]);
+    const second = Number(match[2]);
+    if (first > 12 && second <= 12) return "DD/MM/YYYY";
+    if (second > 12 && first <= 12) return "MM/DD/YYYY";
+  }
+  return fallback;
+}
+
 export type DateSanityResult = { ok: true } | { ok: false; error: string };
 
 /**
  * Rejects a file whose rows mostly belong to a different calendar month
  * than the date the uploader picked. `itemNoun` names what's being counted
  * in the error message (e.g. "invoice", "row", "sale") — plural is formed
- * by appending "s".
+ * by appending "s". `fallbackFormat` is the report type's usual slash-date
+ * convention, used only when the file's own data can't settle it (see
+ * detectSlashDateFormat above).
  */
 export function checkDateColumnSanity(
   rawRows: Record<string, unknown>[],
   dateColumn: string,
   claimedDate: string,
   itemNoun = "row",
-  format: SlashDateFormat = "MM/DD/YYYY"
+  fallbackFormat: SlashDateFormat = "MM/DD/YYYY"
 ): DateSanityResult {
+  const format = detectSlashDateFormat(rawRows, dateColumn, fallbackFormat);
   const claimedMonth = claimedDate.slice(0, 7);
   let withDate = 0;
   let matching = 0;
