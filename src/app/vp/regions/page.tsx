@@ -4,11 +4,18 @@ import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { achievementRatio } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { formatCompactCurrency } from "@/lib/format";
+import { computePace } from "@/lib/pace";
 import { regionForBranch } from "@/lib/regions";
 import { isBodyPaintOnly, type BranchReport } from "@/lib/report";
 import { loadVpData } from "@/lib/vp-data";
 import { rankValues } from "@/lib/gus-per-car-trend";
-import { bandClassName, LABOUR_PER_RO_BANDS, PARTS_PER_RO_BANDS, RevenuePerVehicleTable } from "../../dashboard/revenue-per-vehicle-table";
+import {
+  bandClassName,
+  LABOUR_PER_RO_BANDS,
+  PARTS_PER_RO_BANDS,
+  TGLOSS_PER_RO_BANDS,
+  RevenuePerVehicleTable,
+} from "../../dashboard/revenue-per-vehicle-table";
 import { FlagComposer } from "../flag-composer";
 import { GusPerCarCell } from "../gus-per-car-cell";
 import { KeralaMapCard, type BranchPin } from "../kerala-map";
@@ -101,6 +108,12 @@ async function Regions({
   const generalBranches = data.report.branches.filter((b) => !isBodyPaintOnly(b.branch));
   const partsRank = rankGusPerCar(generalBranches, (b) => (b.gusRoMtd === null || b.gusRoMtd === 0 ? null : achievementRatio(b.gusPartsMtd, b.gusRoMtd)));
   const labourRank = rankGusPerCar(generalBranches, (b) => (b.gusRoMtd === null || b.gusRoMtd === 0 ? null : achievementRatio(b.gusLabourMtd, b.gusRoMtd)));
+  const bpuRank = rankGusPerCar(generalBranches, (b) =>
+    b.bpuRoMtd === null || b.bpuRoMtd === 0 || (b.bpuPartsMtd === null && b.bpuLabourMtd === null)
+      ? null
+      : achievementRatio((b.bpuPartsMtd ?? 0) + (b.bpuLabourMtd ?? 0), b.bpuRoMtd)
+  );
+  const tglossRank = rankGusPerCar(generalBranches, (b) => (b.gusRoMtd === null || b.gusRoMtd === 0 ? null : achievementRatio(b.vasAchievementForTheMonth, b.gusRoMtd)));
 
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-8">
@@ -123,15 +136,37 @@ async function Regions({
           defaultOpen
           renderGusCell={(row, metric, value, plain) => {
             if (row.branch === "All branches" || value === null) return plain();
-            const rank = (metric === "parts" ? partsRank : labourRank).get(row.branch) ?? null;
+            const rankPool = metric === "parts" ? partsRank : metric === "labour" ? labourRank : metric === "bpu" ? bpuRank : tglossRank;
+            const rank = rankPool.get(row.branch) ?? null;
+            const className =
+              metric === "parts"
+                ? bandClassName(value, PARTS_PER_RO_BANDS)
+                : metric === "labour"
+                  ? bandClassName(value, LABOUR_PER_RO_BANDS)
+                  : metric === "tgloss"
+                    ? bandClassName(value, TGLOSS_PER_RO_BANDS)
+                    : "bg-surface-2 text-fg"; // BPU has no fixed per-RO target yet
+            const bpuSplit =
+              metric === "bpu"
+                ? { parts: achievementRatio(row.bpuPartsMtd, row.bpuRoMtd), labour: achievementRatio(row.bpuLabourMtd, row.bpuRoMtd) }
+                : undefined;
+            const tglossPace =
+              metric === "tgloss"
+                ? (() => {
+                    const pace = computePace(data.date, row.vasAchievementForTheMonth, row.vasBillTarget);
+                    return { target: row.vasBillTarget, gap: pace.gap, requiredRatePerDay: pace.requiredRatePerDay };
+                  })()
+                : undefined;
             return (
               <GusPerCarCell
                 branch={row.branch}
                 metric={metric}
                 value={value}
-                className={bandClassName(value, metric === "parts" ? PARTS_PER_RO_BANDS : LABOUR_PER_RO_BANDS)}
+                className={className}
                 rank={rank}
                 date={data.date}
+                bpuSplit={bpuSplit}
+                tglossPace={tglossPace}
               />
             );
           }}

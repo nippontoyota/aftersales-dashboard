@@ -5,14 +5,19 @@ import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/forma
 import type { GusLabourVasCounts, RankInfo, VasCountDetail } from "@/lib/gus-per-car-trend";
 
 /**
- * The VP's "why is this branch low or high" detail for one GUS Parts/Car or
- * Labour/Car figure (2026-09-25, at the VP's explicit request). Wraps the
+ * The VP's "why is this branch low or high" detail for one GUS Parts/Car,
+ * Labour/Car, BPU/Car or TGLOSS/GUS-Car figure (2026-09-25, at the VP's
+ * explicit request; extended to BPU and TGLOSS the same day). Wraps the
  * same coloured badge revenue-per-vehicle-table.tsx already renders — click
  * opens a modal with where the branch ranks, who's #1, who's last, and the
  * company average. For Labour only, it also shows the GUS-only Wheel
  * Alignment/Balancing/Brake Skimming penetration against PM Actual (fetched
  * lazily from /api/vp/gus-per-car-trend only for this metric), so a low
- * Labour/Car figure can be checked against real job volume.
+ * Labour/Car figure can be checked against real job volume. For BPU, it
+ * shows the Parts/Labour split behind the combined figure. For TGLOSS, it
+ * shows the gap and required daily run-rate to hit this month's target —
+ * both already computed server-side (lib/pace.ts), so neither needs a
+ * fetch.
  *
  * This used to also show a day-by-day trend for the month — dropped
  * 2026-09-25 at the VP's request after it turned out to be the actual
@@ -22,7 +27,13 @@ import type { GusLabourVasCounts, RankInfo, VasCountDetail } from "@/lib/gus-per
  * of the page, so this modal still opens instantly.
  */
 
-const METRIC_LABEL = { parts: "GUS Parts / Car", labour: "GUS Labour / Car" } as const;
+const METRIC_LABEL = {
+  parts: "GUS Parts / Car",
+  labour: "GUS Labour / Car",
+  bpu: "BPU / Car",
+  tgloss: "TGLOSS / GUS Car",
+} as const;
+type Metric = keyof typeof METRIC_LABEL;
 const VAS_COUNT_LABEL = { wheelAlignment: "Wheel Alignment", wheelBalancing: "Wheel Balancing", brakeSkimming: "Brake Skimming" } as const;
 
 function rankTone(rank: number, total: number): "good" | "warn" | "critical" {
@@ -69,13 +80,17 @@ function DetailModal({
   value,
   rank,
   date,
+  bpuSplit,
+  tglossPace,
   onClose,
 }: {
   branch: string;
-  metric: "parts" | "labour";
+  metric: Metric;
   value: number;
   rank: RankInfo | null;
   date: string;
+  bpuSplit?: { parts: number | null; labour: number | null };
+  tglossPace?: { target: number | null; gap: number | null; requiredRatePerDay: number | null };
   onClose: () => void;
 }) {
   const [vasCounts, setVasCounts] = useState<GusLabourVasCounts | null | undefined>(metric === "labour" ? undefined : null);
@@ -178,6 +193,50 @@ function DetailModal({
             </div>
           </div>
         ) : null}
+
+        {metric === "bpu" && bpuSplit ? (
+          <div className="mt-5">
+            <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">Parts / Labour split</div>
+            <div className="mt-2.5 grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-border-subtle bg-surface-2/40 p-2.5 text-center">
+                <div className="text-[9.5px] uppercase tracking-[0.08em] text-fg-faint">Parts</div>
+                <div className="mt-1 text-sm font-semibold tabular-nums text-fg">{formatCompactCurrency(bpuSplit.parts)}</div>
+              </div>
+              <div className="rounded-lg border border-border-subtle bg-surface-2/40 p-2.5 text-center">
+                <div className="text-[9.5px] uppercase tracking-[0.08em] text-fg-faint">Labour</div>
+                <div className="mt-1 text-sm font-semibold tabular-nums text-fg">{formatCompactCurrency(bpuSplit.labour)}</div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {metric === "tgloss" && tglossPace ? (
+          <div className="mt-5">
+            <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">Pace to this month&apos;s target</div>
+            <div className="mt-2.5 rounded-lg border border-border-subtle bg-surface-2/30 px-3 py-2.5 text-[11px] text-fg-muted">
+              {tglossPace.target === null ? (
+                <div className="text-fg-faint">No TGLOSS target set for this branch yet.</div>
+              ) : tglossPace.gap !== null && tglossPace.gap > 0 ? (
+                <div className="space-y-1">
+                  <div>
+                    Target <span className="font-semibold tabular-nums text-fg">{formatCompactCurrency(tglossPace.target)}</span>
+                  </div>
+                  <div>
+                    Gap <span className="font-semibold tabular-nums text-fg">{formatCompactCurrency(tglossPace.gap)}</span>
+                    {tglossPace.requiredRatePerDay !== null ? (
+                      <>
+                        {" · Required "}
+                        <span className="font-semibold tabular-nums text-fg">{formatCompactCurrency(tglossPace.requiredRatePerDay)}/day</span>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div className="font-medium text-good">Target already met this month.</div>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -190,13 +249,17 @@ export function GusPerCarCell({
   className,
   rank,
   date,
+  bpuSplit,
+  tglossPace,
 }: {
   branch: string;
-  metric: "parts" | "labour";
+  metric: Metric;
   value: number;
   className: string;
   rank: RankInfo | null;
   date: string;
+  bpuSplit?: { parts: number | null; labour: number | null };
+  tglossPace?: { target: number | null; gap: number | null; requiredRatePerDay: number | null };
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -209,7 +272,18 @@ export function GusPerCarCell({
       >
         {formatCompact(value)}
       </button>
-      {open ? <DetailModal branch={branch} metric={metric} value={value} rank={rank} date={date} onClose={() => setOpen(false)} /> : null}
+      {open ? (
+        <DetailModal
+          branch={branch}
+          metric={metric}
+          value={value}
+          rank={rank}
+          date={date}
+          bpuSplit={bpuSplit}
+          tglossPace={tglossPace}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

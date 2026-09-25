@@ -46,7 +46,7 @@ export const LABOUR_PER_RO_BANDS: Band[] = [
   { min: 3500, className: BAND_COLORS.yellow },
   { min: 3000, className: BAND_COLORS.orange },
 ];
-const TGLOSS_PER_RO_BANDS: Band[] = [
+export const TGLOSS_PER_RO_BANDS: Band[] = [
   { min: 1140, className: BAND_COLORS.green },
   { min: 1000, className: BAND_COLORS.yellow },
   { min: 700, className: BAND_COLORS.orange },
@@ -68,16 +68,17 @@ function bandedPerRoCell(numerator: number | null, gusRoMtd: number | null, band
   );
 }
 
-/** Lets a caller (the VP's Regions page) swap the plain GUS Parts/Labour
- * badges for a clickable cell of its own — e.g. one that opens a rank +
- * trend detail modal — without this shared table knowing anything about
- * that feature. Falls back to the two args it would've used to render the
- * plain badge, so a caller with nothing special to show can just re-render
- * the same thing. Only GUS Parts/Labour get this hook (2026-09-25, at the
- * VP's request) — BPU and TGLOSS/GUS stay plain for now. */
+/** Lets a caller (the VP's Regions page) swap the plain GUS Parts/Labour/
+ * BPU/TGLOSS badges for a clickable cell of its own — e.g. one that opens a
+ * rank + detail modal — without this shared table knowing anything about
+ * that feature. Falls back to the render this table would've used on its
+ * own, so a caller with nothing special to show for a given row (e.g. the
+ * "All branches" total, or a branch with no figure yet) can just re-render
+ * the same thing. Extended from GUS Parts/Labour only (2026-09-25) to also
+ * cover BPU and TGLOSS/GUS the same day, at the VP's request. */
 export type GusCellRenderer = (
   row: BranchReport,
-  metric: "parts" | "labour",
+  metric: "parts" | "labour" | "bpu" | "tgloss",
   value: number | null,
   plain: () => ReactNode
 ) => ReactNode;
@@ -106,6 +107,39 @@ function gusLabourColumn(renderGusCell?: GusCellRenderer): SectionColumn {
   };
 }
 
+function bpuColumn(renderGusCell?: GusCellRenderer): SectionColumn {
+  return {
+    label: "BPU (Rs/Car)",
+    render: (r) => {
+      const plain = () => (
+        <BpuCell
+          combined={achievementRatio((r.bpuPartsMtd ?? 0) + (r.bpuLabourMtd ?? 0), r.bpuRoMtd)}
+          parts={achievementRatio(r.bpuPartsMtd, r.bpuRoMtd)}
+          labour={achievementRatio(r.bpuLabourMtd, r.bpuRoMtd)}
+        />
+      );
+      if (!renderGusCell) return plain();
+      const hasAny = r.bpuPartsMtd !== null || r.bpuLabourMtd !== null;
+      const value = r.bpuRoMtd === null || r.bpuRoMtd === 0 || !hasAny ? null : achievementRatio((r.bpuPartsMtd ?? 0) + (r.bpuLabourMtd ?? 0), r.bpuRoMtd);
+      return renderGusCell(r, "bpu", value, plain);
+    },
+  };
+}
+
+function tglossColumn(renderGusCell?: GusCellRenderer): SectionColumn {
+  return {
+    // Relabeled from "VAS (Rs/Car)" — the underlying figure is still total
+    // TGLOSS revenue ÷ GUS RO (vasAchievementForTheMonth), not spoTGloss.
+    label: "TGLOSS/GUS (Rs/Car)",
+    render: (r) => {
+      const plain = () => bandedPerRoCell(r.vasAchievementForTheMonth, r.gusRoMtd, TGLOSS_PER_RO_BANDS);
+      if (!renderGusCell) return plain();
+      const value = r.gusRoMtd === null || r.gusRoMtd === 0 ? null : achievementRatio(r.vasAchievementForTheMonth, r.gusRoMtd);
+      return renderGusCell(r, "tgloss", value, plain);
+    },
+  };
+}
+
 /** First 4 entries are GUS Parts, GUS Labour, BPU, TGLOSS/GUS — what the VP
  * view shows (its own "compact" variant below); Parts Retail and Offtake
  * are HQ-dashboard-only additions the VP doesn't need (confirmed 2026-09-25). */
@@ -113,19 +147,8 @@ function buildColumns(renderGusCell?: GusCellRenderer): SectionColumn[] {
   return [
     gusPartsColumn(renderGusCell),
     gusLabourColumn(renderGusCell),
-    {
-      label: "BPU (Rs/Car)",
-      render: (r) => (
-        <BpuCell
-          combined={achievementRatio((r.bpuPartsMtd ?? 0) + (r.bpuLabourMtd ?? 0), r.bpuRoMtd)}
-          parts={achievementRatio(r.bpuPartsMtd, r.bpuRoMtd)}
-          labour={achievementRatio(r.bpuLabourMtd, r.bpuRoMtd)}
-        />
-      ),
-    },
-    // Relabeled from "VAS (Rs/Car)" — the underlying figure is still total
-    // TGLOSS revenue ÷ GUS RO (vasAchievementForTheMonth), not spoTGloss.
-    { label: "TGLOSS/GUS (Rs/Car)", render: (r) => bandedPerRoCell(r.vasAchievementForTheMonth, r.gusRoMtd, TGLOSS_PER_RO_BANDS) },
+    bpuColumn(renderGusCell),
+    tglossColumn(renderGusCell),
     { label: "Parts Retail (Rs/Car)", render: (r) => perVehicleCell(r.partsRetailAchievementForTheMonth, r.gusRoMtd) },
     { label: "Offtake (Rs/Car)", render: (r) => perVehicleCell(r.offtakeAchievementForTheMonth, r.gusRoMtd) },
   ];

@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
-import { achievementTone } from "@/lib/aggregate";
+import { achievementTone, filterBranchesByRegion } from "@/lib/aggregate";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import type { RegionName } from "@/lib/regions";
+import type { BranchReport } from "@/lib/report";
 import type { VpScopeMetrics } from "@/lib/vp-data";
 import { tglossText } from "@/components/tgloss-text";
 import { bandClassName, LABOUR_PER_RO_BANDS, PARTS_PER_RO_BANDS, type Band } from "../dashboard/revenue-per-vehicle-table";
 import { IncentiveSlabIndicator } from "../dashboard/incentive-slab-indicator";
+import { ScopeBreakdownCell } from "./external-sales-cell";
 
 const REGION_COLOR: Record<RegionName, string> = {
   Central: "var(--color-cat-central)",
@@ -32,7 +34,17 @@ type Row =
        * -formatted display string. */
       band?: { value: (s: VpScopeMetrics) => number | null; bands: Band[] };
     }
-  | { kind: "slabs" };
+  | { kind: "slabs" }
+  | {
+      /** Click a scope's cell to see the branches behind that total, ranked
+       * by their own contribution — for rows with no natural per-car
+       * denominator to band against (External Sales, 2026-09-25). */
+      kind: "scopeBreakdown";
+      label: ReactNode;
+      metricLabel: string;
+      value: (s: VpScopeMetrics) => number | null;
+      branchValue: (b: BranchReport) => number | null;
+    };
 
 const ROWS: Row[] = [
   { kind: "section", label: "Revenue Stream" },
@@ -88,7 +100,13 @@ const ROWS: Row[] = [
   },
 
   { kind: "section", label: "Other Revenue" },
-  { kind: "metric", label: "External Sales · MTD", get: (s) => formatCompactCurrency(s.externalSalesMtd) },
+  {
+    kind: "scopeBreakdown",
+    label: "External Sales · MTD",
+    metricLabel: "External Sales · MTD",
+    value: (s) => s.externalSalesMtd,
+    branchValue: (b) => b.externalSalesMtd,
+  },
   { kind: "metric", label: "Scrap & Used Oil · MTD", get: (s) => formatCompactCurrency(s.scrapAndUsedOilMtd) },
 
   { kind: "section", label: "Incentive Target Slabs" },
@@ -126,8 +144,12 @@ function ColumnHeader({ scope, className }: { scope: VpScopeMetrics; className?:
  * between Body & Paint-only branches and everyone else's own BPU line, RO
  * MTD, TGLOSS, External Sales, Scrap & Used Oil, and the incentive slab
  * rings — explicitly no "for the day" or MoM/YoY figures, per the VP brief.
+ * External Sales · MTD is clickable per scope (2026-09-25) — since these
+ * columns are scopes, not branches, it opens a branch-contribution
+ * breakdown rather than the rank-vs-company-wide modal GUS/BPU/TGLOSS use
+ * on the Regions page (see external-sales-cell.tsx).
  */
-export function RevenueStreamGrid({ scopes, date }: { scopes: VpScopeMetrics[]; date: string }) {
+export function RevenueStreamGrid({ scopes, branches, date }: { scopes: VpScopeMetrics[]; branches: BranchReport[]; date: string }) {
   return (
     // A bounded max-height + its own overflow-y-auto (2026-09-25, at the
     // VP's request for a frozen header) — a plain overflow-x-auto wrapper
@@ -181,6 +203,35 @@ export function RevenueStreamGrid({ scopes, date }: { scopes: VpScopeMetrics[]; 
                       {row.get(s)}
                     </td>
                   ))}
+                </tr>
+              );
+            }
+
+            if (row.kind === "scopeBreakdown") {
+              return (
+                <tr key={i} className="border-t border-border-subtle">
+                  <td className="px-5 py-2.5">
+                    <div className="text-[13px] font-medium text-fg">{row.label}</div>
+                  </td>
+                  {scopes.map((s, ci) => {
+                    const value = row.value(s);
+                    const scopeBranches = s.region ? filterBranchesByRegion(branches, s.region) : branches;
+                    return (
+                      <td key={s.label} className={`px-4 py-2.5 text-right ${ci === 1 ? "border-l border-border-subtle" : ""}`}>
+                        {value === null ? (
+                          <span className="text-sm text-fg-faint">—</span>
+                        ) : (
+                          <ScopeBreakdownCell
+                            scopeLabel={s.label}
+                            metricLabel={row.metricLabel}
+                            value={value}
+                            branches={scopeBranches.map((b) => ({ branch: b.branch, value: row.branchValue(b) }))}
+                            className="ml-auto flex h-8 w-fit min-w-[5.5rem] items-center justify-end rounded px-2 text-sm font-semibold tabular-nums text-fg transition-transform hover:scale-105 hover:text-accent-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          />
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             }

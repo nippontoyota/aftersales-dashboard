@@ -6,7 +6,10 @@ import { loadVpData } from "@/lib/vp-data";
 import { FlagComposer } from "./flag-composer";
 import { requireVpAccess } from "./vp-guard";
 import { RevenueStreamGrid } from "./revenue-stream-grid";
+import { VpCollapsibleSection } from "./vp-collapsible-section";
+import { VpExceptionsBanner } from "./vp-exceptions-banner";
 import { VpHeader } from "./vp-header";
+import { VpKpiCards } from "./vp-kpi-cards";
 import { DraftWarning } from "@/components/draft-warning";
 
 export default async function VpOverviewPage({
@@ -81,7 +84,15 @@ async function Overview({
       />
 
       <div className="mt-8">
-        <RevenueStreamGrid scopes={data.scopes} date={data.date} />
+        <VpKpiCards group={data.scopes[0]} date={data.date} />
+      </div>
+
+      <VpExceptionsBanner exceptions={data.tglossExceptions} />
+
+      <div className="mt-6">
+        <VpCollapsibleSection title="Full Revenue Stream Grid" subtitle="Group, Central, South, North — every metric" defaultOpen>
+          <RevenueStreamGrid scopes={data.scopes} branches={data.report.branches} date={data.date} />
+        </VpCollapsibleSection>
       </div>
 
       <p className="mt-4 max-w-3xl text-[11px] leading-relaxed text-fg-faint">
