@@ -8,7 +8,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { REGIONS, type RegionName } from "@/lib/regions";
-import { listRegionQueries, listRegionQueriesForBranch, listRegionQueriesForRegion } from "@/lib/region-queries/store";
+import { listBranchQueriesForRegion, listRegionQueries, listRegionQueriesForBranch, listRegionQueriesForRegion } from "@/lib/region-queries/store";
 import { CancellationFlag } from "../cancellations/cancellation-flag";
 import { VpFlagsPanel } from "@/components/vp-flags-panel";
 import { RaiseToBranchForm, RaiseToHqForm, RaiseToRegionForm } from "./region-query-forms";
@@ -165,9 +165,14 @@ async function RegionQueriesSection({ admin }: { admin: AdminAccount }) {
 /** A regional manager's own Queries page — their region's threads (both
  * directions), plus a composer to ask HQ a new question. */
 async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, { role: "regional" }> }) {
-  const queries = await listRegionQueriesForRegion(admin.region);
+  const [queries, branchQueries] = await Promise.all([
+    listRegionQueriesForRegion(admin.region),
+    listBranchQueriesForRegion(admin.region),
+  ]);
   const open = queries.filter((q) => q.status !== "closed");
   const closed = queries.filter((q) => q.status === "closed");
+  const branchQueriesOpen = branchQueries.filter((q) => q.status !== "closed");
+  const branchQueriesClosed = branchQueries.filter((q) => q.status === "closed");
   const branches = REGIONS[admin.region].filter((b) => b !== "CO01C");
 
   return (
@@ -221,6 +226,28 @@ async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, 
           ) : null}
         </>
       )}
+
+      {branchQueries.length > 0 ? (
+        <div className="mt-10 border-t border-border pt-6">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">Your branches&apos; own queries</h2>
+          <p className="mt-1 text-[12px] text-fg-faint">
+            Read-only — these are private threads between HQ/you and the branch directly; the branch handles its own reply and
+            Mark resolved.
+          </p>
+          <div className="mt-3 space-y-3">
+            {branchQueriesOpen.map((q) => (
+              <RegionQueryThread key={q.id} query={q} viewerCanReply={false} viewerCanManage={admin.username === q.createdBy} />
+            ))}
+          </div>
+          {branchQueriesClosed.length > 0 ? (
+            <div className="mt-3 space-y-3">
+              {branchQueriesClosed.map((q) => (
+                <RegionQueryThread key={q.id} query={q} viewerCanReply={false} viewerCanManage={admin.username === q.createdBy} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

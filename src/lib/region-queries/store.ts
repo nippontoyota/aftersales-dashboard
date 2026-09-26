@@ -94,10 +94,26 @@ export async function listRegionQueries(): Promise<RegionQuery[]> {
 /** One region's threads (both directions) — a regional manager's own inbox.
  * Excludes 'to_branch' threads — those are private to the addressed branch,
  * never surfaced to the regional manager even for a branch in their own
- * region. */
+ * region. See listBranchQueriesForRegion below for the manager's separate,
+ * read-only visibility into those. */
 export async function listRegionQueriesForRegion(region: RegionName): Promise<RegionQuery[]> {
   const { rows } = await pool.query<Row>(
     `select ${COLUMNS} from region_queries where region = $1 and direction <> 'to_branch' order by created_at desc`,
+    [region],
+  );
+  return rows.map(toQuery);
+}
+
+/** Read-only visibility for a regional manager into their own branches'
+ * to_branch threads (2026-09-26, at the user's request — "the regional
+ * manager should also know so they know what is going on in their
+ * branches"). Deliberately NOT counted in countActionableForRegion and NOT
+ * part of the login pop-up — awareness only, never a notification; the
+ * branch itself still owns replying/resolving it (see queries/page.tsx,
+ * which renders these with viewerCanReply always false). */
+export async function listBranchQueriesForRegion(region: RegionName): Promise<RegionQuery[]> {
+  const { rows } = await pool.query<Row>(
+    `select ${COLUMNS} from region_queries where region = $1 and direction = 'to_branch' order by created_at desc`,
     [region],
   );
   return rows.map(toQuery);
