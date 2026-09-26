@@ -4,6 +4,7 @@ import { adminIdentityLabel } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadNavState } from "@/lib/dashboard-data";
 import { loadBillTotalsByMonth, type BillBranchScope } from "@/lib/bill/store";
+import { BRANCH_REVENUE_VISIBLE_FROM_MONTH } from "@/lib/branch-revenue-visibility";
 import { REGIONS } from "@/lib/regions";
 import { BillsPageClient } from "./bills-page-client";
 
@@ -35,7 +36,12 @@ export default async function BillsPage({
   const scopeLabel = admin.role === "branch" ? admin.branch : admin.role === "regional" ? `the ${admin.region} region` : null;
 
   const params = await searchParams;
-  const allMonths = await loadBillTotalsByMonth(scopeBranch);
+  const allMonthsRaw = await loadBillTotalsByMonth(scopeBranch);
+  // A branch admin's own scrap/used-oil revenue is masked before Aug 2026,
+  // same cutover as the rest of their dashboard (see
+  // branch-revenue-visibility.ts) — HQ and regional managers still see every
+  // backfilled month.
+  const allMonths = admin.role === "branch" ? allMonthsRaw.filter((m) => m.month >= BRANCH_REVENUE_VISIBLE_FROM_MONTH) : allMonthsRaw;
 
   // Validate ?month= param
   const month =

@@ -8,6 +8,7 @@ import { loadCombinedServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot 
 import { isDatePublished } from "./publish-store";
 import { countActionableForHq, countActionableForRegion } from "./region-queries/store";
 import { countOpenVpFlags } from "./vp-flags/store";
+import { BRANCH_REVENUE_VISIBLE_FROM_MONTH, maskBranchRevenue } from "./branch-revenue-visibility";
 
 /** Nav-shell state for the dashboard family of pages — cheap enough to run in
  * the fast outer shell (before the Suspense'd content). A branch or regional
@@ -111,7 +112,7 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
 
   const latestDate = allDates.at(-1)!;
   const billBranch = admin.role === "branch" ? admin.branch : undefined;
-  const [report, monthSnapshots, serviceInfoMonthSnapshots, isPublished, billTotals, latestPublished] = await Promise.all([
+  const [reportRaw, monthSnapshots, serviceInfoMonthSnapshots, isPublished, billTotalsRaw, latestPublished] = await Promise.all([
     buildReport(date),
     loadSnapshotsForMonthUpTo(date),
     loadCombinedServiceInfoSnapshotsForMonthUpTo(date),
@@ -119,6 +120,15 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
     loadBillTotalsByMonth(billBranch),
     date === latestDate ? Promise.resolve(null) : isDatePublished(latestDate),
   ]);
+
+  // A branch admin's own revenue is masked before Aug 2026 (backfilled data
+  // stays real for HQ/regional/VP/CEO/Accounts — see
+  // branch-revenue-visibility.ts). Applied here, at the shared foundation
+  // every branch-visible page builds on, so every consumer (hero cards, the
+  // all-branches comparison panel, the incentive slab ring, the pre-publish
+  // Daily Report) inherits it automatically.
+  const report = reportRaw && admin.role === "branch" ? { ...reportRaw, branches: maskBranchRevenue(reportRaw.branches, reportRaw.date) } : reportRaw;
+  const billTotals = admin.role === "branch" ? billTotalsRaw.filter((m) => m.month >= BRANCH_REVENUE_VISIBLE_FROM_MONTH) : billTotalsRaw;
 
   const isLatestPublished = latestPublished ?? isPublished;
   const isCompanyScope = isHq || isPublished;

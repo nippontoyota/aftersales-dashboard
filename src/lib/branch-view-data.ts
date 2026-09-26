@@ -4,6 +4,7 @@ import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./s
 import { loadAllServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
 import { loadReportHolidaySet } from "./report-holidays/store";
 import { computeVasTrendSeries, type TrendPoint } from "./trend";
+import { maskBranchRevenue } from "./branch-revenue-visibility";
 
 /**
  * Everything the branch-first dashboard (a branch account, or one card in a
@@ -126,15 +127,27 @@ type Shared = {
   holidays: ReadonlySet<string>;
 };
 
+function maskReport(report: Report): Report {
+  return { ...report, branches: maskBranchRevenue(report.branches, report.date) };
+}
+
 /** Load the data shared by every branch on the page (a regional grid reuses
  * one call across all its branches). `report` / `monthSnapshots` /
  * `serviceInfoMonthSnapshots` are already loaded by dashboard-data — pass
- * them in to avoid a second fetch. */
+ * them in to avoid a second fetch.
+ *
+ * `maskRevenue` (2026-09-26) — true only for a branch admin's own view
+ * (loadBranchView); `report` itself is already masked by dashboard-data in
+ * that case, but the extra prior-month/trend reports fetched below are
+ * this function's own, so they need the same treatment here. loadRegionView
+ * always passes false — a regional manager sees real revenue for every
+ * date, backfilled or not. */
 async function loadShared(
   date: string,
   report: Report,
   monthSnapshots: Snapshot[],
   serviceInfoMonthSnapshots: ServiceInfoSnapshot[],
+  maskRevenue: boolean,
 ): Promise<Shared> {
   const allDates = await listSnapshotDates();
   const month = date.slice(0, 7);
@@ -147,11 +160,16 @@ async function loadShared(
   })();
   const prevMonthEndDate = allDates.filter((d) => d.slice(0, 7) === prevMonthPrefix).at(-1) ?? null;
 
-  const [priorReports, prevMonthReport, holidays] = await Promise.all([
+  const [priorReportsRaw, prevMonthReportRaw, holidays] = await Promise.all([
     Promise.all(monthDates.map(async (d) => ({ date: d, report: await buildReport(d) }))),
     prevMonthEndDate ? buildReport(prevMonthEndDate) : Promise.resolve(null),
     loadReportHolidaySet(),
   ]);
+
+  const priorReports = maskRevenue
+    ? priorReportsRaw.map((r) => (r.report ? { date: r.date, report: maskReport(r.report) } : r))
+    : priorReportsRaw;
+  const prevMonthReport = maskRevenue && prevMonthReportRaw ? maskReport(prevMonthReportRaw) : prevMonthReportRaw;
 
   const reportsByDate = [
     ...priorReports.filter((r): r is { date: string; report: Report } => r.report !== null),
@@ -345,7 +363,8 @@ export async function loadBranchView(
   monthSnapshots: Snapshot[],
   serviceInfoMonthSnapshots: ServiceInfoSnapshot[],
 ): Promise<BranchView | null> {
-  const shared = await loadShared(date, report, monthSnapshots, serviceInfoMonthSnapshots);
+  // Always a branch admin's own dashboard (the only caller) — mask.
+  const shared = await loadShared(date, report, monthSnapshots, serviceInfoMonthSnapshots, true);
   return buildView(branch, shared);
 }
 
@@ -373,7 +392,8 @@ export async function loadRegionView(
   monthSnapshots: Snapshot[],
   serviceInfoMonthSnapshots: ServiceInfoSnapshot[],
 ): Promise<{ rollup: RegionRollup; branches: BranchView[] }> {
-  const shared = await loadShared(date, report, monthSnapshots, serviceInfoMonthSnapshots);
+  // Regional managers always see real revenue, backfilled or not — never mask.
+  const shared = await loadShared(date, report, monthSnapshots, serviceInfoMonthSnapshots, false);
   const present = new Set(report.branches.map((b) => b.branch));
 
   const branches = (REGIONS[region] as readonly string[])

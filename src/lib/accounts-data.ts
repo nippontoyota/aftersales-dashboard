@@ -1,4 +1,5 @@
 import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, type HeroSummary, type KpiSummary } from "./aggregate";
+import { maskBranchRevenue } from "./branch-revenue-visibility";
 import { loadCancellationMonthSummaries, type CancellationMonthSummary } from "./cancellation/store";
 import { REGIONS, type RegionName } from "./regions";
 import { buildReport, type BranchReport, type Report } from "./report";
@@ -55,11 +56,16 @@ export async function loadAccountsData(requestedDate?: string): Promise<Accounts
   const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
   const month = date.slice(0, 7);
 
-  const [report, allCancellationSummaries, published, scom205Count] = await Promise.all([buildReport(date), loadCancellationMonthSummaries(), isDatePublished(date), countScom205BranchesForDate(date)]);
+  const [reportRaw, allCancellationSummaries, published, scom205Count] = await Promise.all([buildReport(date), loadCancellationMonthSummaries(), isDatePublished(date), countScom205BranchesForDate(date)]);
 
-  if (!report) {
+  if (!reportRaw) {
     return { date, dates, month, report: null, group: null, regions: [], cancellationsByBranch: new Map(), isPublished: published, uploadedBranchCount: 0, totalBranchCount: 18 };
   }
+
+  // Accounts sees revenue masked before Aug 2026 too (2026-09-26, at HQ's
+  // request — same cutover as a branch's own view, see
+  // branch-revenue-visibility.ts) — HQ/regional/VP/CEO are unaffected.
+  const report: Report = { ...reportRaw, branches: maskBranchRevenue(reportRaw.branches, reportRaw.date) };
 
   const monthSummaries = allCancellationSummaries.filter((s) => s.month === month);
   const cancellationsByBranch = new Map(monthSummaries.map((s) => [s.branch, s]));
