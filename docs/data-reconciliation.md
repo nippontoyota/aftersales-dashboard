@@ -23,6 +23,24 @@ Going forward the upload date is computed — one date for every branch (see
 should stop recurring; the September mess still needs the catch-up uploads.
 Figures are ₹. Status key: ☐ open · ⏳ chasing branch · 📥 file received · ✅ resolved.
 
+**Re-audited 2026-09-26** (whole month, latest data day: 25 Sep) for the two
+recurring bug classes this doc exists to catch:
+- **Cumulative/duplicate re-uploads** (Part Sale by `BillNo`, Service Info/SSRV089
+  by `Job Order No`, ≥50% overlap between any two dates) — **zero hits across every
+  branch, all month.** The upload-time safety checks added 2026-09-19–24
+  (`checkBillOverlap`, `checkRoOverlap`, `checkGrowth`, the date-sanity checks) appear
+  to be holding; this class of problem has not recurred since.
+- **scom205 MTD non-decreasing check** — one hit: **TR01B's BPU Labour MTD dipped
+  ₹1,291 from 21→22 Sep** (₹10,66,946.98 → ₹10,65,655.98), fully recovered by the
+  23rd (₹12,07,385.48). Both files are correctly dated (not a resend/mislabel);
+  reviewed and left as-is — most likely a genuine DMS-side
+  cancellation/adjustment, not a pipeline bug (predates `checkGrowth`, deployed
+  2026-09-24, by 2 days).
+
+The ☐ open items below were re-checked against current data and are still open as
+listed, except where a section says otherwise — this pass didn't re-litigate
+each one, just confirmed no *new* instances of either bug class have appeared.
+
 ---
 
 ## September · went dark after 3 Sep  →  GUS + BPU + Total Revenue MTD **blank** on the live dashboard
