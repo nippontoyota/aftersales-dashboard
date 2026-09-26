@@ -8,10 +8,10 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { REGIONS, type RegionName } from "@/lib/regions";
-import { listRegionQueries, listRegionQueriesForRegion } from "@/lib/region-queries/store";
+import { listRegionQueries, listRegionQueriesForBranch, listRegionQueriesForRegion } from "@/lib/region-queries/store";
 import { CancellationFlag } from "../cancellations/cancellation-flag";
 import { VpFlagsPanel } from "@/components/vp-flags-panel";
-import { RaiseToHqForm, RaiseToRegionForm } from "./region-query-forms";
+import { RaiseToBranchForm, RaiseToHqForm, RaiseToRegionForm } from "./region-query-forms";
 import { RegionQueryThread } from "./region-query-thread";
 
 /** Formerly "Alerts" — the achievement-below-target list (AlertsPanel) was
@@ -26,7 +26,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
   if (!admin?.canViewDashboard) redirect("/upload");
-  if (admin.role !== "hq" && admin.role !== "hq_viewer" && admin.role !== "regional") redirect("/dashboard");
+  if (admin.role !== "hq" && admin.role !== "hq_viewer" && admin.role !== "regional" && admin.role !== "branch") redirect("/dashboard");
 
   const nav = await loadNavState(admin);
   const identity = adminIdentityLabel(admin);
@@ -39,11 +39,17 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
       isRegional={admin.role === "regional"}
+      isBranch={admin.role === "branch"}
+      centralNav={admin.role === "regional" && admin.region === "Central"}
+      slimNav={nav.slimNav}
+      dashboardLabel={nav.dashboardLabel}
       queriesBadge={nav.queriesBadge}
       identity={identity}
     >
       {admin.role === "regional" ? (
         <RegionalQueriesContent admin={admin} />
+      ) : admin.role === "branch" ? (
+        <BranchQueriesContent admin={admin} />
       ) : (
         <Suspense fallback={<DashboardPageSkeleton />}>
           <HqQueriesContent searchParams={searchParams} admin={admin} />
@@ -122,7 +128,10 @@ async function RegionQueriesSection({ admin }: { admin: AdminAccount }) {
       <div className="mt-3 rounded-lg border border-border-subtle bg-surface p-3">
         <div className="flex items-center justify-between gap-3">
           <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Regional Queries — none open</span>
-          <RaiseToRegionForm regions={regions} />
+          <div className="flex gap-2">
+            <RaiseToRegionForm regions={regions} />
+            <RaiseToBranchForm regions={regions} />
+          </div>
         </div>
       </div>
     );
@@ -134,7 +143,10 @@ async function RegionQueriesSection({ admin }: { admin: AdminAccount }) {
         <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-info">
           Regional Queries — {open.length} open
         </span>
-        <RaiseToRegionForm regions={regions} />
+        <div className="flex gap-2">
+          <RaiseToRegionForm regions={regions} />
+          <RaiseToBranchForm regions={regions} />
+        </div>
       </div>
       <div className="mt-2 space-y-2">
         {open.map((q) => (
@@ -169,7 +181,10 @@ async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, 
               Questions you&apos;ve raised and HQ&apos;s replies, plus anything HQ has asked you.
             </p>
           </div>
-          <RaiseToHqForm branches={branches} />
+          <div className="flex flex-shrink-0 gap-2">
+            <RaiseToHqForm branches={branches} />
+            <RaiseToBranchForm regions={[{ region: admin.region, branches }]} />
+          </div>
         </div>
       </header>
 
@@ -200,6 +215,59 @@ async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, 
               <div className="mt-3 space-y-3">
                 {closed.map((q) => (
                   <RegionQueryThread key={q.id} query={q} viewerCanReply={false} viewerCanManage={admin.username === q.createdBy} />
+                ))}
+              </div>
+            </>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A branch admin's own Queries page (2026-09-26) — what's been raised
+ * directly to them, receive-only (no composer to raise their own question
+ * upward yet — see the conversation for why this is scoped that way for
+ * now). Reuses the exact same RegionQueryThread/"Mark resolved" flow as
+ * every other role. */
+async function BranchQueriesContent({ admin }: { admin: Extract<AdminAccount, { role: "branch" }> }) {
+  const queries = await listRegionQueriesForBranch(admin.branch);
+  const open = queries.filter((q) => q.status !== "closed");
+  const closed = queries.filter((q) => q.status === "closed");
+
+  return (
+    <div className="mx-auto max-w-3xl px-6 py-8">
+      <header className="border-b border-border pb-5">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-text">{admin.branch} · Queries</div>
+        <h1 className="mt-1.5 text-[22px] font-semibold leading-tight tracking-tight text-fg">Questions from HQ / your regional manager</h1>
+        <p className="mt-1.5 max-w-xl text-[13px] text-fg-subtle">
+          Anything HQ or your regional manager has flagged for you specifically. Reply if it needs an answer, then click Mark
+          resolved once it&apos;s sorted — that clears the reminder for good.
+        </p>
+      </header>
+
+      {queries.length === 0 ? (
+        <div className="mt-6 rounded-xl border border-dashed border-border-strong bg-surface p-8 text-center">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-fg-subtle">
+            <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+              <path d="M4 4.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H8l-3.5 3v-3H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <p className="mt-3 text-sm text-fg-subtle">Nothing here right now.</p>
+        </div>
+      ) : (
+        <>
+          <div className="mt-6 space-y-3">
+            {open.map((q) => (
+              <RegionQueryThread key={q.id} query={q} viewerCanReply={q.status === "open" && !q.reply} viewerCanManage />
+            ))}
+          </div>
+          {closed.length > 0 ? (
+            <>
+              <h2 className="mt-8 text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">Resolved</h2>
+              <div className="mt-3 space-y-3">
+                {closed.map((q) => (
+                  <RegionQueryThread key={q.id} query={q} viewerCanReply={false} viewerCanManage />
                 ))}
               </div>
             </>

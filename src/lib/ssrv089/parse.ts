@@ -42,7 +42,16 @@ function toAmount(value: unknown): number {
 function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | null {
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    // raw: false (2026-09-25, after a false-rejected MV01A upload) — without
+    // it, xlsx's own CSV type-guessing silently mis-parses an ambiguous
+    // dash/slash date string (e.g. "02-03-2026") as MM-DD-YYYY whenever the
+    // day is ≤12, turning it into a wrong Excel serial number before this
+    // code ever sees it — corrupting Invoice Doc Date for most rows in a
+    // file and tripping the date-sanity check with scattered wrong months.
+    // raw:false makes xlsx hand back the original text instead. Confirmed
+    // safe for Part Sale/Labour Sale and Close SA Name too — identical
+    // totals before/after against two real branch exports.
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
     // All three, not just "Close SA Name" alone — a pivot-table summary
     // sheet can legitimately have "Close SA Name" as a cell value too (its
     // filter label, e.g. "Close SA Name: (Multiple Items)"), which becomes

@@ -2,15 +2,22 @@ import { pool } from "../db";
 import type { RegionName } from "../regions";
 
 /**
- * HQ ↔ Regional Manager query threads (table `region_queries`). Bidirectional,
- * unlike vp_flags (VP → HQ only): `direction: "to_hq"` is a regional manager
- * raising a question (mirrors vp_flags' shape — optional date/branch context
- * within their own region); `direction: "to_region"` is HQ raising one,
- * addressed to a specific region's manager. Same one-question/one-reply
- * lifecycle (open → answered → closed) as vp_flags, for consistency.
+ * HQ ↔ Regional Manager (↔ Branch, since 2026-09-26) query threads (table
+ * `region_queries`). Bidirectional, unlike vp_flags (VP → HQ only):
+ * `direction: "to_hq"` is a regional manager raising a question (mirrors
+ * vp_flags' shape — optional date/branch context within their own region);
+ * `direction: "to_region"` is HQ raising one, addressed to a specific
+ * region's manager; `direction: "to_branch"` is HQ or that region's manager
+ * raising one addressed to a single branch admin (`contextBranch` required)
+ * — private to that branch, deliberately excluded from every
+ * region-scoped/regional-manager-facing query and count below, so a
+ * regional manager never sees or gets pinged for a thread addressed to one
+ * of their branches (confirmed with the user 2026-09-26). Same
+ * one-question/one-reply lifecycle (open → answered → closed) as vp_flags,
+ * for consistency.
  */
 
-export type RegionQueryDirection = "to_hq" | "to_region";
+export type RegionQueryDirection = "to_hq" | "to_region" | "to_branch";
 export type RegionQueryStatus = "open" | "answered" | "closed";
 
 export type RegionQuery = {
@@ -84,9 +91,26 @@ export async function listRegionQueries(): Promise<RegionQuery[]> {
   return rows.map(toQuery);
 }
 
-/** One region's threads (both directions) — a regional manager's own inbox. */
+/** One region's threads (both directions) — a regional manager's own inbox.
+ * Excludes 'to_branch' threads — those are private to the addressed branch,
+ * never surfaced to the regional manager even for a branch in their own
+ * region. */
 export async function listRegionQueriesForRegion(region: RegionName): Promise<RegionQuery[]> {
-  const { rows } = await pool.query<Row>(`select ${COLUMNS} from region_queries where region = $1 order by created_at desc`, [region]);
+  const { rows } = await pool.query<Row>(
+    `select ${COLUMNS} from region_queries where region = $1 and direction <> 'to_branch' order by created_at desc`,
+    [region],
+  );
+  return rows.map(toQuery);
+}
+
+/** One branch's own threads — a branch admin's inbox (2026-09-26). Only
+ * 'to_branch' threads addressed to this exact branch; a branch never sees
+ * its region's other to_hq/to_region traffic. */
+export async function listRegionQueriesForBranch(branch: string): Promise<RegionQuery[]> {
+  const { rows } = await pool.query<Row>(
+    `select ${COLUMNS} from region_queries where direction = 'to_branch' and context_branch = $1 order by created_at desc`,
+    [branch],
+  );
   return rows.map(toQuery);
 }
 
@@ -109,19 +133,23 @@ export async function setRegionQueryStatus(id: number, status: RegionQueryStatus
 
 /**
  * HQ's notification count — threads where the ball is in HQ's court: a
- * regional manager asked and it's still open (awaiting HQ's reply), or HQ
- * asked and the manager has replied (awaiting HQ reading/closing it).
+ * regional manager asked and it's still open (awaiting HQ's reply), HQ
+ * asked and the manager has replied (awaiting HQ reading/closing it), or a
+ * branch has replied to a to_branch thread (HQ's own global inbox is the
+ * one place every to_branch thread is still visible, regardless of whether
+ * HQ or a regional manager raised it, so this is where a reply surfaces).
  */
 export async function countActionableForHq(): Promise<number> {
   const { rows } = await pool.query<{ n: string }>(
     `select count(*)::text as n from region_queries
       where (direction = 'to_hq' and status = 'open')
-         or (direction = 'to_region' and status = 'answered')`,
+         or (direction = 'to_region' and status = 'answered')
+         or (direction = 'to_branch' and status = 'answered')`,
   );
   return Number(rows[0]?.n ?? 0);
 }
 
-/** A regional manager's notification count — the mirror image of countActionableForHq, scoped to their region. */
+/** A regional manager's notification count — the mirror image of countActionableForHq, scoped to their region. Never counts to_branch — private to the addressed branch. */
 export async function countActionableForRegion(region: RegionName): Promise<number> {
   const { rows } = await pool.query<{ n: string }>(
     `select count(*)::text as n from region_queries
@@ -129,6 +157,15 @@ export async function countActionableForRegion(region: RegionName): Promise<numb
         and ((direction = 'to_region' and status = 'open')
          or  (direction = 'to_hq' and status = 'answered'))`,
     [region],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** A branch admin's notification count (2026-09-26) — open to_branch threads addressed to them. Once they reply, the ball is in the raiser's court, so it drops out of their own count. */
+export async function countActionableForBranch(branch: string): Promise<number> {
+  const { rows } = await pool.query<{ n: string }>(
+    `select count(*)::text as n from region_queries where direction = 'to_branch' and context_branch = $1 and status = 'open'`,
+    [branch],
   );
   return Number(rows[0]?.n ?? 0);
 }

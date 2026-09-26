@@ -1,4 +1,5 @@
 import { pool } from "../db";
+import { checkDateColumnSanity, type DateSanityResult } from "../upload-date-sanity";
 
 /**
  * Partial-duplicate warning for Part Sale uploads (2026-09-21), mirroring
@@ -14,6 +15,27 @@ import { pool } from "../db";
  */
 
 const BILL_NO_COLUMN = "BillNo";
+const SALE_DATE_COLUMN = "SaleDate";
+
+/**
+ * Month-level date-sanity check (2026-09-24), same logic Service Info has
+ * had since 2026-09-19 — see upload-date-sanity.ts. Deliberately skipped for
+ * TI01C and IR01A: their SaleDate column uses a confirmed non-standard
+ * encoding (advances ~31 raw units/day, not a real Excel date serial — see
+ * [[project_ti01c_part_sale_saledate_encoding]] memory), so running this
+ * check against them would misread every date and reject valid uploads.
+ * Revisit once that encoding is properly calibrated per branch.
+ */
+const SALE_DATE_CHECK_EXCLUDED_BRANCHES = new Set(["TI01C", "IR01A"]);
+
+export function checkSaleDateSanity(branch: string, rawRows: Record<string, unknown>[], claimedDate: string): DateSanityResult {
+  if (SALE_DATE_CHECK_EXCLUDED_BRANCHES.has(branch)) return { ok: true };
+  // SaleDate is day-first (DD/MM/YYYY) — confirmed 2026-09-25 against real
+  // stored data in both .csv and .xlsx exports ("15/09/2026" = 15 Sept),
+  // unlike Service Info's month-first convention. A month-first read wrongly
+  // rejected a real upload dated 24/09/2026 (misread as month "24").
+  return checkDateColumnSanity(rawRows, SALE_DATE_COLUMN, claimedDate, "sale", "DD/MM/YYYY");
+}
 
 export type BillOverlapResult = { duplicate: false } | { duplicate: true; message: string };
 

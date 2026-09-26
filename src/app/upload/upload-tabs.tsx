@@ -18,7 +18,7 @@ export function UploadTabs({
 
   const tabs: { key: TabKey; label: string; show: boolean }[] = [
     { key: "reports", label: "Daily Reports", show: true },
-    { key: "bills", label: "Bills", show: true },
+    { key: "bills", label: "Scrap and Used Oil", show: true },
     { key: "cancellations", label: "Cancellations", show: cancellations != null },
   ];
 

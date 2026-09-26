@@ -103,3 +103,43 @@ export function workingDaysInMonth(dateIso: string, holidays: ReadonlySet<string
   }
   return count;
 }
+
+/**
+ * A *separate* working-day count from workingDaysElapsedInMonth/
+ * workingDaysInMonth above — those exclude Saturday because Saturday's data
+ * only reaches HQ on Monday (an upload-timing workaround, not a claim that
+ * branches don't work Saturdays). Branches actually work Monday–Saturday,
+ * Sunday off; this pair counts that real working-day calendar (minus the
+ * same shared report_holidays) for MTD target pacing that wants to reflect
+ * true elapsed working days rather than upload cadence. Added 2026-09-24 for
+ * the Central regional dashboard only — every other page's pacing keeps
+ * using the Saturday-excluded pair above unchanged.
+ */
+const SUNDAY = 0;
+
+function isSundayOffWorkingDay(iso: string, holidays: ReadonlySet<string>): boolean {
+  return new Date(`${iso}T00:00:00Z`).getUTCDay() !== SUNDAY && !holidays.has(iso);
+}
+
+export function sundayOffWorkingDaysElapsedInMonth(dateIso: string, holidays: ReadonlySet<string>): number {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth();
+  let count = 0;
+  for (let day = 1; day <= d.getUTCDate(); day++) {
+    if (isSundayOffWorkingDay(isoOf(new Date(Date.UTC(year, month, day))), holidays)) count++;
+  }
+  return count;
+}
+
+export function sundayOffWorkingDaysInMonth(dateIso: string, holidays: ReadonlySet<string>): number {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth();
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  let count = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    if (isSundayOffWorkingDay(isoOf(new Date(Date.UTC(year, month, day))), holidays)) count++;
+  }
+  return count;
+}

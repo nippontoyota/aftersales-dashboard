@@ -3,14 +3,18 @@ import { AppShell } from "@/components/app-shell";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadNavState } from "@/lib/dashboard-data";
-import { loadBillTotalsByMonth } from "@/lib/bill/store";
+import { loadBillTotalsByMonth, type BillBranchScope } from "@/lib/bill/store";
+import { BRANCH_REVENUE_VISIBLE_FROM_MONTH } from "@/lib/branch-revenue-visibility";
+import { REGIONS } from "@/lib/regions";
 import { BillsPageClient } from "./bills-page-client";
 
-/** Bills page — visible to branch admins (own branch), HQ, and HQ viewer.
- * Branch admins see only their own bills; HQ sees all branches (no filter,
- * consistent with the existing dashboard drilldown). VP, CEO, and Accounts
- * are sent to their own executive views; regional managers are redirected to
- * /dashboard (they don't manage bills). */
+/** Bills page — visible to branch admins (own branch), regional managers
+ * (their whole region), HQ, and HQ viewer. Branch admins see only their own
+ * bills; regional managers see every branch in their region (2026-09-23, at
+ * the user's request — previously redirected away with "they don't manage
+ * bills", reversed); HQ sees all branches (no filter, consistent with the
+ * existing dashboard drilldown). VP, CEO, and Accounts are sent to their own
+ * executive views. */
 export default async function BillsPage({
   searchParams,
 }: {
@@ -21,16 +25,23 @@ export default async function BillsPage({
   if (admin.role === "vp_service") redirect("/vp");
   if (admin.role === "ceo") redirect("/ceo");
   if (admin.role === "accounts") redirect("/accounts");
-  if (admin.role === "regional") redirect("/dashboard");
 
   const nav = await loadNavState(admin);
   const identity = adminIdentityLabel(admin);
 
-  // Branch admins see only their own bills; everyone else sees all.
-  const scopeBranch = admin.role === "branch" ? admin.branch : undefined;
+  // Branch admins see only their own bills; regional managers see their
+  // whole region; everyone else (HQ, HQ viewer) sees all.
+  const scopeBranch: BillBranchScope =
+    admin.role === "branch" ? admin.branch : admin.role === "regional" ? REGIONS[admin.region] : undefined;
+  const scopeLabel = admin.role === "branch" ? admin.branch : admin.role === "regional" ? `the ${admin.region} region` : null;
 
   const params = await searchParams;
-  const allMonths = await loadBillTotalsByMonth(scopeBranch);
+  const allMonthsRaw = await loadBillTotalsByMonth(scopeBranch);
+  // A branch admin's own scrap/used-oil revenue is masked before Aug 2026,
+  // same cutover as the rest of their dashboard (see
+  // branch-revenue-visibility.ts) — HQ and regional managers still see every
+  // backfilled month.
+  const allMonths = admin.role === "branch" ? allMonthsRaw.filter((m) => m.month >= BRANCH_REVENUE_VISIBLE_FROM_MONTH) : allMonthsRaw;
 
   // Validate ?month= param
   const month =
@@ -46,7 +57,9 @@ export default async function BillsPage({
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}
-      isRegional={false}
+      isRegional={admin.role === "regional"}
+      isBranch={admin.role === "branch"}
+      centralNav={admin.role === "regional" && admin.region === "Central"}
       queriesBadge={nav.queriesBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
@@ -56,9 +69,7 @@ export default async function BillsPage({
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-fg">Bills</h1>
             <p className="mt-1 text-[13px] text-fg-subtle">
-              {scopeBranch
-                ? `Scrap and used-oil tax invoices uploaded for ${scopeBranch}.`
-                : "Scrap and used-oil tax invoices across all branches."}
+              {scopeLabel ? `Scrap and used-oil tax invoices uploaded for ${scopeLabel}.` : "Scrap and used-oil tax invoices across all branches."}
             </p>
           </div>
         </div>
@@ -69,7 +80,7 @@ export default async function BillsPage({
             {admin.role === "branch" ? "Upload PDF invoices from the Upload page." : ""}
           </div>
         ) : (
-          <BillsPageClient months={allMonths} initialMonth={month} />
+          <BillsPageClient months={allMonths} initialMonth={month} showBranchColumn={admin.role !== "branch"} />
         )}
       </div>
     </AppShell>

@@ -15,7 +15,9 @@ import { loadIncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { loadBranchView, loadRegionView } from "@/lib/branch-view-data";
+import { loadCentralRegionView } from "@/lib/central-region-data";
 import { BranchAccountPage, RegionAccountPage } from "./branch/branch-page";
+import { CentralRegionDashboard } from "./central/central-region-dashboard";
 import { BillDrilldown } from "./bill-drilldown";
 import { BranchDailyReport } from "./branch-daily-report";
 import { DashboardTabs } from "./dashboard-tabs";
@@ -62,6 +64,8 @@ export default async function DashboardPage({
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}
       isRegional={admin.role === "regional"}
+      isBranch={admin.role === "branch"}
+      centralNav={admin.role === "regional" && admin.region === "Central"}
       queriesBadge={nav.queriesBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
@@ -123,6 +127,9 @@ async function DashboardContent({
       minute: "2-digit",
       timeZone: "Asia/Kolkata",
     });
+    // Incentive slab progress (2026-09-25, at the user's request — every
+    // branch should be able to see their own slab, published or not).
+    const branchSlabTargets = (await loadIncentiveSlabTargets(data.date.slice(0, 7))).get(branchReport.branch);
     return (
       <BranchDailyReport
         report={branchReport}
@@ -131,13 +138,19 @@ async function DashboardContent({
         dates={data.dates}
         uploadedAtLabel={uploadedAtLabel}
         daysSincePrevious={data.report.daysSincePrevious}
+        incentiveSlabs={branchSlabTargets}
       />
     );
   }
 
   // Regional manager, date not published yet → wide region comparison table
   // (their branches + a region total) instead of the company dashboard.
-  if (data.showRegionDailyReport && admin.role === "regional") {
+  // Central is excluded here — his dashboard below (loadCentralRegionView)
+  // reads the same buildReport() output regardless of publish state, so he
+  // gets his own layout either way, with a DraftWarning banner standing in
+  // for this detour instead of a different page entirely (2026-09-24, at
+  // his request).
+  if (data.showRegionDailyReport && admin.role === "regional" && admin.region !== "Central") {
     if (!data.report || data.filteredBranches.length === 0) {
       return (
         <NoDataForDate
@@ -183,8 +196,17 @@ async function DashboardContent({
   // HQ keeps the company Executive Overview below. (Pre-publish is already
   // handled by showBranchDailyReport / showRegionDailyReport above.)
   if (admin.role === "branch") {
-    const view = await loadBranchView(admin.branch, date, report, monthSnapshots, serviceInfoMonthSnapshots);
-    return <BranchAccountPage view={view} branch={admin.branch} date={date} dates={dates} uploadedAt={report.uploadedAt} />;
+    const [view, branchSlabTargets] = await Promise.all([
+      loadBranchView(admin.branch, date, report, monthSnapshots, serviceInfoMonthSnapshots),
+      loadIncentiveSlabTargets(date.slice(0, 7)).then((m) => m.get(admin.branch)),
+    ]);
+    return (
+      <BranchAccountPage view={view} branch={admin.branch} date={date} dates={dates} uploadedAt={report.uploadedAt} incentiveSlabs={branchSlabTargets} />
+    );
+  }
+  if (admin.role === "regional" && admin.region === "Central") {
+    const view = await loadCentralRegionView(date, report);
+    return <CentralRegionDashboard view={view} dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} />;
   }
   if (admin.role === "regional") {
     const { rollup, branches } = await loadRegionView(admin.region, date, report, monthSnapshots, serviceInfoMonthSnapshots);

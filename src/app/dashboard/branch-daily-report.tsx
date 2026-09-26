@@ -1,8 +1,10 @@
 import { achievementTone, type AchievementTone } from "@/lib/aggregate";
 import { formatPercent } from "@/lib/format";
+import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import type { BranchReport } from "@/lib/report";
 import { DateSelect } from "./date-select";
 import { DAILY_REPORT_ROWS, branchCell, type ValueFmt } from "./daily-report-rows";
+import { IncentiveSlabIndicator } from "./incentive-slab-indicator";
 import { tglossText } from "@/components/tgloss-text";
 
 /**
@@ -40,6 +42,7 @@ export function BranchDailyReport({
   dates,
   uploadedAtLabel,
   daysSincePrevious,
+  incentiveSlabs,
 }: {
   report: BranchReport;
   branch: string;
@@ -47,6 +50,11 @@ export function BranchDailyReport({
   dates: string[];
   uploadedAtLabel: string;
   daysSincePrevious: number | null;
+  /** Undefined when no target is uploaded for this branch this month —
+   * IncentiveSlabIndicator shows a muted placeholder rather than hiding
+   * (2026-09-25, at the user's request: every branch should be able to see
+   * their own slab progress, published or not). */
+  incentiveSlabs?: IncentiveSlabTargets;
 }) {
   const todayHeader = daysSincePrevious === null || daysSincePrevious === 1 ? "Today" : `Last ${daysSincePrevious} days`;
 
@@ -63,6 +71,10 @@ export function BranchDailyReport({
           </p>
         </div>
         <DateSelect dates={dates} selected={date} region="All" />
+      </div>
+
+      <div className="mt-4 flex justify-center rounded-lg border border-border bg-surface p-4 shadow-card sm:justify-start">
+        <IncentiveSlabIndicator scopeLabel={branch} actual={report.totalRevenueStreamMtd} slabs={incentiveSlabs} date={date} size={108} />
       </div>
 
       <div className="mt-4 max-h-[calc(100dvh-11rem)] overflow-auto rounded-lg border border-border bg-surface shadow-card">

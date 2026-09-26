@@ -82,14 +82,13 @@ export async function saveCancellationReport(params: {
       );
     }
 
+    // A plain insert, never an upsert — one row per upload (see schema.sql's
+    // 2026-09-23 migration), not one per (branch, month). The old
+    // on-conflict-overwrite silently discarded every earlier upload's PDF
+    // the moment a branch uploaded a second, incremental round that month.
     await client.query(
       `insert into invoice_cancellation_files (branch, month, uploaded_at, uploaded_by, source_file_name, file_data)
-       values ($1,$2,$3,$4,$5,$6)
-       on conflict (branch, month) do update set
-         uploaded_at = excluded.uploaded_at,
-         uploaded_by = excluded.uploaded_by,
-         source_file_name = excluded.source_file_name,
-         file_data = excluded.file_data`,
+       values ($1,$2,$3,$4,$5,$6)`,
       [params.branch, params.month, params.uploadedAt, params.uploadedBy, params.sourceFileName, params.fileData],
     );
 
@@ -102,22 +101,30 @@ export async function saveCancellationReport(params: {
   }
 }
 
-/** One row per uploaded branch-month — for the page's month + branch pickers. */
+/** One row per uploaded branch-month — for the page's month + branch pickers.
+ * `uploaded_at`/`source_file_name` describe the MOST RECENT of possibly
+ * several uploads that branch-month has (see invoice_cancellation_files) —
+ * a `distinct on` per (branch, month) rather than two independent `max()`s,
+ * so they always describe the same upload rather than mixing the latest
+ * timestamp with an unrelated (alphabetically-last) filename. */
 export async function loadCancellationMonthSummaries(branch?: string): Promise<CancellationMonthSummary[]> {
   const { rows } = await pool.query<{
     branch: string; month: string; count: string;
     before_tax_total: string; after_tax_total: string;
-    uploaded_at: string; source_file_name: string;
+    uploaded_at: string | null; source_file_name: string | null;
   }>(
     `select c.branch, c.month, count(*)::int as count,
             coalesce(sum(c.before_tax), 0) as before_tax_total,
             coalesce(sum(c.after_tax), 0)  as after_tax_total,
-            max(f.uploaded_at) as uploaded_at,
-            max(f.source_file_name) as source_file_name
+            latest.uploaded_at, latest.source_file_name
      from invoice_cancellations c
-     left join invoice_cancellation_files f on f.branch = c.branch and f.month = c.month
+     left join lateral (
+       select uploaded_at, source_file_name from invoice_cancellation_files f
+       where f.branch = c.branch and f.month = c.month
+       order by f.uploaded_at desc limit 1
+     ) latest on true
      ${branch ? "where c.branch = $1" : ""}
-     group by c.branch, c.month
+     group by c.branch, c.month, latest.uploaded_at, latest.source_file_name
      order by c.month desc, c.branch`,
     branch ? [branch] : [],
   );
@@ -127,8 +134,8 @@ export async function loadCancellationMonthSummaries(branch?: string): Promise<C
     count: Number(r.count),
     beforeTaxTotal: Number(r.before_tax_total),
     afterTaxTotal: Number(r.after_tax_total),
-    uploadedAt: r.uploaded_at,
-    sourceFileName: r.source_file_name,
+    uploadedAt: r.uploaded_at ?? "",
+    sourceFileName: r.source_file_name ?? "",
   }));
 }
 
@@ -204,9 +211,40 @@ export async function loadCancellationKpis(month: string, branches?: string[]): 
   return [...byBranch.values()].sort((a, b) => b.count - a.count);
 }
 
-export async function getCancellationFile(branch: string, month: string): Promise<{ fileName: string; data: Buffer } | null> {
+export type CancellationFileInfo = { id: number; branch: string; month: string; uploadedAt: string; sourceFileName: string };
+
+/** Every uploaded file for a set of branch-months, oldest first within each —
+ * a branch that uploads incrementally through the month gets one entry per
+ * round, not just the latest (see schema.sql's 2026-09-23 migration). One
+ * query for however many branches the caller needs, not one per branch. */
+export async function listCancellationFiles(month: string, branches?: string[]): Promise<CancellationFileInfo[]> {
+  const { rows } = await pool.query<{ id: string; branch: string; month: string; uploaded_at: string; source_file_name: string }>(
+    `select id, branch, month, uploaded_at, source_file_name from invoice_cancellation_files
+     where month = $1 ${branches && branches.length ? "and branch = any($2::text[])" : ""}
+     order by branch, uploaded_at`,
+    branches && branches.length ? [month, branches] : [month],
+  );
+  return rows.map((r) => ({ id: Number(r.id), branch: r.branch, month: r.month, uploadedAt: r.uploaded_at, sourceFileName: r.source_file_name }));
+}
+
+/** One specific upload's PDF bytes, scoped to the branch/month it claims to
+ * belong to (defense in depth alongside the API route's own access check —
+ * a caller can't fetch another branch's file just by guessing an id). */
+export async function getCancellationFileById(id: number, branch: string, month: string): Promise<{ fileName: string; data: Buffer } | null> {
   const { rows } = await pool.query<{ source_file_name: string; file_data: Buffer }>(
-    `select source_file_name, file_data from invoice_cancellation_files where branch = $1 and month = $2`,
+    `select source_file_name, file_data from invoice_cancellation_files where id = $1 and branch = $2 and month = $3`,
+    [id, branch, month],
+  );
+  return rows[0] ? { fileName: rows[0].source_file_name, data: rows[0].file_data } : null;
+}
+
+/** The most recently uploaded file for a branch-month — used by the
+ * legacy/bookmarked PDF route so an old link still resolves to something
+ * sensible instead of erroring. */
+export async function getLatestCancellationFile(branch: string, month: string): Promise<{ fileName: string; data: Buffer } | null> {
+  const { rows } = await pool.query<{ source_file_name: string; file_data: Buffer }>(
+    `select source_file_name, file_data from invoice_cancellation_files
+     where branch = $1 and month = $2 order by uploaded_at desc limit 1`,
     [branch, month],
   );
   return rows[0] ? { fileName: rows[0].source_file_name, data: rows[0].file_data } : null;

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { REGIONS } from "@/lib/regions";
-import { getCancellationFile } from "@/lib/cancellation/store";
+import { getLatestCancellationFile } from "@/lib/cancellation/store";
 
+/** Legacy/bookmarked link — a branch-month can now have several uploads
+ * (see invoice_cancellation_files' 2026-09-23 migration), each with its own
+ * PDF at .../pdf/[id]. This bare route resolves to whichever was uploaded
+ * most recently, so an old link still opens something rather than erroring. */
 export async function GET(_request: Request, { params }: { params: Promise<{ branch: string; month: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
@@ -19,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bra
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
-  const file = await getCancellationFile(branch, month);
+  const file = await getLatestCancellationFile(branch, month);
   if (!file) return NextResponse.json({ error: "No report on file for that branch and month." }, { status: 404 });
 
   return new NextResponse(new Uint8Array(file.data), {

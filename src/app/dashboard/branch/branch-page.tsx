@@ -1,6 +1,8 @@
 import type { BranchView, RegionRollup } from "@/lib/branch-view-data";
+import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import { BODY_PAINT_ONLY_BRANCHES } from "@/lib/report";
 import { DateSelect } from "../date-select";
+import { IncentiveSlabIndicator } from "../incentive-slab-indicator";
 import { BranchOverviewBody } from "./branch-overview-body";
 import { RegionRollup as RegionRollupPanel } from "./region-rollup";
 import { RegionTable, type RegionTableRow } from "./region-table";
@@ -33,12 +35,18 @@ export function BranchAccountPage({
   date,
   dates,
   uploadedAt,
+  incentiveSlabs,
 }: {
   view: BranchView | null;
   branch: string;
   date: string;
   dates: string[];
   uploadedAt: string;
+  /** Undefined when no target is uploaded for this branch this month —
+   * IncentiveSlabIndicator shows a muted placeholder rather than hiding
+   * (2026-09-25, at the user's request: every branch should be able to see
+   * their own slab progress on their own dashboard). */
+  incentiveSlabs?: IncentiveSlabTargets;
 }) {
   return (
     <div className="mx-auto max-w-[1400px] p-6">
@@ -48,6 +56,9 @@ export function BranchAccountPage({
         date={date}
         dates={dates}
       />
+      <div className="mt-4 flex justify-center rounded-lg border border-border bg-surface p-4 shadow-card sm:justify-start">
+        <IncentiveSlabIndicator scopeLabel={branch} actual={view?.totalRevenueMtd ?? null} slabs={incentiveSlabs} date={date} size={108} />
+      </div>
       <div className="mt-4">
         {view ? (
           <BranchOverviewBody view={view} date={date} />

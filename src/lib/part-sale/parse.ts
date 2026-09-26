@@ -1,5 +1,4 @@
 import * as XLSX from "xlsx";
-import { eligibleSameMonthFTypeRefDocs } from "./external-sales-eligibility";
 
 /**
  * Part Sale Report — one row per part sold. Unlike Service Info Report,
@@ -16,6 +15,44 @@ const BILL_NO_COLUMN = "BillNo";
 const NET_AMNT_COLUMN = "NetAmnt";
 const REF_DOC_NO_COLUMN = "RefDocNo";
 const CUSTOMER_NAME_COLUMN = "CustomerName";
+/** Matches SALE_DATE_COLUMN in part-sale/upload-validation.ts — that check
+ * reads this same post-alias column name, never the file's original header. */
+const SALE_DATE_COLUMN = "SaleDate";
+
+/** Some branches' exports use a differently-punctuated header row for the
+ * same columns (confirmed 2026-09-24, TR01B's "Parts Sales Report" file —
+ * spaced/period-separated names instead of the standard SPRT014 ones, on an
+ * otherwise identical row shape). Renamed to the canonical column name right
+ * after the sheet is read so the rest of the parser never needs to know.
+ * "Sale Date" added 2026-09-24 alongside the others, at the user's request,
+ * after a differently-spaced date header came up while testing the new
+ * upload-validation checks. */
+const COLUMN_ALIASES: Record<string, string> = {
+  "Part No.": PART_NO_COLUMN,
+  "Qty.": SALE_QTY_COLUMN,
+  "Bill No.": BILL_NO_COLUMN,
+  "Net Amt.": NET_AMNT_COLUMN,
+  "Ref. Doc. No.": REF_DOC_NO_COLUMN,
+  "Cust. Name": CUSTOMER_NAME_COLUMN,
+  "Sale Date": SALE_DATE_COLUMN,
+};
+
+function applyColumnAliases(row: Record<string, unknown>): Record<string, unknown> {
+  let hasAlias = false;
+  for (const alias in COLUMN_ALIASES) {
+    if (alias in row) {
+      hasAlias = true;
+      break;
+    }
+  }
+  if (!hasAlias) return row;
+
+  const renamed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    renamed[COLUMN_ALIASES[key] ?? key] = value;
+  }
+  return renamed;
+}
 
 const ENGINE_FLUSH_PARTS = ["A-08814-80061", "A-08814-80090"];
 const INJECTOR_CLEANER_PARTS = ["A-08813-80100", "A-08813-80019"];
@@ -46,13 +83,16 @@ const BRAKE_CLEANING_SPRAY_PARTS = ["Z-9BCHP-00001"];
 const EXTERNAL_SALES_BILL_TYPE = "A";
 const EXTERNAL_SALES_RETURN_BILL_TYPE = "F";
 
-/** Whether an F-type row's original A-type bill is eligible to net against
- * External Sales — same-calendar-month bills only (see
- * external-sales-eligibility.ts). Defaults to "nothing is eligible" so a
- * caller that forgets to supply a real resolver fails safe (excludes,
- * doesn't wrongly include); the async `parsePartSaleWorkbook` path always
- * supplies the real one. */
+/** Whether an F-type row's original A-type bill should net against External
+ * Sales. Always returns true — an FK return lands in the month it appears,
+ * regardless of which month the original A-type bill was in. Since prior
+ * months are locked once closed, a cross-month return has nowhere else to go
+ * (2026-09-23, replaces the same-calendar-month-only rule added 2026-09-21). */
 export type FTypeEligibility = (refDocNo: string) => boolean;
+
+/** The resolver used at parse time and in backfill scripts: every F-type
+ * return whose RefDocNo points to an A-type bill is always eligible. */
+export const alwaysEligible: FTypeEligibility = () => true;
 
 /** Opulent Auto Care Pvt Ltd is a vendor (buys parts from us for their own
  * use), not a revenue-generating customer — its rows never count toward
@@ -187,7 +227,17 @@ export type ParsedPartSale = {
 export function parsePartSaleRows(buffer: Buffer): Record<string, unknown>[] {
   const workbook = XLSX.read(looksBinaryWorkbook(buffer) ? buffer : repairCsvQuotes(buffer), { type: "buffer" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  // raw: false (2026-09-25) — without it, xlsx's own CSV type-guessing
+  // silently mis-parses an ambiguous dash/slash SaleDate as MM-DD-YYYY
+  // whenever the day is ≤12, corrupting it before this code (and
+  // upload-validation.ts's checkSaleDateSanity) ever sees it — see
+  // ssrv089/parse.ts's fix note for the full story. Doesn't touch
+  // TI01C/IR01A's separately-known non-standard SaleDate encoding, which
+  // stays excluded from the sanity check regardless (see
+  // SALE_DATE_CHECK_EXCLUDED_BRANCHES). Confirmed safe for amount columns
+  // elsewhere in this codebase (toAmount() already tolerates a numeric
+  // string same as a number).
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false }).map(applyColumnAliases);
 
   if (rows.length === 0) {
     throw new Error("No rows found — is this a Part Sale Report export?");
@@ -201,20 +251,7 @@ export function parsePartSaleRows(buffer: Buffer): Record<string, unknown>[] {
 
 export async function parsePartSaleWorkbook(buffer: Buffer, branch: string, uploadDate: string): Promise<ParsedPartSale> {
   const rows = parsePartSaleRows(buffer);
-  const isFTypeEligible = await buildFTypeEligibility(branch, uploadDate, rows);
-  return { counts: partSaleCountsFromRows(rows, isFTypeEligible), rawRows: rows };
-}
-
-async function buildFTypeEligibility(
-  branch: string,
-  uploadDate: string,
-  rows: Record<string, unknown>[]
-): Promise<FTypeEligibility> {
-  const refDocNos = rows
-    .filter((row) => normalizePart(row[BILL_NO_COLUMN]).charAt(0).toUpperCase() === EXTERNAL_SALES_RETURN_BILL_TYPE)
-    .map((row) => normalizePart(row[REF_DOC_NO_COLUMN]));
-  const eligible = await eligibleSameMonthFTypeRefDocs(branch, uploadDate, refDocNos);
-  return (refDocNo: string) => eligible.has(refDocNo);
+  return { counts: partSaleCountsFromRows(rows, alwaysEligible), rawRows: rows };
 }
 
 /** The counting, split out from the workbook read so a re-parse can run

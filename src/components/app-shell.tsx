@@ -3,6 +3,7 @@
 import Link, { useLinkStatus } from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions";
+import { QueryPopupGate } from "./query-popup-gate";
 import { ThemeToggle } from "./theme-toggle";
 
 // Every branch admin sees the full company-wide dashboard, identical to HQ
@@ -25,7 +26,7 @@ const NAV_ITEMS = [
   // alwaysVisible: true — branch admins see their own bills and cancellations
   // regardless of whether the latest date is published (these pages are about
   // their own uploads, not the company-wide dashboard state).
-  { href: "/bills", label: "Bills", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true },
+  { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true },
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false },
 ];
@@ -50,6 +51,22 @@ const CEO_NAV_ITEMS = [{ href: "/ceo", label: "Overview", key: "ceo" as const }]
  * item, reached only by clicking a region on Overview. See src/app/accounts/*. */
 const ACCOUNTS_NAV_ITEMS = [{ href: "/accounts", label: "Overview", key: "accounts" as const }];
 
+/** The Central regional manager's own nav (2026-09-26, replacing the single
+ * combined "My Region" page) — three of his own pages (My Region, TKM
+ * Targets, Set Targets) around the two he shares with every other regional
+ * admin (Queries, Bills, Cancellations). North/South still get the generic
+ * NAV_ITEMS filtering below; nothing here touches theirs. Set Targets sits
+ * last, at the RM's own request — an occasional admin task, not a daily
+ * view, so it doesn't crowd the pages he actually looks at day to day. */
+const CENTRAL_NAV_ITEMS = [
+  { href: "/dashboard", label: "My Region", key: "dashboard" as const },
+  { href: "/dashboard/central/tkm-targets", label: "TKM Targets", key: "central-tkm-targets" as const },
+  { href: "/queries", label: "Queries", key: "queries" as const },
+  { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
+  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
+  { href: "/dashboard/central/set-targets", label: "Set Targets", key: "central-set-targets" as const },
+];
+
 /** HQ-only tools, kept apart from the day-to-day nav above — administrative
  * rather than something anyone checks routinely, so they sit as a small
  * link list near the account area at the bottom instead of the main list. */
@@ -70,6 +87,7 @@ type NavKey =
   | (typeof VP_NAV_ITEMS)[number]["key"]
   | (typeof CEO_NAV_ITEMS)[number]["key"]
   | (typeof ACCOUNTS_NAV_ITEMS)[number]["key"]
+  | (typeof CENTRAL_NAV_ITEMS)[number]["key"]
   | "bills";
 
 function DashboardIcon() {
@@ -98,6 +116,17 @@ function TkmTargetsIcon() {
       <circle cx="10" cy="10" r="7" />
       <circle cx="10" cy="10" r="3.8" />
       <circle cx="10" cy="10" r="0.8" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function SetTargetsIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <path d="M3 5.5h9M15.5 5.5h1.5M3 10h5M10.5 10h6.5M3 14.5h9M15.5 14.5h1.5" strokeLinecap="round" />
+      <circle cx="12" cy="5.5" r="1.6" />
+      <circle cx="7.5" cy="10" r="1.6" />
+      <circle cx="12" cy="14.5" r="1.6" />
     </svg>
   );
 }
@@ -263,6 +292,8 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   "vp-queries": ChatIcon,
   ceo: DashboardIcon,
   accounts: DashboardIcon,
+  "central-tkm-targets": TkmTargetsIcon,
+  "central-set-targets": SetTargetsIcon,
 };
 
 export function AppShell({
@@ -274,8 +305,10 @@ export function AppShell({
   vpNav = false,
   ceoNav = false,
   accountsNav = false,
+  centralNav = false,
   slimNav = false,
   isRegional = false,
+  isBranch = false,
   queriesBadge = 0,
   dashboardLabel = "Executive Overview",
   identity,
@@ -304,6 +337,11 @@ export function AppShell({
   /** Accounts: replace the whole nav with the single /accounts item (no
    * upload, no company tabs, no HQ utilities). Defaults to false. */
   accountsNav?: boolean;
+  /** Central regional manager: replace the whole nav with CENTRAL_NAV_ITEMS
+   * (My Region, TKM Targets, Queries, Bills, Cancellations, Set Targets) —
+   * North/South keep the generic regional nav below unchanged. Defaults to
+   * false. */
+  centralNav?: boolean;
   /** Branch / regional accounts: drop the company-wide pages (TKM Targets,
    * Alerts, Branch Performance, Reports) from the sidebar entirely — their
    * content now lives on the branch-first dashboard. Leaves My Branch /
@@ -312,6 +350,10 @@ export function AppShell({
   /** A regional admin — keeps `regionalVisible` nav items (just Queries)
    * showing even under slimNav. Defaults to false. */
   isRegional?: boolean;
+  /** A branch admin — same as `isRegional`, keeps `regionalVisible` nav
+   * items (Queries, since 2026-09-26 branches get their own queries too)
+   * showing even under slimNav. Defaults to false. */
+  isBranch?: boolean;
   /** Count shown as a small badge on the Queries nav item — threads awaiting
    * this viewer's attention. 0 (default) renders no badge. */
   queriesBadge?: number;
@@ -334,13 +376,15 @@ export function AppShell({
     ? CEO_NAV_ITEMS
     : accountsNav
     ? ACCOUNTS_NAV_ITEMS
+    : centralNav
+    ? CENTRAL_NAV_ITEMS.map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item))
     : NAV_ITEMS.filter(
         (item) =>
           (!item.requiresDashboard || showDashboardLink) &&
-          (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && isRegional)) &&
+          (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
-  const utilityItems = isHq && !vpNav && !ceoNav && !accountsNav ? UTILITY_NAV_ITEMS : [];
+  const utilityItems = isHq && !vpNav && !ceoNav && !accountsNav && !centralNav ? UTILITY_NAV_ITEMS : [];
 
   const navLink = (item: { href: string; label: string; key: NavKey }, compact: boolean) => {
     const Icon = ICONS[item.key];
@@ -445,6 +489,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-canvas text-fg">
+      <QueryPopupGate />
       {/* Desktop sidebar — collapsible to an icon rail */}
       <aside
         className={`hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex print:!hidden ${

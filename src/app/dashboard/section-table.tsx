@@ -31,14 +31,19 @@ export function SectionTable({
   subtitle,
   branches,
   columns,
+  defaultOpen,
 }: {
   title: string;
   subtitle?: string;
   branches: BranchReport[];
   columns: SectionColumn[];
+  /** Opens the card immediately instead of the usual collapsed-by-default —
+   * the VP's Regions page wants its one table visible on load, not another
+   * click away (2026-09-25). Defaults to CollapsibleCard's own false. */
+  defaultOpen?: boolean;
 }) {
   return (
-    <CollapsibleCard title={title} subtitle={subtitle}>
+    <CollapsibleCard title={title} subtitle={subtitle} defaultOpen={defaultOpen}>
       <div className="max-h-[calc(100dvh-15rem)] overflow-auto">
         <table className="min-w-full text-xs">
           <thead className="text-left text-fg-subtle [&>tr>th]:sticky [&>tr>th]:top-0 [&>tr>th]:z-10 [&>tr>th]:bg-surface-2 [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border)]">

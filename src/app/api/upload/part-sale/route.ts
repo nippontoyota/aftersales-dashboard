@@ -3,7 +3,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { hashRows } from "@/lib/duplicate-detection";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { loadPartSaleSnapshot, savePartSaleSnapshot } from "@/lib/part-sale/store";
-import { checkBillOverlap } from "@/lib/part-sale/upload-validation";
+import { checkBillOverlap, checkSaleDateSanity } from "@/lib/part-sale/upload-validation";
 import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 
 export async function POST(request: Request) {
@@ -54,32 +54,39 @@ export async function POST(request: Request) {
     );
   }
 
-  // Warn-and-allow duplicate checks (exact-hash: 2026-09-16; bill-overlap:
+  // Date-sanity check (2026-09-24, same month-level logic Service Info has
+  // had since 2026-09-19 — see upload-date-sanity.ts). Skipped for TI01C/
+  // IR01A, whose SaleDate encoding is non-standard (see part-sale/
+  // upload-validation.ts).
+  const dateSanity = checkSaleDateSanity(admin.branch, rawRows, date);
+  if (!dateSanity.ok) {
+    return NextResponse.json({ error: dateSanity.error }, { status: 422 });
+  }
+
+  // Hard-blocking duplicate checks (exact-hash: 2026-09-16; bill-overlap:
   // 2026-09-21, after IR01A's "17 Sep" file turned out to be a mislabeled
   // partial pull of the 18th — 101 of its 321 rows, not a whole-file match,
   // so the exact-hash check alone missed it. See part-sale/upload-validation.ts.
   // A branch genuinely combining several days into one export (extra rows for
-  // the newer days) hashes differently and has high-but-expected overlap with
-  // its own prior days — both checks warn rather than block, same as
-  // service-info's. Checked against every prior upload this month, not just
-  // the most recent one (see raw-upload-rows/store.ts for why).
-  const confirmed = formData.get("confirmDuplicate") === "true";
-  if (!confirmed) {
-    const priorUploads = await loadAllRawUploadRowsBefore("part_sale", admin.branch, date);
-    const newHash = hashRows(rawRows);
-    const match = priorUploads.find((u) => hashRows(u.rows) === newHash);
-    if (match) {
-      return NextResponse.json({
-        duplicate: true,
-        previousDate: match.date,
-        message: `This file looks identical to your upload from ${match.date} — same rows. Are you sure this is ${date}'s file?`,
-      });
-    }
+  // the newer days) hashes differently, so it passes the exact-hash check;
+  // the bill-overlap check still has high-but-expected overlap for that case
+  // — upgraded from warn-and-allow to a hard reject 2026-09-24, at the user's
+  // request. A genuine false positive now needs HQ (Upload Sheet). Checked
+  // against every prior upload this month, not just the most recent one (see
+  // raw-upload-rows/store.ts for why).
+  const priorUploads = await loadAllRawUploadRowsBefore("part_sale", admin.branch, date);
+  const newHash = hashRows(rawRows);
+  const exactMatch = priorUploads.find((u) => hashRows(u.rows) === newHash);
+  if (exactMatch) {
+    return NextResponse.json(
+      { error: `This file looks identical to your upload from ${exactMatch.date} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
+      { status: 422 }
+    );
+  }
 
-    const overlap = await checkBillOverlap(admin.branch, rawRows, date);
-    if (overlap.duplicate) {
-      return NextResponse.json({ duplicate: true, message: overlap.message });
-    }
+  const overlap = await checkBillOverlap(admin.branch, rawRows, date);
+  if (overlap.duplicate) {
+    return NextResponse.json({ error: `${overlap.message} If this really is new data, contact HQ (Upload Sheet).` }, { status: 422 });
   }
 
   const uploadedAt = new Date().toISOString();

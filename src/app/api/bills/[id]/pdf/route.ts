@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { getBillById, getBillPdfData } from "@/lib/bill/store";
+import { REGIONS } from "@/lib/regions";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getCurrentAdmin();
@@ -20,6 +21,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   if (admin.role === "branch" && bill.branch !== admin.branch) {
+    return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  }
+  if (admin.role === "regional" && !(REGIONS[admin.region] as readonly string[]).includes(bill.branch)) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 

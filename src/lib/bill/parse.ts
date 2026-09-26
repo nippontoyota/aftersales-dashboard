@@ -10,6 +10,26 @@ import "./pdf-polyfill";
 import "pdfjs-dist/legacy/build/pdf.worker.mjs";
 import { PDFParse } from "pdf-parse";
 
+/**
+ * A GST amount's paise digits sometimes wrap across a text-extraction line
+ * break right in the middle — "7,082.10" comes out of pdf.js as "7,082.1"
+ * on one line and a lone "0" on the next (confirmed 2026-09-25, an MV01A
+ * scrap invoice — this column value's own width triggers it, so it only
+ * shows up on larger GST amounts, not the smaller ones on most invoices).
+ * A split token like that isn't a valid 2-decimal money token to any
+ * strategy below, so it silently vanishes from the count moneyTokens()
+ * sees — which is exactly what made fromTotalLabelBlock's "needs all 6
+ * columns" check fail and fall through to a much weaker heuristic, on a
+ * multi-item invoice landing on a single line item's value instead of the
+ * invoice's real total. Re-joining it before any strategy runs fixes every
+ * strategy at once, not just the one that happened to trip over it.
+ * `(?!\d)` stops it from ever merging into a real 3-digit decimal (should
+ * one ever appear) — this only rejoins the exact single-lost-digit case.
+ */
+function normalizeWrappedDecimals(text: string): string {
+  return text.replace(/(\.\d)\n(\d)(?!\d)/g, "$1$2");
+}
+
 export type BillParseResult = {
   invoiceNumber: string | null;
   taxableValue: number | null;
@@ -23,7 +43,7 @@ export async function parseBillPdf(buffer: Buffer): Promise<BillParseResult> {
   try {
     const parser = new PDFParse({ data: buffer });
     const result = await parser.getText();
-    text = result.text;
+    text = normalizeWrappedDecimals(result.text);
     await parser.destroy();
   } catch (err) {
     console.error("[bill-parse] pdf text extraction failed:", err);

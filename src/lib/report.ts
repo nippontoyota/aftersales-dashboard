@@ -8,6 +8,9 @@ import { loadAllSsrv089SnapshotsForMonthUpTo } from "./ssrv089/store";
 import type { Ssrv089Snapshot } from "./ssrv089/store";
 import { loadCancelledAccessoriesAdjustmentForMonth } from "./ssrv089/cancellation-adjustment";
 import type { CancelledAccessoriesAdjustment } from "./ssrv089/cancellation-adjustment";
+import { loadCrossMonthReplacementAdjustmentForMonth } from "./cancellation/cross-month-replacement";
+import type { CrossMonthReplacementAdjustment } from "./cancellation/cross-month-replacement";
+import { targetOverrideFor } from "./target-overrides";
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import type { Scom205Snapshot } from "./scom205/store";
 import { loadBillRevenueByBranchForMonth, loadBillRevenueByBranchForDate } from "./bill/store";
@@ -123,6 +126,13 @@ export type BranchReport = {
   bpuPartsMtd: number | null;
   bpuLabourMtd: number | null;
 
+  // scom205 sheet 3 ("Service Parts Sales & Stock") — TGP column's Stock
+  // Month row, and the Service Rate (S/R) table's Total row's S/R Lines (%).
+  // Null whenever scom205 hasn't been uploaded for this branch/date yet, or
+  // its sheet 3 didn't match the expected layout.
+  stockMonthTgp: number | null;
+  srLinesTotalPct: number | null;
+
   // External Sales MTD (Rs) = the branch's cumulative Part Sale Report
   // "External Sales" filter alone (every row on an `A`-type bill, plus
   // matching `F`-type returns — see part-sale/parse.ts). BA Tool's SPR
@@ -131,6 +141,15 @@ export type BranchReport = {
   // conservative rule as GUS Parts MTD above — 0 instead for a Body &
   // Paint-only branch (see BODY_PAINT_ONLY_BRANCHES below).
   externalSalesMtd: number | null;
+
+  // BA Tool's raw "SPR External" column, MTD-cumulative as reported each day
+  // — the figure externalSalesMtd above replaced on 2026-09-15 (see its own
+  // comment). Kept here as a separate, clearly-labelled field only for
+  // branches/views that want to see BA Tool's own number alongside our Part
+  // Sale Report one (added 2026-09-24 for the Central regional dashboard,
+  // which tracks both) — never folded into totalRevenueStreamMtd or any
+  // other total.
+  sprExternalMtd: number | null;
 
   // Scrap and used-oil revenue (Rs, without tax) — sum of PDF bill taxable
   // values for this branch, split by the category chosen on upload. Always a
@@ -355,6 +374,7 @@ function mergeOnlineStoreBranches(rows: BaToolBranchRow[]): { rows: BaToolBranch
  */
 function computeBranchReport(
   branch: string,
+  date: string,
   today: BaToolBranchRow | undefined,
   yesterday: BaToolBranchRow | undefined,
   serviceInfoToday: ServiceInfoSnapshot | undefined,
@@ -365,7 +385,8 @@ function computeBranchReport(
   scom205Today: Scom205Snapshot | undefined,
   billRevenue: { scrapRevenue: number; usedOilRevenue: number },
   billRevenueForTheDay: { scrapRevenue: number; usedOilRevenue: number },
-  cancelledAccessoriesAdjustment: CancelledAccessoriesAdjustment | undefined
+  cancelledAccessoriesAdjustment: CancelledAccessoriesAdjustment | undefined,
+  crossMonthReplacementAdjustment: CrossMonthReplacementAdjustment | undefined
 ): BranchReport {
   const y = (key: keyof BaToolBranchRow) => (yesterday ? num(yesterday[key] as number | string | null) : null);
   const t = (key: keyof BaToolBranchRow) => (today ? num(today[key] as number | string | null) : null);
@@ -395,20 +416,27 @@ function computeBranchReport(
   // Labour is 0 (not "unknown"), and it never files the SSRV089-General /
   // Part Sale reports the normal null-guards wait for.
   const bodyPaintOnly = BODY_PAINT_ONLY_BRANCHES.has(branch);
+  const targetOverride = targetOverrideFor(branch, date);
 
+  // Cross-month-replacement adjustment (2026-09-24, KT01A only for now — see
+  // cross-month-replacement.ts): a cancelled invoice's job re-invoiced in a
+  // later month than its own revenue month has its replacement's value
+  // excluded from the month it landed in, since the job's revenue is already
+  // frozen in its original (earlier) month's figures.
   const gusPartsMtd = bodyPaintOnly
     ? 0
     : scom205Today && accessoriesPartSaleMtd !== null
-      ? scom205Today.totals.gusSpRevMtd - accessoriesPartSaleMtd
+      ? scom205Today.totals.gusSpRevMtd - accessoriesPartSaleMtd - (crossMonthReplacementAdjustment?.partSale ?? 0)
       : null;
   const gusLabourMtd = bodyPaintOnly
     ? 0
     : scom205Today && accessoriesLabourSaleMtd !== null
-      ? scom205Today.totals.gusLabRevMtd - accessoriesLabourSaleMtd
+      ? scom205Today.totals.gusLabRevMtd - accessoriesLabourSaleMtd - (crossMonthReplacementAdjustment?.labourSale ?? 0)
       : null;
   const bpuPartsMtd = scom205Today?.totals.bpuSpRevMtd ?? null;
   const bpuLabourMtd = scom205Today?.totals.bpuLabRevMtd ?? null;
   const externalSalesMtd = externalSalesFromPartsMtd ?? (bodyPaintOnly ? 0 : null);
+  const sprExternalMtd = t("sprExternal");
 
   return {
     branch,
@@ -445,15 +473,15 @@ function computeBranchReport(
     cpuForTheDay: delta(t("cpus"), y("cpus")),
     cpuAchievementForTheMonth: t("cpus"),
 
-    bpuTarget: t("bpusTarget"),
+    bpuTarget: targetOverride?.bpuTarget ?? t("bpusTarget"),
     bpuForTheDay: delta(t("bpus"), y("bpus")),
     bpuAchievementForTheMonth: t("bpus"),
 
-    offtakeTarget: t("spoDealerTarget"),
+    offtakeTarget: targetOverride?.offtakeTarget ?? t("spoDealerTarget"),
     offtakeForThePreviousDay: delta(t("spoDealer"), y("spoDealer")),
     offtakeAchievementForTheMonth: t("spoDealer"),
 
-    partsRetailTarget: t("sprInternalTarget"),
+    partsRetailTarget: targetOverride?.partsRetailTarget ?? t("sprInternalTarget"),
     partsRetailForTheDay: delta(t("sprInternal"), y("sprInternal")),
     partsRetailAchievementForTheMonth,
 
@@ -494,7 +522,11 @@ function computeBranchReport(
     bpuPartsMtd,
     bpuLabourMtd,
 
+    stockMonthTgp: scom205Today?.stockAndServiceRate?.stockMonthTgp ?? null,
+    srLinesTotalPct: scom205Today?.stockAndServiceRate?.srLinesTotalPct ?? null,
+
     externalSalesMtd,
+    sprExternalMtd,
 
     scrapRevenueForTheDay: billRevenueForTheDay.scrapRevenue,
     scrapRevenueMtd: billRevenue.scrapRevenue,
@@ -571,6 +603,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     billRevenueList,
     billRevenueDayList,
     cancelledAccessoriesAdjustment,
+    crossMonthReplacementAdjustment,
   ] = await Promise.all([
     loadPreviousSnapshot(date),
     loadCombinedServiceInfoSnapshotsForDate(date),
@@ -582,6 +615,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     loadBillRevenueByBranchForMonth(date.slice(0, 7)),
     loadBillRevenueByBranchForDate(date),
     loadCancelledAccessoriesAdjustmentForMonth(date),
+    loadCrossMonthReplacementAdjustmentForMonth(date),
   ]);
 
   // Only needed for the !today branch-discovery set below — derived from the
@@ -642,6 +676,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     const branches = [...branchesWithData].sort().map((branch) =>
       computeBranchReport(
         branch,
+        date,
         undefined,
         undefined,
         serviceInfoToday.get(branch),
@@ -652,7 +687,8 @@ export async function buildReport(date: string): Promise<Report | null> {
         scom205Today.get(branch),
         billRevenue.get(branch) ?? NO_BILL_REVENUE,
         billRevenueDay.get(branch) ?? NO_BILL_REVENUE,
-        cancelledAccessoriesAdjustment.get(branch)
+        cancelledAccessoriesAdjustment.get(branch),
+        crossMonthReplacementAdjustment.get(branch)
       )
     );
 
@@ -703,6 +739,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     const yesterdayRow = previousBranches?.find((b) => b.branch === branchRow.branch);
     const branchReport = computeBranchReport(
       branchRow.branch,
+      date,
       branchRow,
       yesterdayRow,
       serviceInfoToday.get(branchRow.branch),
@@ -713,7 +750,8 @@ export async function buildReport(date: string): Promise<Report | null> {
       scom205Today.get(branchRow.branch),
       billRevenue.get(branchRow.branch) ?? NO_BILL_REVENUE,
       billRevenueDay.get(branchRow.branch) ?? NO_BILL_REVENUE,
-      cancelledAccessoriesAdjustment.get(branchRow.branch)
+      cancelledAccessoriesAdjustment.get(branchRow.branch),
+      crossMonthReplacementAdjustment.get(branchRow.branch)
     );
     const onlineStoreBreakdown = onlineStoreBreakdowns.get(branchRow.branch);
     return onlineStoreBreakdown ? { ...branchReport, onlineStoreBreakdown } : branchReport;

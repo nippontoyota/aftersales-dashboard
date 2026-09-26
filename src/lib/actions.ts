@@ -18,7 +18,13 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   }
 
   await createSession(admin.username);
-  redirect("/upload");
+  // HQ admins land on the Executive Overview (2026-09-24, at the user's
+  // request — the upload page isn't what they want to see first). Every
+  // other role keeps landing on /upload, unchanged; /dashboard itself
+  // already redirects vp_service/ceo/accounts to their own page and anyone
+  // without canViewDashboard back to /upload, so this only actually changes
+  // behavior for the "hq" role.
+  redirect(admin.role === "hq" ? "/dashboard" : "/upload");
 }
 
 export async function logoutAction() {

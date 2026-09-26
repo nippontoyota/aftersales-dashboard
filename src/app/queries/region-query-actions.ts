@@ -2,8 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
-import { REGIONS, type RegionName } from "@/lib/regions";
-import { createRegionQuery, replyToRegionQuery, setRegionQueryStatus } from "@/lib/region-queries/store";
+import { REGIONS, regionForBranch, type RegionName } from "@/lib/regions";
+import {
+  createRegionQuery,
+  listRegionQueriesForBranch,
+  listRegionQueriesForRegion,
+  replyToRegionQuery,
+  setRegionQueryStatus,
+  type RegionQuery,
+} from "@/lib/region-queries/store";
 
 export type RegionQueryState = { error: string | null; ok: boolean };
 
@@ -70,12 +77,44 @@ export async function raiseRegionQueryToRegionAction(_prev: RegionQueryState, fo
   return { error: null, ok: true };
 }
 
-/** Either side replying — HQ answering a "to_hq" thread, or a regional
- * manager answering a "to_region" one. The store doesn't care which; the
- * caller only ever sees the reply form on threads addressed to them. */
-export async function replyRegionQueryAction(_prev: RegionQueryState, formData: FormData): Promise<RegionQueryState> {
+/** HQ or a regional manager raises a question to one specific branch
+ * (2026-09-26) — private to that branch, never shown to the regional
+ * manager (see region-queries/store.ts). A regional manager is locked to
+ * their own branches; HQ picks any branch in any region. */
+export async function raiseRegionQueryToBranchAction(_prev: RegionQueryState, formData: FormData): Promise<RegionQueryState> {
   const admin = await getCurrentAdmin();
   if (admin?.role !== "hq" && admin?.role !== "regional") return { error: "Not allowed.", ok: false };
+
+  const branch = String(formData.get("branch") ?? "").trim();
+  if (!branch) return { error: "Pick a branch.", ok: false };
+
+  const region = regionForBranch(branch);
+  if (!region) return { error: "Unknown branch.", ok: false };
+  if (admin.role === "regional" && admin.region !== region) return { error: "That branch isn't in your region.", ok: false };
+
+  const note = String(formData.get("note") ?? "").trim();
+  if (!note) return { error: "Type your question first.", ok: false };
+
+  await createRegionQuery({
+    createdBy: admin.username,
+    direction: "to_branch",
+    region,
+    contextDate: optionalField(formData, "date"),
+    contextBranch: branch,
+    note,
+  });
+
+  revalidatePath("/queries");
+  return { error: null, ok: true };
+}
+
+/** Whoever the thread is addressed to replying — HQ answering "to_hq",
+ * a regional manager answering "to_region", or a branch admin answering
+ * "to_branch". The store doesn't care which; the caller only ever sees the
+ * reply form on threads addressed to them. */
+export async function replyRegionQueryAction(_prev: RegionQueryState, formData: FormData): Promise<RegionQueryState> {
+  const admin = await getCurrentAdmin();
+  if (admin?.role !== "hq" && admin?.role !== "regional" && admin?.role !== "branch") return { error: "Not allowed.", ok: false };
 
   const id = Number(formData.get("id"));
   const reply = String(formData.get("reply") ?? "").trim();
@@ -88,10 +127,11 @@ export async function replyRegionQueryAction(_prev: RegionQueryState, formData: 
   return { error: null, ok: true };
 }
 
-/** The original asker closes (or reopens) their own thread. */
+/** The original asker (or a branch admin managing their own to_branch
+ * thread) closes/reopens it. */
 export async function setRegionQueryStatusAction(_prev: RegionQueryState, formData: FormData): Promise<RegionQueryState> {
   const admin = await getCurrentAdmin();
-  if (admin?.role !== "hq" && admin?.role !== "regional") return { error: "Not allowed.", ok: false };
+  if (admin?.role !== "hq" && admin?.role !== "regional" && admin?.role !== "branch") return { error: "Not allowed.", ok: false };
 
   const id = Number(formData.get("id"));
   const status = String(formData.get("status") ?? "");
@@ -101,4 +141,26 @@ export async function setRegionQueryStatusAction(_prev: RegionQueryState, formDa
   await setRegionQueryStatus(id, status);
   revalidatePath("/queries");
   return { error: null, ok: true };
+}
+
+/** The login pop-up's data source (2026-09-26) — every query still awaiting
+ * this viewer's own action, right now: a branch's own open to_branch
+ * threads, or a regional manager's open to_region / answered-awaiting-close
+ * to_hq threads (the exact same conditions as countActionableForRegion/
+ * countActionableForBranch, just returning the rows instead of a count).
+ * Empty for every other role — HQ isn't nagged by this pop-up, they already
+ * live on this page. */
+export async function getMyOpenQueriesForPopupAction(): Promise<RegionQuery[]> {
+  const admin = await getCurrentAdmin();
+  if (!admin) return [];
+
+  if (admin.role === "branch") {
+    const rows = await listRegionQueriesForBranch(admin.branch);
+    return rows.filter((q) => q.status === "open");
+  }
+  if (admin.role === "regional") {
+    const rows = await listRegionQueriesForRegion(admin.region);
+    return rows.filter((q) => (q.direction === "to_region" && q.status === "open") || (q.direction === "to_hq" && q.status === "answered"));
+  }
+  return [];
 }

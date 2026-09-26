@@ -83,10 +83,16 @@ create table if not exists vp_flags (
 create index if not exists vp_flags_status_idx on vp_flags (status, created_at desc);
 create index if not exists vp_flags_branch_idx on vp_flags (context_branch) where context_branch is not null;
 
--- HQ ↔ Regional Manager query threads — bidirectional, unlike vp_flags
--- (VP → HQ only). `direction` says who asked: 'to_hq' means the regional
--- manager for `region` raised it (mirrors vp_flags' shape); 'to_region'
--- means HQ raised it, addressed to that region's manager. One question +
+-- HQ ↔ Regional Manager (↔ Branch, since 2026-09-26) query threads —
+-- bidirectional, unlike vp_flags (VP → HQ only). `direction` says who
+-- asked/who it's addressed to: 'to_hq' means the regional manager for
+-- `region` raised it (mirrors vp_flags' shape); 'to_region' means HQ raised
+-- it, addressed to that region's manager; 'to_branch' means HQ or that
+-- region's manager raised it addressed to one specific branch admin
+-- (`context_branch`, required for this direction) — private to that
+-- branch, never shown in the region's own list/badge (see
+-- listRegionQueriesForRegion/countActionableForRegion in
+-- region-queries/store.ts, which explicitly exclude it). One question +
 -- one reply per thread, same open/answered/closed lifecycle as vp_flags.
 -- See src/lib/region-queries/store.ts.
 create table if not exists region_queries (
@@ -102,9 +108,10 @@ create table if not exists region_queries (
   reply text,
   replied_by text references admins(username),
   replied_at timestamptz,
-  constraint region_queries_direction_check check (direction in ('to_hq', 'to_region')),
+  constraint region_queries_direction_check check (direction in ('to_hq', 'to_region', 'to_branch')),
   constraint region_queries_region_check check (region in ('North', 'Central', 'South')),
-  constraint region_queries_status_check check (status in ('open', 'answered', 'closed'))
+  constraint region_queries_status_check check (status in ('open', 'answered', 'closed')),
+  constraint region_queries_to_branch_requires_branch check (direction <> 'to_branch' or context_branch is not null)
 );
 create index if not exists region_queries_region_idx on region_queries (region, status, created_at desc);
 create index if not exists region_queries_status_idx on region_queries (status, created_at desc);
@@ -264,6 +271,15 @@ alter table part_sale_snapshots add column if not exists diy_revenue numeric not
 -- the user 2026-08-31.
 alter table service_info_snapshots add column if not exists vas_revenue numeric not null default 0;
 
+-- scom205 sheet 3 ("Service Parts Sales & Stock"): Stock Month row's TGP
+-- (Rs.) value, and the Service Rate (S/R) table's Total row's S/R Lines (%)
+-- — added after scom205_snapshots already existed in production, for the
+-- Branch Performance page (see src/lib/scom205/parse.ts). Nullable: older
+-- rows were saved before this sheet was parsed, and a given upload's sheet 3
+-- can fail to match the expected layout.
+alter table scom205_snapshots add column if not exists stock_month_tgp numeric;
+alter table scom205_snapshots add column if not exists sr_lines_total_pct numeric;
+
 -- A date is "published" once HQ has reviewed the day's compiled dashboard
 -- and explicitly released it — only then can branch admins see the full
 -- company-wide dashboard for that date (2026-08-31, at the user's request:
@@ -412,7 +428,11 @@ create index if not exists idx_bill_uploads_branch_invoice_date
 -- and removes nothing — a cancellation is terminal (it never un-cancels),
 -- so a partial-range upload accumulates and a re-upload just refreshes.
 -- `month` is each row's own cancel-date month. invoice_cancellation_files
--- keeps the latest uploaded PDF per (branch, month).
+-- keeps every uploaded PDF per (branch, month) — a branch uploading
+-- incrementally through the month gets one file per round, not just the
+-- latest (see the alter table below; fixed 2026-09-23 after a branch's
+-- earlier upload silently vanished from the PDF link when a later,
+-- smaller catch-up file overwrote it).
 create table if not exists invoice_cancellations (
   doc_no          text        primary key,           -- the cancelled invoice number (TXA…/BSA…/INA…/ASA…)
   branch          text        not null,
@@ -445,19 +465,29 @@ create index if not exists idx_invoice_cancellations_ref_doc
 -- Added after the table already existed in production.
 alter table invoice_cancellations add column if not exists cancel_at timestamptz;
 
--- Retains the uploaded PDF bytes, one per (branch, month), so the source is
--- there to look at later — same pattern as raw_report_uploads. Kept in its
--- own table rather than a bytea column on invoice_cancellations because that
--- table has one row PER cancelled invoice, not one per file.
+-- Retains the uploaded PDF bytes, one row PER UPLOAD (not per branch/month —
+-- see the id primary key below), so the source is there to look at later —
+-- same pattern as raw_report_uploads. Kept in its own table rather than a
+-- bytea column on invoice_cancellations because that table has one row PER
+-- cancelled invoice, not one per file.
 create table if not exists invoice_cancellation_files (
+  id               bigserial   primary key,
   branch           text        not null,
   month            text        not null,
   uploaded_at      timestamptz not null,
   uploaded_by      text        not null,
   source_file_name text        not null,
-  file_data        bytea       not null,
-  primary key (branch, month)
+  file_data        bytea       not null
 );
+create index if not exists idx_invoice_cancellation_files_branch_month
+  on invoice_cancellation_files (branch, month);
+-- Migrated 2026-09-23 from one row per (branch, month) — keyed so the
+-- latest upload silently overwrote every earlier one's file — to one row
+-- per upload, keyed by its own id. Safe to re-run: drops+recreates the same
+-- default-named pkey each time rather than erroring if already migrated.
+alter table invoice_cancellation_files add column if not exists id bigserial;
+alter table invoice_cancellation_files drop constraint if exists invoice_cancellation_files_pkey;
+alter table invoice_cancellation_files add primary key (id);
 
 -- Report holidays (2026-09-09, at the user's request). HQ flags a date as a
 -- non-working day; the branch upload page then computes ONE report date for
@@ -492,5 +522,52 @@ create table if not exists incentive_slab_targets (
   uploaded_at       timestamptz not null,
   uploaded_by       text        not null,
   source_file_name  text        not null,
+  primary key (month, branch)
+);
+
+-- Region revenue targets, per branch per calendar month (2026-09-24, at the
+-- Central RM's request, to replace his personal Excel tracker). Unlike
+-- incentive_slab_targets above (HQ-uploaded), these are set directly by a
+-- regional manager for their own region's branches — GS/BP/Ext Sales are
+-- HQ-communicated figures with no BA Tool/SCOM205 field of their own, so
+-- there's nothing to upload from a file; a regional manager just types them
+-- in for their branches. Month-scoped and full-row-replace-on-save (same
+-- shape as incentive_slab_targets) so a past month's dashboard keeps
+-- reflecting what was actually targeted that month.
+create table if not exists region_revenue_targets (
+  month       text        not null, -- 'YYYY-MM'
+  branch      text        not null,
+  gs_target   numeric     not null,
+  bp_target   numeric     not null,
+  ext_target  numeric     not null,
+  set_by      text        not null,
+  set_at      timestamptz not null default now(),
+  primary key (month, branch)
+);
+
+-- Central region's own "TKM Targets" tracker (2026-09-26, replacing the
+-- Central RM's separate BusinessTracker Excel for these 7 metrics) — a
+-- second, complementary target table alongside region_revenue_targets
+-- above, not a replacement: that one covers GS/BP/Ext Sales (the RM's own
+-- higher-level figures); this one covers TKM's own official target
+-- categories (BPU, Offtake, SPR Internal, PM+OC, Battery, Tyre — all six
+-- already have their own target field in ba_tool_snapshots, sourced there
+-- for closed months) plus SPR External, which has no BA Tool target field
+-- at all and is always set here directly (its *achieved* figure still
+-- comes live from Part Sale Report's external_sales, same as the rest of
+-- the app — only the target has nowhere else to come from). Month-scoped,
+-- full-row upsert per branch, same shape as region_revenue_targets.
+create table if not exists central_metric_targets (
+  month                 text        not null, -- 'YYYY-MM'
+  branch                text        not null,
+  bpu_target            numeric     not null,
+  offtake_target        numeric     not null,
+  spr_internal_target   numeric     not null,
+  spr_external_target   numeric     not null,
+  pm_oc_target          numeric     not null,
+  battery_target        numeric     not null,
+  tyre_target           numeric     not null,
+  set_by                text        not null,
+  set_at                timestamptz not null default now(),
   primary key (month, branch)
 );
