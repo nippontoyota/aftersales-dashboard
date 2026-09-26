@@ -25,7 +25,7 @@ const NAV_ITEMS = [
   // alwaysVisible: true — branch admins see their own bills and cancellations
   // regardless of whether the latest date is published (these pages are about
   // their own uploads, not the company-wide dashboard state).
-  { href: "/bills", label: "Bills", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true },
+  { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true },
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false },
 ];
@@ -61,7 +61,7 @@ const CENTRAL_NAV_ITEMS = [
   { href: "/dashboard", label: "My Region", key: "dashboard" as const },
   { href: "/dashboard/central/tkm-targets", label: "TKM Targets", key: "central-tkm-targets" as const },
   { href: "/queries", label: "Queries", key: "queries" as const },
-  { href: "/bills", label: "Bills", key: "bills" as const },
+  { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
   { href: "/dashboard/central/set-targets", label: "Set Targets", key: "central-set-targets" as const },
 ];
