@@ -36,7 +36,7 @@ export function StockServiceRateTable({ branches }: { branches: BranchReport[] }
   const rows = [...branches].sort(regionSort);
   return (
     <SectionTable
-      title="Stock Month & Service Rate — from Monthly KPI Report"
+      title="Spare Parts KPI"
       subtitle="Stock Month (TGP) and Total S/R Lines (%), as filed"
       branches={rows}
       columns={COLUMNS}
