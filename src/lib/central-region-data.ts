@@ -41,7 +41,7 @@ export const CENTRAL_BRANCH_LABELS: Record<CentralBranchCode, string> = {
   KY01A: "Kayamkulam",
 };
 
-function centralBranchesForMonth(month: string): CentralBranchCode[] {
+export function centralBranchesForMonth(month: string): CentralBranchCode[] {
   return month >= CO01E_SPLIT_MONTH ? [...CENTRAL_BRANCH_ORDER] : CENTRAL_BRANCH_ORDER.filter((b) => b !== "CO01E");
 }
 

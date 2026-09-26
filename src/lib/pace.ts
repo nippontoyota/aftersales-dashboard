@@ -22,6 +22,42 @@ export type Pace = {
   projectedAchievementRatio: number | null;
 };
 
+/**
+ * Same shape as Pace above, but paced over the calendar YEAR instead of the
+ * month — "at this rate, where do we land by December" (2026-09-26, for the
+ * Central region's TKM Targets build). `achievedYtd` is the sum of every
+ * closed month's final achieved figure plus the current month's live MTD
+ * figure; `annualTarget` is the sum of all 12 months' own targets. Treats
+ * the current month as fully "elapsed" for the run-rate average (same
+ * convention as Pace treating today as a whole elapsed day) — simple linear
+ * month-based pacing, not seasonally weighted.
+ */
+export type AnnualPace = {
+  monthsElapsed: number;
+  monthsInYear: number;
+  monthsRemaining: number;
+  runRatePerMonth: number | null;
+  requiredRatePerMonth: number | null;
+  gap: number | null;
+  projectedYearEnd: number | null;
+  projectedAchievementRatio: number | null;
+};
+
+export function computeAnnualPace(date: string, achievedYtd: number | null, annualTarget: number | null): AnnualPace {
+  const d = new Date(`${date}T00:00:00Z`);
+  const monthsElapsed = d.getUTCMonth() + 1;
+  const monthsInYear = 12;
+  const monthsRemaining = Math.max(0, monthsInYear - monthsElapsed);
+
+  const runRatePerMonth = achievedYtd !== null && monthsElapsed > 0 ? achievedYtd / monthsElapsed : null;
+  const gap = achievedYtd !== null && annualTarget !== null ? annualTarget - achievedYtd : null;
+  const requiredRatePerMonth = gap === null ? null : monthsRemaining > 0 ? gap / monthsRemaining : gap;
+  const projectedYearEnd = runRatePerMonth !== null ? runRatePerMonth * monthsInYear : null;
+  const projectedAchievementRatio = projectedYearEnd !== null && annualTarget !== null && annualTarget !== 0 ? projectedYearEnd / annualTarget : null;
+
+  return { monthsElapsed, monthsInYear, monthsRemaining, runRatePerMonth, requiredRatePerMonth, gap, projectedYearEnd, projectedAchievementRatio };
+}
+
 export function computePace(date: string, actual: number | null, target: number | null): Pace {
   const d = new Date(`${date}T00:00:00Z`);
   const daysElapsed = d.getUTCDate();

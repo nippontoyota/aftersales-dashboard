@@ -76,6 +76,7 @@ export default async function CancellationsPage({
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}
       isRegional={admin.role === "regional"}
+      centralNav={admin.role === "regional" && admin.region === "Central"}
       queriesBadge={nav.queriesBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}

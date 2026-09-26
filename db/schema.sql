@@ -537,3 +537,30 @@ create table if not exists region_revenue_targets (
   set_at      timestamptz not null default now(),
   primary key (month, branch)
 );
+
+-- Central region's own "TKM Targets" tracker (2026-09-26, replacing the
+-- Central RM's separate BusinessTracker Excel for these 7 metrics) — a
+-- second, complementary target table alongside region_revenue_targets
+-- above, not a replacement: that one covers GS/BP/Ext Sales (the RM's own
+-- higher-level figures); this one covers TKM's own official target
+-- categories (BPU, Offtake, SPR Internal, PM+OC, Battery, Tyre — all six
+-- already have their own target field in ba_tool_snapshots, sourced there
+-- for closed months) plus SPR External, which has no BA Tool target field
+-- at all and is always set here directly (its *achieved* figure still
+-- comes live from Part Sale Report's external_sales, same as the rest of
+-- the app — only the target has nowhere else to come from). Month-scoped,
+-- full-row upsert per branch, same shape as region_revenue_targets.
+create table if not exists central_metric_targets (
+  month                 text        not null, -- 'YYYY-MM'
+  branch                text        not null,
+  bpu_target            numeric     not null,
+  offtake_target        numeric     not null,
+  spr_internal_target   numeric     not null,
+  spr_external_target   numeric     not null,
+  pm_oc_target          numeric     not null,
+  battery_target        numeric     not null,
+  tyre_target           numeric     not null,
+  set_by                text        not null,
+  set_at                timestamptz not null default now(),
+  primary key (month, branch)
+);

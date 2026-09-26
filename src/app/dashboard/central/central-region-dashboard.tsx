@@ -4,7 +4,6 @@ import { eyebrow } from "@/lib/ui";
 import { tglossText } from "@/components/tgloss-text";
 import { DraftWarning } from "@/components/draft-warning";
 import { DateSelect } from "../date-select";
-import { TargetsForm } from "./targets-form";
 import { IncentiveSlabIndicator } from "../incentive-slab-indicator";
 
 const STATUS_LABEL: Record<CentralMetricStatus, string> = { achieved: "Achieved", onTrack: "On Track", behind: "Behind", unknown: "—" };
@@ -80,7 +79,6 @@ export function CentralRegionDashboard({
   uploadedAt: string;
   isPublished: boolean;
 }) {
-  const month = view.date.slice(0, 7);
   const columns = [
     ...view.branches,
     {
@@ -188,12 +186,6 @@ export function CentralRegionDashboard({
         </table>
       </div>
 
-      <div className="mt-4">
-        <TargetsForm
-          month={month}
-          branches={view.branches.map((r) => ({ branch: r.branch, label: r.label, gsTarget: r.gs.target, bpTarget: r.bp.target, extTarget: r.ext.target }))}
-        />
-      </div>
     </div>
   );
 }
