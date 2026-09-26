@@ -63,7 +63,8 @@ async function TkmTargetsContent({ searchParams }: { searchParams: Promise<{ dat
   }
 
   const branches = report.branches.filter((b) => CENTRAL_METRIC_BRANCHES.includes(b.branch));
-  const metrics = await loadCentralMetricTargetsView(branches, date);
+  const co01eReport = report.branches.find((b) => b.branch === "CO01E");
+  const metrics = await loadCentralMetricTargetsView(branches, date, co01eReport);
 
   return (
     <div className="mx-auto max-w-[1400px] p-6">

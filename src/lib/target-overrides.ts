@@ -17,7 +17,7 @@
  * applying this split to earlier dates could misattribute target that was
  * legitimately CO01B's alone at the time.
  */
-const TARGET_OVERRIDE_START_DATE = "2026-09-01";
+export const TARGET_OVERRIDE_START_DATE = "2026-09-01";
 
 export type BranchTargetOverride = {
   bpuTarget: number;

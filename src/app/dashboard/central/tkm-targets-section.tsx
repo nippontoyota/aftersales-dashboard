@@ -2,6 +2,7 @@ import type { CentralMetricView } from "@/lib/central-metric-targets/view-data";
 import { CENTRAL_BRANCH_LABELS } from "@/lib/central-region-data";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { MonthlyBreakdownTable } from "./monthly-breakdown-table";
 
 const TONE_BAR = { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad", neutral: "bg-border-strong" } as const;
 const TONE_CHIP = {
@@ -121,6 +122,7 @@ export function TkmTargetsSection({ metrics }: { metrics: CentralMetricView[] })
         <CollapsibleCard key={metric.key} title={metric.label} subtitle="Target / Achieved · MTD pace · Year pace · Rank" defaultOpen>
           <div className="p-3">
             <MetricCard metric={metric} />
+            <MonthlyBreakdownTable metric={metric} branchLabels={CENTRAL_BRANCH_LABELS} />
           </div>
         </CollapsibleCard>
       ))}

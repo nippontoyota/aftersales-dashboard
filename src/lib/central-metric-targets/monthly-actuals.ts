@@ -1,4 +1,5 @@
 import { pool } from "../db";
+import { TARGET_OVERRIDE_START_DATE } from "../target-overrides";
 
 /** One past month's FINAL achieved figure for all 7 metrics, for one branch
  * — "final" meaning the last BA Tool / Part Sale Report snapshot dated
@@ -17,7 +18,24 @@ export type CentralMetricActuals = {
   tyreAchieved: number | null;
 };
 
-export async function loadCentralMonthlyActuals(branch: string, month: string): Promise<CentralMetricActuals> {
+function sumOrNull(values: (number | null)[]): number | null {
+  const present = values.filter((v): v is number => v !== null);
+  return present.length ? present.reduce((a, b) => a + b, 0) : null;
+}
+
+function addActuals(a: CentralMetricActuals, b: CentralMetricActuals): CentralMetricActuals {
+  return {
+    bpuAchieved: sumOrNull([a.bpuAchieved, b.bpuAchieved]),
+    offtakeAchieved: sumOrNull([a.offtakeAchieved, b.offtakeAchieved]),
+    sprInternalAchieved: sumOrNull([a.sprInternalAchieved, b.sprInternalAchieved]),
+    sprExternalAchieved: sumOrNull([a.sprExternalAchieved, b.sprExternalAchieved]),
+    pmOcAchieved: sumOrNull([a.pmOcAchieved, b.pmOcAchieved]),
+    batteryAchieved: sumOrNull([a.batteryAchieved, b.batteryAchieved]),
+    tyreAchieved: sumOrNull([a.tyreAchieved, b.tyreAchieved]),
+  };
+}
+
+async function loadOneBranchMonthlyActuals(branch: string, month: string): Promise<CentralMetricActuals> {
   const [baToolRow, extRow] = await Promise.all([
     pool.query<{
       pm: string | null;
@@ -51,4 +69,16 @@ export async function loadCentralMonthlyActuals(branch: string, month: string): 
     batteryAchieved: r ? Number(r.battery_actuals) : null,
     tyreAchieved: r ? Number(r.tyre_actual) : null,
   };
+}
+
+/** CO01B/CO01E fold-in (2026-09-26, at the RM's request) — before
+ * TARGET_OVERRIDE_START_DATE, CO01B's TKM target already lumps in CO01E's
+ * whole share (see target-overrides.ts), but its achieved figures never did.
+ * Folding CO01E's achieved into CO01B's for those months keeps the two
+ * sides of the comparison scoped the same way, for all 7 metrics. */
+export async function loadCentralMonthlyActuals(branch: string, month: string): Promise<CentralMetricActuals> {
+  const own = await loadOneBranchMonthlyActuals(branch, month);
+  if (branch !== "CO01B" || month >= TARGET_OVERRIDE_START_DATE.slice(0, 7)) return own;
+  const co01e = await loadOneBranchMonthlyActuals("CO01E", month);
+  return addActuals(own, co01e);
 }
