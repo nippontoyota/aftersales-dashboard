@@ -169,7 +169,7 @@ export function parseServiceInfoWorkbook(buffer: Buffer, branch: string, staffNa
     const desc = normalize(row[JOB_DESC_COLUMN]);
     if (desc === WHEEL_BALANCING_DESC) counts.wheelBalancing++;
     else if (desc === WHEEL_ALIGNMENT_DESC) counts.wheelAlignment++;
-    else if (isBrakeSkimmingDesc(desc)) brakeSkimmingRos.add(normalize(row[JOB_ORDER_NO_COLUMN]) || ` row-${rowIndex}`);
+    else if (isBrakeSkimmingDesc(desc)) brakeSkimmingRos.add(normalize(row[JOB_ORDER_NO_COLUMN]) || ` row-${rowIndex}`);
     else if (desc === EVAPORATOR_CLEANING_DESC) counts.evaporatorCleaning++;
 
     const jobCode = normalize(row[JOB_CODE_COLUMN]);
