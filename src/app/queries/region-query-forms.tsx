@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import {
   raiseRegionQueryAction,
+  raiseRegionQueryToBranchAction,
   raiseRegionQueryToRegionAction,
   replyRegionQueryAction,
   setRegionQueryStatusAction,
@@ -137,6 +138,86 @@ export function RaiseToHqForm({ branches }: { branches: string[] }) {
             className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
           >
             {pending ? "Sending…" : "Send to HQ"}
+          </button>
+        </div>
+      </form>
+    </ComposerCard>
+  );
+}
+
+/** HQ or a regional manager raising a question to one specific branch
+ * (2026-09-26) — private to that branch. `regions` drives the branch list;
+ * when it has just one entry (a regional manager, their own region) the
+ * region selector is skipped entirely — only `branch` is ever submitted,
+ * the server derives the region from it. */
+export function RaiseToBranchForm({ regions }: { regions: { region: string; branches: string[] }[] }) {
+  const [open, setOpen] = useState(false);
+  const [state, action, pending] = useActionState(raiseRegionQueryToBranchAction, INIT);
+  const [region, setRegion] = useState(regions[0]?.region ?? "");
+  const branches = regions.find((r) => r.region === region)?.branches ?? [];
+  const [branch, setBranch] = useState(branches[0] ?? "");
+
+  useEffect(() => {
+    if (state.ok) {
+      const t = setTimeout(() => setOpen(false), 1600);
+      return () => clearTimeout(t);
+    }
+  }, [state.ok]);
+
+  if (!open) return <ComposerButton label="Ask a specific branch" onClick={() => setOpen(true)} />;
+
+  if (state.ok) {
+    return (
+      <div className="rounded-lg border border-good/30 bg-good-soft px-4 py-3 text-sm text-good">
+        Sent to {branch} — it&apos;ll show up in their own Queries page, and they&apos;ll see a reminder next time they log in.
+      </div>
+    );
+  }
+
+  return (
+    <ComposerCard label="Ask a specific branch" onClose={() => setOpen(false)}>
+      <form action={action} className="space-y-3">
+        {regions.length > 1 ? (
+          <select
+            value={region}
+            onChange={(e) => {
+              setRegion(e.target.value);
+              setBranch(regions.find((r) => r.region === e.target.value)?.branches[0] ?? "");
+            }}
+            className={inputClass}
+          >
+            {regions.map((r) => (
+              <option key={r.region} value={r.region}>
+                {r.region}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <div className="grid grid-cols-2 gap-2">
+          <select name="branch" value={branch} onChange={(e) => setBranch(e.target.value)} className={inputClass}>
+            {branches.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+          <input type="date" name="date" className={inputClass} />
+        </div>
+        <textarea
+          name="note"
+          required
+          rows={3}
+          placeholder="What would you like this branch to check or fix?"
+          className={inputClass}
+        />
+        {state.error ? <p className="text-[12px] text-bad">{state.error}</p> : null}
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={pending || !branch}
+            className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+          >
+            {pending ? "Sending…" : "Send"}
           </button>
         </div>
       </form>

@@ -64,6 +64,7 @@ export default async function DashboardPage({
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}
       isRegional={admin.role === "regional"}
+      isBranch={admin.role === "branch"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
       queriesBadge={nav.queriesBadge}
       dashboardLabel={nav.dashboardLabel}

@@ -33,13 +33,16 @@ export function RegionQueryThread({
   viewerCanReply: boolean;
   viewerCanManage: boolean;
 }) {
-  const askerLabel = query.direction === "to_hq" ? `${query.region} regional manager` : "HQ";
-  const replierLabel = query.direction === "to_hq" ? "HQ" : `${query.region} regional manager`;
+  const askerLabel =
+    query.direction === "to_hq" ? `${query.region} regional manager` : query.direction === "to_region" ? "HQ" : "HQ or your regional manager";
+  const replierLabel =
+    query.direction === "to_hq" ? "HQ" : query.direction === "to_region" ? `${query.region} regional manager` : query.contextBranch ?? "the branch";
 
   const context = [
     query.contextDate && `Date ${query.contextDate}`,
-    query.contextBranch && `Branch ${query.contextBranch}`,
+    query.direction !== "to_branch" && query.contextBranch && `Branch ${query.contextBranch}`,
     query.direction === "to_region" && `To ${query.region}`,
+    query.direction === "to_branch" && `To ${query.contextBranch}`,
   ].filter(Boolean);
 
   return (

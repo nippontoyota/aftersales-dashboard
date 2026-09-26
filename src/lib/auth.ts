@@ -14,6 +14,14 @@ import { findAdmin, verifyAdminPassword, type AdminAccount } from "./admin-store
 const SESSION_COOKIE = "admin_session";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 
+/** Non-httpOnly, unsigned — readable by client JS. Its only job is to change
+ * value on every fresh login, so the queries login pop-up (see
+ * query-popup-gate.tsx) can tell "a new login just happened" apart from "the
+ * user is just navigating between pages within the same login" without a
+ * server round trip. Carries no security meaning of its own — the real
+ * session is still the signed, httpOnly admin_session cookie above. */
+const LOGIN_MARKER_COOKIE = "login_marker";
+
 function getSecret(): string {
   const secret = process.env.SESSION_SECRET;
   if (!secret) {
@@ -43,11 +51,19 @@ export async function createSession(username: string) {
     path: "/",
     expires: new Date(expiresAt),
   });
+  cookieStore.set(LOGIN_MARKER_COOKIE, String(expiresAt), {
+    httpOnly: false,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    expires: new Date(expiresAt),
+  });
 }
 
 export async function destroySession() {
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE);
+  cookieStore.delete(LOGIN_MARKER_COOKIE);
 }
 
 export const SESSION_COOKIE_NAME = SESSION_COOKIE;

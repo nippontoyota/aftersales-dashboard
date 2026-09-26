@@ -3,6 +3,7 @@
 import Link, { useLinkStatus } from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions";
+import { QueryPopupGate } from "./query-popup-gate";
 import { ThemeToggle } from "./theme-toggle";
 
 // Every branch admin sees the full company-wide dashboard, identical to HQ
@@ -307,6 +308,7 @@ export function AppShell({
   centralNav = false,
   slimNav = false,
   isRegional = false,
+  isBranch = false,
   queriesBadge = 0,
   dashboardLabel = "Executive Overview",
   identity,
@@ -348,6 +350,10 @@ export function AppShell({
   /** A regional admin — keeps `regionalVisible` nav items (just Queries)
    * showing even under slimNav. Defaults to false. */
   isRegional?: boolean;
+  /** A branch admin — same as `isRegional`, keeps `regionalVisible` nav
+   * items (Queries, since 2026-09-26 branches get their own queries too)
+   * showing even under slimNav. Defaults to false. */
+  isBranch?: boolean;
   /** Count shown as a small badge on the Queries nav item — threads awaiting
    * this viewer's attention. 0 (default) renders no badge. */
   queriesBadge?: number;
@@ -375,7 +381,7 @@ export function AppShell({
     : NAV_ITEMS.filter(
         (item) =>
           (!item.requiresDashboard || showDashboardLink) &&
-          (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && isRegional)) &&
+          (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq && !vpNav && !ceoNav && !accountsNav && !centralNav ? UTILITY_NAV_ITEMS : [];
@@ -483,6 +489,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-canvas text-fg">
+      <QueryPopupGate />
       {/* Desktop sidebar — collapsible to an icon rail */}
       <aside
         className={`hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex print:!hidden ${

@@ -6,7 +6,7 @@ import { REGIONS, type RegionName } from "./regions";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
 import { loadCombinedServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
 import { isDatePublished } from "./publish-store";
-import { countActionableForHq, countActionableForRegion } from "./region-queries/store";
+import { countActionableForBranch, countActionableForHq, countActionableForRegion } from "./region-queries/store";
 import { countOpenVpFlags } from "./vp-flags/store";
 import { BRANCH_REVENUE_VISIBLE_FROM_MONTH, maskBranchRevenue } from "./branch-revenue-visibility";
 
@@ -15,8 +15,9 @@ import { BRANCH_REVENUE_VISIBLE_FROM_MONTH, maskBranchRevenue } from "./branch-r
  * admin whose latest uploaded date isn't published yet is in raw-report mode:
  * the /dashboard nav item is relabelled and the company-wide tabs (Reports,
  * TKM Targets, Queries, Branches) are hidden — except Queries stays visible
- * for a regional admin (see app-shell.tsx's `regionalVisible`). Regional
- * admins never see the Upload tab. HQ is never restricted. */
+ * for both a regional admin and a branch admin (2026-09-26, see
+ * app-shell.tsx's `regionalVisible`). Regional admins never see the Upload
+ * tab. HQ is never restricted. */
 export async function loadNavState(
   admin: AdminAccount,
 ): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean; slimNav: boolean; queriesBadge: number }> {
@@ -31,7 +32,11 @@ export async function loadNavState(
   const slimNav = admin.role === "branch" || admin.role === "regional";
   const [dates, queriesBadge] = await Promise.all([
     listSnapshotDates(),
-    admin.role === "regional" ? countActionableForRegion(admin.region) : Promise.resolve(0),
+    admin.role === "regional"
+      ? countActionableForRegion(admin.region)
+      : admin.role === "branch"
+      ? countActionableForBranch(admin.branch)
+      : Promise.resolve(0),
   ]);
   const latest = dates.at(-1);
   const latestPublished = latest ? await isDatePublished(latest) : true;
