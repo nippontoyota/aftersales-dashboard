@@ -51,7 +51,7 @@ function TkmCell({ spec, row }: { spec: MetricSpec; row: BranchReport }) {
   const label = ratio === null ? "—" : `${(ratio * 100).toFixed(1)}%`;
   const isTotal = row.branch === GROUP_LABEL;
   return (
-    <div className="flex w-24 flex-col items-end gap-1">
+    <div className="flex w-20 flex-col items-end gap-1">
       <div className="whitespace-nowrap text-[10px] tabular-nums text-fg-faint">
         {actual === null ? "—" : formatCompact(actual)} / {formatCompact(target)}
       </div>
@@ -100,12 +100,12 @@ function Badge({ ratio, label, metric, row, valueOverride }: { ratio: number | n
 /** Engine Flush / Injector Cleaner — count ÷ PM Actual, graded against the 20% penetration target. */
 function PenetrationCell({ row, count, metric }: { row: BranchReport; count: number | null; metric: MetricKey }) {
   const pm = row.pmOcAchievementForTheMonth;
-  if (row.branch !== GROUP_LABEL && isBodyPaintOnly(row.branch)) return <div className="w-24 text-right text-sm text-fg-faint">—</div>;
-  if (count === null || pm === null || pm <= 0) return <div className="w-24 text-right text-sm text-fg-faint">—</div>;
+  if (row.branch !== GROUP_LABEL && isBodyPaintOnly(row.branch)) return <div className="w-20 text-right text-sm text-fg-faint">—</div>;
+  if (count === null || pm === null || pm <= 0) return <div className="w-20 text-right text-sm text-fg-faint">—</div>;
   const pen = count / pm;
   return (
-    <div className="flex w-24 flex-col items-end gap-1">
-      <div className="whitespace-nowrap text-[10px] tabular-nums text-fg-faint">{formatCompact(count)} · target {formatPercent(PENETRATION_TARGET)}</div>
+    <div className="flex w-20 flex-col items-end gap-1">
+      <div className="whitespace-nowrap text-[10px] tabular-nums text-fg-faint">{formatCompact(count)}</div>
       <Badge ratio={pen / PENETRATION_TARGET} label={formatPercent(pen)} metric={metric} row={row} valueOverride={pen} />
     </div>
   );
@@ -116,9 +116,9 @@ function TargetPenetrationCell({ row, actual, target, metric }: { row: BranchRep
   const pm = row.pmOcAchievementForTheMonth;
   const pen = actual !== null && pm !== null && pm > 0 ? actual / pm : null;
   const ratio = actual !== null && target !== null && target > 0 ? actual / target : null;
-  if (ratio === null && pen === null) return <div className="w-24 text-right text-sm text-fg-faint">—</div>;
+  if (ratio === null && pen === null) return <div className="w-20 text-right text-sm text-fg-faint">—</div>;
   return (
-    <div className="flex w-24 flex-col items-end gap-1">
+    <div className="flex w-20 flex-col items-end gap-1">
       <div className="whitespace-nowrap text-[10px] tabular-nums text-fg-faint">
         {actual === null ? "—" : formatCompact(actual)} / {target === null || target <= 0 ? "—" : formatCompact(target)}
       </div>
@@ -161,7 +161,7 @@ export function VpTkmMonthlyTable({ branches }: { branches: BranchReport[] }) {
   return (
     <SectionTable
       title="TKM Targets — this month"
-      subtitle="Achieved / target and % for the month so far, per branch"
+      subtitle="Achieved / target and % for the month so far, per branch · Engine Flush and Injector Cleaner are % of PM Actual, graded against a 20% target"
       branches={rows.length > 0 ? [groupRow, ...rows] : rows}
       columns={columns}
       scroll={false}

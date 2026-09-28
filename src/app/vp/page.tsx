@@ -123,11 +123,10 @@ async function Overview({
       {!data.isPublished && (
         <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} />
       )}
-      {/* Sticky under VpShell's own top bar (top-14 = its h-14) — the date
-          picker, Raise a query and Export to PDF stay reachable while
-          scrolling through the grid/Regions below, instead of requiring a
-          scroll back to the top every time. */}
-      <div className="sticky top-14 z-20 bg-canvas print:static">
+      {/* Scrolls away with the page (un-frozen 2026-09-28 at the VP's request).
+          What stays pinned is each table's own column-header row, just under
+          VpShell's h-14 top bar. */}
+      <div>
         <VpHeader
           eyebrow="Nippon Group · Service"
           title="Executive Overview"

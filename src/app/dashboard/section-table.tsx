@@ -60,7 +60,7 @@ export function SectionTable({
   const table = (
     <table className="min-w-full text-xs">
       <thead
-        className={`text-left text-fg-subtle ${scroll ? "[&>tr>th]:sticky [&>tr>th]:top-0 [&>tr>th]:z-10 [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border)]" : "[&>tr>th]:border-b [&>tr>th]:border-border"} [&>tr>th]:bg-surface-2`}
+        className={`text-left text-fg-subtle ${scroll ? "[&>tr>th]:sticky [&>tr>th]:top-0 [&>tr>th]:z-10 [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border)]" : "[&>tr>th]:sticky [&>tr>th]:top-14 [&>tr>th]:z-10 [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border)]"} [&>tr>th]:bg-surface-2`}
       >
         <tr>
           <th className={`${scroll ? "sticky left-0" : ""} whitespace-nowrap bg-surface-2 ${cellPad}`}>Branch</th>
@@ -87,7 +87,7 @@ export function SectionTable({
   );
 
   return (
-    <CollapsibleCard title={title} subtitle={subtitle} defaultOpen={defaultOpen}>
+    <CollapsibleCard title={title} subtitle={subtitle} defaultOpen={defaultOpen} clip={!scroll}>
       {scroll ? <div className="max-h-[calc(100dvh-15rem)] overflow-auto">{table}</div> : table}
     </CollapsibleCard>
   );

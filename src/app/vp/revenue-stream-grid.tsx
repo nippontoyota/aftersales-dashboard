@@ -180,15 +180,15 @@ export function RevenueStreamGrid({ scopes, branches, date }: { scopes: VpScopeM
     // kept deliberately — this table is min-w-[720px] and needs to scroll
     // horizontally on a narrow viewport; dropping it entirely would let the
     // table force the whole page wider instead.
-    <div className="overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
-      <table className="w-full min-w-[720px] border-collapse text-sm">
+    <div className="overflow-clip rounded-2xl border border-border-subtle bg-surface">
+      <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-border-subtle">
-            <th scope="col" className="bg-surface-2 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">
+            <th scope="col" className="sticky top-14 z-10 bg-surface-2 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">
               Metric
             </th>
             {scopes.map((s, i) => (
-              <ColumnHeader key={s.label} scope={s} className={`bg-surface-2 ${i === 1 ? "border-l border-border-subtle" : ""}`} />
+              <ColumnHeader key={s.label} scope={s} className={`sticky top-14 z-10 bg-surface-2 ${i === 1 ? "border-l border-border-subtle" : ""}`} />
             ))}
           </tr>
         </thead>

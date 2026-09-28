@@ -73,11 +73,11 @@ function MetricBlock({ metric, quarter }: { metric: TkmMetricRow; quarter: strin
 
 function ScopeTable({ scope, months, quarter }: { scope: TkmScopeQuarter; months: string[]; quarter: string }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border-subtle bg-surface">
+    <div className="overflow-clip rounded-lg border border-border-subtle bg-surface">
       <div className="border-b border-border-subtle bg-surface-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-fg">{scope.label}</div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[420px] text-xs">
-          <thead>
+      <div>
+        <table className="w-full text-xs">
+          <thead className="[&>tr>th]:sticky [&>tr>th]:top-14 [&>tr>th]:z-10 [&>tr>th]:bg-surface [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border-subtle)]">
             <tr className="border-b border-border-subtle text-[10.5px] uppercase tracking-[0.06em] text-fg-faint">
               <th className="px-3 py-1.5 text-left font-medium"> </th>
               {months.map((m) => (

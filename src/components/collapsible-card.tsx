@@ -14,17 +14,20 @@ export function CollapsibleCard({
   title,
   subtitle,
   defaultOpen = false,
+  clip = false,
   children,
 }: {
   title: string;
   subtitle?: string;
   defaultOpen?: boolean;
+  /** overflow-clip instead of overflow-hidden: still rounds the corners, but doesn't make the card a scroll container, so a `position: sticky` table header inside it pins against the page. */
+  clip?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-card">
+    <div className={`${clip ? "overflow-clip" : "overflow-hidden"} rounded-lg border border-border bg-surface shadow-card`}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
