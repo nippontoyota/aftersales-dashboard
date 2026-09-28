@@ -21,6 +21,7 @@ import { isAccessoriesStaff } from "../accessories-staff";
 const CLOSE_SA_NAME_COLUMN = "Close SA Name";
 const PART_SALE_COLUMN = "Part Sale";
 const LABOUR_SALE_COLUMN = "Labour Sale";
+const PART_SALE_ALIAS = "Parts Sale";
 
 export type Ssrv089Totals = {
   accessoriesPartSale: number;
@@ -52,6 +53,16 @@ function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | nul
     // safe for Part Sale/Labour Sale and Close SA Name too — identical
     // totals before/after against two real branch exports.
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
+    // Some branch exports (2026-09-28, IR01A) label the column "Parts Sale"
+    // (and "Parts Cost ") instead of "Part Sale". Rename to the canonical
+    // spelling in place so both the check below and the stored raw rows
+    // (read by the cancellation SQL as row_data->>'Part Sale') stay uniform.
+    for (const row of rows) {
+      if (PART_SALE_ALIAS in row && !(PART_SALE_COLUMN in row)) {
+        row[PART_SALE_COLUMN] = row[PART_SALE_ALIAS];
+        delete row[PART_SALE_ALIAS];
+      }
+    }
     // All three, not just "Close SA Name" alone — a pivot-table summary
     // sheet can legitimately have "Close SA Name" as a cell value too (its
     // filter label, e.g. "Close SA Name: (Multiple Items)"), which becomes
