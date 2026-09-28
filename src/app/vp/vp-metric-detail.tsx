@@ -87,7 +87,7 @@ function DriverRow({ metric, branch, all }: { metric: MetricKey; branch: string;
   );
 }
 
-function ItemRow({ item, branch, scopeBranches, all }: { item: ItemKey; branch?: string; scopeBranches: CompareBranchData[]; all: CompareBranchData[] }) {
+export function ItemRow({ item, branch, scopeBranches, all }: { item: ItemKey; branch?: string; scopeBranches: CompareBranchData[]; all: CompareBranchData[] }) {
   const def = ITEMS[item];
   const pool = itemPool(branch ? all : scopeBranches, item);
   if (pool.length === 0) return null;
@@ -163,16 +163,19 @@ export function MetricDetailModal({ request, all, onClose }: { request: MetricRe
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative max-h-[90dvh] w-full max-w-md overflow-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">{request.branch ?? request.scope?.label}</div>
-            <h2 className="mt-0.5 text-lg font-semibold text-fg">{def.label}</h2>
+      <div className="relative flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="shrink-0 border-b border-border-subtle px-5 pb-3 pt-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">{request.branch ?? request.scope?.label}</div>
+              <h2 className="mt-0.5 text-lg font-semibold text-fg">{def.label}</h2>
+            </div>
+            <CloseButton onClose={onClose} />
           </div>
-          <CloseButton onClose={onClose} />
+          <div className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-fg">{formatMetric(request.value, def.kind)}</div>
         </div>
 
-        <div className="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-fg">{formatMetric(request.value, def.kind)}</div>
+        <div className="overflow-auto px-5 pb-5">
 
         {isBranch && idx >= 0 && leader ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -221,7 +224,7 @@ export function MetricDetailModal({ request, all, onClose }: { request: MetricRe
           <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">
             {isBranch ? "All branches, ranked" : `${request.scope?.label} branches, ranked`}
           </div>
-          <div className="mt-2.5 max-h-72 space-y-1.5 overflow-auto pr-0.5">
+          <div className="mt-2.5 space-y-1.5">
             {pool.length === 0 ? (
               <p className="text-xs text-fg-faint">No branch has a figure for this yet this month.</p>
             ) : (
@@ -248,6 +251,7 @@ export function MetricDetailModal({ request, all, onClose }: { request: MetricRe
               })
             )}
           </div>
+        </div>
         </div>
       </div>
     </div>

@@ -196,7 +196,6 @@ async function Overview({
                 value={value}
                 className={className}
                 rank={rank}
-                date={data.date}
                 bpuSplit={bpuSplit}
                 tglossPace={tglossPace}
               />

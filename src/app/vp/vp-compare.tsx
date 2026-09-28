@@ -23,7 +23,14 @@ type CompareContextValue = {
   clear: () => void;
   openCompare: () => void;
   openMetric: (request: MetricRequest) => void;
+  /** Every branch's precomputed figures — for popups that show a branch against the rest. */
+  allBranches: CompareBranchData[];
 };
+
+/** All branches' compare data; empty outside a provider. */
+export function useAllBranches(): CompareBranchData[] {
+  return useContext(CompareContext)?.allBranches ?? [];
+}
 
 const CompareContext = createContext<CompareContextValue | null>(null);
 
@@ -42,14 +49,18 @@ export function VpCompareProvider({ data, children }: { data: Record<string, Com
   }, []);
   const openCompare = useCallback(() => setOpen(true), []);
 
-  const value = useMemo(() => ({ pinned, toggle, clear, openCompare, openMetric }), [pinned, toggle, clear, openCompare, openMetric]);
+  const allBranches = useMemo(() => Object.values(data), [data]);
+  const value = useMemo(
+    () => ({ pinned, toggle, clear, openCompare, openMetric, allBranches }),
+    [pinned, toggle, clear, openCompare, openMetric, allBranches]
+  );
 
   return (
     <CompareContext.Provider value={value}>
       {children}
       <CompareBar pinned={pinned} onToggle={toggle} onClear={clear} onOpen={openCompare} />
       {open && pinned.length >= 2 ? <CompareModal branches={pinned.map((b) => data[b]).filter(Boolean)} onClose={() => setOpen(false)} /> : null}
-      {metricRequest ? <MetricDetailModal request={metricRequest} all={Object.values(data)} onClose={() => setMetricRequest(null)} /> : null}
+      {metricRequest ? <MetricDetailModal request={metricRequest} all={allBranches} onClose={() => setMetricRequest(null)} /> : null}
     </CompareContext.Provider>
   );
 }
@@ -185,26 +196,33 @@ function CompareBar({
 }
 
 type Kind = "currency" | "count" | "percent";
-type Row = { label: string; kind: Kind; get: (d: CompareBranchData) => number | null };
+type Row = {
+  label: string;
+  kind: Kind;
+  get: (d: CompareBranchData) => number | null;
+  /** Add-on item rows: the count is `get`, this is its share of PM Actual — shown under the count and used for best/worst colouring (raw counts favour big branches). */
+  pen?: (d: CompareBranchData) => number | null;
+  /** Optional third line (e.g. DIY revenue). */
+  extra?: (d: CompareBranchData) => string | null;
+};
 type Section = { title: string; rows: Row[] };
 
-/** Count row + penetration row per add-on item (plus a revenue row where the item has one). */
+/** One row per add-on item: count, with its % of PM Actual beneath (and revenue where the item has one). */
 function itemSection(title: string, keys: ItemKey[]): Section {
-  const rows: Row[] = [];
-  for (const key of keys) {
+  const rows: Row[] = keys.map((key) => {
     const item = ITEMS[key];
-    rows.push({ label: item.label, kind: "count", get: (d) => item.count(d) });
-    rows.push({
-      label: `${item.label} · % of ${item.denomLabel}`,
-      kind: "percent",
-      get: (d) => {
+    return {
+      label: item.label,
+      kind: "count" as const,
+      get: (d) => item.count(d),
+      pen: (d) => {
         const c = item.count(d);
         const den = item.denom(d);
         return c === null || den === null || den <= 0 ? null : c / den;
       },
-    });
-    if (item.revenue) rows.push({ label: `${item.label} · revenue`, kind: "currency", get: (d) => item.revenue!(d) });
-  }
+      extra: item.revenue ? (d) => (item.revenue!(d) === null ? null : formatCompactCurrency(item.revenue!(d)!)) : undefined,
+    };
+  });
   return { title, rows };
 }
 
@@ -358,14 +376,34 @@ function SectionRows({ section, branches }: { section: Section; branches: Compar
       </tr>
       {section.rows.map((row) => {
         const values = branches.map((b) => row.get(b));
+        const pens = row.pen ? branches.map((b) => row.pen!(b)) : null;
         return (
           <tr key={row.label} className="border-t border-border-subtle">
             <td className="sticky left-0 bg-surface px-5 py-2.5 text-[13px] text-fg-muted">{row.label}</td>
-            {values.map((v, i) => (
-              <td key={branches[i].branch} className={`px-4 py-2.5 text-right text-sm font-semibold tabular-nums ${cellTone(v, values)}`}>
-                {format(v, row.kind)}
-              </td>
-            ))}
+            {values.map((v, i) => {
+              const pen = pens ? pens[i] : null;
+              const extra = row.extra ? row.extra(branches[i]) : null;
+              return (
+                <td
+                  key={branches[i].branch}
+                  className={`px-4 py-2.5 text-right text-sm font-semibold tabular-nums ${pens ? "text-fg" : cellTone(v, values)}`}
+                >
+                  {pens ? (
+                    pen === null ? (
+                      <span className="font-normal text-fg-faint">—</span>
+                    ) : (
+                      <>
+                        <span>{format(v, row.kind)}</span>
+                        <span className={`mt-0.5 block text-[11px] font-medium ${cellTone(pen, pens)}`}>{formatPercent(pen)} of PM</span>
+                        {extra ? <span className="block text-[10.5px] font-normal text-fg-faint">{extra}</span> : null}
+                      </>
+                    )
+                  ) : (
+                    format(v, row.kind)
+                  )}
+                </td>
+              );
+            })}
           </tr>
         );
       })}

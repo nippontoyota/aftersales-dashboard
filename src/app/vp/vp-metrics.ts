@@ -76,22 +76,21 @@ export type ItemDef = {
 };
 
 const pmDenom = (d: CompareBranchData) => d.pm;
-const gusRoDenom = (d: CompareBranchData) => d.gusRo;
 
 export const ITEMS: Record<ItemKey, ItemDef> = {
   wheelAlignmentGs: { label: "Wheel Alignment", count: (d) => d.items.wheelAlignmentGs, denom: pmDenom, denomLabel: "PM Actual", gusOnly: true },
   wheelBalancingGs: { label: "Wheel Balancing", count: (d) => d.items.wheelBalancingGs, denom: pmDenom, denomLabel: "PM Actual", gusOnly: true },
   brakeSkimmingGs: { label: "Brake Skimming", count: (d) => d.items.brakeSkimmingGs, denom: pmDenom, denomLabel: "PM Actual", gusOnly: true },
   evaporator: { label: "Evaporator Cleaning", count: (d) => d.items.evaporator, denom: pmDenom, denomLabel: "PM Actual", gusOnly: true, note: "General Service only" },
-  wheelAlignmentBp: { label: "Wheel Alignment", count: (d) => d.items.wheelAlignmentBp, denom: (d) => d.bpuRo, denomLabel: "BPU ROs" },
-  wheelBalancingBp: { label: "Wheel Balancing", count: (d) => d.items.wheelBalancingBp, denom: (d) => d.bpuRo, denomLabel: "BPU ROs" },
-  brakeSkimmingBp: { label: "Brake Skimming", count: (d) => d.items.brakeSkimmingBp, denom: (d) => d.bpuRo, denomLabel: "BPU ROs" },
-  engineFlush: { label: "Engine Flush", count: (d) => d.items.engineFlush, denom: gusRoDenom, denomLabel: "GUS ROs", gusOnly: true },
-  injectorCleaner: { label: "Injector Cleaner", count: (d) => d.items.injectorCleaner, denom: gusRoDenom, denomLabel: "GUS ROs", gusOnly: true },
-  brakeSpray: { label: "Brake Cleaning Spray", count: (d) => d.items.brakeSpray, denom: gusRoDenom, denomLabel: "GUS ROs", gusOnly: true },
-  tyre: { label: "Tyre", count: (d) => d.items.tyre, denom: gusRoDenom, denomLabel: "GUS ROs", gusOnly: true, note: "branch-wide (BA Tool)" },
-  battery: { label: "Battery", count: (d) => d.items.battery, denom: gusRoDenom, denomLabel: "GUS ROs", gusOnly: true, note: "branch-wide (BA Tool)" },
-  diy: { label: "DIY", count: (d) => d.items.diyCount, denom: gusRoDenom, denomLabel: "GUS ROs", revenue: (d) => d.items.diyRevenue, gusOnly: true },
+  wheelAlignmentBp: { label: "Wheel Alignment", count: (d) => d.items.wheelAlignmentBp, denom: pmDenom, denomLabel: "PM Actual" },
+  wheelBalancingBp: { label: "Wheel Balancing", count: (d) => d.items.wheelBalancingBp, denom: pmDenom, denomLabel: "PM Actual" },
+  brakeSkimmingBp: { label: "Brake Skimming", count: (d) => d.items.brakeSkimmingBp, denom: pmDenom, denomLabel: "PM Actual" },
+  engineFlush: { label: "Engine Flush", count: (d) => d.items.engineFlush, denom: pmDenom, denomLabel: "PM Actual", gusOnly: true },
+  injectorCleaner: { label: "Injector Cleaner", count: (d) => d.items.injectorCleaner, denom: pmDenom, denomLabel: "PM Actual", gusOnly: true },
+  brakeSpray: { label: "Brake Cleaning Spray", count: (d) => d.items.brakeSpray, denom: pmDenom, denomLabel: "PM Actual", gusOnly: true },
+  tyre: { label: "Tyre", count: (d) => d.items.tyre, denom: pmDenom, denomLabel: "PM Actual", gusOnly: true, note: "branch-wide (BA Tool)" },
+  battery: { label: "Battery", count: (d) => d.items.battery, denom: pmDenom, denomLabel: "PM Actual", gusOnly: true, note: "branch-wide (BA Tool)" },
+  diy: { label: "DIY", count: (d) => d.items.diyCount, denom: pmDenom, denomLabel: "PM Actual", revenue: (d) => d.items.diyRevenue, gusOnly: true },
 };
 
 const LABOUR_GUS_ITEMS: ItemKey[] = ["wheelAlignmentGs", "wheelBalancingGs", "brakeSkimmingGs", "evaporator"];
