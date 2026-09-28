@@ -3,6 +3,7 @@
 import Link, { useLinkStatus } from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions";
+import { AutoRefresh } from "./auto-refresh";
 import { QueryPopupGate } from "./query-popup-gate";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -489,6 +490,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-canvas text-fg">
+      <AutoRefresh />
       <QueryPopupGate />
       {/* Desktop sidebar — collapsible to an icon rail */}
       <aside
