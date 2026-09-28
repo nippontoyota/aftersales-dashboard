@@ -12,6 +12,25 @@ import { isBodyPaintOnly, type BranchReport } from "@/lib/report";
  */
 export type SlabCompare = { target: number; ratio: number | null };
 
+/** GS vs Body & Paint Service Info counts, MTD — see lib/vp-service-items.ts. */
+export type LabourItemCounts = {
+  wheelAlignmentGs: number | null;
+  wheelBalancingGs: number | null;
+  brakeSkimmingGs: number | null;
+  wheelAlignmentBp: number | null;
+  wheelBalancingBp: number | null;
+  brakeSkimmingBp: number | null;
+};
+
+const NO_LABOUR_ITEMS: LabourItemCounts = {
+  wheelAlignmentGs: null,
+  wheelBalancingGs: null,
+  brakeSkimmingGs: null,
+  wheelAlignmentBp: null,
+  wheelBalancingBp: null,
+  brakeSkimmingBp: null,
+};
+
 export type CompareBranchData = {
   branch: string;
   region: string | null;
@@ -33,7 +52,33 @@ export type CompareBranchData = {
   /** null when this branch has no slab target of its own (e.g. CO01E, which folds into CO01B). */
   slabs: [SlabCompare, SlabCompare, SlabCompare, SlabCompare] | null;
   /** This month's TKM figures, achieved ÷ target — same fields the main dashboard's TKM Targets page reads. */
-  tkm: { bpu: number | null; offtake: number | null; partsRetail: number | null; pmOc: number | null };
+  tkm: {
+    bpu: number | null;
+    offtake: number | null;
+    partsRetail: number | null;
+    pmOc: number | null;
+    /** Item count ÷ PM Actual (penetration). Engine Flush / Injector Cleaner are graded against PENETRATION_TARGET, Tyre / Battery against their own BA Tool target — see tyre / battery below. */
+    engineFlushPen: number | null;
+    injectorCleanerPen: number | null;
+    /** Tyre / Battery achieved ÷ BA Tool target. */
+    tyre: number | null;
+    battery: number | null;
+    tyrePen: number | null;
+    batteryPen: number | null;
+  };
+  /** PM Actual (BA Tool) — the penetration denominator for Labour and TKM add-on items. */
+  pm: number | null;
+  /** Add-on service / part counts, MTD. */
+  items: LabourItemCounts & {
+    evaporator: number | null;
+    engineFlush: number | null;
+    injectorCleaner: number | null;
+    brakeSpray: number | null;
+    tyre: number | null;
+    battery: number | null;
+    diyCount: number | null;
+    diyRevenue: number | null;
+  };
 };
 
 function ratio(numerator: number | null, denominator: number | null): number | null {
@@ -65,10 +110,12 @@ function slabsFor(
 
 export function buildCompareData(
   branches: BranchReport[],
-  incentiveSlabTargets: Record<string, IncentiveSlabTargets>
+  incentiveSlabTargets: Record<string, IncentiveSlabTargets>,
+  labourItems: Record<string, LabourItemCounts> = {}
 ): Record<string, CompareBranchData> {
   const out: Record<string, CompareBranchData> = {};
   for (const b of branches) {
+    const pm = b.pmOcAchievementForTheMonth;
     out[b.branch] = {
       branch: b.branch,
       region: regionForBranch(b.branch),
@@ -94,6 +141,24 @@ export function buildCompareData(
         offtake: ratio(b.offtakeAchievementForTheMonth, b.offtakeTarget),
         partsRetail: ratio(b.partsRetailAchievementForTheMonth, b.partsRetailTarget),
         pmOc: ratio(b.pmOcAchievementForTheMonth, b.pmOcTarget),
+        engineFlushPen: ratio(b.engineFlushMtd, pm),
+        injectorCleanerPen: ratio(b.injectorCleanerMtd, pm),
+        tyre: ratio(b.tireSalesForTheMonth, b.tireTarget),
+        battery: ratio(b.batterySalesForTheMonth, b.batteryTarget),
+        tyrePen: ratio(b.tireSalesForTheMonth, pm),
+        batteryPen: ratio(b.batterySalesForTheMonth, pm),
+      },
+      pm,
+      items: {
+        ...(labourItems[b.branch] ?? NO_LABOUR_ITEMS),
+        evaporator: b.evaporatorCleaningMtd,
+        engineFlush: b.engineFlushMtd,
+        injectorCleaner: b.injectorCleanerMtd,
+        brakeSpray: b.brakeCleaningSprayMtd,
+        tyre: b.tireSalesForTheMonth,
+        battery: b.batterySalesForTheMonth,
+        diyCount: b.diyCountMtd,
+        diyRevenue: b.diyRevenueMtd,
       },
     };
   }

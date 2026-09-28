@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/format";
 import type { CompareBranchData } from "./vp-compare-data";
 import { MetricDetailModal, type MetricRequest } from "./vp-metric-detail";
-import { METRICS } from "./vp-metrics";
+import { ITEMS, METRICS, type ItemKey } from "./vp-metrics";
 
 /**
  * Branch-vs-branch comparison (2026-09-28, at the VP's request — "he should
@@ -188,6 +188,26 @@ type Kind = "currency" | "count" | "percent";
 type Row = { label: string; kind: Kind; get: (d: CompareBranchData) => number | null };
 type Section = { title: string; rows: Row[] };
 
+/** Count row + penetration row per add-on item (plus a revenue row where the item has one). */
+function itemSection(title: string, keys: ItemKey[]): Section {
+  const rows: Row[] = [];
+  for (const key of keys) {
+    const item = ITEMS[key];
+    rows.push({ label: item.label, kind: "count", get: (d) => item.count(d) });
+    rows.push({
+      label: `${item.label} · % of ${item.denomLabel}`,
+      kind: "percent",
+      get: (d) => {
+        const c = item.count(d);
+        const den = item.denom(d);
+        return c === null || den === null || den <= 0 ? null : c / den;
+      },
+    });
+    if (item.revenue) rows.push({ label: `${item.label} · revenue`, kind: "currency", get: (d) => item.revenue!(d) });
+  }
+  return { title, rows };
+}
+
 const SECTIONS: Section[] = [
   {
     title: "Revenue · MTD",
@@ -229,8 +249,17 @@ const SECTIONS: Section[] = [
       { label: "Offtake", kind: "percent", get: (d) => d.tkm.offtake },
       { label: "Parts Retail", kind: "percent", get: (d) => d.tkm.partsRetail },
       { label: "PM+OC", kind: "percent", get: (d) => d.tkm.pmOc },
+      { label: "Engine Flush · % of PM (target 20%)", kind: "percent", get: (d) => d.tkm.engineFlushPen },
+      { label: "Injector Cleaner · % of PM (target 20%)", kind: "percent", get: (d) => d.tkm.injectorCleanerPen },
+      { label: "Tyre · % of target", kind: "percent", get: (d) => d.tkm.tyre },
+      { label: "Tyre · % of PM", kind: "percent", get: (d) => d.tkm.tyrePen },
+      { label: "Battery · % of target", kind: "percent", get: (d) => d.tkm.battery },
+      { label: "Battery · % of PM", kind: "percent", get: (d) => d.tkm.batteryPen },
     ],
   },
+  itemSection("GUS Labour add-ons · MTD", ["wheelAlignmentGs", "wheelBalancingGs", "brakeSkimmingGs", "evaporator"]),
+  itemSection("BPU Labour add-ons · MTD (Body & Paint jobs)", ["wheelAlignmentBp", "wheelBalancingBp", "brakeSkimmingBp"]),
+  itemSection("GUS Parts add-ons · MTD", ["engineFlush", "injectorCleaner", "brakeSpray", "tyre", "battery", "diy"]),
 ];
 
 function format(value: number | null, kind: Kind): string {

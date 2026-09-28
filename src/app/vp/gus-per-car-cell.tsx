@@ -34,7 +34,7 @@ const METRIC_LABEL = {
   tgloss: "TGLOSS / GUS Car",
 } as const;
 type Metric = keyof typeof METRIC_LABEL;
-const VAS_COUNT_LABEL = { wheelAlignment: "Wheel Alignment", wheelBalancing: "Wheel Balancing", brakeSkimming: "Brake Skimming" } as const;
+const VAS_COUNT_LABEL = { wheelAlignment: "Wheel Alignment", wheelBalancing: "Wheel Balancing", brakeSkimming: "Brake Skimming", evaporatorCleaning: "Evaporator Cleaning" } as const;
 
 function rankTone(rank: number, total: number): "good" | "warn" | "critical" {
   if (total <= 1) return "good";
@@ -188,6 +188,7 @@ function DetailModal({
                   <MetricRankRow label={VAS_COUNT_LABEL.wheelAlignment} detail={vasCounts.wheelAlignment} />
                   <MetricRankRow label={VAS_COUNT_LABEL.wheelBalancing} detail={vasCounts.wheelBalancing} />
                   <MetricRankRow label={VAS_COUNT_LABEL.brakeSkimming} detail={vasCounts.brakeSkimming} />
+                  <MetricRankRow label={VAS_COUNT_LABEL.evaporatorCleaning} detail={vasCounts.evaporatorCleaning} />
                 </>
               )}
             </div>

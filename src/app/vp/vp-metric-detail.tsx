@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
-import { formatPercent } from "@/lib/format";
+import { useEffect, type ReactNode } from "react";
+import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/format";
 import type { CompareBranchData } from "./vp-compare-data";
-import { METRICS, formatMetric, rankPool, type MetricKey, type RankedRow } from "./vp-metrics";
+import { ITEMS, METRICS, formatMetric, itemPool, rankPool, type ItemKey, type MetricKey, type RankedRow } from "./vp-metrics";
 
 /**
  * "Why is this number what it is" for any figure on the VP page (2026-09-28,
@@ -87,6 +87,61 @@ function DriverRow({ metric, branch, all }: { metric: MetricKey; branch: string;
   );
 }
 
+function ItemRow({ item, branch, scopeBranches, all }: { item: ItemKey; branch?: string; scopeBranches: CompareBranchData[]; all: CompareBranchData[] }) {
+  const def = ITEMS[item];
+  const pool = itemPool(branch ? all : scopeBranches, item);
+  if (pool.length === 0) return null;
+  const avgPen = pool.reduce((s, r) => s + r.pen, 0) / pool.length;
+
+  let count: number;
+  let pen: number;
+  let revenue: number | null = null;
+  let rankBadge: ReactNode = null;
+  let detail: string;
+  if (branch) {
+    const idx = pool.findIndex((r) => r.branch === branch);
+    if (idx < 0) return null;
+    count = pool[idx].count;
+    pen = pool[idx].pen;
+    revenue = pool[idx].revenue;
+    rankBadge = (
+      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${TONE_BADGE[rankTone(idx + 1, pool.length)]}`}>
+        #{idx + 1} of {pool.length}
+      </span>
+    );
+    detail = `avg ${formatPercent(avgPen)} of ${def.denomLabel}`;
+  } else {
+    count = pool.reduce((s, r) => s + r.count, 0);
+    pen = count / pool.reduce((s, r) => s + r.denom, 0);
+    revenue = def.revenue ? pool.reduce((s, r) => s + (r.revenue ?? 0), 0) : null;
+    const top = pool[0];
+    const last = pool[pool.length - 1];
+    detail = pool.length > 1 ? `#1 ${top.branch} ${formatPercent(top.pen)} · last ${last.branch} ${formatPercent(last.pen)}` : `of ${def.denomLabel}`;
+  }
+
+  return (
+    <div className="rounded-lg border border-border-subtle bg-surface-2/30 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12px] font-medium text-fg">
+          {def.label}
+          {def.note ? <span className="ml-1.5 text-[10px] font-normal text-fg-faint">{def.note}</span> : null}
+        </span>
+        <span className="text-right">
+          <span className="text-sm font-semibold tabular-nums text-fg">{formatPercent(pen)}</span>
+          <span className="ml-1.5 text-[11px] tabular-nums text-fg-faint">
+            ({formatCompact(count)}
+            {revenue !== null ? ` · ${formatCompactCurrency(revenue)}` : ""})
+          </span>
+        </span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+        {rankBadge}
+        <span className="text-[10.5px] text-fg-faint">{detail}</span>
+      </div>
+    </div>
+  );
+}
+
 export function MetricDetailModal({ request, all, onClose }: { request: MetricRequest; all: CompareBranchData[]; onClose: () => void }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -146,6 +201,17 @@ export function MetricDetailModal({ request, all, onClose }: { request: MetricRe
             <div className="mt-2.5 space-y-2">
               {def.drivers.map((m) => (
                 <DriverRow key={m} metric={m} branch={request.branch!} all={all} />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {def.items?.length ? (
+          <div className="mt-5">
+            <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">Add-on services · MTD</div>
+            <div className="mt-2.5 space-y-2">
+              {def.items.map((item) => (
+                <ItemRow key={item} item={item} branch={request.branch} scopeBranches={scoped} all={all} />
               ))}
             </div>
           </div>

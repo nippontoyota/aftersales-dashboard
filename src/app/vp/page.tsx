@@ -5,6 +5,7 @@ import { achievementRatio } from "@/lib/aggregate";
 import { computePace } from "@/lib/pace";
 import { isBodyPaintOnly, type BranchReport } from "@/lib/report";
 import { loadVpData } from "@/lib/vp-data";
+import { loadVpLabourItems } from "@/lib/vp-service-items";
 import { rankValues } from "@/lib/gus-per-car-trend";
 import { countAwaitingVp, listVpQueryThreadsForVp } from "@/lib/vp-flags/store";
 import { LABOUR_PER_RO_BANDS, PARTS_PER_RO_BANDS, TGLOSS_PER_RO_BANDS, RevenuePerVehicleTable } from "../dashboard/revenue-per-vehicle-table";
@@ -111,7 +112,8 @@ async function Overview({
   );
   const tglossRank = rankGusPerCar(generalBranches, (b) => (b.gusRoMtd === null || b.gusRoMtd === 0 ? null : achievementRatio(b.vasAchievementForTheMonth, b.gusRoMtd)));
 
-  const compareData = buildCompareData(data.report.branches, data.incentiveSlabTargetsByBranch);
+  const labourItems = await loadVpLabourItems(data.date);
+  const compareData = buildCompareData(data.report.branches, data.incentiveSlabTargetsByBranch, labourItems);
   const tkmQuarterMonths = quarterMonthsFor(data.date);
   const tkmQuarterlyScopes = await loadVpTkmQuarterly(data.date, data.report);
 
