@@ -239,11 +239,14 @@ export function RevenuePerVehicleTable({
   /** See GusCellRenderer above — lets the VP's Regions page make the GUS
    * Parts/Labour cells open its own rank + trend detail modal. */
   renderGusCell,
+  renderBranchCell,
 }: {
   branches: BranchReport[];
   variant?: "full" | "compact";
   defaultOpen?: boolean;
   renderGusCell?: GusCellRenderer;
+  /** Forwarded to SectionTable — see there. */
+  renderBranchCell?: (row: BranchReport) => ReactNode;
 }) {
   const allColumns = buildColumns(renderGusCell);
   const columns = variant === "compact" ? allColumns.slice(0, 4) : allColumns;
@@ -252,6 +255,11 @@ export function RevenuePerVehicleTable({
 
   const rows = [...generalBranches].sort(regionSort);
   const withTotal = rows.length > 0 ? [buildAllBranchesRow(generalBranches), ...rows] : rows;
+  // "compact" is the VP's own variant — its tables scroll with the page
+  // (not in their own capped-height box) and get a bit more breathing room;
+  // the main dashboard's "full" variant is unchanged. See section-table.tsx.
+  const scroll = variant !== "compact";
+  const roomy = variant === "compact";
 
   return (
     <div className="space-y-3">
@@ -261,6 +269,9 @@ export function RevenuePerVehicleTable({
         branches={withTotal}
         columns={columns}
         defaultOpen={defaultOpen}
+        scroll={scroll}
+        roomy={roomy}
+        renderBranchCell={renderBranchCell}
       />
       {bpOnlyBranches.length > 0 ? (
         <SectionTable
@@ -269,6 +280,9 @@ export function RevenuePerVehicleTable({
           branches={[...bpOnlyBranches].sort((a, b) => a.branch.localeCompare(b.branch))}
           columns={BP_ONLY_COLUMNS}
           defaultOpen={defaultOpen}
+          scroll={scroll}
+          roomy={roomy}
+          renderBranchCell={renderBranchCell}
         />
       ) : null}
     </div>

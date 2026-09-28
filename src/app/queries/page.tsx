@@ -13,6 +13,8 @@ import { CancellationFlag } from "../cancellations/cancellation-flag";
 import { VpFlagsPanel } from "@/components/vp-flags-panel";
 import { RaiseToBranchForm, RaiseToHqForm, RaiseToRegionForm } from "./region-query-forms";
 import { RegionQueryThread } from "./region-query-thread";
+import { listVpQueryThreadsForBranch } from "@/lib/vp-flags/store";
+import { VpFlagThread } from "../vp/vp-flag-thread";
 
 /** Formerly "Alerts" — the achievement-below-target list (AlertsPanel) was
  * dropped entirely (2026-09-15, at the user's request: "not really needed").
@@ -193,6 +195,10 @@ async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, 
         </div>
       </header>
 
+      <Suspense fallback={null}>
+        <VpFlagsPanel admin={admin} />
+      </Suspense>
+
       {queries.length === 0 ? (
         <div className="mt-6 rounded-xl border border-dashed border-border-strong bg-surface p-8 text-center">
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-fg-subtle">
@@ -258,9 +264,11 @@ async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, 
  * now). Reuses the exact same RegionQueryThread/"Mark resolved" flow as
  * every other role. */
 async function BranchQueriesContent({ admin }: { admin: Extract<AdminAccount, { role: "branch" }> }) {
-  const queries = await listRegionQueriesForBranch(admin.branch);
+  const [queries, vpThreads] = await Promise.all([listRegionQueriesForBranch(admin.branch), listVpQueryThreadsForBranch(admin.branch)]);
   const open = queries.filter((q) => q.status !== "closed");
   const closed = queries.filter((q) => q.status === "closed");
+  const vpOpen = vpThreads.filter((t) => !t.archived);
+  const vpClosed = vpThreads.filter((t) => t.archived);
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
@@ -301,6 +309,25 @@ async function BranchQueriesContent({ admin }: { admin: Extract<AdminAccount, { 
           ) : null}
         </>
       )}
+
+      {vpThreads.length > 0 ? (
+        <div className="mt-10 border-t border-border pt-6">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">From the VP Service</h2>
+          <div className="mt-3 space-y-3">
+            {vpOpen.map((t) => {
+              const replyable = new Set(t.recipients.filter((r) => r.type === "branch" && r.branch === admin.branch).map((r) => r.id));
+              return <VpFlagThread key={t.id} thread={t} viewerReplyableRecipientIds={replyable} canManage={false} />;
+            })}
+          </div>
+          {vpClosed.length > 0 ? (
+            <div className="mt-3 space-y-3">
+              {vpClosed.map((t) => (
+                <VpFlagThread key={t.id} thread={t} viewerReplyableRecipientIds={new Set()} canManage={false} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

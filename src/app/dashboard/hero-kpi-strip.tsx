@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion } from "@/lib/aggregate";
+import { CO01B_SLAB_COMBINED_BRANCHES } from "@/lib/body-paint-only";
 import { formatCompactCurrency, formatNumber } from "@/lib/format";
 import { aggregateIncentiveSlabTargets } from "@/lib/incentive-slabs/aggregate";
 import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
@@ -16,16 +17,6 @@ import { IncentiveSlabIndicator } from "./incentive-slab-indicator";
 import { useSyncedScope } from "./scope-sync";
 
 type Option = { value: string; label: string; region: RegionName | null; kind: "all" | "region" | "branch" };
-
-/** CO01E (Kalamassery Body & Paint) has no VAS/Service Info of its own and
- * shares CO01B's city — its incentive slab thresholds were set as one
- * combined target with CO01B, not two separately achievable ones (confirmed
- * with the user 2026-09-19: viewed alone, neither branch's own revenue ever
- * clears its slabs). Only the Total Revenue Stream card + its incentive
- * slab ring combine them when CO01B is the selected scope — every other
- * hero card (GUS RO, BPU RO, External Sales, VAS) stays CO01B-only, and
- * selecting CO01E on its own is unaffected. */
-const CO01B_SLAB_COMBINED_BRANCHES = ["CO01B", "CO01E"];
 
 /**
  * The five Executive Overview hero cards, with a scope switcher that now

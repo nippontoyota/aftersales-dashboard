@@ -5,7 +5,9 @@ import { replyVpFlagAction, setVpFlagStatusAction, type FlagState } from "./acti
 
 const INIT: FlagState = { error: null, ok: false };
 
-/** HQ's reply box on a flag thread. */
+/** A recipient's own reply box — replying only ever answers this one
+ * recipient row, never the whole thread (other recipients on the same
+ * question reply independently). */
 export function ReplyForm({ id }: { id: number }) {
   const [state, action, pending] = useActionState(replyVpFlagAction, INIT);
   return (
@@ -19,9 +21,6 @@ export function ReplyForm({ id }: { id: number }) {
         className="w-full rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-[13px] text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       />
       <div className="flex items-center gap-3">
-        <label className="flex items-center gap-1.5 text-[12px] text-fg-muted">
-          <input type="checkbox" name="close" className="accent-accent" /> close thread
-        </label>
         <button
           type="submit"
           disabled={pending}

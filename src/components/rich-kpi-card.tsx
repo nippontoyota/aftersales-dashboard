@@ -23,10 +23,30 @@ const STATUS_CHIP: Record<AchievementTone, { text: string; cls: string } | null>
   neutral: null,
 };
 
+export type TrendInfo = { pct: number; title: string };
+
+/** A small "▲6%"/"▼3%" growth chip — up is always green here since every
+ * caller so far is a revenue-ish metric where more is better. Kept as its
+ * own exported piece (not baked into RichKpiCard's render only) so
+ * vp-paired-kpi-card.tsx's non-RichKpiCard layout can reuse the exact same
+ * chip for its two stacked values. */
+export function TrendChip({ trend }: { trend: TrendInfo }) {
+  const up = trend.pct >= 0;
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-[10px] font-semibold ${up ? "bg-good-soft text-good" : "bg-bad-soft text-bad"}`}
+      title={trend.title}
+    >
+      {up ? "▲" : "▼"}
+      {Math.abs(Math.round(trend.pct))}%
+    </span>
+  );
+}
+
 // Per-card identity: a soft chip behind the icon + a hairline accent along
 // the card's top edge. Decorative, not a status signal — status lives in the
 // tone-coloured bar and %.
-const ACCENT: Record<string, { chip: string; edge: string }> = {
+export const KPI_CARD_ACCENT: Record<string, { chip: string; edge: string }> = {
   red: { chip: "bg-accent-soft text-accent-text", edge: "bg-accent" },
   blue: { chip: "bg-info-soft text-info", edge: "bg-info-solid" },
   amber: { chip: "bg-warn-soft text-warn", edge: "bg-warn-solid" },
@@ -61,9 +81,11 @@ export function RichKpiCard({
   formatPaceValue = formatNumber,
   showSparkline = true,
   extra,
+  compact = false,
+  trend,
 }: {
   icon: React.ReactNode;
-  color: keyof typeof ACCENT;
+  color: keyof typeof KPI_CARD_ACCENT;
   label: string;
   /** Styled version of `label` for the visible card (e.g. the TGLOSS
    * red-T/black-GLOSS treatment) — `label` itself stays plain text and keeps
@@ -89,13 +111,17 @@ export function RichKpiCard({
   showSparkline?: boolean;
   /** Anything else this specific card needs in the space between the value/icon row and the footer — e.g. the Incentive Slab Achievement rings on the Total Revenue Stream card. Renders instead of the target-bar/sparkline/sub block, not alongside it — a card only has room for one. */
   extra?: React.ReactNode;
+  /** Tighter padding/icon/type scale for a dense hero row (e.g. /vp's Executive Overview) — same information, smaller footprint. Defaults to the original size everywhere else. */
+  compact?: boolean;
+  /** A small "vs last upload" growth chip next to the value — see TrendChip below. Omit for no chip (every existing caller). */
+  trend?: TrendInfo | null;
 }) {
   const hasTarget = actual !== undefined && target !== undefined;
   const ratio = hasTarget ? achievementRatio(actual, target) : null;
   const tone = paceTone ?? achievementTone(ratio);
   const statusChip = paceTone ? STATUS_CHIP[paceTone] : null;
   const widthPct = ratio === null ? 0 : Math.min(100, Math.max(0, ratio * 100));
-  const accent = ACCENT[color] ?? ACCENT.indigo;
+  const accent = KPI_CARD_ACCENT[color] ?? KPI_CARD_ACCENT.indigo;
 
   const tooltip = hasTarget
     ? `${label}: ${formatNumber(actual)} of ${formatNumber(target)} target${hasPreviousUpload === false ? " · first upload" : ""}`
@@ -103,7 +129,7 @@ export function RichKpiCard({
 
   return (
     <div
-      className="group relative flex h-full flex-col justify-between overflow-hidden rounded-lg border border-border bg-surface p-4 shadow-card transition-shadow duration-150 hover:shadow-card-hover"
+      className={`group relative flex h-full flex-col justify-between overflow-hidden rounded-lg border border-border bg-surface shadow-card transition-shadow duration-150 hover:shadow-card-hover ${compact ? "p-3" : "p-4"}`}
       title={tooltip}
     >
       <span className={`absolute inset-x-0 top-0 h-0.5 ${accent.edge}`} aria-hidden="true" />
@@ -111,16 +137,23 @@ export function RichKpiCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">{visualLabel ?? label}</div>
-          <div className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums text-fg">{value}</div>
+          <div className="mt-1 flex items-center gap-1.5">
+            <span className={`font-semibold tracking-tight tabular-nums text-fg ${compact ? "text-lg" : "text-2xl"}`}>{value}</span>
+            {trend ? <TrendChip trend={trend} /> : null}
+          </div>
         </div>
-        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${accent.chip}`}>{icon}</div>
+        <div
+          className={`flex shrink-0 items-center justify-center rounded-lg ${accent.chip} ${compact ? "h-7 w-7 [&_svg]:h-3.5 [&_svg]:w-3.5" : "h-9 w-9"}`}
+        >
+          {icon}
+        </div>
       </div>
 
       {extra ? (
-        <div className="mt-2 flex flex-1 items-center justify-center">{extra}</div>
+        <div className={`flex flex-1 items-center justify-center ${compact ? "mt-1.5" : "mt-2"}`}>{extra}</div>
       ) : hasTarget ? (
-        <div className="mt-3.5">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2 ring-1 ring-inset ring-border-subtle">
+        <div className={compact ? "mt-2" : "mt-3.5"}>
+          <div className={`w-full overflow-hidden rounded-full bg-surface-2 ring-1 ring-inset ring-border-subtle ${compact ? "h-1.5" : "h-2"}`}>
             <div
               className={`h-full rounded-full ${TONE_BAR[tone]} transition-[width] duration-500 ease-out`}
               style={{ width: `${widthPct}%` }}
@@ -159,7 +192,7 @@ export function RichKpiCard({
         </div>
       ) : (showSparkline && sparklineValues && sparklineValues.filter((v) => v !== null).length >= 2) ||
         (pace?.runRatePerDay !== null && pace?.runRatePerDay !== undefined) ? (
-        <div className="mt-3">
+        <div className={compact ? "mt-2" : "mt-3"}>
           {sub ? <div className="text-[11px] font-medium text-fg-faint">{sub}</div> : null}
           {showSparkline && sparklineValues && sparklineValues.filter((v) => v !== null).length >= 2 ? (
             <Sparkline values={sparklineValues} color={tone === "neutral" ? "#94a3b8" : undefined} />
@@ -171,7 +204,7 @@ export function RichKpiCard({
           ) : null}
         </div>
       ) : sub ? (
-        <div className="mt-3 text-[11px] text-fg-faint">{sub}</div>
+        <div className={`text-[11px] text-fg-faint ${compact ? "mt-2" : "mt-3"}`}>{sub}</div>
       ) : null}
 
       {hasPreviousUpload !== undefined ? (

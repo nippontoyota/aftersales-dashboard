@@ -52,6 +52,14 @@ export const StorefrontIcon = () =>
     </>
   );
 
+export const ExternalSalesIcon = () =>
+  base(
+    <>
+      <path d="M8.5 5H4.5v10.5H15V11.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M11 4.5h4.5V9M15.5 5 10 10.5" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  );
+
 export const BellIcon = () =>
   base(
     <>

@@ -3,13 +3,47 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useActionState, useEffect } from "react";
+import { REGIONS, type RegionName } from "@/lib/regions";
 import { raiseVpFlagAction, type FlagState } from "./actions";
 
+const REGION_NAMES = Object.keys(REGIONS) as RegionName[];
+
+/** HQ / any regional manager / any branch admin, checkboxes grouped by
+ * region — the VP picks any combination on one query (2026-09-26). CO01C
+ * (the online store) has no admin of its own, so it's excluded here same as
+ * everywhere else recipients are enumerated. */
+function RecipientPicker() {
+  return (
+    <div className="max-h-40 space-y-2.5 overflow-y-auto rounded-md border border-border-strong bg-surface px-3 py-2.5">
+      <label className="flex items-center gap-2 text-[13px] font-medium text-fg">
+        <input type="checkbox" name="recipients" value="hq" className="accent-accent" /> HQ
+      </label>
+      {REGION_NAMES.map((region) => (
+        <div key={region} className="border-t border-border-subtle pt-2 first:border-t-0 first:pt-0">
+          <label className="flex items-center gap-2 text-[13px] font-medium text-fg">
+            <input type="checkbox" name="recipients" value={`regional:${region}`} className="accent-accent" /> {region} Regional Manager
+          </label>
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 pl-5">
+            {REGIONS[region].filter((b) => b !== "CO01C").map((branch) => (
+              <label key={branch} className="flex items-center gap-1.5 text-[12px] text-fg-subtle">
+                <input type="checkbox" name="recipients" value={`branch:${branch}`} className="accent-accent" /> {branch}
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
- * The "raise a query to HQ" composer. Shown as a modal whenever `?flag=1`
- * is in the URL — a header button or any row's flag icon just links there
- * with the context pre-filled (`&metric=…&branch=…`). Closing it strips the
- * flag params. Read-only VP → HQ; the reply comes back on /vp/queries.
+ * The "raise a query" composer. Shown as a modal whenever `?flag=1` is in
+ * the URL — a flag icon on a specific figure links there with the context
+ * pre-filled (`&metric=…&branch=…`); the corner notifications popup's "New
+ * query" links there with no context for a general question. Closing it
+ * strips the flag params. Addressed to any combination of HQ / regional
+ * managers / branch admins (2026-09-26) — each replies independently, and
+ * every reply shows up in the popup.
  */
 export function FlagComposer({
   page,
@@ -52,8 +86,8 @@ export function FlagComposer({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <Link href={closeHref} className="absolute inset-0 bg-black/50" aria-label="Cancel" />
-      <div className="relative w-full max-w-md rounded-lg border border-border bg-surface p-5 shadow-lg">
-        <h2 className="text-sm font-semibold text-fg">Raise a query to HQ</h2>
+      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg border border-border bg-surface p-5 shadow-lg">
+        <h2 className="text-sm font-semibold text-fg">Raise a query</h2>
         <p className="mt-1 text-[12px] text-fg-faint">
           {[
             metric && `Metric: ${metric}`,
@@ -67,7 +101,7 @@ export function FlagComposer({
 
         {state.ok ? (
           <div className="mt-4 rounded-md border border-good/30 bg-good-soft px-3 py-2 text-sm text-good">
-            Sent to HQ. You&apos;ll see the reply under Queries.
+            Sent. You&apos;ll see replies in your notifications.
           </div>
         ) : (
           <form action={formAction} className="mt-3 space-y-3">
@@ -80,11 +114,15 @@ export function FlagComposer({
             <textarea
               name="note"
               required
-              rows={4}
+              rows={3}
               autoFocus
-              placeholder="What would you like HQ to check or explain?"
+              placeholder="What would you like to ask or have checked?"
               className="w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             />
+            <div>
+              <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-fg-faint">Send to</div>
+              <RecipientPicker />
+            </div>
             {state.error ? <p className="text-[12px] text-bad">{state.error}</p> : null}
             <div className="flex justify-end gap-2">
               <Link
@@ -98,7 +136,7 @@ export function FlagComposer({
                 disabled={pending}
                 className="rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
               >
-                {pending ? "Sending…" : "Send to HQ"}
+                {pending ? "Sending…" : "Send"}
               </button>
             </div>
           </form>

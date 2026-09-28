@@ -13,7 +13,7 @@ import { tglossText } from "@/components/tgloss-text";
 export function VpExceptionsBanner({ exceptions }: { exceptions: TglossException[] }) {
   if (exceptions.length === 0) {
     return (
-      <div className="mt-4 flex items-center gap-2 rounded-lg border border-good/30 bg-good-soft px-4 py-2.5 text-[12px] font-medium text-good">
+      <div className="mt-5 flex items-center gap-2 rounded-lg border border-good/30 bg-good-soft px-4 py-2.5 text-[12px] font-medium text-good">
         <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M4 10.5l4 4 8-9" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -26,7 +26,7 @@ export function VpExceptionsBanner({ exceptions }: { exceptions: TglossException
   const hiddenCount = exceptions.length - shown.length;
 
   return (
-    <div className="mt-4 rounded-xl border border-warn/30 bg-warn-soft/40 px-4 py-3">
+    <div className="mt-5 rounded-xl border border-warn/30 bg-warn-soft/40 px-4 py-3">
       <div className="flex items-center gap-2 text-[12px] font-semibold text-warn">
         <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path d="M10 2a1 1 0 01.894.553l7 14A1 1 0 0117 18H3a1 1 0 01-.894-1.447l7-14A1 1 0 0110 2zm0 6a1 1 0 00-1 1v3a1 1 0 002 0V9a1 1 0 00-1-1zm0 7a1 1 0 100 2 1 1 0 000-2z" />
@@ -47,7 +47,11 @@ export function VpExceptionsBanner({ exceptions }: { exceptions: TglossException
             ) : null}
           </div>
         ))}
-        {hiddenCount > 0 ? <span className="self-center text-[11px] text-fg-faint">+{hiddenCount} more — see Regions</span> : null}
+        {hiddenCount > 0 ? (
+          <a href="#regions" className="self-center text-[11px] text-fg-faint hover:text-accent-text hover:underline">
+            +{hiddenCount} more — see Regions below
+          </a>
+        ) : null}
       </div>
     </div>
   );
