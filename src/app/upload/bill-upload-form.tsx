@@ -27,6 +27,27 @@ type FileResult = {
 // batch under the limit without needing a different upload path.
 const MAX_BATCH_BYTES = 3.5 * 1024 * 1024;
 
+// "Could not reach the server" used to be shown for every failure mode,
+// which hid the difference between a genuine dropped connection (TypeError —
+// the request never got a response at all) and a response that came back but
+// wasn't the JSON we expected (SyntaxError from res.json() — e.g. a session
+// timeout bouncing the POST through a redirect to /login, which responds
+// with an empty, non-JSON body). Surfacing which one it was, plus the
+// browser's own error text, turns a dead-end complaint into something we can
+// actually diagnose next time it happens instead of guessing blind.
+function describeFetchError(err: unknown): string {
+  if (err instanceof SyntaxError) {
+    return `Upload failed — the server's response couldn't be read (${err.message}). This usually means the session expired mid-upload — try refreshing the page and signing in again.`;
+  }
+  if (err instanceof TypeError) {
+    return `Upload failed — could not reach the server (${err.message}). Check your internet connection and try again.`;
+  }
+  if (err instanceof Error) {
+    return `Upload failed — ${err.name}: ${err.message}`;
+  }
+  return "Upload failed — unknown error.";
+}
+
 function batchFilesBySize(files: File[], maxBytes: number): File[][] {
   const batches: File[][] = [];
   let current: File[] = [];
@@ -118,8 +139,9 @@ export function BillUploadForm() {
         formRef.current?.reset();
         router.refresh();
       }
-    } catch {
-      setError("Upload failed — could not reach the server.");
+    } catch (err) {
+      console.error("[bill-upload] batch upload failed:", err);
+      setError(describeFetchError(err));
       setResults(allResults);
     } finally {
       setPending(false);
@@ -159,8 +181,9 @@ export function BillUploadForm() {
         formRef.current?.reset();
         router.refresh();
       }
-    } catch {
-      setError("Upload failed — could not reach the server.");
+    } catch (err) {
+      console.error("[bill-upload] manual-entry submit failed:", err);
+      setError(describeFetchError(err));
     } finally {
       setPending(false);
     }
