@@ -246,6 +246,14 @@ async function DashboardContent({
 
   const vasGentani = achievementRatio(kpis.vasAchievementForTheMonth, kpis.gusRoMtd);
 
+  const extSalesCovered = filteredBranches.filter(
+    (b) => typeof b.externalSalesMtd === "number" && typeof b.partsRetailAchievementForTheMonth === "number"
+  ).length;
+  const extSalesSub =
+    extSalesCovered > 0 && extSalesCovered < filteredBranches.length
+      ? `Based on ${extSalesCovered} of ${filteredBranches.length} branches`
+      : "External sales ÷ total parts sales";
+
   // Only HQ reaches this point — branch and regional accounts returned above
   // with their own branch-first view. `region` is always "All" here now that
   // the header's region dropdown is gone (removed 2026-09-22 — see
@@ -321,7 +329,7 @@ async function DashboardContent({
               <>
                 <CollapsibleCard title="Other KPIs" defaultOpen>
                   <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-2">
-                    <RichKpiCard icon={<PercentIcon />} color="violet" label="External Sales % on SPR I" value={formatPercent(kpis.externalSalesPctOfSprInternal)} sub="avg across branches" />
+                    <RichKpiCard icon={<PercentIcon />} color="violet" label="External Sales % on SPR I" value={formatPercent(kpis.externalSalesPctOfSprInternal)} sub={extSalesSub} />
                     <RichKpiCard
                       icon={<TargetIcon />}
                       color="indigo"

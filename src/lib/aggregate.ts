@@ -41,6 +41,30 @@ function avgField(branches: BranchReport[], key: NumericBranchReportKey): number
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
+/** Sums externalSalesMtd and partsRetailAchievementForTheMonth only for
+ * branches where BOTH fields are numeric. A null on either side excludes that
+ * branch entirely from both the numerator and denominator — it never biases the
+ * ratio in either direction. Zero is a valid number (a branch with no external
+ * sales contributes 0 to the numerator and its full SPR-I to the denominator).
+ * Returns null only when no branch has both inputs present. */
+function pairedExternalSalesPct(branches: BranchReport[]): number | null {
+  let sumExt = 0;
+  let sumSprI = 0;
+  let found = false;
+  for (const b of branches) {
+    const ext = b.externalSalesMtd;
+    const spr = b.partsRetailAchievementForTheMonth;
+    if (typeof ext === "number" && typeof spr === "number") {
+      sumExt += ext;
+      sumSprI += spr;
+      found = true;
+    }
+  }
+  if (!found) return null;
+  const denom = sumSprI + sumExt;
+  return denom === 0 ? null : sumExt / denom;
+}
+
 /** Headline KPI strip — one field per tile shown on the dashboard. */
 export type KpiSummary = {
   gusRoMtd: number | null;
@@ -63,7 +87,9 @@ export type KpiSummary = {
   bpuPartsMtd: number | null;
   bpuLabourMtd: number | null;
   externalSalesMtd: number | null;
-  /** Averaged across branches, not summed — see avgField. */
+  /** Paired-branch weighted ratio — only branches with both externalSalesMtd and
+   * partsRetailAchievementForTheMonth present contribute; a branch missing either
+   * is excluded from both numerator and denominator. See pairedExternalSalesPct(). */
   externalSalesPctOfSprInternal: number | null;
   spoTGloss: number | null;
   spoTGlossTarget: number | null;
@@ -101,7 +127,7 @@ export function computeKpiSummary(branches: BranchReport[]): KpiSummary {
     bpuPartsMtd: sumField(branches, "bpuPartsMtd"),
     bpuLabourMtd: sumField(branches, "bpuLabourMtd"),
     externalSalesMtd: sumField(branches, "externalSalesMtd"),
-    externalSalesPctOfSprInternal: avgField(branches, "externalSalesPctOfSprInternal"),
+    externalSalesPctOfSprInternal: pairedExternalSalesPct(branches),
     spoTGloss: sumField(branches, "spoTGloss"),
     spoTGlossTarget: sumField(branches, "spoTGlossTarget"),
     serviceRevenue: sumField(branches, "serviceRevenue"),
@@ -127,7 +153,7 @@ export type HeroSummary = {
   bpuPartsMtd: number | null;
   bpuLabourMtd: number | null;
   externalSalesMtd: number | null;
-  /** Averaged across branches, not summed — same convention as KpiSummary's field of the same name (see avgField). */
+  /** Paired-branch weighted ratio — same semantics as KpiSummary's field. See pairedExternalSalesPct(). */
   externalSalesPctOfSprInternal: number | null;
   /** Scrap / used-oil bill revenue (Rs, without tax), MTD — summed across branches. Always a number (0 when no bills). */
   scrapRevenueMtd: number | null;
@@ -152,7 +178,7 @@ export function computeHeroSummary(branches: BranchReport[]): HeroSummary {
     bpuPartsMtd: sumField(branches, "bpuPartsMtd"),
     bpuLabourMtd: sumField(branches, "bpuLabourMtd"),
     externalSalesMtd: sumField(branches, "externalSalesMtd"),
-    externalSalesPctOfSprInternal: avgField(branches, "externalSalesPctOfSprInternal"),
+    externalSalesPctOfSprInternal: pairedExternalSalesPct(branches),
     scrapRevenueMtd: sumField(branches, "scrapRevenueMtd"),
     usedOilRevenueMtd: sumField(branches, "usedOilRevenueMtd"),
     totalRevenueStreamMtd: sumField(branches, "totalRevenueStreamMtd"),
