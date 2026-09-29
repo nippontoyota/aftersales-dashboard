@@ -10,6 +10,7 @@ import { achievementRatio, computeKpiSummary, TKM_TRACKED_KPIS } from "@/lib/agg
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
+import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computePace, paceTone } from "@/lib/pace";
@@ -89,7 +90,8 @@ async function TkmTargetsContent({
   admin: AdminAccount;
 }) {
   const params = await searchParams;
-  const data = await loadDashboardData(params, admin);
+  const [data, holidaySet] = await Promise.all([loadDashboardData(params, admin), loadReportHolidaySet()]);
+  const holidays = [...holidaySet];
 
   if (!data) {
     return (
@@ -116,20 +118,20 @@ async function TkmTargetsContent({
   };
 
   const pace = {
-    bpu: computePace(date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget),
-    offtake: computePace(date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget),
-    partsRetail: computePace(date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget),
-    pmOc: computePace(date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget),
+    bpu: computePace(date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget, holidaySet),
+    offtake: computePace(date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget, holidaySet),
+    partsRetail: computePace(date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget, holidaySet),
+    pmOc: computePace(date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget, holidaySet),
   };
 
   // Same pace methodology everywhere on this page (2026-09-19, at the user's
   // request) — one paceTone call per KPI, reused for the card's status chip,
   // matching the heatmap/region-card/insights logic exactly.
   const tone = {
-    bpu: paceTone(date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget),
-    offtake: paceTone(date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget),
-    partsRetail: paceTone(date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget),
-    pmOc: paceTone(date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget),
+    bpu: paceTone(date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget, holidaySet),
+    offtake: paceTone(date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget, holidaySet),
+    partsRetail: paceTone(date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget, holidaySet),
+    pmOc: paceTone(date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget, holidaySet),
   };
 
   return (
@@ -266,15 +268,15 @@ async function TkmTargetsContent({
           per the user's 2026-09-19 request. */}
       <MetricSyncProvider initialMetric={TREND_METRICS[0].key}>
         <div className="mt-4">
-          <TrendChart seriesByMetric={trendSeriesByMetric} metrics={TREND_METRICS} date={date} chartHeight={150} />
+          <TrendChart seriesByMetric={trendSeriesByMetric} metrics={TREND_METRICS} date={date} chartHeight={150} holidays={holidays} />
         </div>
 
         <div className="mt-4">
-          <RegionScorecard branches={report.branches} monthSnapshots={monthSnapshots} metrics={REGION_METRICS} date={date} />
+          <RegionScorecard branches={report.branches} monthSnapshots={monthSnapshots} metrics={REGION_METRICS} date={date} holidays={holidays} />
         </div>
 
         <div className="mt-4">
-          <BranchPerformanceHeatmap branches={filteredBranches} metrics={HEATMAP_METRICS} date={date} monthSnapshots={monthSnapshots} />
+          <BranchPerformanceHeatmap branches={filteredBranches} metrics={HEATMAP_METRICS} date={date} monthSnapshots={monthSnapshots} holidays={holidays} />
         </div>
       </MetricSyncProvider>
 
@@ -287,6 +289,7 @@ async function TkmTargetsContent({
           perBranchMetrics={PER_BRANCH_METRICS}
           regionGapMetric={REGION_GAP_METRIC}
           maxVisible={3}
+          holidays={holidays}
         />
       </div>
 

@@ -8,11 +8,13 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { REGIONS, type RegionName } from "@/lib/regions";
-import { listRegionQueries, listRegionQueriesForBranch, listRegionQueriesForRegion } from "@/lib/region-queries/store";
+import { listBranchQueriesForRegion, listRegionQueries, listRegionQueriesForBranch, listRegionQueriesForRegion } from "@/lib/region-queries/store";
 import { CancellationFlag } from "../cancellations/cancellation-flag";
 import { VpFlagsPanel } from "@/components/vp-flags-panel";
 import { RaiseToBranchForm, RaiseToHqForm, RaiseToRegionForm } from "./region-query-forms";
 import { RegionQueryThread } from "./region-query-thread";
+import { listVpQueryThreadsForBranch } from "@/lib/vp-flags/store";
+import { VpFlagThread } from "../vp/vp-flag-thread";
 
 /** Formerly "Alerts" — the achievement-below-target list (AlertsPanel) was
  * dropped entirely (2026-09-15, at the user's request: "not really needed").
@@ -165,9 +167,14 @@ async function RegionQueriesSection({ admin }: { admin: AdminAccount }) {
 /** A regional manager's own Queries page — their region's threads (both
  * directions), plus a composer to ask HQ a new question. */
 async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, { role: "regional" }> }) {
-  const queries = await listRegionQueriesForRegion(admin.region);
+  const [queries, branchQueries] = await Promise.all([
+    listRegionQueriesForRegion(admin.region),
+    listBranchQueriesForRegion(admin.region),
+  ]);
   const open = queries.filter((q) => q.status !== "closed");
   const closed = queries.filter((q) => q.status === "closed");
+  const branchQueriesOpen = branchQueries.filter((q) => q.status !== "closed");
+  const branchQueriesClosed = branchQueries.filter((q) => q.status === "closed");
   const branches = REGIONS[admin.region].filter((b) => b !== "CO01C");
 
   return (
@@ -187,6 +194,10 @@ async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, 
           </div>
         </div>
       </header>
+
+      <Suspense fallback={null}>
+        <VpFlagsPanel admin={admin} />
+      </Suspense>
 
       {queries.length === 0 ? (
         <div className="mt-6 rounded-xl border border-dashed border-border-strong bg-surface p-8 text-center">
@@ -221,6 +232,28 @@ async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, 
           ) : null}
         </>
       )}
+
+      {branchQueries.length > 0 ? (
+        <div className="mt-10 border-t border-border pt-6">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">Your branches&apos; own queries</h2>
+          <p className="mt-1 text-[12px] text-fg-faint">
+            Read-only — these are private threads between HQ/you and the branch directly; the branch handles its own reply and
+            Mark resolved.
+          </p>
+          <div className="mt-3 space-y-3">
+            {branchQueriesOpen.map((q) => (
+              <RegionQueryThread key={q.id} query={q} viewerCanReply={false} viewerCanManage={admin.username === q.createdBy} />
+            ))}
+          </div>
+          {branchQueriesClosed.length > 0 ? (
+            <div className="mt-3 space-y-3">
+              {branchQueriesClosed.map((q) => (
+                <RegionQueryThread key={q.id} query={q} viewerCanReply={false} viewerCanManage={admin.username === q.createdBy} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -231,9 +264,11 @@ async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, 
  * now). Reuses the exact same RegionQueryThread/"Mark resolved" flow as
  * every other role. */
 async function BranchQueriesContent({ admin }: { admin: Extract<AdminAccount, { role: "branch" }> }) {
-  const queries = await listRegionQueriesForBranch(admin.branch);
+  const [queries, vpThreads] = await Promise.all([listRegionQueriesForBranch(admin.branch), listVpQueryThreadsForBranch(admin.branch)]);
   const open = queries.filter((q) => q.status !== "closed");
   const closed = queries.filter((q) => q.status === "closed");
+  const vpOpen = vpThreads.filter((t) => !t.archived);
+  const vpClosed = vpThreads.filter((t) => t.archived);
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
@@ -274,6 +309,25 @@ async function BranchQueriesContent({ admin }: { admin: Extract<AdminAccount, { 
           ) : null}
         </>
       )}
+
+      {vpThreads.length > 0 ? (
+        <div className="mt-10 border-t border-border pt-6">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">From the VP Service</h2>
+          <div className="mt-3 space-y-3">
+            {vpOpen.map((t) => {
+              const replyable = new Set(t.recipients.filter((r) => r.type === "branch" && r.branch === admin.branch).map((r) => r.id));
+              return <VpFlagThread key={t.id} thread={t} viewerReplyableRecipientIds={replyable} canManage={false} />;
+            })}
+          </div>
+          {vpClosed.length > 0 ? (
+            <div className="mt-3 space-y-3">
+              {vpClosed.map((t) => (
+                <VpFlagThread key={t.id} thread={t} viewerReplyableRecipientIds={new Set()} canManage={false} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

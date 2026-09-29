@@ -6,6 +6,7 @@ import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
+import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { ReportTable } from "../dashboard/report-table";
 
@@ -41,7 +42,8 @@ async function ReportsContent({
   admin: AdminAccount;
 }) {
   const params = await searchParams;
-  const data = await loadDashboardData(params, admin);
+  const [data, holidaySet] = await Promise.all([loadDashboardData(params, admin), loadReportHolidaySet()]);
+  const holidays = [...holidaySet];
 
   if (!data) {
     return (
@@ -74,7 +76,7 @@ async function ReportsContent({
         isCompanyScope={data.isCompanyScope}
       />
       <div className="mt-4">
-        <ReportTable branches={data.filteredBranches} daysSincePrevious={data.report.daysSincePrevious} date={data.date} />
+        <ReportTable branches={data.filteredBranches} daysSincePrevious={data.report.daysSincePrevious} date={data.date} holidays={holidays} />
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { loadCentralMetricTargetsView } from "@/lib/central-metric-targets/view-data";
 import { loadNavState } from "@/lib/dashboard-data";
+import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { buildReport } from "@/lib/report";
 import { listSnapshotDates } from "@/lib/snapshot-store";
 import { requireCentralRmAccess } from "../central-guard";
@@ -49,7 +50,7 @@ async function TkmTargetsContent({ searchParams }: { searchParams: Promise<{ dat
   }
 
   const date = params.date && dates.includes(params.date) ? params.date : dates.at(-1)!;
-  const report = await buildReport(date);
+  const [report, holidays] = await Promise.all([buildReport(date), loadReportHolidaySet()]);
 
   if (!report) {
     return (
@@ -64,7 +65,7 @@ async function TkmTargetsContent({ searchParams }: { searchParams: Promise<{ dat
 
   const branches = report.branches.filter((b) => CENTRAL_METRIC_BRANCHES.includes(b.branch));
   const co01eReport = report.branches.find((b) => b.branch === "CO01E");
-  const metrics = await loadCentralMetricTargetsView(branches, date, co01eReport);
+  const metrics = await loadCentralMetricTargetsView(branches, date, holidays, co01eReport);
 
   return (
     <div className="mx-auto max-w-[1400px] p-6">

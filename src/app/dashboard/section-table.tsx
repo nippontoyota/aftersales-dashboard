@@ -32,44 +32,63 @@ export function SectionTable({
   branches,
   columns,
   defaultOpen,
+  scroll = true,
+  roomy = false,
+  renderBranchCell,
 }: {
   title: string;
   subtitle?: string;
   branches: BranchReport[];
   columns: SectionColumn[];
-  /** Opens the card immediately instead of the usual collapsed-by-default —
-   * the VP's Regions page wants its one table visible on load, not another
-   * click away (2026-09-25). Defaults to CollapsibleCard's own false. */
+  /** Opens the card immediately instead of the usual collapsed-by-default.
+   * Defaults to CollapsibleCard's own false. */
   defaultOpen?: boolean;
+  /** Off to let the table scroll with the page instead of in its own
+   * capped-height/frozen-header box (2026-09-28, at the VP's request — three
+   * of these boxed tables stacked under a sticky header felt "suffocating,"
+   * peering through small windows instead of one continuous page). Defaults
+   * to true, unchanged, everywhere except the VP's own tables. */
+  scroll?: boolean;
+  /** A bit more row/cell padding, for the same VP request above — the main
+   * dashboard's tables stay at their current density. Defaults to false. */
+  roomy?: boolean;
+  /** Replaces the plain branch-name text in each row's first cell — the VP's
+   * compare feature uses it to add a pin button next to the name. */
+  renderBranchCell?: (row: BranchReport) => ReactNode;
 }) {
-  return (
-    <CollapsibleCard title={title} subtitle={subtitle} defaultOpen={defaultOpen}>
-      <div className="max-h-[calc(100dvh-15rem)] overflow-auto">
-        <table className="min-w-full text-xs">
-          <thead className="text-left text-fg-subtle [&>tr>th]:sticky [&>tr>th]:top-0 [&>tr>th]:z-10 [&>tr>th]:bg-surface-2 [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border)]">
-            <tr>
-              <th className="sticky left-0 whitespace-nowrap bg-surface-2 px-3 py-2">Branch</th>
-              {columns.map((c) => (
-                <th key={c.label} className="whitespace-nowrap px-3 py-2">
-                  {tglossText(c.label)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {branches.map((row) => (
-              <tr key={row.branch} className="border-t border-border-subtle hover:bg-surface-2/70">
-                <td className="sticky left-0 whitespace-nowrap bg-surface px-3 py-2 font-medium text-fg">{row.branch}</td>
-                {columns.map((c) => (
-                  <td key={c.label} className="px-3 py-2 align-top">
-                    {c.render(row)}
-                  </td>
-                ))}
-              </tr>
+  const cellPad = roomy ? "px-3 py-3" : "px-3 py-2";
+  const table = (
+    <table className="min-w-full text-xs">
+      <thead
+        className={`text-left text-fg-subtle ${scroll ? "[&>tr>th]:sticky [&>tr>th]:top-0 [&>tr>th]:z-10 [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border)]" : "[&>tr>th]:sticky [&>tr>th]:top-14 [&>tr>th]:z-10 [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border)]"} [&>tr>th]:bg-surface-2`}
+      >
+        <tr>
+          <th className={`${scroll ? "sticky left-0" : ""} whitespace-nowrap bg-surface-2 ${cellPad}`}>Branch</th>
+          {columns.map((c) => (
+            <th key={c.label} className={`whitespace-nowrap ${cellPad}`}>
+              {tglossText(c.label)}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {branches.map((row) => (
+          <tr key={row.branch} className="border-t border-border-subtle hover:bg-surface-2/70">
+            <td className={`${scroll ? "sticky left-0" : ""} whitespace-nowrap bg-surface ${cellPad} font-medium text-fg`}>{renderBranchCell ? renderBranchCell(row) : row.branch}</td>
+            {columns.map((c) => (
+              <td key={c.label} className={`${cellPad} align-top`}>
+                {c.render(row)}
+              </td>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+
+  return (
+    <CollapsibleCard title={title} subtitle={subtitle} defaultOpen={defaultOpen} clip={!scroll}>
+      {scroll ? <div className="max-h-[calc(100dvh-15rem)] overflow-auto">{table}</div> : table}
     </CollapsibleCard>
   );
 }

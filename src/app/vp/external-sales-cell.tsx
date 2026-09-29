@@ -42,27 +42,28 @@ function BreakdownModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative max-h-[90dvh] w-full max-w-md overflow-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">{scopeLabel}</div>
-            <h2 className="mt-0.5 text-lg font-semibold text-fg">{metricLabel}</h2>
+      <div className="relative flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="shrink-0 border-b border-border-subtle px-5 pb-3 pt-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">{scopeLabel}</div>
+              <h2 className="mt-0.5 text-lg font-semibold text-fg">{metricLabel}</h2>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded p-1 text-fg-muted hover:bg-surface-2 hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+              aria-label="Close"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-fg-muted hover:bg-surface-2 hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent"
-            aria-label="Close"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-          </button>
+          <div className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(total)}</div>
         </div>
 
-        <div className="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(total)}</div>
-
-        <div className="mt-4 space-y-1.5">
+        <div className="space-y-1.5 overflow-auto px-5 pb-5 pt-4">
           {withValue.length === 0 ? (
             <p className="text-xs text-fg-faint">No branch has a figure to break this down by yet this month.</p>
           ) : (

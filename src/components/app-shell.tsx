@@ -3,6 +3,7 @@
 import Link, { useLinkStatus } from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions";
+import { AutoRefresh } from "./auto-refresh";
 import { QueryPopupGate } from "./query-popup-gate";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -31,19 +32,11 @@ const NAV_ITEMS = [
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false },
 ];
 
-/** The VP Service view (role `vp_service`) gets its own small nav and
- * nothing else — no upload, no HQ tools, no publish. See src/app/vp/*.
- * Branch detail (/vp/branches) is intentionally *not* a nav item — the only
- * way in is clicking a branch on Regions, and it shows a "← Regions" link. */
-const VP_NAV_ITEMS = [
-  { href: "/vp", label: "Overview", key: "vp" as const },
-  { href: "/vp/regions", label: "Regions", key: "vp-regions" as const },
-  { href: "/vp/queries", label: "Queries", key: "vp-queries" as const },
-];
-
-/** The CEO view (role `ceo`) gets its own single-item nav, same shape as
- * VP_NAV_ITEMS — branch detail (/ceo/branches) isn't a nav item, reached
- * only by clicking a region on Overview. See src/app/ceo/*. */
+/** The CEO view (role `ceo`) gets its own single-item nav — branch detail
+ * (/ceo/branches) isn't a nav item, reached only by clicking a region on
+ * Overview. See src/app/ceo/*. (The VP Service view, role `vp_service`, used
+ * to have an equivalent small nav here too — retired 2026-09-26 in favour of
+ * VpShell, a bare page with no sidebar/nav at all; see src/app/vp/vp-shell.tsx.) */
 const CEO_NAV_ITEMS = [{ href: "/ceo", label: "Overview", key: "ceo" as const }];
 
 /** The Accounts view (role `accounts`) gets its own single-item nav, same
@@ -84,7 +77,6 @@ const UTILITY_NAV_ITEMS = [
 type NavKey =
   | (typeof NAV_ITEMS)[number]["key"]
   | (typeof UTILITY_NAV_ITEMS)[number]["key"]
-  | (typeof VP_NAV_ITEMS)[number]["key"]
   | (typeof CEO_NAV_ITEMS)[number]["key"]
   | (typeof ACCOUNTS_NAV_ITEMS)[number]["key"]
   | (typeof CENTRAL_NAV_ITEMS)[number]["key"]
@@ -200,15 +192,6 @@ function PanelIcon() {
   );
 }
 
-function MapIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
-      <path d="M7.5 3.5 3 5v11.5l4.5-1.5 5 1.5L17 15V3.5l-4.5 1.5-5-1.5z" strokeLinejoin="round" />
-      <path d="M7.5 3.5v11.5M12.5 5v11.5" />
-    </svg>
-  );
-}
-
 function ChatIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
@@ -287,9 +270,6 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   upload: UploadIcon,
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,
-  vp: DashboardIcon,
-  "vp-regions": MapIcon,
-  "vp-queries": ChatIcon,
   ceo: DashboardIcon,
   accounts: DashboardIcon,
   "central-tkm-targets": TkmTargetsIcon,
@@ -302,7 +282,6 @@ export function AppShell({
   isHq = false,
   companyTabs = true,
   canUpload = true,
-  vpNav = false,
   ceoNav = false,
   accountsNav = false,
   centralNav = false,
@@ -328,9 +307,6 @@ export function AppShell({
   /** When false, the Upload nav item is hidden — regional managers never
    * upload. Defaults to true. */
   canUpload?: boolean;
-  /** VP Service: replace the whole nav with the four /vp items (no upload,
-   * no company tabs, no HQ utilities). Defaults to false. */
-  vpNav?: boolean;
   /** CEO: replace the whole nav with the single /ceo item (no upload, no
    * company tabs, no HQ utilities). Defaults to false. */
   ceoNav?: boolean;
@@ -370,9 +346,7 @@ export function AppShell({
   // client syncs to the stored value on hydration.
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
 
-  const items = vpNav
-    ? VP_NAV_ITEMS
-    : ceoNav
+  const items = ceoNav
     ? CEO_NAV_ITEMS
     : accountsNav
     ? ACCOUNTS_NAV_ITEMS
@@ -384,7 +358,7 @@ export function AppShell({
           (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
-  const utilityItems = isHq && !vpNav && !ceoNav && !accountsNav && !centralNav ? UTILITY_NAV_ITEMS : [];
+  const utilityItems = isHq && !ceoNav && !accountsNav && !centralNav ? UTILITY_NAV_ITEMS : [];
 
   const navLink = (item: { href: string; label: string; key: NavKey }, compact: boolean) => {
     const Icon = ICONS[item.key];
@@ -489,6 +463,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-canvas text-fg">
+      <AutoRefresh />
       <QueryPopupGate />
       {/* Desktop sidebar — collapsible to an icon rail */}
       <aside

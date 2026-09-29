@@ -26,7 +26,7 @@ export function VpCollapsibleSection({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border-subtle bg-surface">
+    <div className="overflow-clip rounded-2xl border border-border-subtle bg-surface">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

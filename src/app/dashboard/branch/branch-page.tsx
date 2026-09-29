@@ -36,6 +36,7 @@ export function BranchAccountPage({
   dates,
   uploadedAt,
   incentiveSlabs,
+  holidays,
 }: {
   view: BranchView | null;
   branch: string;
@@ -47,6 +48,8 @@ export function BranchAccountPage({
    * (2026-09-25, at the user's request: every branch should be able to see
    * their own slab progress on their own dashboard). */
   incentiveSlabs?: IncentiveSlabTargets;
+  /** HQ-flagged report_holidays, for the Incentive Slab forecast (2026-09-29). */
+  holidays?: string[];
 }) {
   return (
     <div className="mx-auto max-w-[1400px] p-6">
@@ -57,7 +60,7 @@ export function BranchAccountPage({
         dates={dates}
       />
       <div className="mt-4 flex justify-center rounded-lg border border-border bg-surface p-4 shadow-card sm:justify-start">
-        <IncentiveSlabIndicator scopeLabel={branch} actual={view?.totalRevenueMtd ?? null} slabs={incentiveSlabs} date={date} size={108} />
+        <IncentiveSlabIndicator scopeLabel={branch} actual={view?.totalRevenueMtd ?? null} slabs={incentiveSlabs} date={date} holidays={holidays} size={108} />
       </div>
       <div className="mt-4">
         {view ? (

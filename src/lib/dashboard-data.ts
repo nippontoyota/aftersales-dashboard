@@ -7,7 +7,7 @@ import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./s
 import { loadCombinedServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
 import { isDatePublished } from "./publish-store";
 import { countActionableForBranch, countActionableForHq, countActionableForRegion } from "./region-queries/store";
-import { countOpenVpFlags } from "./vp-flags/store";
+import { countOpenForBranch as countOpenVpForBranch, countOpenForHq, countOpenForRegion } from "./vp-flags/store";
 import { BRANCH_REVENUE_VISIBLE_FROM_MONTH, maskBranchRevenue } from "./branch-revenue-visibility";
 
 /** Nav-shell state for the dashboard family of pages — cheap enough to run in
@@ -23,7 +23,7 @@ export async function loadNavState(
 ): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean; slimNav: boolean; queriesBadge: number }> {
   const canUpload = admin.role !== "regional" && admin.role !== "hq_viewer";
   if (admin.role === "hq" || admin.role === "hq_viewer") {
-    const [vpOpen, regionActionable] = await Promise.all([countOpenVpFlags(), countActionableForHq()]);
+    const [vpOpen, regionActionable] = await Promise.all([countOpenForHq(), countActionableForHq()]);
     return { companyTabs: true, dashboardLabel: "Executive Overview", canUpload, slimNav: false, queriesBadge: vpOpen + regionActionable };
   }
   // Branch / regional accounts get the slim nav (company pages dropped, their
@@ -33,9 +33,9 @@ export async function loadNavState(
   const [dates, queriesBadge] = await Promise.all([
     listSnapshotDates(),
     admin.role === "regional"
-      ? countActionableForRegion(admin.region)
+      ? Promise.all([countActionableForRegion(admin.region), countOpenForRegion(admin.region)]).then(([a, b]) => a + b)
       : admin.role === "branch"
-      ? countActionableForBranch(admin.branch)
+      ? Promise.all([countActionableForBranch(admin.branch), countOpenVpForBranch(admin.branch)]).then(([a, b]) => a + b)
       : Promise.resolve(0),
   ]);
   const latest = dates.at(-1);

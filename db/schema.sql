@@ -116,6 +116,75 @@ create table if not exists region_queries (
 create index if not exists region_queries_region_idx on region_queries (region, status, created_at desc);
 create index if not exists region_queries_status_idx on region_queries (status, created_at desc);
 
+-- VP query threads (2026-09-26) — replaces vp_flags' single "always → HQ"
+-- recipient with true multi-recipient: the VP picks any combination of HQ,
+-- one or more regional managers, and/or one or more branch admins on one
+-- question, and each recipient replies independently (their own reply lives
+-- on their own row in vp_query_recipients, never shared with anyone else
+-- addressed on the same thread). vp_flags is left in place rather than
+-- dropped — a read-only historical record, nothing new writes to it. See
+-- src/lib/vp-flags/store.ts.
+create table if not exists vp_query_threads (
+  id bigint generated always as identity primary key,
+  created_by text not null references admins(username),
+  created_at timestamptz not null default now(),
+  context_page text not null,
+  context_date date,
+  context_region text,
+  context_branch text,
+  context_metric text,
+  context_value text,
+  note text not null,
+  -- The VP's own "done with this" flag — independent of whether every
+  -- recipient has replied; the VP can archive a thread the moment they have
+  -- enough of an answer, same as vp_flags' old "closed" status.
+  archived boolean not null default false,
+  constraint vp_query_threads_page_check check (context_page in ('overview', 'region', 'branch'))
+);
+create index if not exists vp_query_threads_archived_idx on vp_query_threads (archived, created_at desc);
+
+create table if not exists vp_query_recipients (
+  id bigint generated always as identity primary key,
+  thread_id bigint not null references vp_query_threads(id) on delete cascade,
+  recipient_type text not null,
+  -- Set only for recipient_type='regional'.
+  recipient_region text,
+  -- Set only for recipient_type='branch'.
+  recipient_branch text,
+  status text not null default 'open',
+  reply text,
+  replied_by text references admins(username),
+  replied_at timestamptz,
+  constraint vp_query_recipients_type_check check (recipient_type in ('hq', 'regional', 'branch')),
+  constraint vp_query_recipients_region_check check (recipient_type <> 'regional' or recipient_region in ('North', 'Central', 'South')),
+  constraint vp_query_recipients_branch_check check (recipient_type <> 'branch' or recipient_branch is not null),
+  constraint vp_query_recipients_status_check check (status in ('open', 'answered'))
+);
+create index if not exists vp_query_recipients_thread_idx on vp_query_recipients (thread_id);
+create index if not exists vp_query_recipients_hq_idx on vp_query_recipients (recipient_type, status) where recipient_type = 'hq';
+create index if not exists vp_query_recipients_region_idx on vp_query_recipients (recipient_region, status) where recipient_type = 'regional';
+create index if not exists vp_query_recipients_branch_idx on vp_query_recipients (recipient_branch, status) where recipient_type = 'branch';
+
+-- One-time backfill from vp_flags, guarded so re-running db/migrate.mjs
+-- never duplicates it: every existing vp_flags row becomes one thread with
+-- a single 'hq' recipient (the only recipient the old model ever had),
+-- carrying over its reply/status/closed state exactly.
+insert into vp_query_threads (id, created_by, created_at, context_page, context_date, context_region, context_branch, context_metric, context_value, note, archived)
+overriding system value
+select id, created_by, created_at, context_page, context_date, context_region, context_branch, context_metric, context_value, note, (status = 'closed')
+from vp_flags
+where not exists (select 1 from vp_query_threads)
+  and exists (select 1 from vp_flags);
+
+select setval(pg_get_serial_sequence('vp_query_threads', 'id'), coalesce((select max(id) from vp_query_threads), 1))
+where exists (select 1 from vp_query_threads);
+
+insert into vp_query_recipients (thread_id, recipient_type, status, reply, replied_by, replied_at)
+select id, 'hq', case when status = 'open' then 'open' else 'answered' end, hq_reply, replied_by, replied_at
+from vp_flags
+where not exists (select 1 from vp_query_recipients)
+  and exists (select 1 from vp_flags);
+
 -- One row per branch per date — mirrors data/uploads/{date}.json's `branches` array.
 create table if not exists ba_tool_snapshots (
   date date not null,

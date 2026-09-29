@@ -1,18 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
-import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { achievementRatio, achievementTone } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { regionForBranch, REGIONS, type RegionName } from "@/lib/regions";
 import { branchOptionsByRegion, loadVpData } from "@/lib/vp-data";
+import { countAwaitingVp, listVpQueryThreadsForVp } from "@/lib/vp-flags/store";
 import { DAILY_REPORT_ROWS, branchCell } from "../../dashboard/daily-report-rows";
 import { BranchPicker } from "../branch-picker";
 import { FlagComposer } from "../flag-composer";
 import { requireVpAccess } from "../vp-guard";
 import { VpHeader } from "../vp-header";
+import { VpQueriesPopup } from "../vp-queries-popup";
+import { VpShell } from "../vp-shell";
 import { tglossText } from "@/components/tgloss-text";
 
 const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg" } as const;
@@ -36,28 +38,35 @@ export default async function VpBranchesPage({
   const admin = await requireVpAccess();
   return (
     // Branch detail lives inside the Regions section — no nav item of its own.
-    <AppShell current="vp-regions" showDashboardLink vpNav identity={adminIdentityLabel(admin)}>
+    <VpShell identity={adminIdentityLabel(admin)}>
       <Suspense fallback={<DashboardPageSkeleton />}>
-        <Branch searchParams={searchParams} />
+        <Branch searchParams={searchParams} vpUsername={admin.username} />
       </Suspense>
-    </AppShell>
+    </VpShell>
   );
 }
 
 async function Branch({
   searchParams,
+  vpUsername,
 }: {
   searchParams: Promise<{ date?: string; branch?: string; region?: string; flag?: string }>;
+  vpUsername: string;
 }) {
   const params = await searchParams;
-  const data = await loadVpData(params.date);
+  const [data, queryThreads, unreadCount] = await Promise.all([
+    loadVpData(params.date),
+    listVpQueryThreadsForVp(vpUsername),
+    countAwaitingVp(vpUsername),
+  ]);
   if (!data) {
     return (
       <div className="mx-auto w-full max-w-3xl px-6 py-8">
-        <VpHeader eyebrow="Nippon Group · Service" title="Branch" flagHref="/vp/regions?flag=1" backHref="/vp/regions" backLabel="Regions" />
+        <VpHeader eyebrow="Nippon Group · Service" title="Branch" flagHref="/vp?flag=1" backHref="/vp#regions" backLabel="Regions" />
         <div className="mt-6 rounded-xl border border-dashed border-border-strong bg-surface p-8 text-sm text-fg-subtle">
           No BA Tool reports have been uploaded yet.
         </div>
+        <VpQueriesPopup threads={queryThreads} unreadCount={unreadCount} />
       </div>
     );
   }
@@ -71,44 +80,50 @@ async function Branch({
           date={data.date}
           basePath="/vp/branches"
           dateExtraParams={params.branch ? { branch: params.branch } : undefined}
-          flagHref="/vp/regions?flag=1"
-          backHref={`/vp/regions?date=${data.date}`}
+          flagHref="/vp?flag=1"
+          backHref={`/vp?date=${data.date}#regions`}
           backLabel="Regions"
         />
         <div className="mt-6 rounded-xl border border-dashed border-border-strong bg-surface p-8 text-sm text-fg-subtle">
           No BA Tool report on file for {data.date}.
         </div>
+        <VpQueriesPopup threads={queryThreads} unreadCount={unreadCount} />
       </div>
     );
   }
 
   const selected = params.branch && data.report.branches.some((b) => b.branch === params.branch) ? params.branch : null;
   // The only way in is clicking a branch on Regions — with no branch, send them back.
-  if (!selected) redirect(`/vp/regions?date=${data.date}`);
+  if (!selected) redirect(`/vp?date=${data.date}#regions`);
 
   const branch = data.report.branches.find((b) => b.branch === selected)!;
   const region = regionForBranch(branch.branch);
   const fromRegion = params.region && params.region in REGIONS ? (params.region as RegionName) : null;
   const groups = branchOptionsByRegion(data.report).filter((g) => g.branches.length > 0);
   const flagBase = `/vp/branches?date=${data.date}&branch=${selected}${fromRegion ? `&region=${fromRegion}` : ""}`;
-  const backHref = `/vp/regions?date=${data.date}${fromRegion ? `&region=${fromRegion}` : ""}`;
+  const backHref = `/vp?date=${data.date}${fromRegion ? `&region=${fromRegion}` : ""}#regions`;
 
   return (
     <div className="mx-auto max-w-[1200px] px-6 py-8">
-      <VpHeader
-        eyebrow="Nippon Group · Service"
-        title={branch.branch}
-        subtitle={`${region ?? "—"} region · month-to-date, with a run-rate projection to month-end.`}
-        dates={data.dates}
-        date={data.date}
-        basePath="/vp/branches"
-        dateExtraParams={{ branch: selected, ...(fromRegion ? { region: fromRegion } : {}) }}
-        flagHref={`${flagBase}&fbranch=${branch.branch}&flag=1`}
-        backHref={backHref}
-        backLabel={fromRegion ?? "Regions"}
-      >
-        <BranchPicker groups={groups} selected={selected} />
-      </VpHeader>
+      {/* Sticky under VpShell's own top bar, same as the Executive Overview —
+          the branch picker/date/flag controls stay reachable while scrolling
+          the long metrics table below. */}
+      <div className="sticky top-14 z-20 bg-canvas print:static">
+        <VpHeader
+          eyebrow="Nippon Group · Service"
+          title={branch.branch}
+          subtitle={`${region ?? "—"} region · month-to-date, with a run-rate projection to month-end.`}
+          dates={data.dates}
+          date={data.date}
+          basePath="/vp/branches"
+          dateExtraParams={{ branch: selected, ...(fromRegion ? { region: fromRegion } : {}) }}
+          flagHref={`${flagBase}&fbranch=${branch.branch}&flag=1`}
+          backHref={backHref}
+          backLabel={fromRegion ?? "Regions"}
+        >
+          <BranchPicker groups={groups} selected={selected} />
+        </VpHeader>
+      </div>
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MiniStat label="Total Revenue · MTD" value={formatCompactCurrency(branch.totalRevenueStreamMtd)} accent />
@@ -192,6 +207,7 @@ async function Branch({
       </p>
 
       <FlagComposer page="branch" date={data.date} />
+      <VpQueriesPopup threads={queryThreads} unreadCount={unreadCount} />
     </div>
   );
 }

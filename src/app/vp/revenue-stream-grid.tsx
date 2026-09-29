@@ -5,9 +5,12 @@ import type { RegionName } from "@/lib/regions";
 import type { BranchReport } from "@/lib/report";
 import type { VpScopeMetrics } from "@/lib/vp-data";
 import { tglossText } from "@/components/tgloss-text";
-import { bandClassName, LABOUR_PER_RO_BANDS, PARTS_PER_RO_BANDS, type Band } from "../dashboard/revenue-per-vehicle-table";
+import { LABOUR_PER_RO_BANDS, PARTS_PER_RO_BANDS, type Band } from "../dashboard/revenue-per-vehicle-table";
 import { IncentiveSlabIndicator } from "../dashboard/incentive-slab-indicator";
 import { ScopeBreakdownCell } from "./external-sales-cell";
+import { softBandClassName } from "./vp-band-colors";
+import { VpMetricButton } from "./vp-compare";
+import type { MetricKey } from "./vp-metrics";
 
 const REGION_COLOR: Record<RegionName, string> = {
   Central: "var(--color-cat-central)",
@@ -19,12 +22,14 @@ const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", 
 
 type Row =
   | { kind: "section"; label: string }
-  | { kind: "hero"; label: ReactNode; sub: string; get: (s: VpScopeMetrics) => string }
+  | { kind: "hero"; label: ReactNode; sub: string; get: (s: VpScopeMetrics) => string; detail: DetailSpec }
   | {
       kind: "metric";
       label: ReactNode;
       sub?: string;
       get: (s: VpScopeMetrics) => string;
+      /** Makes each scope's figure clickable — opens the ranked-branches detail (vp-metric-detail.tsx). */
+      detail?: DetailSpec;
       tone?: (s: VpScopeMetrics) => keyof typeof TONE_TEXT;
       /** Renders this row as a coloured band (green/yellow/orange/red)
        * instead of plain text — the same thresholds and colours as the
@@ -46,6 +51,8 @@ type Row =
       branchValue: (b: BranchReport) => number | null;
     };
 
+type DetailSpec = { metric: MetricKey; value: (s: VpScopeMetrics) => number | null };
+
 const ROWS: Row[] = [
   { kind: "section", label: "Revenue Stream" },
   {
@@ -53,17 +60,19 @@ const ROWS: Row[] = [
     label: "Total Revenue Stream · MTD",
     sub: "GUS + BPU parts & labour + External Sales + scrap/used oil",
     get: (s) => formatCompactCurrency(s.totalRevenueStreamMtd),
+    detail: { metric: "totalRevenue", value: (s) => s.totalRevenueStreamMtd },
   },
 
   { kind: "section", label: "GUS · General Service" },
-  { kind: "metric", label: "GUS Parts · MTD", get: (s) => formatCompactCurrency(s.gusPartsMtd) },
-  { kind: "metric", label: "GUS Labour · MTD", get: (s) => formatCompactCurrency(s.gusLabourMtd) },
+  { kind: "metric", label: "GUS Parts · MTD", get: (s) => formatCompactCurrency(s.gusPartsMtd), detail: { metric: "gusParts", value: (s) => s.gusPartsMtd } },
+  { kind: "metric", label: "GUS Labour · MTD", get: (s) => formatCompactCurrency(s.gusLabourMtd), detail: { metric: "gusLabour", value: (s) => s.gusLabourMtd } },
   {
     kind: "metric",
     label: "GUS Parts / car",
     sub: "Parts MTD ÷ GUS RO MTD",
     get: (s) => formatCompactCurrency(s.gusPartsPerCar),
     band: { value: (s) => s.gusPartsPerCar, bands: PARTS_PER_RO_BANDS },
+    detail: { metric: "gusPartsPerCar", value: (s) => s.gusPartsPerCar },
   },
   {
     kind: "metric",
@@ -71,8 +80,9 @@ const ROWS: Row[] = [
     sub: "Labour MTD ÷ GUS RO MTD",
     get: (s) => formatCompactCurrency(s.gusLabourPerCar),
     band: { value: (s) => s.gusLabourPerCar, bands: LABOUR_PER_RO_BANDS },
+    detail: { metric: "gusLabourPerCar", value: (s) => s.gusLabourPerCar },
   },
-  { kind: "metric", label: "GUS RO · MTD", get: (s) => formatNumber(s.gusRoMtd) },
+  { kind: "metric", label: "GUS RO · MTD", get: (s) => formatNumber(s.gusRoMtd), detail: { metric: "gusRo", value: (s) => s.gusRoMtd } },
 
   { kind: "section", label: "BPU · Body & Paint" },
   {
@@ -87,16 +97,17 @@ const ROWS: Row[] = [
     sub: "BPU line at every GUS+BPU branch",
     get: (s) => formatCompactCurrency(s.bpuRevenueOtherMtd),
   },
-  { kind: "metric", label: "BPU RO · MTD", get: (s) => formatNumber(s.bpuRoMtd) },
+  { kind: "metric", label: "BPU RO · MTD", get: (s) => formatNumber(s.bpuRoMtd), detail: { metric: "bpuRo", value: (s) => s.bpuRoMtd } },
 
   { kind: "section", label: "TGLOSS" },
-  { kind: "metric", label: tglossText("TGLOSS · MTD"), get: (s) => formatCompactCurrency(s.tglossMtd) },
+  { kind: "metric", label: tglossText("TGLOSS · MTD"), get: (s) => formatCompactCurrency(s.tglossMtd), detail: { metric: "tglossMtd", value: (s) => s.tglossMtd } },
   { kind: "metric", label: tglossText("TGLOSS Target"), get: (s) => formatCompactCurrency(s.tglossTarget) },
   {
     kind: "metric",
     label: tglossText("TGLOSS Achievement"),
     get: (s) => formatPercent(s.tglossPct),
     tone: (s) => achievementTone(s.tglossPct),
+    detail: { metric: "tglossPct", value: (s) => s.tglossPct },
   },
 
   { kind: "section", label: "Other Revenue" },
@@ -112,6 +123,17 @@ const ROWS: Row[] = [
   { kind: "section", label: "Incentive Target Slabs" },
   { kind: "slabs" },
 ];
+
+/** A scope's figure — a button that opens the ranked-branches detail when the row has one, plain text otherwise. */
+function ScopeFigure({ spec, scope, className, children }: { spec?: DetailSpec; scope: VpScopeMetrics; className?: string; children: ReactNode }) {
+  const value = spec ? spec.value(scope) : null;
+  if (!spec || value === null) return className ? <div className={className}>{children}</div> : <>{children}</>;
+  return (
+    <VpMetricButton className={className} target={{ metric: spec.metric, value, scope: { label: scope.label, region: scope.region ?? null } }}>
+      {children}
+    </VpMetricButton>
+  );
+}
 
 function ColumnHeader({ scope, className }: { scope: VpScopeMetrics; className?: string }) {
   const dot = scope.region ? (
@@ -149,33 +171,24 @@ function ColumnHeader({ scope, className }: { scope: VpScopeMetrics; className?:
  * breakdown rather than the rank-vs-company-wide modal GUS/BPU/TGLOSS use
  * on the Regions page (see external-sales-cell.tsx).
  */
-export function RevenueStreamGrid({ scopes, branches, date }: { scopes: VpScopeMetrics[]; branches: BranchReport[]; date: string }) {
+export function RevenueStreamGrid({ scopes, branches, date, holidays }: { scopes: VpScopeMetrics[]; branches: BranchReport[]; date: string; holidays?: string[] }) {
   return (
-    // A bounded max-height + its own overflow-y-auto (2026-09-25, at the
-    // VP's request for a frozen header) — a plain overflow-x-auto wrapper
-    // with no height constraint doesn't work for this: per the CSS overflow
-    // spec, overflow-x:auto alone silently forces overflow-y to a
-    // scroll-container value too (confirmed — "hidden" here, "auto" without
-    // this comment's fix), which hijacks the sticky header below to stick
-    // relative to *this div* instead of the page; since the div's own
-    // scrollTop never moved (nothing overflowed it — the page scrolled
-    // instead), the header never actually looked stuck. Giving it a real
-    // height and letting it scroll internally is what makes the header
-    // genuinely stick, same pattern as the Regions page's own tables.
-    <div className="max-h-[calc(100dvh-14rem)] overflow-auto rounded-2xl border border-border-subtle bg-surface">
-      <table className="w-full min-w-[720px] border-collapse text-sm">
+    // Scrolls with the page now (2026-09-28, at the VP's request — a capped
+    // height + frozen header here, stacked with two more of the same on the
+    // Regions section below, made the page feel like a stack of small boxed
+    // windows rather than one page). overflow-x-auto (not overflow-auto) is
+    // kept deliberately — this table is min-w-[720px] and needs to scroll
+    // horizontally on a narrow viewport; dropping it entirely would let the
+    // table force the whole page wider instead.
+    <div className="overflow-clip rounded-2xl border border-border-subtle bg-surface">
+      <table className="w-full border-collapse text-sm">
         <thead>
-          {/* Frozen while the page scrolls (2026-09-25, at the VP's request —
-              so which column is Group/Central/South/North stays visible the
-              whole way down). Sticky must sit on each cell, not the <tr> —
-              table rows don't reliably respect position: sticky, only cells
-              do. */}
           <tr className="border-b border-border-subtle">
-            <th scope="col" className="sticky top-0 z-10 bg-surface-2 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">
+            <th scope="col" className="sticky top-14 z-10 bg-surface-2 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">
               Metric
             </th>
             {scopes.map((s, i) => (
-              <ColumnHeader key={s.label} scope={s} className={`sticky top-0 z-10 bg-surface-2 ${i === 1 ? "border-l border-border-subtle" : ""}`} />
+              <ColumnHeader key={s.label} scope={s} className={`sticky top-14 z-10 bg-surface-2 ${i === 1 ? "border-l border-border-subtle" : ""}`} />
             ))}
           </tr>
         </thead>
@@ -200,7 +213,9 @@ export function RevenueStreamGrid({ scopes, branches, date }: { scopes: VpScopeM
                   </td>
                   {scopes.map((s, ci) => (
                     <td key={s.label} className={`px-4 py-4 text-right text-xl font-semibold tabular-nums tracking-tight text-fg ${ci === 1 ? "border-l border-border-subtle" : ""}`}>
-                      {row.get(s)}
+                      <ScopeFigure spec={row.detail} scope={s}>
+                        {row.get(s)}
+                      </ScopeFigure>
                     </td>
                   ))}
                 </tr>
@@ -210,14 +225,14 @@ export function RevenueStreamGrid({ scopes, branches, date }: { scopes: VpScopeM
             if (row.kind === "scopeBreakdown") {
               return (
                 <tr key={i} className="border-t border-border-subtle">
-                  <td className="px-5 py-2.5">
+                  <td className="px-5 py-3">
                     <div className="text-[13px] font-medium text-fg">{row.label}</div>
                   </td>
                   {scopes.map((s, ci) => {
                     const value = row.value(s);
                     const scopeBranches = s.region ? filterBranchesByRegion(branches, s.region) : branches;
                     return (
-                      <td key={s.label} className={`px-4 py-2.5 text-right ${ci === 1 ? "border-l border-border-subtle" : ""}`}>
+                      <td key={s.label} className={`px-4 py-3 text-right ${ci === 1 ? "border-l border-border-subtle" : ""}`}>
                         {value === null ? (
                           <span className="text-sm text-fg-faint">—</span>
                         ) : (
@@ -245,7 +260,7 @@ export function RevenueStreamGrid({ scopes, branches, date }: { scopes: VpScopeM
                   {scopes.map((s, ci) => (
                     <td key={s.label} className={`px-4 py-3 ${ci === 1 ? "border-l border-border-subtle" : ""}`}>
                       <div className="flex justify-end">
-                        <IncentiveSlabIndicator scopeLabel={s.label} actual={s.totalRevenueStreamMtd} slabs={s.incentiveSlabs} date={date} size={72} showActual={false} />
+                        <IncentiveSlabIndicator scopeLabel={s.label} actual={s.totalRevenueStreamMtd} slabs={s.incentiveSlabs} date={date} holidays={holidays} size={72} showActual={false} />
                       </div>
                     </td>
                   ))}
@@ -255,17 +270,21 @@ export function RevenueStreamGrid({ scopes, branches, date }: { scopes: VpScopeM
 
             return (
               <tr key={i} className="border-t border-border-subtle">
-                <td className="px-5 py-2.5">
+                <td className="px-5 py-3">
                   <div className="text-[13px] font-medium text-fg">{row.label}</div>
                   {row.sub ? <div className="text-[10.5px] leading-tight text-fg-faint">{row.sub}</div> : null}
                 </td>
                 {scopes.map((s, ci) => {
                   if (row.band) {
                     return (
-                      <td key={s.label} className={`px-4 py-2.5 text-right ${ci === 1 ? "border-l border-border-subtle" : ""}`}>
-                        <div className={`ml-auto flex h-7 w-fit min-w-24 items-center justify-center rounded px-2 text-sm font-semibold tabular-nums ${bandClassName(row.band.value(s), row.band.bands)}`}>
+                      <td key={s.label} className={`px-4 py-3 text-right ${ci === 1 ? "border-l border-border-subtle" : ""}`}>
+                        <ScopeFigure
+                          spec={row.detail}
+                          scope={s}
+                          className={`ml-auto flex h-7 w-fit min-w-24 items-center justify-center rounded px-2 text-sm font-semibold tabular-nums ${softBandClassName(row.band.value(s), row.band.bands)}`}
+                        >
                           {row.get(s)}
-                        </div>
+                        </ScopeFigure>
                       </td>
                     );
                   }
@@ -273,9 +292,11 @@ export function RevenueStreamGrid({ scopes, branches, date }: { scopes: VpScopeM
                   return (
                     <td
                       key={s.label}
-                      className={`px-4 py-2.5 text-right text-sm font-semibold tabular-nums ${TONE_TEXT[tone]} ${ci === 1 ? "border-l border-border-subtle" : ""}`}
+                      className={`px-4 py-3 text-right text-sm font-semibold tabular-nums ${TONE_TEXT[tone]} ${ci === 1 ? "border-l border-border-subtle" : ""}`}
                     >
-                      {row.get(s)}
+                      <ScopeFigure spec={row.detail} scope={s} className="rounded px-1 hover:text-accent-text">
+                        {row.get(s)}
+                      </ScopeFigure>
                     </td>
                   );
                 })}

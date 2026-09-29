@@ -30,9 +30,9 @@ function pmPenText(salesMtd: number | null, pmActualMtd: number | null): string 
  * pacing is shown — see lib/pace.ts) appended to the actual-value line. */
 const ENGINE_FLUSH_INJECTOR_PM_TARGET_SHARE = 0.2;
 
-function pmTargetShareCell(actualMtd: number | null, pmActualMtd: number | null, date: string) {
+function pmTargetShareCell(actualMtd: number | null, pmActualMtd: number | null, date: string, holidays: ReadonlySet<string>) {
   const target = pmActualMtd !== null ? pmActualMtd * ENGINE_FLUSH_INJECTOR_PM_TARGET_SHARE : null;
-  const forecastRatio = computePace(date, actualMtd, target).projectedAchievementRatio;
+  const forecastRatio = computePace(date, actualMtd, target, holidays).projectedAchievementRatio;
   return <ProgressCell actual={actualMtd} target={target} formatValue={formatCompact} secondaryLine={`Fcst ${pct0(forecastRatio)}`} />;
 }
 
@@ -50,12 +50,16 @@ export function ReportTable({
   branches,
   daysSincePrevious,
   date,
+  holidays: holidaysProp,
 }: {
   branches: BranchReport[];
   daysSincePrevious: number | null;
   date: string;
+  /** HQ-flagged report_holidays, for the Engine Flush/Injector Cleaner forecast (2026-09-29). */
+  holidays?: string[];
 }) {
   const asOf = dayLabel(daysSincePrevious);
+  const holidays = new Set(holidaysProp ?? []);
 
   return (
     <div className="space-y-4">
@@ -105,11 +109,11 @@ export function ReportTable({
           },
           {
             label: "Engine Flush",
-            render: (r) => pmTargetShareCell(r.engineFlushMtd, r.pmOcAchievementForTheMonth, date),
+            render: (r) => pmTargetShareCell(r.engineFlushMtd, r.pmOcAchievementForTheMonth, date, holidays),
           },
           {
             label: "Injector Cleaner Diesel/Petrol",
-            render: (r) => pmTargetShareCell(r.injectorCleanerMtd, r.pmOcAchievementForTheMonth, date),
+            render: (r) => pmTargetShareCell(r.injectorCleanerMtd, r.pmOcAchievementForTheMonth, date, holidays),
           },
           {
             label: "Synthetic Oil (Ltrs)",

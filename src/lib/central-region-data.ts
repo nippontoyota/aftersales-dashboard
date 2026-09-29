@@ -112,6 +112,9 @@ export type CentralRegionView = {
    * thresholds" rule as a single branch missing its own slab row. */
   regionSlab: IncentiveSlabTargets | undefined;
   workingDays: { elapsed: number; total: number; remaining: number };
+  /** HQ-flagged report_holidays, as an array — the Slab indicator's own
+   * forecast (lib/pace.ts's computePace) needs the same set (2026-09-29). */
+  holidays: string[];
   /** How many of the displayed branches have a scom205 upload in for `date`
    * — same signal the CEO page's DraftWarning already uses, just scoped to
    * these branches instead of company-wide. */
@@ -250,6 +253,7 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
     balanceToSlab4: slab4Total !== null && totalAchieved !== null ? slab4Total - totalAchieved : null,
     regionSlab,
     workingDays,
+    holidays: [...holidays],
     uploadStatus: { uploaded, total: displayedBranches.length },
   };
 }

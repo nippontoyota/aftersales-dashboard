@@ -176,6 +176,7 @@ export function CentralRegionDashboard({
                     actual={c.totalAchieved}
                     slabs={c.branch === "Central Rgn" ? view.regionSlab : c.slab}
                     date={view.date}
+                    holidays={view.holidays}
                     size={64}
                     showActual={false}
                   />

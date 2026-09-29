@@ -48,6 +48,7 @@ export type GusLabourVasCounts = {
   wheelAlignment: VasCountDetail;
   wheelBalancing: VasCountDetail;
   brakeSkimming: VasCountDetail;
+  evaporatorCleaning: VasCountDetail;
 };
 
 /**
@@ -65,12 +66,13 @@ export type GusLabourVasCounts = {
 export async function loadGusLabourVasCounts(branch: string, date: string): Promise<GusLabourVasCounts> {
   const [snapshots, baToolSnapshot] = await Promise.all([loadAllServiceInfoSnapshotsForMonthUpTo(date), loadSnapshot(date)]);
 
-  const byBranch = new Map<string, { wheelAlignment: number; wheelBalancing: number; brakeSkimming: number }>();
+  const byBranch = new Map<string, { wheelAlignment: number; wheelBalancing: number; brakeSkimming: number; evaporatorCleaning: number }>();
   for (const s of snapshots) {
-    const existing = byBranch.get(s.branch) ?? { wheelAlignment: 0, wheelBalancing: 0, brakeSkimming: 0 };
+    const existing = byBranch.get(s.branch) ?? { wheelAlignment: 0, wheelBalancing: 0, brakeSkimming: 0, evaporatorCleaning: 0 };
     existing.wheelAlignment += s.counts.wheelAlignment;
     existing.wheelBalancing += s.counts.wheelBalancing;
     existing.brakeSkimming += s.counts.brakeSkimming;
+    existing.evaporatorCleaning += s.counts.evaporatorCleaning;
     byBranch.set(s.branch, existing);
   }
 
@@ -81,7 +83,7 @@ export async function loadGusLabourVasCounts(branch: string, date: string): Prom
     if (typeof row.pm === "number") pmActualByBranch.set(row.branch, row.pm);
   }
 
-  function build(metric: "wheelAlignment" | "wheelBalancing" | "brakeSkimming"): VasCountDetail {
+  function build(metric: "wheelAlignment" | "wheelBalancing" | "brakeSkimming" | "evaporatorCleaning"): VasCountDetail {
     const rows: { branch: string; value: number }[] = [];
     for (const [b, counts] of byBranch.entries()) {
       const pm = pmActualByBranch.get(b);
@@ -96,5 +98,5 @@ export async function loadGusLabourVasCounts(branch: string, date: string): Prom
     return { count, penetrationPct, rank: rankMap.get(branch) ?? null };
   }
 
-  return { wheelAlignment: build("wheelAlignment"), wheelBalancing: build("wheelBalancing"), brakeSkimming: build("brakeSkimming") };
+  return { wheelAlignment: build("wheelAlignment"), wheelBalancing: build("wheelBalancing"), brakeSkimming: build("brakeSkimming"), evaporatorCleaning: build("evaporatorCleaning") };
 }

@@ -2,7 +2,7 @@ import { BP_BAYS, bpBayUtilization, gsBayUtilization, GS_BAYS, sumBayUtilization
 import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, grossProfitPerRo, type HeroSummary, type KpiSummary } from "./aggregate";
 import { REGIONS, type RegionName } from "./regions";
 import { loadReportHolidaySet } from "./report-holidays/store";
-import { workingDaysElapsedInMonth, workingDaysInMonth } from "./reporting-date";
+import { sundayOffWorkingDaysElapsedInMonth, sundayOffWorkingDaysInMonth } from "./reporting-date";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { computeTrendSeries } from "./trend";
 import { isDatePublished } from "./publish-store";
@@ -95,6 +95,11 @@ export type CeoData = {
    * that's derived from `report` follows suit. */
   report: Report | null;
   workingDaysElapsed: number;
+  /** HQ-flagged report_holidays, as an array (serializable across the
+   * server/client boundary) — every computePace/paceTone call on this page
+   * must reuse this same set, so a Sunday or holiday grades identically
+   * everywhere (2026-09-29). */
+  holidays: string[];
   group: {
     hero: HeroSummary;
     kpis: KpiSummary;
@@ -183,6 +188,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
       dates,
       report: null,
       workingDaysElapsed: 0,
+      holidays: [...holidays],
       group: null,
       regions: [],
       revenueTrend: [],
@@ -196,7 +202,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     };
   }
 
-  const workingDaysElapsed = workingDaysElapsedInMonth(date, holidays);
+  const workingDaysElapsed = sundayOffWorkingDaysElapsedInMonth(date, holidays);
 
   // GUS-for-the-month Target: same per-branch formula as Bay Utilization's
   // own ideal figure, just for every working day in the month rather than
@@ -204,7 +210,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
   // really just "however many working days to project capacity for", so
   // this reuses it (and sumBayUtilization for the group total) instead of
   // duplicating the bays x productivity x days formula.
-  const monthDays = workingDaysInMonth(date, holidays);
+  const monthDays = sundayOffWorkingDaysInMonth(date, holidays);
   const gusMonthTarget = sumBayUtilization(
     report.branches.map((branch) => (GS_BAYS[branch.branch] ? gsBayUtilization(branch.branch, branch.gusRoMtd, monthDays) : null)),
   )?.idealRoMtd ?? null;
@@ -249,6 +255,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     dates,
     report,
     workingDaysElapsed,
+    holidays: [...holidays],
     group: {
       hero: groupHero,
       kpis: computeKpiSummary(report.branches),

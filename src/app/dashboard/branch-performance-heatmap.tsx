@@ -89,22 +89,24 @@ function MetricCell({
   label,
   branch,
   date,
+  holidays,
 }: {
   actual: number | null;
   target: number | null;
   label: string;
   branch: string;
   date?: string;
+  holidays: ReadonlySet<string>;
 }) {
   const ratio = achievementRatio(actual, target);
-  const tone = date ? computePaceTone(date, actual, target) : achievementTone(ratio);
+  const tone = date ? computePaceTone(date, actual, target, holidays) : achievementTone(ratio);
   const activityOnly = hasActualWithoutTarget(actual, target);
 
   let tooltip: string;
   if (activityOnly) {
     tooltip = `${branch} — ${label}: ${formatNumber(actual)} (no target set)`;
   } else if (date && ratio !== null) {
-    const expected = expectedProgressRatio(date);
+    const expected = expectedProgressRatio(date, holidays);
     tooltip = `${branch} — ${label}: ${formatNumber(actual)} of ${formatNumber(target)} target (${formatPercent(ratio)} of full target; expected ${formatPercent(expected)} by today)`;
   } else {
     tooltip = `${branch} — ${label}: ${formatNumber(actual)} of ${formatNumber(target)} target (${formatPercent(ratio)})`;
@@ -137,16 +139,18 @@ function DrilldownMetricRow({
   target,
   date,
   series,
+  holidays,
 }: {
   metric: HeatmapMetricConfig;
   actual: number | null;
   target: number | null;
   date: string;
   series: TrendPoint[] | null;
+  holidays: ReadonlySet<string>;
 }) {
   const ratio = achievementRatio(actual, target);
-  const expected = expectedProgressRatio(date);
-  const pRatio = paceRatio(date, actual, target);
+  const expected = expectedProgressRatio(date, holidays);
+  const pRatio = paceRatio(date, actual, target, holidays);
   const gap = actual !== null && target !== null ? target - actual : null;
   const expectedByNow = target !== null ? target * expected : null;
   const gapToExpected = actual !== null && expectedByNow !== null ? expectedByNow - actual : null;
@@ -198,6 +202,7 @@ export function BranchPerformanceHeatmap({
   metrics = DEFAULT_METRICS,
   date,
   monthSnapshots,
+  holidays: holidaysProp,
 }: {
   branches: BranchReport[];
   /** Defaults to the main dashboard's own set (TGLOSS Revenue); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics instead. */
@@ -206,8 +211,11 @@ export function BranchPerformanceHeatmap({
   date?: string;
   /** Only used for the drilldown sparkline (paceMode only, and only for metrics that set baToolActual/baToolTarget). Omit to skip sparklines. */
   monthSnapshots?: Snapshot[];
+  /** HQ-flagged report_holidays — required whenever `date` is passed (pace mode), so the pace grading here matches every other dashboard (2026-09-29). */
+  holidays?: string[];
 }) {
   const paceMode = Boolean(date);
+  const holidays = useMemo(() => new Set(holidaysProp ?? []), [holidaysProp]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [drilldownBranch, setDrilldownBranch] = useState<string | null>(null);
   const [manualSort, setManualSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
@@ -237,7 +245,7 @@ export function BranchPerformanceHeatmap({
     const rank = (b: BranchReport) => {
       const actual = b[sortMetric.actual] as number | null;
       const target = typeof sortMetric.target === "number" ? sortMetric.target : (b[sortMetric.target] as number | null);
-      const r = date ? paceRatio(date, actual, target) : achievementRatio(actual, target);
+      const r = date ? paceRatio(date, actual, target, holidays) : achievementRatio(actual, target);
       // No-target/no-data branches sort last regardless of direction — a
       // missing ratio isn't "worse" or "better," it's just not comparable.
       return r;
@@ -251,7 +259,7 @@ export function BranchPerformanceHeatmap({
       return activeSort!.direction === "asc" ? ra - rb : rb - ra;
     });
     return list;
-  }, [branches, sortMetric, activeSort, date]);
+  }, [branches, sortMetric, activeSort, date, holidays]);
 
   const toggle = (branch: string) => {
     setExpanded((prev) => {
@@ -364,7 +372,7 @@ export function BranchPerformanceHeatmap({
                       const target = typeof m.target === "number" ? m.target : (b[m.target] as number | null);
                       return (
                         <td key={m.label} className="p-0">
-                          <MetricCell actual={actual} target={target} label={m.label} branch={b.branch} date={date} />
+                          <MetricCell actual={actual} target={target} label={m.label} branch={b.branch} date={date} holidays={holidays} />
                         </td>
                       );
                     })}
@@ -376,7 +384,7 @@ export function BranchPerformanceHeatmap({
                         {metrics.map((m, i) =>
                           i === offtakeColumnIndex ? (
                             <td key={m.label} className="p-0">
-                              <MetricCell actual={breakdown.ownOfftake} target={breakdown.ownOfftakeTarget} label={`${m.label} (physical)`} branch={b.branch} date={date} />
+                              <MetricCell actual={breakdown.ownOfftake} target={breakdown.ownOfftakeTarget} label={`${m.label} (physical)`} branch={b.branch} date={date} holidays={holidays} />
                             </td>
                           ) : (
                             <td key={m.label} className="p-0">
@@ -396,6 +404,7 @@ export function BranchPerformanceHeatmap({
                                 label={`${m.label} (online)`}
                                 branch={breakdown.onlineBranchCode}
                                 date={date}
+                                holidays={holidays}
                               />
                             </td>
                           ) : (
@@ -418,6 +427,7 @@ export function BranchPerformanceHeatmap({
                               actual={b[m.actual] as number | null}
                               target={typeof m.target === "number" ? m.target : (b[m.target] as number | null)}
                               date={date}
+                              holidays={holidays}
                               series={
                                 monthSnapshots && m.baToolActual
                                   ? computeTrendSeries(monthSnapshots, "All", m.baToolActual, m.baToolTarget, "sum", b.branch)
