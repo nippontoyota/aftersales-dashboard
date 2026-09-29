@@ -225,8 +225,13 @@ export type ParsedPartSale = {
  * build the F-type eligibility resolver (needs branch + upload date) before
  * running the actual counts. */
 export function parsePartSaleRows(buffer: Buffer): Record<string, unknown>[] {
-  const workbook = XLSX.read(looksBinaryWorkbook(buffer) ? buffer : repairCsvQuotes(buffer), { type: "buffer" });
+  const PART_SALE_MAX_ROWS = 20_000;
+  const workbook = XLSX.read(looksBinaryWorkbook(buffer) ? buffer : repairCsvQuotes(buffer), { type: "buffer", sheetRows: PART_SALE_MAX_ROWS + 1 });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
+  if (range.e.r >= PART_SALE_MAX_ROWS) {
+    throw new Error(`File has more than ${PART_SALE_MAX_ROWS.toLocaleString()} rows — is this the right file?`);
+  }
   // raw: false (2026-09-25) — without it, xlsx's own CSV type-guessing
   // silently mis-parses an ambiguous dash/slash SaleDate as MM-DD-YYYY
   // whenever the day is ≤12, corrupting it before this code (and

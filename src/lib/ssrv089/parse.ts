@@ -22,6 +22,7 @@ const CLOSE_SA_NAME_COLUMN = "Close SA Name";
 const PART_SALE_COLUMN = "Part Sale";
 const LABOUR_SALE_COLUMN = "Labour Sale";
 const PART_SALE_ALIAS = "Parts Sale";
+const SSRV089_MAX_ROWS = 20_000;
 
 export type Ssrv089Totals = {
   accessoriesPartSale: number;
@@ -70,6 +71,10 @@ function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | nul
     // headers-from-row-1. It won't also have real Part Sale/Labour Sale
     // columns, which is what actually distinguishes real transaction data.
     if (rows.length > 0 && CLOSE_SA_NAME_COLUMN in rows[0] && PART_SALE_COLUMN in rows[0] && LABOUR_SALE_COLUMN in rows[0]) {
+      const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
+      if (range.e.r >= SSRV089_MAX_ROWS) {
+        throw new Error(`File has more than ${SSRV089_MAX_ROWS.toLocaleString()} rows — is this the right file?`);
+      }
       return rows;
     }
   }
@@ -77,7 +82,7 @@ function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | nul
 }
 
 export function parseSsrv089Workbook(buffer: Buffer, staffNames: string[]): ParsedSsrv089 {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const workbook = XLSX.read(buffer, { type: "buffer", sheetRows: SSRV089_MAX_ROWS + 1 });
   const rows = findDataSheet(workbook);
 
   if (!rows) {

@@ -123,6 +123,8 @@ export type ParsedServiceInfo = {
  * back 0. Requiring every column the parser actually reads (not just one)
  * is what actually distinguishes real transaction data from a pivot sheet
  * that happens to share one column name. */
+const SERVICE_INFO_MAX_ROWS = 20_000;
+
 function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | null {
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
@@ -144,6 +146,10 @@ function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | nul
       JOB_ORDER_NO_COLUMN in rows[0] &&
       CLOSE_SA_NAME_COLUMN in rows[0]
     ) {
+      const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
+      if (range.e.r >= SERVICE_INFO_MAX_ROWS) {
+        throw new Error(`File has more than ${SERVICE_INFO_MAX_ROWS.toLocaleString()} rows — is this the right file?`);
+      }
       return rows;
     }
   }
@@ -151,7 +157,7 @@ function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | nul
 }
 
 export function parseServiceInfoWorkbook(buffer: Buffer, branch: string, staffNames: string[]): ParsedServiceInfo {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const workbook = XLSX.read(buffer, { type: "buffer", sheetRows: SERVICE_INFO_MAX_ROWS + 1 });
   const rows = findDataSheet(workbook);
 
   if (!rows) {
