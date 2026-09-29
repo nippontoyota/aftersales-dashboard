@@ -1,10 +1,21 @@
 import type { AchievementTone } from "./aggregate";
+import { sundayOffWorkingDaysElapsedInMonth, sundayOffWorkingDaysInMonth } from "./reporting-date";
 
 /**
  * Run-rate / pacing math — "are we on track to hit target by month-end,"
  * not just "what % of target are we at today." Pure functions, no DB access,
  * safe to call from client or server components. All inputs/outputs share
  * whatever unit the caller's actual/target are already in (Rs, units, %).
+ *
+ * `daysElapsed`/`daysInMonth`/`daysRemaining` count real working days (Mon–Sat,
+ * Sunday off, minus HQ-flagged `report_holidays`) — not calendar days. Every
+ * caller must supply the same `holidays` set used everywhere else (from
+ * `loadReportHolidaySet()`), so a single day off is graded identically across
+ * every dashboard. Switched from calendar days 2026-09-29, at the user's
+ * request, for consistency with the working-day math already used by CEO's
+ * Bay Utilization and Central's TKM targets — before this, a Sunday or a
+ * flagged holiday counted as a full day of expected progress everywhere else
+ * (KPI cards, heatmap, VP dashboard, insights), which this fixes.
  */
 export type Pace = {
   daysElapsed: number;
@@ -58,10 +69,9 @@ export function computeAnnualPace(date: string, achievedYtd: number | null, annu
   return { monthsElapsed, monthsInYear, monthsRemaining, runRatePerMonth, requiredRatePerMonth, gap, projectedYearEnd, projectedAchievementRatio };
 }
 
-export function computePace(date: string, actual: number | null, target: number | null): Pace {
-  const d = new Date(`${date}T00:00:00Z`);
-  const daysElapsed = d.getUTCDate();
-  const daysInMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+export function computePace(date: string, actual: number | null, target: number | null, holidays: ReadonlySet<string>): Pace {
+  const daysElapsed = sundayOffWorkingDaysElapsedInMonth(date, holidays);
+  const daysInMonth = sundayOffWorkingDaysInMonth(date, holidays);
   const daysRemaining = Math.max(0, daysInMonth - daysElapsed);
 
   const runRatePerDay = actual !== null && daysElapsed > 0 ? actual / daysElapsed : null;
@@ -75,17 +85,17 @@ export function computePace(date: string, actual: number | null, target: number 
 
 /**
  * Progress-to-date ratio: how far into the month's *target* the branch/KPI
- * should be by `date`, if the target were being hit evenly every calendar
- * day (elapsed days ÷ days in month — calendar days, not working days;
- * confirmed with the user 2026-09-19, consistent with computePace above).
- * Used as the denominator for pace-vs-expected-pace comparisons (heatmap
- * colour, KPI/region "on track" status) — kept separate from computePace so
- * callers that only need this one number don't have to supply actual/target.
+ * should be by `date`, if the target were being hit evenly every working day
+ * (elapsed working days ÷ working days in month — see the module-level
+ * comment above for why this is working days, not calendar days, as of
+ * 2026-09-29). Used as the denominator for pace-vs-expected-pace comparisons
+ * (heatmap colour, KPI/region "on track" status) — kept separate from
+ * computePace so callers that only need this one number don't have to supply
+ * actual/target.
  */
-export function expectedProgressRatio(date: string): number {
-  const d = new Date(`${date}T00:00:00Z`);
-  const daysElapsed = d.getUTCDate();
-  const daysInMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+export function expectedProgressRatio(date: string, holidays: ReadonlySet<string>): number {
+  const daysElapsed = sundayOffWorkingDaysElapsedInMonth(date, holidays);
+  const daysInMonth = sundayOffWorkingDaysInMonth(date, holidays);
   return daysInMonth > 0 ? daysElapsed / daysInMonth : 0;
 }
 
@@ -98,9 +108,9 @@ export function expectedProgressRatio(date: string): number {
  * Returns null when there's no target or no actual to grade (see
  * hasActualWithoutTarget in aggregate.ts for that case).
  */
-export function paceRatio(date: string, actual: number | null, target: number | null): number | null {
+export function paceRatio(date: string, actual: number | null, target: number | null, holidays: ReadonlySet<string>): number | null {
   if (actual === null || target === null || target === 0) return null;
-  const expected = expectedProgressRatio(date);
+  const expected = expectedProgressRatio(date, holidays);
   if (expected <= 0) return null;
   return actual / target / expected;
 }
@@ -115,8 +125,8 @@ export function paceRatio(date: string, actual: number | null, target: number | 
  * day to day — one slow day early in the month swings it further than the
  * same slip would move a full-month ratio.
  */
-export function paceTone(date: string, actual: number | null, target: number | null): AchievementTone {
-  const ratio = paceRatio(date, actual, target);
+export function paceTone(date: string, actual: number | null, target: number | null, holidays: ReadonlySet<string>): AchievementTone {
+  const ratio = paceRatio(date, actual, target, holidays);
   if (ratio === null) return "neutral";
   if (ratio >= 1) return "good";
   if (ratio >= 0.85) return "warn";

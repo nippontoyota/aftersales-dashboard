@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { achievementRatio, achievementTone, TRACKED_KPIS, type KpiSummary, type TrackedKpi } from "@/lib/aggregate";
 import { formatNumber, formatPercent } from "@/lib/format";
 import { computePace } from "@/lib/pace";
@@ -38,7 +38,8 @@ function buildInsights(
   date: string,
   trackedKpis: TrackedKpi[],
   perBranchMetrics: PerBranchMetric[],
-  regionGapMetric: RegionGapMetric
+  regionGapMetric: RegionGapMetric,
+  holidays: ReadonlySet<string>
 ): Insight[] {
   const insights: Insight[] = [];
 
@@ -53,7 +54,7 @@ function buildInsights(
   // 1) The single worst-off KPI, with its pace toward target.
   const worst = [...withRatio].sort((a, b) => a.ratio - b.ratio)[0];
   if (worst && worst.ratio < 1 && worst.key !== "tGloss") {
-    const pace = computePace(date, worst.actual, worst.target);
+    const pace = computePace(date, worst.actual, worst.target, holidays);
     if (pace.gap !== null && pace.gap > 0 && pace.runRatePerDay !== null && pace.requiredRatePerDay !== null) {
       insights.push(
         `${worst.label} needs ${formatNumber(pace.gap)} more to reach target. Current run rate is ${formatNumber(pace.runRatePerDay)}/day vs ${formatNumber(pace.requiredRatePerDay)}/day required.`
@@ -124,6 +125,7 @@ export function InsightsPanel({
   perBranchMetrics = DEFAULT_PER_BRANCH_METRICS,
   regionGapMetric = DEFAULT_REGION_GAP_METRIC,
   maxVisible,
+  holidays: holidaysProp,
 }: {
   kpis: KpiSummary;
   branches: BranchReport[];
@@ -138,8 +140,11 @@ export function InsightsPanel({
    * every insight with no toggle at all — the main Dashboard's own panel
    * (max 4 anyway) keeps its original always-expanded behaviour. */
   maxVisible?: number;
+  /** HQ-flagged report_holidays — feeds the run-rate/pace insight (2026-09-29). */
+  holidays?: string[];
 }) {
-  const insights = buildInsights(kpis, branches, date, trackedKpis, perBranchMetrics, regionGapMetric);
+  const holidays = useMemo(() => new Set(holidaysProp ?? []), [holidaysProp]);
+  const insights = buildInsights(kpis, branches, date, trackedKpis, perBranchMetrics, regionGapMetric, holidays);
   const [showAll, setShowAll] = useState(maxVisible === undefined);
   const visible = showAll ? insights : insights.slice(0, maxVisible);
   const hiddenCount = insights.length - visible.length;

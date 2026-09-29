@@ -171,7 +171,7 @@ function ColumnHeader({ scope, className }: { scope: VpScopeMetrics; className?:
  * breakdown rather than the rank-vs-company-wide modal GUS/BPU/TGLOSS use
  * on the Regions page (see external-sales-cell.tsx).
  */
-export function RevenueStreamGrid({ scopes, branches, date }: { scopes: VpScopeMetrics[]; branches: BranchReport[]; date: string }) {
+export function RevenueStreamGrid({ scopes, branches, date, holidays }: { scopes: VpScopeMetrics[]; branches: BranchReport[]; date: string; holidays?: string[] }) {
   return (
     // Scrolls with the page now (2026-09-28, at the VP's request — a capped
     // height + frozen header here, stacked with two more of the same on the
@@ -260,7 +260,7 @@ export function RevenueStreamGrid({ scopes, branches, date }: { scopes: VpScopeM
                   {scopes.map((s, ci) => (
                     <td key={s.label} className={`px-4 py-3 ${ci === 1 ? "border-l border-border-subtle" : ""}`}>
                       <div className="flex justify-end">
-                        <IncentiveSlabIndicator scopeLabel={s.label} actual={s.totalRevenueStreamMtd} slabs={s.incentiveSlabs} date={date} size={72} showActual={false} />
+                        <IncentiveSlabIndicator scopeLabel={s.label} actual={s.totalRevenueStreamMtd} slabs={s.incentiveSlabs} date={date} holidays={holidays} size={72} showActual={false} />
                       </div>
                     </td>
                   ))}

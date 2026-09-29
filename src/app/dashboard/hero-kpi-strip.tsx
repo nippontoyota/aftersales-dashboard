@@ -36,6 +36,7 @@ export function HeroKpiStrip({
   hasPreviousUpload,
   defaultScope,
   incentiveSlabTargets,
+  holidays: holidaysProp,
 }: {
   branches: BranchReport[];
   date: string;
@@ -50,7 +51,10 @@ export function HeroKpiStrip({
    * branches' targets — see aggregateIncentiveSlabTargets). Omitted entirely
    * hides the rings (no empty ring placeholder). */
   incentiveSlabTargets?: Record<string, IncentiveSlabTargets>;
+  /** HQ-flagged report_holidays — feeds the TGLOSS pace + Incentive Slab pace (2026-09-29). */
+  holidays?: string[];
 }) {
+  const holidays = useMemo(() => new Set(holidaysProp ?? []), [holidaysProp]);
   const options = useMemo<Option[]>(() => {
     const present = new Set(branches.map((b) => b.branch));
     const opts: Option[] = [{ value: "All", label: "All branches", region: null, kind: "all" }];
@@ -84,8 +88,8 @@ export function HeroKpiStrip({
   const hero = useMemo(() => computeHeroSummary(scoped), [scoped]);
   const kpis = useMemo(() => computeKpiSummary(scoped), [scoped]);
   const vasPace = useMemo(
-    () => computePace(date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget),
-    [date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget],
+    () => computePace(date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget, holidays),
+    [date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget, holidays],
   );
 
   const isCo01bScope = current?.kind === "branch" && scope === "CO01B";
@@ -212,6 +216,7 @@ export function HeroKpiStrip({
                 actual={revenueHero.totalRevenueStreamMtd}
                 slabs={scopeSlabs}
                 date={date}
+                holidays={holidaysProp}
                 showActual={false}
               />
             ) : undefined

@@ -76,23 +76,24 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
   });
 
   const kpis = group.kpis;
+  const holidays = new Set(data.holidays);
   const pace = {
-    gus: computePace(data.date, kpis.gusRoMtd, group.gusMonthTarget),
-    bpu: computePace(data.date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget),
-    offtake: computePace(data.date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget),
-    partsRetail: computePace(data.date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget),
-    pmOc: computePace(data.date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget),
-    tyre: computePace(data.date, kpis.tireSalesForTheMonth, kpis.tireTarget),
-    battery: computePace(data.date, kpis.batterySalesForTheMonth, kpis.batteryTarget),
+    gus: computePace(data.date, kpis.gusRoMtd, group.gusMonthTarget, holidays),
+    bpu: computePace(data.date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget, holidays),
+    offtake: computePace(data.date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget, holidays),
+    partsRetail: computePace(data.date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget, holidays),
+    pmOc: computePace(data.date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget, holidays),
+    tyre: computePace(data.date, kpis.tireSalesForTheMonth, kpis.tireTarget, holidays),
+    battery: computePace(data.date, kpis.batterySalesForTheMonth, kpis.batteryTarget, holidays),
   };
   const tone = {
-    gus: paceTone(data.date, kpis.gusRoMtd, group.gusMonthTarget),
-    bpu: paceTone(data.date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget),
-    offtake: paceTone(data.date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget),
-    partsRetail: paceTone(data.date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget),
-    pmOc: paceTone(data.date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget),
-    tyre: paceTone(data.date, kpis.tireSalesForTheMonth, kpis.tireTarget),
-    battery: paceTone(data.date, kpis.batterySalesForTheMonth, kpis.batteryTarget),
+    gus: paceTone(data.date, kpis.gusRoMtd, group.gusMonthTarget, holidays),
+    bpu: paceTone(data.date, kpis.bpuAchievementForTheMonth, kpis.bpuTarget, holidays),
+    offtake: paceTone(data.date, kpis.offtakeAchievementForTheMonth, kpis.offtakeTarget, holidays),
+    partsRetail: paceTone(data.date, kpis.partsRetailAchievementForTheMonth, kpis.partsRetailTarget, holidays),
+    pmOc: paceTone(data.date, kpis.pmOcAchievementForTheMonth, kpis.pmOcTarget, holidays),
+    tyre: paceTone(data.date, kpis.tireSalesForTheMonth, kpis.tireTarget, holidays),
+    battery: paceTone(data.date, kpis.batterySalesForTheMonth, kpis.batteryTarget, holidays),
   };
 
   return (
@@ -304,7 +305,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         </div>
 
         <div className="mt-4">
-          <BranchPerformanceHeatmap branches={data.report.branches} metrics={CEO_HEATMAP_METRICS} date={data.date} monthSnapshots={data.monthSnapshots} />
+          <BranchPerformanceHeatmap branches={data.report.branches} metrics={CEO_HEATMAP_METRICS} date={data.date} monthSnapshots={data.monthSnapshots} holidays={data.holidays} />
         </div>
       </MetricSyncProvider>
 

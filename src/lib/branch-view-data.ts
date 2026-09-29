@@ -3,6 +3,7 @@ import { REGIONS, regionForBranch, type RegionName } from "./regions";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
 import { loadAllServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
 import { loadReportHolidaySet } from "./report-holidays/store";
+import { sundayOffWorkingDaysElapsedInMonth, sundayOffWorkingDaysInMonth } from "./reporting-date";
 import { computeVasTrendSeries, type TrendPoint } from "./trend";
 import { maskBranchRevenue } from "./branch-revenue-visibility";
 
@@ -97,19 +98,17 @@ function mean(values: number[]): number | null {
   return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
 }
 
-const SATURDAY = 6;
+/** Working days = Mon–Sat, Sunday off, minus HQ-flagged holidays — the same
+ * true working-day calendar used by CEO's Bay Utilization and Central's TKM
+ * targets (lib/reporting-date.ts's sundayOffWorkingDays* pair). Switched from
+ * a Saturday-excluded duplicate of its own 2026-09-29, at the user's request,
+ * for consistency with the rest of the app. */
+function countWorkingDaysElapsed(dateIso: string, holidays: ReadonlySet<string>): number {
+  return sundayOffWorkingDaysElapsedInMonth(dateIso, holidays);
+}
 
-/** Working days = calendar days minus Saturdays minus HQ-flagged holidays —
- * the same "what counts as a report date" rule as lib/reporting-date.ts,
- * applied across a whole month for run-rate projection. */
-function countWorkingDays(year: number, monthIndex0: number, lastDay: number, holidays: ReadonlySet<string>): number {
-  let n = 0;
-  for (let day = 1; day <= lastDay; day++) {
-    const d = new Date(Date.UTC(year, monthIndex0, day));
-    const iso = d.toISOString().slice(0, 10);
-    if (d.getUTCDay() !== SATURDAY && !holidays.has(iso)) n++;
-  }
-  return n;
+function countWorkingDaysInMonth(dateIso: string, holidays: ReadonlySet<string>): number {
+  return sundayOffWorkingDaysInMonth(dateIso, holidays);
 }
 
 function monthName(iso: string): string {
@@ -233,13 +232,9 @@ function buildView(branch: string, shared: Shared): BranchView | null {
   ];
 
   // ---- working days + projection ----
-  const d = new Date(`${date}T00:00:00Z`);
-  const y = d.getUTCFullYear();
-  const m0 = d.getUTCMonth();
-  const lastDayOfMonth = new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
   const workingDays = {
-    elapsed: countWorkingDays(y, m0, d.getUTCDate(), holidays),
-    total: countWorkingDays(y, m0, lastDayOfMonth, holidays),
+    elapsed: countWorkingDaysElapsed(date, holidays),
+    total: countWorkingDaysInMonth(date, holidays),
   };
   const projectedTotalRevenue =
     totalRevenueMtd !== null && workingDays.elapsed > 0
@@ -416,13 +411,9 @@ export async function loadRegionView(
     .sort((a, b) => b.totalRevenue - a.totalRevenue);
   const rankIdx = sortedByRevenue.findIndex((r) => r.region === region);
 
-  const d = new Date(`${date}T00:00:00Z`);
-  const y = d.getUTCFullYear();
-  const m0 = d.getUTCMonth();
-  const lastDay = new Date(Date.UTC(y, m0 + 1, 0)).getUTCDate();
   const workingDays = {
-    elapsed: countWorkingDays(y, m0, d.getUTCDate(), shared.holidays),
-    total: countWorkingDays(y, m0, lastDay, shared.holidays),
+    elapsed: countWorkingDaysElapsed(date, shared.holidays),
+    total: countWorkingDaysInMonth(date, shared.holidays),
   };
   const totalRevenue = regionSum(region, (b) => b.totalRevenueStreamMtd);
   const vasActual = regionSum(region, (b) => b.vasAchievementForTheMonth);

@@ -103,6 +103,7 @@ export type CentralMetricView = {
 export async function loadCentralMetricTargetsView(
   branches: BranchReport[],
   date: string,
+  holidays: ReadonlySet<string>,
   co01eReport?: BranchReport
 ): Promise<CentralMetricView[]> {
   const branchCodes = branches.map((b) => b.branch);
@@ -127,8 +128,8 @@ export async function loadCentralMetricTargetsView(
     const rows: CentralMetricBranchRow[] = perBranchYearData.map(({ branch, report, yearTargets, closedMonths, closedActuals }) => {
       const target = targetFor(currentTargets.get(branch), key);
       const achieved = liveAchieved(branch, report, key, date, co01eReport);
-      const pace = computePace(date, achieved, target);
-      const tone = paceTone(date, achieved, target);
+      const pace = computePace(date, achieved, target, holidays);
+      const tone = paceTone(date, achieved, target, holidays);
 
       let annualTarget = 0;
       let hasAnyTarget = false;

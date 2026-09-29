@@ -71,6 +71,7 @@ function RegionCard({
   metricTarget,
   formatValue,
   date,
+  holidays,
 }: {
   region: RegionName;
   branches: BranchReport[];
@@ -79,13 +80,14 @@ function RegionCard({
   metricTarget: keyof BranchReport;
   formatValue: (v: number | null) => string;
   date?: string;
+  holidays: ReadonlySet<string>;
 }) {
   const regionBranches = filterBranchesByRegion(branches, region);
   const kpis = computeKpiSummary(regionBranches);
   const actual = kpis[metricActual as keyof typeof kpis] as number | null;
   const target = kpis[metricTarget as keyof typeof kpis] as number | null;
   const ratio = achievementRatio(actual, target);
-  const tone = date ? computePaceTone(date, actual, target) : achievementTone(ratio);
+  const tone = date ? computePaceTone(date, actual, target, holidays) : achievementTone(ratio);
   const statusChip = date ? STATUS_CHIP[tone] : null;
   const gap = actual !== null && target !== null ? target - actual : null;
 
@@ -127,6 +129,7 @@ export function RegionScorecard({
   serviceInfoMonthSnapshots = [],
   metrics = DEFAULT_METRICS,
   date,
+  holidays: holidaysProp,
 }: {
   branches: BranchReport[];
   monthSnapshots: Snapshot[];
@@ -136,7 +139,10 @@ export function RegionScorecard({
   metrics?: RegionMetricConfig[];
   /** Opts into the gap/on-track-chip mode instead of the sparkline — see RegionCard's doc comment. Omit to keep the main Dashboard's original cards. */
   date?: string;
+  /** HQ-flagged report_holidays — required whenever `date` is passed (2026-09-29). */
+  holidays?: string[];
 }) {
+  const holidays = new Set(holidaysProp ?? []);
   const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
   const config = metrics.find((m) => m.key === metric) ?? metrics[0];
 
@@ -168,6 +174,7 @@ export function RegionScorecard({
             region={region}
             branches={branches}
             date={date}
+            holidays={holidays}
             metricActual={config.actual as keyof BranchReport}
             metricTarget={config.target as keyof BranchReport}
             series={

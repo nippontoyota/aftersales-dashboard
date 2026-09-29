@@ -271,6 +271,7 @@ export function TrendChart({
   compactCurrency = false,
   date,
   chartHeight = HEIGHT,
+  holidays: holidaysProp,
 }: {
   seriesByMetric: Record<string, TrendPoint[]>;
   /** Defaults to the main dashboard's own set (VAS only); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics and series instead. */
@@ -292,7 +293,10 @@ export function TrendChart({
    * (2026-09-19, at the user's request); the expanded modal always uses its
    * own taller MODAL_HEIGHT regardless of this. */
   chartHeight?: number;
+  /** HQ-flagged report_holidays — required whenever `date` is passed (2026-09-29). */
+  holidays?: string[];
 }) {
+  const holidays = useMemo(() => new Set(holidaysProp ?? []), [holidaysProp]);
   const [metric, setMetric] = useSyncedMetric(metrics[0]?.key ?? "");
   const selectedMetricConfig = metrics.find((m) => m.key === metric) ?? metrics[0];
   const formatValue: ValueFormatter = (selectedMetricConfig?.isCurrency ?? compactCurrency) ? formatCompactCurrency : formatNumber;
@@ -331,8 +335,8 @@ export function TrendChart({
   // omit it (e.g. a caller with no natural "as of" date) and the chart
   // renders exactly as it did before this feature existed.
   const pace = useMemo(
-    () => (date && lastActualValue !== null && lastTargetValue !== null ? computePace(date, lastActualValue, lastTargetValue) : null),
-    [date, lastActualValue, lastTargetValue]
+    () => (date && lastActualValue !== null && lastTargetValue !== null ? computePace(date, lastActualValue, lastTargetValue, holidays) : null),
+    [date, lastActualValue, lastTargetValue, holidays]
   );
   // Only extrapolated when the target is actually moving — treating the
   // target-so-far as its own "actual" purely to linearly project where that
@@ -340,8 +344,8 @@ export function TrendChart({
   // "project" a constant value upward just because it's mid-month; a fixed
   // target's own projection is simply itself (see projectedTargetEom).
   const targetPace = useMemo(
-    () => (date && isTargetMoving && lastTargetValue !== null ? computePace(date, lastTargetValue, null) : null),
-    [date, isTargetMoving, lastTargetValue]
+    () => (date && isTargetMoving && lastTargetValue !== null ? computePace(date, lastTargetValue, null, holidays) : null),
+    [date, isTargetMoving, lastTargetValue, holidays]
   );
   const projectedTargetEom = isTargetMoving ? targetPace?.projectedEom ?? null : lastTargetValue;
   const extraSlots = pace?.daysRemaining ?? 0;

@@ -27,10 +27,10 @@ import { computePace } from "@/lib/pace";
  * `forecastText` line below the rings and inside each not-yet-achieved
  * ring's tooltip (pending or on-track/"projected" alike), both explicitly
  * labelled as a forecast/projection, never as achievement status — see
- * ringTooltip() below. Projection reuses
- * computePace() as-is (simple actual÷daysElapsed×daysInMonth run rate, the
- * same math already driving the TGLOSS target card elsewhere on this page)
- * rather than a working-day-aware variant.
+ * ringTooltip() below. Projection reuses computePace() as-is — the same
+ * working-day-aware run rate (actual÷workingDaysElapsed×workingDaysInMonth,
+ * per lib/pace.ts) already driving the TGLOSS target card elsewhere on this
+ * page.
  */
 
 const GREEN = "var(--color-good-solid)";
@@ -95,6 +95,7 @@ export function IncentiveSlabIndicator({
   actual,
   slabs,
   date,
+  holidays: holidaysProp,
   size = 108,
   /** The KPI card this renders inside already shows Actual as its own big
    * headline number — repeating it under the rings there would be pure
@@ -110,10 +111,13 @@ export function IncentiveSlabIndicator({
   slabs: IncentiveSlabTargets | undefined;
   /** The viewed report date — feeds computePace() for the "at this rate…" forecast text/tooltip below and inside the rings. Omit to skip the forecast entirely; ring fill (achieved/pending) is unaffected either way. */
   date?: string;
+  /** HQ-flagged report_holidays — required whenever `date` is passed (2026-09-29). */
+  holidays?: string[];
   size?: number;
   showActual?: boolean;
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const holidays = new Set(holidaysProp ?? []);
 
   if (!slabs) {
     return (
@@ -137,7 +141,7 @@ export function IncentiveSlabIndicator({
   // so it's passed null), evaluated against the same slabs. This never feeds
   // ring color/fill — see the RingStatus/ringGreen-only comparison below —
   // it only drives the "at this rate…" text and each pending ring's tooltip.
-  const projectedEom = date ? computePace(date, actual, null).projectedEom : null;
+  const projectedEom = date ? computePace(date, actual, null, holidays).projectedEom : null;
   const projected = projectedEom !== null ? computeSlabsAchieved(projectedEom, slabs) : null;
 
   // The "at this rate..." line below the rings (2026-09-18, at the user's

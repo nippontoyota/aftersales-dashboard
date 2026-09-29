@@ -41,12 +41,15 @@ export function VpKpiCards({
   date,
   previous,
   previousDate,
+  holidays,
 }: {
   group: VpScopeMetrics;
   date: string;
   /** The Group scope as of the previous upload — drives each card's "vs last upload" chip. Omit/null to hide every chip (e.g. this month's first upload). */
   previous?: VpScopeMetrics | null;
   previousDate?: string | null;
+  /** HQ-flagged report_holidays, for the Incentive Slab forecast (2026-09-29). */
+  holidays?: string[];
 }) {
   return (
     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
@@ -59,7 +62,7 @@ export function VpKpiCards({
         value={formatCompactCurrency(group.totalRevenueStreamMtd)}
         trend={trendFor(group.totalRevenueStreamMtd, previous?.totalRevenueStreamMtd, previousDate)}
         extra={
-          <IncentiveSlabIndicator scopeLabel="Group" actual={group.totalRevenueStreamMtd} slabs={group.incentiveSlabs} date={date} size={56} showActual={false} />
+          <IncentiveSlabIndicator scopeLabel="Group" actual={group.totalRevenueStreamMtd} slabs={group.incentiveSlabs} date={date} holidays={holidays} size={56} showActual={false} />
         }
       />
       </VpMetricArea>

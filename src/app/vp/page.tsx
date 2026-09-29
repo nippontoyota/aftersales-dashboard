@@ -141,14 +141,14 @@ async function Overview({
       </div>
 
       <div className="mt-5">
-        <VpKpiCards group={data.scopes[0]} date={data.date} previous={data.previousScope} previousDate={data.report.previousDate} />
+        <VpKpiCards group={data.scopes[0]} date={data.date} previous={data.previousScope} previousDate={data.report.previousDate} holidays={data.holidays} />
       </div>
 
       <VpExceptionsBanner exceptions={data.tglossExceptions} />
 
       <div className="mt-5">
         <VpCollapsibleSection title="Full Revenue Stream Grid" subtitle="Group, Central, South, North — every metric">
-          <RevenueStreamGrid scopes={data.scopes} branches={data.report.branches} date={data.date} />
+          <RevenueStreamGrid scopes={data.scopes} branches={data.report.branches} date={data.date} holidays={data.holidays} />
         </VpCollapsibleSection>
       </div>
 
@@ -184,7 +184,7 @@ async function Overview({
             const tglossPace =
               metric === "tgloss"
                 ? (() => {
-                    const pace = computePace(data.date, row.vasAchievementForTheMonth, row.vasBillTarget);
+                    const pace = computePace(data.date, row.vasAchievementForTheMonth, row.vasBillTarget, new Set(data.holidays));
                     return { target: row.vasBillTarget, gap: pace.gap, requiredRatePerDay: pace.requiredRatePerDay };
                   })()
                 : undefined;

@@ -15,6 +15,7 @@ import { buildReport, isBodyPaintOnly, type BranchReport, type Report } from "./
 import { listSnapshotDates } from "./snapshot-store";
 import { isDatePublished } from "./publish-store";
 import { countScom205BranchesForDate } from "./scom205/store";
+import { loadReportHolidaySet } from "./report-holidays/store";
 
 /**
  * The data foundation for the VP Service view (/vp). Deliberately separate
@@ -120,6 +121,9 @@ export type VpData = {
    * per-branch slab table (vp-branch-slab-table.tsx). A branch with no entry has no
    * target loaded for this month, same "drops out" rule as everywhere else. */
   incentiveSlabTargetsByBranch: Record<string, IncentiveSlabTargets>;
+  /** HQ-flagged report_holidays, as an array — every pace/forecast call on
+   * this page reuses this same set (2026-09-29). */
+  holidays: string[];
 };
 
 function perCar(amount: number | null, ro: number | null): number | null {
@@ -153,7 +157,8 @@ function buildScopeMetrics(
   region: RegionName | null,
   branches: BranchReport[],
   incentiveSlabTargets: Record<string, IncentiveSlabTargets>,
-  date: string
+  date: string,
+  holidays: ReadonlySet<string>
 ): VpScopeMetrics {
   const hero = computeHeroSummary(branches);
   const kpis = computeKpiSummary(branches);
@@ -174,14 +179,14 @@ function buildScopeMetrics(
     tglossMtd: kpis.vasAchievementForTheMonth,
     tglossTarget: kpis.vasBillTarget,
     tglossPct: achievementRatio(kpis.vasAchievementForTheMonth, kpis.vasBillTarget),
-    tglossPace: computePace(date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget),
-    tglossPaceTone: paceTone(date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget),
-    gusPartsPace: computePace(date, hero.gusPartsMtd, null),
-    gusLabourPace: computePace(date, hero.gusLabourMtd, null),
-    bpuPartsPace: computePace(date, hero.bpuPartsMtd, null),
-    bpuLabourPace: computePace(date, hero.bpuLabourMtd, null),
+    tglossPace: computePace(date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget, holidays),
+    tglossPaceTone: paceTone(date, kpis.vasAchievementForTheMonth, kpis.vasBillTarget, holidays),
+    gusPartsPace: computePace(date, hero.gusPartsMtd, null, holidays),
+    gusLabourPace: computePace(date, hero.gusLabourMtd, null, holidays),
+    bpuPartsPace: computePace(date, hero.bpuPartsMtd, null, holidays),
+    bpuLabourPace: computePace(date, hero.bpuLabourMtd, null, holidays),
     externalSalesMtd: hero.externalSalesMtd,
-    externalSalesPace: computePace(date, hero.externalSalesMtd, null),
+    externalSalesPace: computePace(date, hero.externalSalesMtd, null, holidays),
     scrapAndUsedOilMtd: hero.scrapRevenueMtd !== null || hero.usedOilRevenueMtd !== null
       ? (hero.scrapRevenueMtd ?? 0) + (hero.usedOilRevenueMtd ?? 0)
       : null,
@@ -200,12 +205,12 @@ function buildScopeMetrics(
  * furthest off-pace first within each. Body & Paint-only branches never
  * appear here: their vasBillTarget derives from a GUS RO count that's
  * forced to 0 for them, so paceTone() always reads "neutral" (no target). */
-function computeTglossExceptions(branches: BranchReport[], date: string): TglossException[] {
+function computeTglossExceptions(branches: BranchReport[], date: string, holidays: ReadonlySet<string>): TglossException[] {
   const rows: TglossException[] = [];
   for (const b of branches) {
-    const tone = paceTone(date, b.vasAchievementForTheMonth, b.vasBillTarget);
+    const tone = paceTone(date, b.vasAchievementForTheMonth, b.vasBillTarget, holidays);
     if (tone !== "warn" && tone !== "critical") continue;
-    const pace = computePace(date, b.vasAchievementForTheMonth, b.vasBillTarget);
+    const pace = computePace(date, b.vasAchievementForTheMonth, b.vasBillTarget, holidays);
     rows.push({
       branch: b.branch,
       region: regionForBranch(b.branch),
@@ -245,11 +250,11 @@ function sameDayLastMonth(date: string): string {
  * "vs last upload" trend chips and the headline's month-over-month
  * sentence, neither of which need the full regions/exceptions machinery
  * loadVpData itself builds. Null when that date has no report at all. */
-async function loadGroupScope(date: string): Promise<VpScopeMetrics | null> {
+async function loadGroupScope(date: string, holidays: ReadonlySet<string>): Promise<VpScopeMetrics | null> {
   const [report, incentiveSlabTargetsMap] = await Promise.all([buildReport(date), loadIncentiveSlabTargets(date.slice(0, 7))]);
   if (!report) return null;
   const incentiveSlabTargets = Object.fromEntries(incentiveSlabTargetsMap);
-  return buildScopeMetrics("Group", null, report.branches, incentiveSlabTargets, date);
+  return buildScopeMetrics("Group", null, report.branches, incentiveSlabTargets, date, holidays);
 }
 
 export async function loadVpData(requestedDate?: string): Promise<VpData | null> {
@@ -257,13 +262,15 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
   if (dates.length === 0) return null;
 
   const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
-  const [report, published, scom205Count, incentiveSlabTargetsMap] = await Promise.all([
+  const [report, published, scom205Count, incentiveSlabTargetsMap, holidaySet] = await Promise.all([
     buildReport(date),
     isDatePublished(date),
     countScom205BranchesForDate(date),
     loadIncentiveSlabTargets(date.slice(0, 7)),
+    loadReportHolidaySet(),
   ]);
   const incentiveSlabTargets = Object.fromEntries(incentiveSlabTargetsMap);
+  const holidays = [...holidaySet];
 
   if (!report)
     return {
@@ -280,6 +287,7 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
       previousScope: null,
       lastMonthScope: null,
       incentiveSlabTargetsByBranch: {},
+      holidays,
     };
 
   const regions: VpRegionRollup[] = (Object.keys(REGIONS) as RegionName[]).map((region) => {
@@ -288,9 +296,9 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
   });
 
   const scopes: VpScopeMetrics[] = [
-    buildScopeMetrics("Group", null, report.branches, incentiveSlabTargets, date),
+    buildScopeMetrics("Group", null, report.branches, incentiveSlabTargets, date, holidaySet),
     ...(Object.keys(REGIONS) as RegionName[]).map((region) =>
-      buildScopeMetrics(region, region, filterBranchesByRegion(report.branches, region), incentiveSlabTargets, date)
+      buildScopeMetrics(region, region, filterBranchesByRegion(report.branches, region), incentiveSlabTargets, date, holidaySet)
     ),
   ];
 
@@ -309,8 +317,8 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
   let previousScope: VpScopeMetrics | null = null;
   let lastMonthScope: VpScopeMetrics | null = null;
   if (published) {
-    previousScope = report.previousDate ? await loadGroupScope(report.previousDate) : null;
-    if (INCLUDE_LAST_MONTH_SCOPE) lastMonthScope = await loadGroupScope(sameDayLastMonth(date));
+    previousScope = report.previousDate ? await loadGroupScope(report.previousDate, holidaySet) : null;
+    if (INCLUDE_LAST_MONTH_SCOPE) lastMonthScope = await loadGroupScope(sameDayLastMonth(date), holidaySet);
   }
 
   return {
@@ -320,13 +328,14 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
     group: { hero: computeHeroSummary(report.branches), kpis: computeKpiSummary(report.branches) },
     regions,
     scopes,
-    tglossExceptions: computeTglossExceptions(report.branches, date),
+    tglossExceptions: computeTglossExceptions(report.branches, date, holidaySet),
     isPublished: published,
     uploadedBranchCount: scom205Count,
     totalBranchCount: 18 + (hasCo01c ? 1 : 0),
     previousScope,
     lastMonthScope,
     incentiveSlabTargetsByBranch: incentiveSlabTargets,
+    holidays,
   };
 }
 

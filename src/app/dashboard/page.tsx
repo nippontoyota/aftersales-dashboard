@@ -12,6 +12,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { loadIncentiveSlabTargets } from "@/lib/incentive-slabs/store";
+import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { loadBranchView, loadRegionView } from "@/lib/branch-view-data";
@@ -85,7 +86,8 @@ async function DashboardContent({
   admin: AdminAccount;
 }) {
   const params = await searchParams;
-  const data = await loadDashboardData(params, admin);
+  const [data, holidaySet] = await Promise.all([loadDashboardData(params, admin), loadReportHolidaySet()]);
+  const holidays = [...holidaySet];
 
   if (!data) {
     return (
@@ -139,6 +141,7 @@ async function DashboardContent({
         uploadedAtLabel={uploadedAtLabel}
         daysSincePrevious={data.report.daysSincePrevious}
         incentiveSlabs={branchSlabTargets}
+        holidays={holidays}
       />
     );
   }
@@ -201,7 +204,7 @@ async function DashboardContent({
       loadIncentiveSlabTargets(date.slice(0, 7)).then((m) => m.get(admin.branch)),
     ]);
     return (
-      <BranchAccountPage view={view} branch={admin.branch} date={date} dates={dates} uploadedAt={report.uploadedAt} incentiveSlabs={branchSlabTargets} />
+      <BranchAccountPage view={view} branch={admin.branch} date={date} dates={dates} uploadedAt={report.uploadedAt} incentiveSlabs={branchSlabTargets} holidays={holidays} />
     );
   }
   if (admin.role === "regional" && admin.region === "Central") {
@@ -263,6 +266,7 @@ async function DashboardContent({
             hasPreviousUpload={hasPreviousUpload}
             defaultScope={heroDefaultScope}
             incentiveSlabTargets={incentiveSlabTargets}
+            holidays={holidays}
           />
         </div>
 
@@ -291,7 +295,7 @@ async function DashboardContent({
                 serviceInfoMonthSnapshots={serviceInfoMonthSnapshots}
               />
             }
-            insights={<InsightsPanel kpis={allKpis} branches={report.branches} date={date} />}
+            insights={<InsightsPanel kpis={allKpis} branches={report.branches} date={date} holidays={holidays} />}
             more={
               <>
                 <CollapsibleCard title="Other KPIs" defaultOpen>
