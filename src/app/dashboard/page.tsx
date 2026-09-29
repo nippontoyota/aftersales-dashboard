@@ -16,6 +16,8 @@ import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { loadBranchView, loadRegionView } from "@/lib/branch-view-data";
+import { CO01B_SLAB_COMBINED_BRANCHES } from "@/lib/body-paint-only";
+import { aggregateIncentiveSlabTargets } from "@/lib/incentive-slabs/aggregate";
 import { loadCentralRegionView } from "@/lib/central-region-data";
 import { BranchAccountPage, RegionAccountPage } from "./branch/branch-page";
 import { CentralRegionDashboard } from "./central/central-region-dashboard";
@@ -131,11 +133,30 @@ async function DashboardContent({
     });
     // Incentive slab progress (2026-09-25, at the user's request — every
     // branch should be able to see their own slab, published or not).
-    const branchSlabTargets = (await loadIncentiveSlabTargets(data.date.slice(0, 7))).get(branchReport.branch);
+    // CO01B/CO01E's slabs are one combined target, not two separately
+    // achievable ones (see CO01B_SLAB_COMBINED_BRANCHES) — same combined
+    // actual+target the published dashboard's HeroKpiStrip shows for CO01B,
+    // now also applied here so both branches' own pre-publish daily report
+    // shows the real (combined) progress instead of CO01B's or CO01E's own
+    // share in isolation, which alone can never clear a slab (2026-09-29,
+    // reported by the CO01B branch: their daily report read "Not Achieved"
+    // on their own ~3.6 Cr when combined with CO01E it clears further).
+    const isCo01bCombined = CO01B_SLAB_COMBINED_BRANCHES.includes(branchReport.branch);
+    const slabTargetsByBranch = Object.fromEntries(await loadIncentiveSlabTargets(data.date.slice(0, 7)));
+    const branchSlabTargets = isCo01bCombined
+      ? aggregateIncentiveSlabTargets(slabTargetsByBranch, CO01B_SLAB_COMBINED_BRANCHES)
+      : slabTargetsByBranch[branchReport.branch];
+    const incentiveSlabActual = isCo01bCombined
+      ? data.report.branches
+          .filter((b) => CO01B_SLAB_COMBINED_BRANCHES.includes(b.branch))
+          .reduce<number | null>((sum, b) => (b.totalRevenueStreamMtd === null ? sum : (sum ?? 0) + b.totalRevenueStreamMtd), null)
+      : branchReport.totalRevenueStreamMtd;
     return (
       <BranchDailyReport
         report={branchReport}
         branch={branchReport.branch}
+        scopeLabel={isCo01bCombined ? "CO01B + CO01E" : branchReport.branch}
+        incentiveSlabActual={incentiveSlabActual}
         date={data.date}
         dates={data.dates}
         uploadedAtLabel={uploadedAtLabel}

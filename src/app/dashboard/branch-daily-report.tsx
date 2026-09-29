@@ -38,6 +38,8 @@ function Cell({ value, fmt, className = "" }: { value: number | null; fmt: Value
 export function BranchDailyReport({
   report,
   branch,
+  scopeLabel,
+  incentiveSlabActual,
   date,
   dates,
   uploadedAtLabel,
@@ -47,6 +49,15 @@ export function BranchDailyReport({
 }: {
   report: BranchReport;
   branch: string;
+  /** Label shown on the Incentive Slab ring — defaults to `branch`. CO01B/
+   * CO01E's page passes "CO01B + CO01E" since the slab is a combined target
+   * for both branches (2026-09-29). */
+  scopeLabel?: string;
+  /** Actual revenue graded against `incentiveSlabs` — defaults to
+   * `report.totalRevenueStreamMtd` (this branch's own figure). CO01B/CO01E's
+   * page passes their combined total instead, since neither branch alone can
+   * clear a slab set as one shared target (2026-09-29). */
+  incentiveSlabActual?: number | null;
   date: string;
   dates: string[];
   uploadedAtLabel: string;
@@ -77,7 +88,7 @@ export function BranchDailyReport({
       </div>
 
       <div className="mt-4 flex justify-center rounded-lg border border-border bg-surface p-4 shadow-card sm:justify-start">
-        <IncentiveSlabIndicator scopeLabel={branch} actual={report.totalRevenueStreamMtd} slabs={incentiveSlabs} date={date} holidays={holidays} size={108} />
+        <IncentiveSlabIndicator scopeLabel={scopeLabel ?? branch} actual={incentiveSlabActual ?? report.totalRevenueStreamMtd} slabs={incentiveSlabs} date={date} holidays={holidays} size={108} />
       </div>
 
       <div className="mt-4 max-h-[calc(100dvh-11rem)] overflow-auto rounded-lg border border-border bg-surface shadow-card">
