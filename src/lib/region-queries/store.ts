@@ -70,6 +70,11 @@ function toQuery(r: Row): RegionQuery {
 const COLUMNS = `id, created_by, created_at, direction, region, context_date::text as context_date,
   context_branch, note, status, reply, replied_by, replied_at`;
 
+export async function getRegionQuery(id: number): Promise<RegionQuery | null> {
+  const { rows } = await pool.query<Row>(`select ${COLUMNS} from region_queries where id = $1`, [id]);
+  return rows[0] ? toQuery(rows[0]) : null;
+}
+
 export async function createRegionQuery(input: {
   createdBy: string;
   direction: RegionQueryDirection;
