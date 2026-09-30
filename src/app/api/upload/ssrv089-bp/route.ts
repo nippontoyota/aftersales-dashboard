@@ -68,6 +68,7 @@ export async function POST(request: Request) {
     uploadedAt: new Date().toISOString(),
     sourceFileName: file.name,
     fileData: buffer,
+    uploadedBy: admin.username,
   });
 
   return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name });

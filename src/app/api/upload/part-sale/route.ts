@@ -94,8 +94,11 @@ export async function POST(request: Request) {
   const dbClient = await pool.connect();
   try {
     await dbClient.query("begin");
-    await savePartSaleSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts }, dbClient);
-    await saveRawUploadRows({ reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })) }, dbClient);
+    await savePartSaleSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username }, dbClient);
+    await saveRawUploadRows(
+      { reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })), uploadedBy: admin.username },
+      dbClient
+    );
     await dbClient.query("commit");
   } catch {
     await dbClient.query("rollback");

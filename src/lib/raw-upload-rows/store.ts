@@ -28,10 +28,14 @@ export async function saveRawUploadRows(
     uploadedAt: string;
     sourceFileName: string;
     rows: { branch: string; data: unknown }[];
+    /** The admin account (username) that performed this upload — null for
+     * uploads saved before this column existed, or for a script-driven
+     * upload with no logged-in admin behind it (e.g. ba_tool). */
+    uploadedBy?: string | null;
   },
   client?: PoolClient
 ): Promise<void> {
-  const { reportType, date, uploadedAt, sourceFileName, rows } = params;
+  const { reportType, date, uploadedAt, sourceFileName, rows, uploadedBy = null } = params;
 
   const run = async (qc: Pick<PoolClient, "query">) => {
     const branchesInvolved = [...new Set(rows.map((r) => r.branch))];
@@ -47,10 +51,10 @@ export async function saveRawUploadRows(
       const rowIndexes = rows.map((_, i) => i);
       const rowDatas = rows.map((r) => JSON.stringify(r.data ?? {}));
       await qc.query(
-        `insert into raw_upload_rows (report_type, date, branch, uploaded_at, source_file_name, row_index, row_data)
-         select $1, $2, b, $3, $4, i, d::jsonb
+        `insert into raw_upload_rows (report_type, date, branch, uploaded_at, source_file_name, row_index, row_data, uploaded_by)
+         select $1, $2, b, $3, $4, i, d::jsonb, $8
          from unnest($5::text[], $6::int[], $7::text[]) as t(b, i, d)`,
-        [reportType, date, uploadedAt, sourceFileName, branches, rowIndexes, rowDatas]
+        [reportType, date, uploadedAt, sourceFileName, branches, rowIndexes, rowDatas, uploadedBy]
       );
     }
   };

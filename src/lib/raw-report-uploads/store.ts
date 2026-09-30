@@ -70,14 +70,18 @@ export async function saveRawReportUpload(params: {
   uploadedAt: string;
   sourceFileName: string;
   fileData: Buffer;
+  /** The admin account (username) that performed this upload — undefined/null
+   * for uploads saved before this column existed. See db/schema.sql. */
+  uploadedBy?: string | null;
 }): Promise<void> {
   await pool.query(
-    `insert into raw_report_uploads (date, branch, report_type, uploaded_at, source_file_name, file_data)
-     values ($1, $2, $3, $4, $5, $6)
+    `insert into raw_report_uploads (date, branch, report_type, uploaded_at, source_file_name, file_data, uploaded_by)
+     values ($1, $2, $3, $4, $5, $6, $7)
      on conflict (date, branch, report_type) do update set
        uploaded_at = excluded.uploaded_at,
        source_file_name = excluded.source_file_name,
-       file_data = excluded.file_data`,
-    [params.date, params.branch, params.reportType, params.uploadedAt, params.sourceFileName, params.fileData]
+       file_data = excluded.file_data,
+       uploaded_by = excluded.uploaded_by`,
+    [params.date, params.branch, params.reportType, params.uploadedAt, params.sourceFileName, params.fileData, params.uploadedBy ?? null]
   );
 }

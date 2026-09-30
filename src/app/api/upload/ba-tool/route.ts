@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   try {
     await dbClient.query("begin");
     await saveSnapshot({ date, uploadedAt, sourceFileName: file.name, branches: parsed.branches }, dbClient);
-    await saveRawUploadRows({ reportType: "ba_tool", date, uploadedAt, sourceFileName: file.name, rows: parsed.rawRows }, dbClient);
+    await saveRawUploadRows({ reportType: "ba_tool", date, uploadedAt, sourceFileName: file.name, rows: parsed.rawRows, uploadedBy: admin.username }, dbClient);
     await dbClient.query("commit");
   } catch {
     await dbClient.query("rollback");

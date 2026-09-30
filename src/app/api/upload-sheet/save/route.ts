@@ -19,6 +19,7 @@ import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/uploa
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { saveSsrv089Snapshot } from "@/lib/ssrv089/store";
+import { checkInvoiceDocDateSanity } from "@/lib/ssrv089/upload-validation";
 
 /**
  * The confirm/save half of Upload Sheet (HQ-only, /upload-sheet). Report
@@ -93,12 +94,12 @@ export async function POST(request: Request) {
   try {
     if (type === "service-info") {
       if (variant === "bp") {
-        await saveRawReportUpload({ date, branch, reportType: "service_info_bp", uploadedAt, sourceFileName: file.name, fileData: buffer });
+        await saveRawReportUpload({ date, branch, reportType: "service_info_bp", uploadedAt, sourceFileName: file.name, fileData: buffer, uploadedBy: admin.username });
         let bpCounts = null;
         try {
           const bpStaffNames = await listAccessoriesStaffNamesForBranch(branch);
           const { counts } = parseServiceInfoWorkbook(buffer, branch, bpStaffNames);
-          await saveServiceInfoBpSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts });
+          await saveServiceInfoBpSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username });
           bpCounts = counts;
         } catch {
           // Same as the branch upload route — an unexpected file shape just
@@ -128,8 +129,11 @@ export async function POST(request: Request) {
       const siClient = await pool.connect();
       try {
         await siClient.query("begin");
-        await saveServiceInfoSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts }, siClient);
-        await saveRawUploadRows({ reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) }, siClient);
+        await saveServiceInfoSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username }, siClient);
+        await saveRawUploadRows(
+          { reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username },
+          siClient
+        );
         await siClient.query("commit");
       } catch {
         await siClient.query("rollback");
@@ -169,8 +173,11 @@ export async function POST(request: Request) {
       const psClient = await pool.connect();
       try {
         await psClient.query("begin");
-        await savePartSaleSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts }, psClient);
-        await saveRawUploadRows({ reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) }, psClient);
+        await savePartSaleSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username }, psClient);
+        await saveRawUploadRows(
+          { reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username },
+          psClient
+        );
         await psClient.query("commit");
       } catch {
         await psClient.query("rollback");
@@ -183,16 +190,43 @@ export async function POST(request: Request) {
 
     if (type === "ssrv089") {
       if (variant === "bp") {
-        await saveRawReportUpload({ date, branch, reportType: "ssrv089_bp", uploadedAt, sourceFileName: file.name, fileData: buffer });
+        await saveRawReportUpload({ date, branch, reportType: "ssrv089_bp", uploadedAt, sourceFileName: file.name, fileData: buffer, uploadedBy: admin.username });
         return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name });
       }
       const staffNames = await listAccessoriesStaffNamesForBranch(branch);
       const { totals, rawRows } = parseSsrv089Workbook(buffer, staffNames);
+
+      // Same two checks as the branch's own upload route (2026-09-30, after a
+      // duplicate SSRV089 upload for MV01A landed through this exact tool
+      // with no validation of any kind — Service Info and Part Sale right
+      // above already had both; SSRV089 never did) — see
+      // ssrv089/upload-validation.ts.
+      const dateSanity = checkInvoiceDocDateSanity(rawRows, date);
+      if (!dateSanity.ok) {
+        return NextResponse.json({ error: dateSanity.error }, { status: 422 });
+      }
+      const confirmed = formData.get("confirmDuplicate") === "true";
+      if (!confirmed) {
+        const priorUploads = await loadAllRawUploadRowsBefore("ssrv089", branch, date);
+        const newHash = hashRows(rawRows);
+        const match = priorUploads.find((u) => hashRows(u.rows) === newHash);
+        if (match) {
+          return NextResponse.json({
+            duplicate: true,
+            previousDate: match.date,
+            message: `This file looks identical to the ${match.date} upload — same rows. Are you sure this is ${date}'s file?`,
+          });
+        }
+      }
+
       const sv089Client = await pool.connect();
       try {
         await sv089Client.query("begin");
-        await saveSsrv089Snapshot({ date, branch, variant: "general", uploadedAt, sourceFileName: file.name, totals }, sv089Client);
-        await saveRawUploadRows({ reportType: "ssrv089", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) }, sv089Client);
+        await saveSsrv089Snapshot({ date, branch, variant: "general", uploadedAt, sourceFileName: file.name, totals, uploadedBy: admin.username }, sv089Client);
+        await saveRawUploadRows(
+          { reportType: "ssrv089", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username },
+          sv089Client
+        );
         await sv089Client.query("commit");
       } catch {
         await sv089Client.query("rollback");
@@ -208,8 +242,11 @@ export async function POST(request: Request) {
     const scClient = await pool.connect();
     try {
       await scClient.query("begin");
-      await saveScom205Snapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals, stockAndServiceRate }, scClient);
-      await saveRawUploadRows({ reportType: "scom205", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) }, scClient);
+      await saveScom205Snapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals, stockAndServiceRate, uploadedBy: admin.username }, scClient);
+      await saveRawUploadRows(
+        { reportType: "scom205", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username },
+        scClient
+      );
       await scClient.query("commit");
     } catch {
       await scClient.query("rollback");

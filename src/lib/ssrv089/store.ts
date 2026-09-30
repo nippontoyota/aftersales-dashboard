@@ -12,19 +12,23 @@ export type Ssrv089Snapshot = {
   uploadedAt: string; // ISO timestamp
   sourceFileName: string;
   totals: Ssrv089Totals;
+  /** The admin account (username) that performed this upload — undefined/null
+   * for uploads saved before this column existed. See db/schema.sql. */
+  uploadedBy?: string | null;
 };
 
 /** Pass `client` to run inside a caller-managed transaction. */
 export async function saveSsrv089Snapshot(snapshot: Ssrv089Snapshot, client?: PoolClient): Promise<void> {
   await (client ?? pool).query(
     `insert into ssrv089_snapshots
-       (date, branch, variant, uploaded_at, source_file_name, accessories_part_sale, accessories_labour_sale)
-     values ($1, $2, $3, $4, $5, $6, $7)
+       (date, branch, variant, uploaded_at, source_file_name, accessories_part_sale, accessories_labour_sale, uploaded_by)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
      on conflict (date, branch, variant) do update set
        uploaded_at = excluded.uploaded_at,
        source_file_name = excluded.source_file_name,
        accessories_part_sale = excluded.accessories_part_sale,
-       accessories_labour_sale = excluded.accessories_labour_sale`,
+       accessories_labour_sale = excluded.accessories_labour_sale,
+       uploaded_by = excluded.uploaded_by`,
     [
       snapshot.date,
       snapshot.branch,
@@ -33,6 +37,7 @@ export async function saveSsrv089Snapshot(snapshot: Ssrv089Snapshot, client?: Po
       snapshot.sourceFileName,
       snapshot.totals.accessoriesPartSale,
       snapshot.totals.accessoriesLabourSale,
+      snapshot.uploadedBy ?? null,
     ]
   );
 }

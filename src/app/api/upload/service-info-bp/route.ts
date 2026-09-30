@@ -83,13 +83,14 @@ export async function POST(request: Request) {
     uploadedAt,
     sourceFileName: file.name,
     fileData: buffer,
+    uploadedBy: admin.username,
   });
 
   let bpCounts = null;
   try {
     const staffNames = await listAccessoriesStaffNamesForBranch(admin.branch);
     const { counts } = parseServiceInfoWorkbook(buffer, admin.branch, staffNames);
-    await saveServiceInfoBpSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts });
+    await saveServiceInfoBpSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username });
     bpCounts = counts;
   } catch {
     // Not a Service Info-shaped export (or some other unexpected shape) —

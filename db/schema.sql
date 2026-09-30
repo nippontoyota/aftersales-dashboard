@@ -640,3 +640,16 @@ create table if not exists central_metric_targets (
   set_at                timestamptz not null default now(),
   primary key (month, branch)
 );
+
+-- Which admin account performed each daily-report upload (2026-09-30) — added
+-- after a duplicate SSRV089 upload for MV01A landed with no way to tell
+-- whether it came from the branch's own upload portal or HQ's Upload Sheet
+-- tool acting on the branch's behalf. Nullable: every row uploaded before
+-- this column existed has no known uploader.
+alter table raw_upload_rows add column if not exists uploaded_by text;
+alter table raw_report_uploads add column if not exists uploaded_by text;
+alter table ssrv089_snapshots add column if not exists uploaded_by text;
+alter table scom205_snapshots add column if not exists uploaded_by text;
+alter table service_info_snapshots add column if not exists uploaded_by text;
+alter table service_info_bp_snapshots add column if not exists uploaded_by text;
+alter table part_sale_snapshots add column if not exists uploaded_by text;

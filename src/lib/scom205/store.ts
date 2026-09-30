@@ -13,14 +13,17 @@ export type Scom205Snapshot = {
    * missing/unrecognized at upload time, or for rows saved before this field
    * existed (see db/schema.sql). */
   stockAndServiceRate: Scom205StockAndServiceRate | null;
+  /** The admin account (username) that performed this upload — undefined/null
+   * for uploads saved before this column existed. See db/schema.sql. */
+  uploadedBy?: string | null;
 };
 
 /** Pass `client` to run inside a caller-managed transaction. */
 export async function saveScom205Snapshot(snapshot: Scom205Snapshot, client?: PoolClient): Promise<void> {
   await (client ?? pool).query(
     `insert into scom205_snapshots
-       (date, branch, uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd, stock_month_tgp, sr_lines_total_pct)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (date, branch, uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd, stock_month_tgp, sr_lines_total_pct, uploaded_by)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      on conflict (date, branch) do update set
        uploaded_at = excluded.uploaded_at,
        source_file_name = excluded.source_file_name,
@@ -29,7 +32,8 @@ export async function saveScom205Snapshot(snapshot: Scom205Snapshot, client?: Po
        bpu_sp_rev_mtd = excluded.bpu_sp_rev_mtd,
        bpu_lab_rev_mtd = excluded.bpu_lab_rev_mtd,
        stock_month_tgp = excluded.stock_month_tgp,
-       sr_lines_total_pct = excluded.sr_lines_total_pct`,
+       sr_lines_total_pct = excluded.sr_lines_total_pct,
+       uploaded_by = excluded.uploaded_by`,
     [
       snapshot.date,
       snapshot.branch,
@@ -41,6 +45,7 @@ export async function saveScom205Snapshot(snapshot: Scom205Snapshot, client?: Po
       snapshot.totals.bpuLabRevMtd,
       snapshot.stockAndServiceRate?.stockMonthTgp ?? null,
       snapshot.stockAndServiceRate?.srLinesTotalPct ?? null,
+      snapshot.uploadedBy ?? null,
     ]
   );
 }
