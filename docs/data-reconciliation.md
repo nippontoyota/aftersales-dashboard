@@ -43,6 +43,34 @@ each one, just confirmed no *new* instances of either bug class have appeared.
 
 ---
 
+## August · External Sales stuck on the old rule  →  Total External Sales **understated** (2026-09-30)
+
+Almost every branch's August Part Sale files were uploaded 2026-08-29–09-02, **before**
+the External Sales rule was rewritten (any `A`-type BillNo, 2026-09-15) and before the FK
+cross-month netting change (2026-09-23). Their stored `external_sales` still reflects the
+old rule (literal `"AA"` prefix + PartNo filter), which scores ~0 for every branch but
+CO01B. September and earlier months were swept by `scripts/recompute-part-sale-fk-all-months.mts`,
+but that script is scoped `FROM = "2026-09-01"` — August fell through the gap.
+
+**Fixed 2026-09-30** in two passes:
+1. `scripts/backfill-part-sale-external-august.mts --commit` — 17 branches with no overlap risk,
+   38 snapshots recomputed under the current rule, **+₹65,46,223** net.
+2. `scripts/fix-kl-co01b-august-dedup.mts --commit` — CO01B's duplicate `08-28` orphan deleted
+   (same file as `08-27`, was double-counting ₹1,02,379); KL01A/KL01B's weekly uploads were found
+   fully contained inside their monthly cumulative file (every weekly bill reappears in the
+   cumulative), so the cumulative was kept as the source of truth and the redundant weeklies
+   deleted (KL01A: `08-07`/`08-14`/`08-21`/`08-30`; KL01B: `08-09`/`08-16`/`08-24`/`08-28`).
+
+August External Sales grand total: ₹9,53,856 (stale) → **₹74,00,870**, verified with zero
+remaining BillNo overlaps across any branch/date pair.
+
+**Fully missing** (no snapshot at all for that branch/day — needs a fresh upload, nothing to recompute):
+CO01A 30 Aug, CO01B 30 Aug, IR01A 30 Aug, KL01B 30 Aug.
+
+**Orphaned** (a snapshot exists but predates raw-row capture (2026-09-01), so it can't be
+recomputed — stuck at its old-rule value, mostly ₹0): 29 Aug for KT01A, KT01B, KY01A, MV01A,
+PH01A, TI01B, TI01C, TL01A, TR01A, TR01B, TR01C. Needs re-upload to correct.
+
 ## September · went dark after 3 Sep  →  GUS + BPU + Total Revenue MTD **blank** on the live dashboard
 
 No scom205 / Service Info / Part Sale / SSRV089 uploaded since **3 Sep**. With no scom205

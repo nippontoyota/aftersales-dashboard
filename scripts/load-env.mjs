@@ -11,12 +11,27 @@ try {
   raw = "";
 }
 
-for (const line of raw.split("\n")) {
+// Values can span multiple lines when wrapped in double quotes (e.g.
+// DATABASE_CA_CERT's PEM block) — keep consuming lines until the closing
+// quote instead of treating each line independently.
+const lines = raw.split("\n");
+for (let i = 0; i < lines.length; i++) {
+  const line = lines[i];
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith("#")) continue;
   const eq = trimmed.indexOf("=");
   if (eq === -1) continue;
   const key = trimmed.slice(0, eq).trim();
-  const value = trimmed.slice(eq + 1).trim();
+  let value = trimmed.slice(eq + 1).trim();
+  if (value.startsWith('"') && !(value.length > 1 && value.endsWith('"'))) {
+    while (i + 1 < lines.length) {
+      i++;
+      value += "\n" + lines[i];
+      if (lines[i].trimEnd().endsWith('"')) break;
+    }
+  }
+  if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
+    value = value.slice(1, -1);
+  }
   if (!(key in process.env)) process.env[key] = value;
 }
