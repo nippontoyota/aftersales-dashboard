@@ -1,4 +1,5 @@
-import { DAILY_REPORT_ROWS, type RowDef } from "../dashboard/daily-report-rows";
+import { formatNumber } from "@/lib/format";
+import { DAILY_REPORT_ROWS, type MetricDef, type RowDef } from "../dashboard/daily-report-rows";
 
 /**
  * The Accounts view's row set — a curated subset of DAILY_REPORT_ROWS
@@ -33,3 +34,25 @@ export const FINANCIAL_ROWS: RowDef[] = DAILY_REPORT_ROWS.filter(
   const next = arr[i + 1];
   return next !== undefined && next.kind === "metric";
 });
+
+/**
+ * Total Units Serviced (RO) · MTD = GUS RO + BPU RO summed. Not money, so it
+ * was originally excluded from FINANCIAL_ROWS above — added back 2026-09-30
+ * per the user's explicit request (accounts wants unit volume alongside
+ * revenue). Synthetic: no single BA Tool field holds the combined figure, so
+ * this isn't filtered from DAILY_REPORT_ROWS like everything else here —
+ * mtd is computed directly off BranchReport. MTD only (no daily figure),
+ * per the user's choice.
+ */
+const unitsServicedRow: MetricDef = {
+  kind: "metric",
+  label: "Total Units Serviced (RO) · MTD",
+  strong: true,
+  summable: true,
+  fmt: formatNumber,
+  today: () => null,
+  mtd: (b) => (b.gusRoMtd == null && b.bpuRoMtd == null ? null : (b.gusRoMtd ?? 0) + (b.bpuRoMtd ?? 0)),
+  target: () => null,
+};
+
+export const UNITS_SERVICED_ROWS: RowDef[] = [{ kind: "group", label: "Units Serviced" }, unitsServicedRow];

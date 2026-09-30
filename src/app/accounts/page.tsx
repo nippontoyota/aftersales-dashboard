@@ -5,7 +5,7 @@ import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { loadAccountsData, type AccountsRegionRollup } from "@/lib/accounts-data";
 import { achievementRatio } from "@/lib/aggregate";
-import { formatCompactCurrency, formatPercent } from "@/lib/format";
+import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { requireAccountsAccess } from "./accounts-guard";
 import { AccountsHeader } from "./accounts-header";
 import { DraftWarning } from "@/components/draft-warning";
@@ -65,6 +65,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
   const gusMtd = (group.hero.gusPartsMtd ?? 0) + (group.hero.gusLabourMtd ?? 0);
   const bpuMtd = (group.hero.bpuPartsMtd ?? 0) + (group.hero.bpuLabourMtd ?? 0);
   const scrapOilMtd = (group.hero.scrapRevenueMtd ?? 0) + (group.hero.usedOilRevenueMtd ?? 0);
+  const unitsServicedMtd = (group.hero.gusRoMtd ?? 0) + (group.hero.bpuRoMtd ?? 0);
 
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-8">
@@ -92,6 +93,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
           sub={`${formatPercent(achievementRatio(group.kpis.vasAchievementForTheMonth, group.kpis.vasBillTarget))} of target`}
         />
         <Tile label="Scrap + Used Oil · MTD" value={formatCompactCurrency(scrapOilMtd)} />
+        <Tile label="Total Units Serviced (RO) · MTD" value={formatNumber(unitsServicedMtd)} sub="GUS + BPU RO" />
         <Tile
           label="Cancellations · This Month"
           value={formatCompactCurrency(group.cancellations.beforeTaxTotal)}

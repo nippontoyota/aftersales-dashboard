@@ -8,7 +8,7 @@ import type { RegionName } from "@/lib/regions";
 import { branchCell, regionTotalCell } from "../../dashboard/daily-report-rows";
 import { requireAccountsAccess } from "../accounts-guard";
 import { AccountsHeader } from "../accounts-header";
-import { FINANCIAL_ROWS } from "../financial-rows";
+import { FINANCIAL_ROWS, UNITS_SERVICED_ROWS } from "../financial-rows";
 import { tglossText } from "@/components/tgloss-text";
 
 export default async function AccountsBranchesPage({
@@ -105,7 +105,7 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
             </tr>
           </thead>
           <tbody>
-            {FINANCIAL_ROWS.map((row, i) => {
+            {[...FINANCIAL_ROWS, ...UNITS_SERVICED_ROWS].map((row, i) => {
               if (row.kind === "group") {
                 return (
                   <tr key={`g${i}`}>
