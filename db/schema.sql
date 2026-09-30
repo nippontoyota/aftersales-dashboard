@@ -653,3 +653,16 @@ alter table scom205_snapshots add column if not exists uploaded_by text;
 alter table service_info_snapshots add column if not exists uploaded_by text;
 alter table service_info_bp_snapshots add column if not exists uploaded_by text;
 alter table part_sale_snapshots add column if not exists uploaded_by text;
+
+-- Login rate-limiting counters (2026-09-30). One row per HMAC-keyed account or
+-- IP prefix. A single atomic upsert both records the attempt and resets an
+-- expired window in one round-trip (see src/lib/login-rate-limit.ts). Rows are
+-- left to decay naturally — a 1%-probability cleanup pass deletes rows older
+-- than 24 hours on each login attempt. No FK to admins intentionally: a failed
+-- login against a non-existent username still increments a counter so username
+-- enumeration doesn't bypass the limit.
+create table if not exists login_rate_limits (
+  key          text        primary key,
+  attempts     integer     not null default 1,
+  window_start timestamptz not null default now()
+);
