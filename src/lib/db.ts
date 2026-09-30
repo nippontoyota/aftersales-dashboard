@@ -24,7 +24,8 @@ function getPool(): Pool {
     if (!connectionString) {
       throw new Error("DATABASE_URL is not set — see .env.local.");
     }
-    g.__pgPool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+    const ca = process.env.DATABASE_CA_CERT;
+    g.__pgPool = new Pool({ connectionString, ssl: { rejectUnauthorized: true, ca } });
   }
   return g.__pgPool;
 }
