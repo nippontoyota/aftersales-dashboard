@@ -12,12 +12,22 @@ import { loadCrossMonthReplacements } from "./cross-month-replacement";
  *   - it landed AFTER the branch's last scom205 upload for that month
  *     (`cancel_date` > that date) — the frozen monthly figure still has it; or
  *   - the cancelled invoice number is still literally present in the
- *     branch's SSRV089 data for the month (no replacement issued yet).
+ *     branch's SSRV089 data for the month, AND no other invoice has shown up
+ *     on that same RO (Job Order No) either — i.e. there's no evidence the
+ *     job was ever rebilled.
  *
- * SSRV089 only drives the Accessories deduction, not revenue directly — but
- * a stale invoice there is a strong tell that the cancellation hasn't
- * propagated. Body & Paint ROs (`BPE…`) aren't in SSRV089-General, so those
- * come back "unverified" — an honest "can't check from this data".
+ * A cancelled RO almost always gets rebilled under a new invoice number
+ * within the same SSRV089 data — branches never re-upload a past day's
+ * SSRV089 to remove the dead row, so its presence alone doesn't mean
+ * anything is wrong (confirmed with the user 2026-09-30). What actually
+ * matters is whether a *different* invoice now sits on that RO: if one does,
+ * the job was rebilled and scom205 (which nets out cancellations as of its
+ * own pull time) already has the right number — this is "replaced", not
+ * "stale", even though the old dead row is still physically sitting in
+ * SSRV089 forever. "stale" is reserved for a cancelled RO with no other
+ * invoice on it anywhere in the month's SSRV089 — genuinely no evidence of
+ * a fix. Body & Paint ROs (`BPE…`) aren't in SSRV089-General, so those come
+ * back "unverified" — an honest "can't check from this data".
  *
  * A "stale" row closed by an Accessories-staff SA is worse than an ordinary
  * stale row: report.ts's Accessories deduction (see
@@ -165,9 +175,10 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
     const crossMonth = crossMonthByDocNo.get(r.doc_no);
     let status: ReconcileStatus;
     if (crossMonth) status = "adjusted";
+    else if (r.has_replacement) status = "replaced"; // a different invoice already exists on this RO — rebilled, not stale
     else if (r.still_present) status = "stale";
     else if (r.after_last_kpi) status = "after_kpi_cutoff";
-    else if (r.has_replacement || r.ro_in_ssrv) status = "replaced";
+    else if (r.ro_in_ssrv) status = "replaced";
     else status = "unverified";
 
     return {
