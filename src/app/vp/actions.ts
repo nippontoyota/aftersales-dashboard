@@ -114,7 +114,8 @@ export async function setVpFlagStatusAction(_prev: FlagState, formData: FormData
   if (!Number.isFinite(id) || id <= 0) return { error: "Bad query id.", ok: false };
   if (status !== "open" && status !== "closed") return { error: "Bad status.", ok: false };
 
-  await setVpQueryThreadArchived(id, status === "closed");
+  const updated = await setVpQueryThreadArchived(id, status === "closed", admin.username);
+  if (!updated) return { error: "Not your thread.", ok: false };
   revalidateEverywhere();
   return { error: null, ok: true };
 }
