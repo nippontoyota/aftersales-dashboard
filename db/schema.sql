@@ -654,6 +654,26 @@ alter table service_info_snapshots add column if not exists uploaded_by text;
 alter table service_info_bp_snapshots add column if not exists uploaded_by text;
 alter table part_sale_snapshots add column if not exists uploaded_by text;
 
+-- Batch-level content hashes for duplicate-upload detection (2026-09-30).
+-- One row per (report_type, branch, date) — the same granularity that
+-- saveRawUploadRows deletes and re-inserts atomically. The PRIMARY KEY
+-- enforces the one-batch-per-date invariant at the schema level and makes
+-- concurrent re-uploads safe (ON CONFLICT UPDATE). The hash index turns the
+-- duplicate check from a ~6 s full-scan + JS loop into a single keyed lookup.
+-- Covers service_info / ssrv089 / part_sale only — scom205 and ba_tool use
+-- their own duplicate-detection paths. Backfilled from raw_upload_rows via
+-- db/backfill-batch-hashes.mjs before code deployment.
+create table if not exists raw_upload_batches (
+  report_type  text        not null check (report_type in ('service_info', 'ssrv089', 'part_sale')),
+  branch       text        not null,
+  date         date        not null,
+  content_hash text        not null,
+  uploaded_at  timestamptz not null,
+  primary key (report_type, branch, date)
+);
+create index if not exists raw_upload_batches_hash_idx
+  on raw_upload_batches (report_type, branch, content_hash);
+
 -- Login rate-limiting counters (2026-09-30). One row per HMAC-keyed account or
 -- IP prefix. A single atomic upsert both records the attempt and resets an
 -- expired window in one round-trip (see src/lib/login-rate-limit.ts). Rows are

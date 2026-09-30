@@ -8,7 +8,7 @@ import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { savePartSaleSnapshot } from "@/lib/part-sale/store";
 import { checkBillOverlap } from "@/lib/part-sale/upload-validation";
 import { saveRawReportUpload } from "@/lib/raw-report-uploads/store";
-import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { detectReportType } from "@/lib/report-sniffer";
 import { ONLINE_STORE_CODES } from "@/lib/report";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
@@ -126,12 +126,13 @@ export async function POST(request: Request) {
         }
       }
 
+      const siHash = hashRows(rawRows);
       const siClient = await pool.connect();
       try {
         await siClient.query("begin");
         await saveServiceInfoSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username }, siClient);
         await saveRawUploadRows(
-          { reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username },
+          { reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username, contentHash: siHash },
           siClient
         );
         await siClient.query("commit");
@@ -151,16 +152,15 @@ export async function POST(request: Request) {
       // (2026-09-21, after IR01A's "17 Sep" mislabeled partial-pull incident
       // went through this exact tool, which previously had no duplicate
       // check at all for Part Sale) — see part-sale/upload-validation.ts.
+      const psHash = hashRows(rawRows);
       const confirmed = formData.get("confirmDuplicate") === "true";
       if (!confirmed) {
-        const priorUploads = await loadAllRawUploadRowsBefore("part_sale", branch, date);
-        const newHash = hashRows(rawRows);
-        const match = priorUploads.find((u) => hashRows(u.rows) === newHash);
-        if (match) {
+        const matchDate = await findDuplicateBatch("part_sale", branch, date, psHash);
+        if (matchDate) {
           return NextResponse.json({
             duplicate: true,
-            previousDate: match.date,
-            message: `This file looks identical to the ${match.date} upload — same rows. Are you sure this is ${date}'s file?`,
+            previousDate: matchDate,
+            message: `This file looks identical to the ${matchDate} upload — same rows. Are you sure this is ${date}'s file?`,
           });
         }
 
@@ -175,7 +175,7 @@ export async function POST(request: Request) {
         await psClient.query("begin");
         await savePartSaleSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username }, psClient);
         await saveRawUploadRows(
-          { reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username },
+          { reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username, contentHash: psHash },
           psClient
         );
         await psClient.query("commit");
@@ -205,16 +205,15 @@ export async function POST(request: Request) {
       if (!dateSanity.ok) {
         return NextResponse.json({ error: dateSanity.error }, { status: 422 });
       }
+      const sv089Hash = hashRows(rawRows);
       const confirmed = formData.get("confirmDuplicate") === "true";
       if (!confirmed) {
-        const priorUploads = await loadAllRawUploadRowsBefore("ssrv089", branch, date);
-        const newHash = hashRows(rawRows);
-        const match = priorUploads.find((u) => hashRows(u.rows) === newHash);
-        if (match) {
+        const matchDate = await findDuplicateBatch("ssrv089", branch, date, sv089Hash);
+        if (matchDate) {
           return NextResponse.json({
             duplicate: true,
-            previousDate: match.date,
-            message: `This file looks identical to the ${match.date} upload — same rows. Are you sure this is ${date}'s file?`,
+            previousDate: matchDate,
+            message: `This file looks identical to the ${matchDate} upload — same rows. Are you sure this is ${date}'s file?`,
           });
         }
       }
@@ -224,7 +223,7 @@ export async function POST(request: Request) {
         await sv089Client.query("begin");
         await saveSsrv089Snapshot({ date, branch, variant: "general", uploadedAt, sourceFileName: file.name, totals, uploadedBy: admin.username }, sv089Client);
         await saveRawUploadRows(
-          { reportType: "ssrv089", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username },
+          { reportType: "ssrv089", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username, contentHash: sv089Hash },
           sv089Client
         );
         await sv089Client.query("commit");
