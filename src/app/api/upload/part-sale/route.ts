@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
+import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { loadPartSaleSnapshot, savePartSaleSnapshot } from "@/lib/part-sale/store";
@@ -90,20 +91,18 @@ export async function POST(request: Request) {
   }
 
   const uploadedAt = new Date().toISOString();
-  await savePartSaleSnapshot({
-    date,
-    branch: admin.branch,
-    uploadedAt,
-    sourceFileName: file.name,
-    counts,
-  });
-  await saveRawUploadRows({
-    reportType: "part_sale",
-    date,
-    uploadedAt,
-    sourceFileName: file.name,
-    rows: rawRows.map((data) => ({ branch: admin.branch, data })),
-  });
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query("begin");
+    await savePartSaleSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts }, dbClient);
+    await saveRawUploadRows({ reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })) }, dbClient);
+    await dbClient.query("commit");
+  } catch {
+    await dbClient.query("rollback");
+    return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+  } finally {
+    dbClient.release();
+  }
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }

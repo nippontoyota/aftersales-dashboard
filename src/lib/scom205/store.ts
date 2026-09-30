@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { pool } from "../db";
 import type { Scom205StockAndServiceRate, Scom205Totals } from "./parse";
 
@@ -14,8 +15,9 @@ export type Scom205Snapshot = {
   stockAndServiceRate: Scom205StockAndServiceRate | null;
 };
 
-export async function saveScom205Snapshot(snapshot: Scom205Snapshot): Promise<void> {
-  await pool.query(
+/** Pass `client` to run inside a caller-managed transaction. */
+export async function saveScom205Snapshot(snapshot: Scom205Snapshot, client?: PoolClient): Promise<void> {
+  await (client ?? pool).query(
     `insert into scom205_snapshots
        (date, branch, uploaded_at, source_file_name, gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd, stock_month_tgp, sr_lines_total_pct)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)

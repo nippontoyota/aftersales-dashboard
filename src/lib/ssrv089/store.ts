@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { pool } from "../db";
 import type { Ssrv089Totals } from "./parse";
 
@@ -13,8 +14,9 @@ export type Ssrv089Snapshot = {
   totals: Ssrv089Totals;
 };
 
-export async function saveSsrv089Snapshot(snapshot: Ssrv089Snapshot): Promise<void> {
-  await pool.query(
+/** Pass `client` to run inside a caller-managed transaction. */
+export async function saveSsrv089Snapshot(snapshot: Ssrv089Snapshot, client?: PoolClient): Promise<void> {
+  await (client ?? pool).query(
     `insert into ssrv089_snapshots
        (date, branch, variant, uploaded_at, source_file_name, accessories_part_sale, accessories_labour_sale)
      values ($1, $2, $3, $4, $5, $6, $7)

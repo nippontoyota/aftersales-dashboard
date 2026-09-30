@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { pool } from "../db";
 import type { PartSaleCounts } from "./parse";
 
@@ -10,8 +11,9 @@ export type PartSaleSnapshot = {
   counts: PartSaleCounts;
 };
 
-export async function savePartSaleSnapshot(snapshot: PartSaleSnapshot): Promise<void> {
-  await pool.query(
+/** Pass `client` to run inside a caller-managed transaction. */
+export async function savePartSaleSnapshot(snapshot: PartSaleSnapshot, client?: PoolClient): Promise<void> {
+  await (client ?? pool).query(
     `insert into part_sale_snapshots
        (date, branch, uploaded_at, source_file_name, engine_flush, injector_cleaner, synthetic_oil_ltrs, brake_cleaning_spray, external_sales, diy_count, diy_revenue)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)

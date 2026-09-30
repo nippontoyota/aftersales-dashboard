@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { listBranchCodes } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
+import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { savePartSaleSnapshot } from "@/lib/part-sale/store";
@@ -124,8 +125,18 @@ export async function POST(request: Request) {
         }
       }
 
-      await saveServiceInfoSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts });
-      await saveRawUploadRows({ reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
+      const siClient = await pool.connect();
+      try {
+        await siClient.query("begin");
+        await saveServiceInfoSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts }, siClient);
+        await saveRawUploadRows({ reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) }, siClient);
+        await siClient.query("commit");
+      } catch {
+        await siClient.query("rollback");
+        return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+      } finally {
+        siClient.release();
+      }
       return NextResponse.json({ success: true, type, variant, date, branch, counts });
     }
 
@@ -155,8 +166,18 @@ export async function POST(request: Request) {
         }
       }
 
-      await savePartSaleSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts });
-      await saveRawUploadRows({ reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
+      const psClient = await pool.connect();
+      try {
+        await psClient.query("begin");
+        await savePartSaleSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts }, psClient);
+        await saveRawUploadRows({ reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) }, psClient);
+        await psClient.query("commit");
+      } catch {
+        await psClient.query("rollback");
+        return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+      } finally {
+        psClient.release();
+      }
       return NextResponse.json({ success: true, type, date, branch, counts });
     }
 
@@ -167,15 +188,35 @@ export async function POST(request: Request) {
       }
       const staffNames = await listAccessoriesStaffNamesForBranch(branch);
       const { totals, rawRows } = parseSsrv089Workbook(buffer, staffNames);
-      await saveSsrv089Snapshot({ date, branch, variant: "general", uploadedAt, sourceFileName: file.name, totals });
-      await saveRawUploadRows({ reportType: "ssrv089", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
+      const sv089Client = await pool.connect();
+      try {
+        await sv089Client.query("begin");
+        await saveSsrv089Snapshot({ date, branch, variant: "general", uploadedAt, sourceFileName: file.name, totals }, sv089Client);
+        await saveRawUploadRows({ reportType: "ssrv089", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) }, sv089Client);
+        await sv089Client.query("commit");
+      } catch {
+        await sv089Client.query("rollback");
+        return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+      } finally {
+        sv089Client.release();
+      }
       return NextResponse.json({ success: true, type, variant, date, branch, totals });
     }
 
     // type === "scom205"
     const { totals, rawRows, stockAndServiceRate } = parseScom205Workbook(buffer);
-    await saveScom205Snapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals, stockAndServiceRate });
-    await saveRawUploadRows({ reportType: "scom205", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) });
+    const scClient = await pool.connect();
+    try {
+      await scClient.query("begin");
+      await saveScom205Snapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals, stockAndServiceRate }, scClient);
+      await saveRawUploadRows({ reportType: "scom205", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })) }, scClient);
+      await scClient.query("commit");
+    } catch {
+      await scClient.query("rollback");
+      return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+    } finally {
+      scClient.release();
+    }
     return NextResponse.json({ success: true, type, date, branch, totals });
   } catch (err) {
     return NextResponse.json(
