@@ -66,7 +66,7 @@ function toAccount(row: AdminRow): AdminAccount {
  * branch", "North regional manager". */
 export function adminIdentityLabel(admin: AdminAccount): string {
   if (admin.role === "hq") return "HQ admin";
-  if (admin.role === "hq_viewer") return "HQ admin";
+  if (admin.role === "hq_viewer") return "HQ viewer";
   if (admin.role === "regional") return `${admin.region} regional manager`;
   if (admin.role === "vp_service") return "VP Service";
   if (admin.role === "ceo") return "CEO";
