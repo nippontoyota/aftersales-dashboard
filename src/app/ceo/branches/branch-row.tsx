@@ -5,11 +5,13 @@ const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", 
 
 /**
  * One branch's row on /ceo/branches — all 13 figures (Revenue/Profit MTD,
- * GS/BP ROs/Utilization/Profit-RO, GS/BP/blended Revenue-RO, GS/BP bay
- * capacity + per-bay target) flat in a single row (2026-10-01, at the
- * user's request — replaced the earlier click-to-expand detail panel with
- * more columns instead). Plain server-rendered row now; no client state
- * needed since there's no more expand/collapse interaction.
+ * then GS ROs/Utilization/Profit-RO/Revenue-RO, then the same four for BP,
+ * then blended Revenue-RO, then GS/BP bay capacity + per-bay target) flat in
+ * a single row (2026-10-01, at the user's request — replaced the earlier
+ * click-to-expand detail panel with more columns instead; Revenue/RO sits
+ * right next to Profit/RO for the same channel, also at the user's request).
+ * Plain server-rendered row now; no client state needed since there's no
+ * more expand/collapse interaction.
  */
 export function BranchRow({
   name,
@@ -60,12 +62,12 @@ export function BranchRow({
         {gsUtilizationPct !== null ? formatPercent(gsUtilizationPct) : "—"}
       </td>
       <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(gsProfitPerRo)}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(gsRevenuePerRo)}</td>
       <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{bpRos !== null ? formatCompact(bpRos) : "—"}</td>
       <td className={`whitespace-nowrap px-4 py-2 text-right tabular-nums font-semibold ${TONE_TEXT[bpTone]}`}>
         {bpUtilizationPct !== null ? formatPercent(bpUtilizationPct) : "—"}
       </td>
       <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(bpProfitPerRo)}</td>
-      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(gsRevenuePerRo)}</td>
       <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(bpRevenuePerRo)}</td>
       <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(blendedRevenuePerRo)}</td>
       <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">
