@@ -48,6 +48,10 @@ export type CompareBranchData = {
   gusPartsPerCar: number | null;
   gusLabourPerCar: number | null;
   bpuPerCar: number | null;
+  /** BPU Parts/Labour split out separately from bpuPerCar above — for the
+   * Regions table's always-visible split cells (2026-10-01, mirroring GUS). */
+  bpuPartsPerCar: number | null;
+  bpuLabourPerCar: number | null;
   tglossPerGusCar: number | null;
   /** null when this branch has no slab target of its own (e.g. CO01E, which folds into CO01B). */
   slabs: [SlabCompare, SlabCompare, SlabCompare, SlabCompare] | null;
@@ -134,6 +138,8 @@ export function buildCompareData(
       gusLabourPerCar: ratio(b.gusLabourMtd, b.gusRoMtd),
       bpuPerCar:
         b.bpuPartsMtd === null && b.bpuLabourMtd === null ? null : ratio((b.bpuPartsMtd ?? 0) + (b.bpuLabourMtd ?? 0), b.bpuRoMtd),
+      bpuPartsPerCar: ratio(b.bpuPartsMtd, b.bpuRoMtd),
+      bpuLabourPerCar: ratio(b.bpuLabourMtd, b.bpuRoMtd),
       tglossPerGusCar: ratio(b.vasAchievementForTheMonth, b.gusRoMtd),
       slabs: slabsFor(b.branch, branches, incentiveSlabTargets),
       tkm: {

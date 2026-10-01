@@ -4,18 +4,20 @@ import { isBodyPaintOnly } from "@/lib/report";
 import { achievementRatio } from "@/lib/aggregate";
 import { formatCompact } from "@/lib/format";
 import { REGIONS, regionForBranch, type RegionName } from "@/lib/regions";
-import { BpuCell } from "./revenue-per-vehicle-row";
 import { SectionTable, type SectionColumn } from "./section-table";
 
 /**
  * "How much are we earning per car" — one compact table, one row per
  * branch, replacing the earlier 7-board ranked-list layout (2026-09-21, at
  * the user's request — that layout was too much scrolling, "way too
- * messed up"). Columns, left to right: GUS Parts, GUS Labour, BPU (combined,
- * click to split Parts/Labour), TGLOSS/GUS, Parts Retail, Offtake — no
- * Total Revenue column (dropped at the user's request). GUS Parts/Labour
- * and TGLOSS/GUS are banded against fixed per-RO targets; BPU/Parts
- * Retail/Offtake have no fixed target yet, so they're plain figures.
+ * messed up"). Columns, left to right: GUS Parts, GUS Labour, BPU Parts,
+ * BPU Labour, TGLOSS/GUS, Parts Retail, Offtake — no Total Revenue column
+ * (dropped at the user's request). BPU Parts/Labour were a single combined
+ * click-to-expand cell until 2026-10-01, when the VP asked for the same
+ * always-visible Parts/Labour split GUS already had, everywhere this table
+ * is used. GUS Parts/Labour and TGLOSS/GUS are banded against fixed per-RO
+ * targets; BPU/Parts Retail/Offtake have no fixed target yet, so they're
+ * plain figures.
  *
  * Body & Paint-only branches (CO01E/KL01B/TR01B) are shown in their own
  * small table below — their BPU RO counts aren't comparable to a mixed
@@ -78,7 +80,7 @@ function bandedPerRoCell(numerator: number | null, gusRoMtd: number | null, band
  * cover BPU and TGLOSS/GUS the same day, at the VP's request. */
 export type GusCellRenderer = (
   row: BranchReport,
-  metric: "parts" | "labour" | "bpu" | "tgloss",
+  metric: "parts" | "labour" | "bpuParts" | "bpuLabour" | "tgloss",
   value: number | null,
   plain: () => ReactNode
 ) => ReactNode;
@@ -107,37 +109,34 @@ function gusLabourColumn(renderGusCell?: GusCellRenderer): SectionColumn {
   };
 }
 
-function bpuColumn(renderGusCell?: GusCellRenderer): SectionColumn {
+/** BPU Parts/Labour — always its own two columns like GUS, never a combined
+ * click-to-expand cell (dropped 2026-10-01, at the VP's request — applies
+ * everywhere this table is used, HQ dashboard and the VP's Regions table
+ * alike). No fixed per-RO target exists for either yet, so these are plain
+ * figures even when renderGusCell wires up a click-to-rank cell. */
+function bpuPartsColumn(renderGusCell?: GusCellRenderer): SectionColumn {
   return {
-    label: "BPU (Rs/Car)",
+    label: "BPU Parts (Rs/Car)",
     render: (r) => {
-      const plain = () => (
-        <BpuCell
-          combined={achievementRatio((r.bpuPartsMtd ?? 0) + (r.bpuLabourMtd ?? 0), r.bpuRoMtd)}
-          parts={achievementRatio(r.bpuPartsMtd, r.bpuRoMtd)}
-          labour={achievementRatio(r.bpuLabourMtd, r.bpuRoMtd)}
-        />
-      );
+      const plain = () => perVehicleCell(r.bpuPartsMtd, r.bpuRoMtd);
       if (!renderGusCell) return plain();
-      const hasAny = r.bpuPartsMtd !== null || r.bpuLabourMtd !== null;
-      const value = r.bpuRoMtd === null || r.bpuRoMtd === 0 || !hasAny ? null : achievementRatio((r.bpuPartsMtd ?? 0) + (r.bpuLabourMtd ?? 0), r.bpuRoMtd);
-      return renderGusCell(r, "bpu", value, plain);
+      const value = r.bpuRoMtd === null || r.bpuRoMtd === 0 ? null : achievementRatio(r.bpuPartsMtd, r.bpuRoMtd);
+      return renderGusCell(r, "bpuParts", value, plain);
     },
   };
 }
 
-/** HQ dashboard only (no renderGusCell caller passes one) — BPU split into
- * its own Parts/Labour columns like GUS, instead of one combined
- * click-to-expand cell (confirmed with the user 2026-10-01). */
-const bpuPartsColumn: SectionColumn = {
-  label: "BPU Parts (Rs/Car)",
-  render: (r) => perVehicleCell(r.bpuPartsMtd, r.bpuRoMtd),
-};
-
-const bpuLabourColumn: SectionColumn = {
-  label: "BPU Labour (Rs/Car)",
-  render: (r) => perVehicleCell(r.bpuLabourMtd, r.bpuRoMtd),
-};
+function bpuLabourColumn(renderGusCell?: GusCellRenderer): SectionColumn {
+  return {
+    label: "BPU Labour (Rs/Car)",
+    render: (r) => {
+      const plain = () => perVehicleCell(r.bpuLabourMtd, r.bpuRoMtd);
+      if (!renderGusCell) return plain();
+      const value = r.bpuRoMtd === null || r.bpuRoMtd === 0 ? null : achievementRatio(r.bpuLabourMtd, r.bpuRoMtd);
+      return renderGusCell(r, "bpuLabour", value, plain);
+    },
+  };
+}
 
 function tglossColumn(renderGusCell?: GusCellRenderer): SectionColumn {
   return {
@@ -153,18 +152,16 @@ function tglossColumn(renderGusCell?: GusCellRenderer): SectionColumn {
   };
 }
 
-/** First 4 entries (when the BPU column is the single combined one) are GUS
- * Parts, GUS Labour, BPU, TGLOSS/GUS — what the VP view shows (its own
- * "compact" variant below); Parts Retail and Offtake are HQ-dashboard-only
- * additions the VP doesn't need (confirmed 2026-09-25). The plain HQ
- * dashboard (no renderGusCell) splits BPU into Parts/Labour columns instead
- * (confirmed 2026-10-01) — compact/VP callers always pass renderGusCell, so
- * this never shifts the VP's 4-column slice below. */
+/** First 5 entries are GUS Parts, GUS Labour, BPU Parts, BPU Labour,
+ * TGLOSS/GUS — what the VP view shows (its own "compact" variant below);
+ * Parts Retail and Offtake are HQ-dashboard-only additions the VP doesn't
+ * need (confirmed 2026-09-25). */
 function buildColumns(renderGusCell?: GusCellRenderer): SectionColumn[] {
   return [
     gusPartsColumn(renderGusCell),
     gusLabourColumn(renderGusCell),
-    ...(renderGusCell ? [bpuColumn(renderGusCell)] : [bpuPartsColumn, bpuLabourColumn]),
+    bpuPartsColumn(renderGusCell),
+    bpuLabourColumn(renderGusCell),
     tglossColumn(renderGusCell),
     { label: "Parts Retail (Rs/Car)", render: (r) => perVehicleCell(r.partsRetailAchievementForTheMonth, r.gusRoMtd) },
     { label: "Offtake (Rs/Car)", render: (r) => perVehicleCell(r.offtakeAchievementForTheMonth, r.gusRoMtd) },
@@ -175,7 +172,10 @@ function buildColumns(renderGusCell?: GusCellRenderer): SectionColumn[] {
  * export in case anything still imports COLUMNS directly. */
 export const COLUMNS: SectionColumn[] = buildColumns();
 
-const BP_ONLY_COLUMNS: SectionColumn[] = [bpuPartsColumn, bpuLabourColumn];
+/** Never interactive — Body & Paint-only branches are excluded from every
+ * rank pool (not comparable to a mixed branch's), so there's no
+ * renderGusCell to wire up here even when the main table above has one. */
+const BP_ONLY_COLUMNS: SectionColumn[] = [bpuPartsColumn(), bpuLabourColumn()];
 
 /** Company-wide row — sum/sum, not an average of each branch's own ratio
  * (same weighted-ratio convention as Service Gentan I, confirmed with the
@@ -238,8 +238,8 @@ function regionSort(a: BranchReport, b: BranchReport): number {
 export function RevenuePerVehicleTable({
   branches,
   /** "compact" drops Parts Retail and Offtake — the VP's own view
-   * (regions/page.tsx), which only wants GUS Parts, GUS Labour, BPU and
-   * TGLOSS/GUS. Defaults to the full 6-column HQ dashboard set. */
+   * (regions/page.tsx), which only wants GUS Parts, GUS Labour, BPU Parts,
+   * BPU Labour and TGLOSS/GUS. Defaults to the full HQ dashboard set. */
   variant = "full",
   defaultOpen,
   /** See GusCellRenderer above — lets the VP's Regions page make the GUS
@@ -255,7 +255,7 @@ export function RevenuePerVehicleTable({
   renderBranchCell?: (row: BranchReport) => ReactNode;
 }) {
   const allColumns = buildColumns(renderGusCell);
-  const columns = variant === "compact" ? allColumns.slice(0, 4) : allColumns;
+  const columns = variant === "compact" ? allColumns.slice(0, 5) : allColumns;
   const generalBranches = branches.filter((b) => !isBodyPaintOnly(b.branch));
   const bpOnlyBranches = branches.filter((b) => isBodyPaintOnly(b.branch));
 

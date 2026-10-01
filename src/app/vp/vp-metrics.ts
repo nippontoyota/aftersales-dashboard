@@ -17,6 +17,8 @@ export type MetricKey =
   | "gusPartsPerCar"
   | "gusLabourPerCar"
   | "bpuPerCar"
+  | "bpuPartsPerCar"
+  | "bpuLabourPerCar"
   | "tglossPerGusCar"
   | "tkmBpu"
   | "tkmOfftake"
@@ -130,6 +132,8 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   gusPartsPerCar: { label: "GUS Parts / car", kind: "currency", gusOnly: true, get: (d) => d.gusPartsPerCar, drivers: ["gusParts", "gusRo"], items: PARTS_GUS_ITEMS },
   gusLabourPerCar: { label: "GUS Labour / car", kind: "currency", gusOnly: true, get: (d) => d.gusLabourPerCar, drivers: ["gusLabour", "gusRo"], items: LABOUR_GUS_ITEMS },
   bpuPerCar: { label: "BPU / car", kind: "currency", get: (d) => d.bpuPerCar, drivers: ["bpuParts", "bpuLabour", "bpuRo"], items: LABOUR_BPU_ITEMS },
+  bpuPartsPerCar: { label: "BPU Parts / car", kind: "currency", get: (d) => d.bpuPartsPerCar, drivers: ["bpuParts", "bpuRo"] },
+  bpuLabourPerCar: { label: "BPU Labour / car", kind: "currency", get: (d) => d.bpuLabourPerCar, drivers: ["bpuLabour", "bpuRo"], items: LABOUR_BPU_ITEMS },
   tglossPerGusCar: { label: "TGLOSS / GUS car", kind: "currency", gusOnly: true, get: (d) => d.tglossPerGusCar, drivers: ["tglossMtd", "gusRo"] },
   tkmBpu: { label: "BPU · % of target", kind: "percent", get: (d) => d.tkm.bpu, drivers: ["bpuRo", "bpuPerCar"] },
   tkmOfftake: { label: "Offtake · % of target", kind: "percent", get: (d) => d.tkm.offtake },
