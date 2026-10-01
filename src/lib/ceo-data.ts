@@ -1,5 +1,5 @@
 import { BP_BAYS, bpBayUtilization, gsBayUtilization, GS_BAYS, sumBayUtilization, type BayUtilization } from "./bay-capacity";
-import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, grossProfitPerRo, type HeroSummary, type KpiSummary } from "./aggregate";
+import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, grossProfitPerRo, revenuePerRo, type HeroSummary, type KpiSummary } from "./aggregate";
 import { REGIONS, type RegionName } from "./regions";
 import { loadReportHolidaySet } from "./report-holidays/store";
 import { sundayOffWorkingDaysElapsedInMonth, sundayOffWorkingDaysInMonth } from "./reporting-date";
@@ -27,8 +27,8 @@ import {
  */
 
 export type CeoUtilization = {
-  gs: { utilizationPct: number; actualRoMtd: number; idealRoMtd: number } | null;
-  bp: { utilizationPct: number; actualRoMtd: number; idealRoMtd: number } | null;
+  gs: { utilizationPct: number; actualRoMtd: number; idealRoMtd: number; bays: number } | null;
+  bp: { utilizationPct: number; actualRoMtd: number; idealRoMtd: number; bays: number } | null;
 };
 
 export type CeoBranchRow = {
@@ -46,6 +46,7 @@ export type CeoRegionRollup = {
   utilization: CeoUtilization;
   revenueTarget: CeoRevenueTarget | null;
   profitTarget: CeoProfitTarget | null;
+  unitEconomics: CeoUnitEconomics;
 };
 
 /** The Profit family, properly weighted at whatever scope (group/region) the
@@ -73,6 +74,65 @@ function computeProfitBreakdown(hero: HeroSummary): CeoProfitBreakdown {
     gsGrossProfitPerRo: grossProfitPerRo(hero.gusLabourMtd, hero.gusPartsMtd, hero.gusRoMtd),
     bpGrossProfitPerRo: grossProfitPerRo(hero.bpuLabourMtd, hero.bpuPartsMtd, hero.bpuRoMtd),
     blendedGrossProfitPerRo: hero.profitMtd !== null && totalRo !== null && totalRo !== 0 ? hero.profitMtd / totalRo : null,
+  };
+}
+
+/** Revenue/Profit per RO (GS/BP/blended) plus bay counts and per-bay
+ * productivity targets, at whatever scope (group/region) the caller sums
+ * branches to — see ./aggregate.ts's revenuePerRo/grossProfitPerRo doc
+ * comments for why these are summed-then-divided, never an average of each
+ * branch's own ratio. gs/bpProfitPerRo duplicate what CeoProfitBreakdown
+ * already carries at group level (harmless — the overview page just doesn't
+ * re-render them there); the point of computing them uniformly here is that
+ * region level never had a Profit/RO figure before this (2026-10-01).
+ *
+ * blendedRevenuePerRo is GS+BP revenue only (matches gs/bpRevenuePerRo's own
+ * scope) — note this is narrower than blendedProfitPerRo, which divides the
+ * full modelled profitMtd (incl. TGLOSS/External Sales) by total ROs. The
+ * two aren't directly comparable as a margin ratio; see BranchReport's
+ * blendedRevenuePerRoMtd doc comment in report.ts for the same note at
+ * branch scope. */
+export type CeoUnitEconomics = {
+  gsRevenuePerRo: number | null;
+  bpRevenuePerRo: number | null;
+  blendedRevenuePerRo: number | null;
+  gsProfitPerRo: number | null;
+  bpProfitPerRo: number | null;
+  blendedProfitPerRo: number | null;
+  gsBays: number;
+  bpBays: number;
+  /** Ideal ROs/jobs per bay per day — GS is always the flat
+   * GS_STANDARD_PRODUCTIVITY_PER_BAY_PER_DAY constant (bay-capacity.ts)
+   * since it's algebraically derived from it; BP varies by job-mix. */
+  gsTargetPerBayPerDay: number | null;
+  bpTargetPerBayPerDay: number | null;
+};
+
+function computeUnitEconomics(
+  hero: HeroSummary,
+  gsUtil: { idealRoMtd: number; bays: number } | null,
+  bpUtil: { idealRoMtd: number; bays: number } | null,
+  workingDaysElapsed: number
+): CeoUnitEconomics {
+  const totalRo = hero.gusRoMtd !== null && hero.bpuRoMtd !== null ? hero.gusRoMtd + hero.bpuRoMtd : null;
+  const gsRevenueMtd = hero.gusPartsMtd !== null && hero.gusLabourMtd !== null ? hero.gusPartsMtd + hero.gusLabourMtd : null;
+  const bpRevenueMtd = hero.bpuPartsMtd !== null && hero.bpuLabourMtd !== null ? hero.bpuPartsMtd + hero.bpuLabourMtd : null;
+  const totalRevenue = gsRevenueMtd !== null && bpRevenueMtd !== null ? gsRevenueMtd + bpRevenueMtd : null;
+
+  const perBayPerDay = (util: { idealRoMtd: number; bays: number } | null) =>
+    util && util.bays > 0 && workingDaysElapsed > 0 ? util.idealRoMtd / util.bays / workingDaysElapsed : null;
+
+  return {
+    gsRevenuePerRo: revenuePerRo(hero.gusLabourMtd, hero.gusPartsMtd, hero.gusRoMtd),
+    bpRevenuePerRo: revenuePerRo(hero.bpuLabourMtd, hero.bpuPartsMtd, hero.bpuRoMtd),
+    blendedRevenuePerRo: totalRevenue !== null && totalRo !== null && totalRo !== 0 ? totalRevenue / totalRo : null,
+    gsProfitPerRo: grossProfitPerRo(hero.gusLabourMtd, hero.gusPartsMtd, hero.gusRoMtd),
+    bpProfitPerRo: grossProfitPerRo(hero.bpuLabourMtd, hero.bpuPartsMtd, hero.bpuRoMtd),
+    blendedProfitPerRo: hero.profitMtd !== null && totalRo !== null && totalRo !== 0 ? hero.profitMtd / totalRo : null,
+    gsBays: gsUtil?.bays ?? 0,
+    bpBays: bpUtil?.bays ?? 0,
+    gsTargetPerBayPerDay: perBayPerDay(gsUtil),
+    bpTargetPerBayPerDay: perBayPerDay(bpUtil),
   };
 }
 
@@ -115,6 +175,7 @@ export type CeoData = {
     gusMonthTarget: number | null;
     revenueTarget: CeoRevenueTarget | null;
     profitTarget: CeoProfitTarget | null;
+    unitEconomics: CeoUnitEconomics;
   } | null;
   regions: CeoRegionRollup[];
   revenueTrend: { date: string; actual: number | null }[];
@@ -234,13 +295,16 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
   const regions: CeoRegionRollup[] = (Object.keys(REGIONS) as RegionName[]).map((region) => {
     const branches = filterBranchesByRegion(report.branches, region);
     const rows = branches.map((branch) => rowsByBranch.get(branch.branch)!);
+    const hero = computeHeroSummary(branches);
+    const utilization = rollupUtilization(rows);
     return {
       region,
       branches: rows,
-      hero: computeHeroSummary(branches),
-      utilization: rollupUtilization(rows),
+      hero,
+      utilization,
       revenueTarget: sumRevenueTargets(rows.map((r) => r.revenueTarget)),
       profitTarget: sumProfitTargets(rows.map((r) => r.profitTarget)),
+      unitEconomics: computeUnitEconomics(hero, utilization.gs, utilization.bp, workingDaysElapsed),
     };
   });
 
@@ -249,6 +313,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
   const groupHero = computeHeroSummary(report.branches);
 
   const hasCo01c = report.branches.some((b) => b.branch === "CO01C");
+  const groupUtilization = rollupUtilization(allRows);
 
   return {
     date,
@@ -259,11 +324,12 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     group: {
       hero: groupHero,
       kpis: computeKpiSummary(report.branches),
-      utilization: rollupUtilization(allRows),
+      utilization: groupUtilization,
       profit: computeProfitBreakdown(groupHero),
       gusMonthTarget,
       revenueTarget: sumRevenueTargets(allRows.map((r) => r.revenueTarget)),
       profitTarget: sumProfitTargets(allRows.map((r) => r.profitTarget)),
+      unitEconomics: computeUnitEconomics(groupHero, groupUtilization.gs, groupUtilization.bp, workingDaysElapsed),
     },
     regions,
     // Total Revenue has no single BA Tool column (it's GUS+BPU parts/labour +

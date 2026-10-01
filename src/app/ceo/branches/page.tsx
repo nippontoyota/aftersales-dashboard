@@ -5,12 +5,10 @@ import { achievementTone } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { branchName } from "@/lib/branch-names";
 import { loadCeoData } from "@/lib/ceo-data";
-import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/format";
 import type { RegionName } from "@/lib/regions";
 import { requireCeoAccess } from "../ceo-guard";
 import { CeoHeader } from "../ceo-header";
-
-const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg-faint" } as const;
+import { BranchRow } from "./branch-row";
 
 export default async function CeoBranchesPage({
   searchParams,
@@ -113,22 +111,32 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
             {rows.map(({ branch, gs, bp }) => {
               const gsTone = achievementTone(gs?.utilizationPct ?? null);
               const bpTone = achievementTone(bp?.utilizationPct ?? null);
+              const gsTargetPerBayPerDay =
+                gs && gs.bays > 0 && data.workingDaysElapsed > 0 ? gs.idealRoMtd / gs.bays / data.workingDaysElapsed : null;
+              const bpTargetPerBayPerDay =
+                bp && bp.bays > 0 && data.workingDaysElapsed > 0 ? bp.idealRoMtd / bp.bays / data.workingDaysElapsed : null;
               return (
-                <tr key={branch.branch} className="border-t border-border-subtle hover:bg-surface-2/40">
-                  <td className="whitespace-nowrap py-2 pl-5 pr-3 font-semibold text-fg">{branchName(branch.branch)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(branch.totalRevenueStreamMtd)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(branch.profitMtd)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{gs ? formatCompact(gs.actualRoMtd) : "—"}</td>
-                  <td className={`px-4 py-2 text-right tabular-nums font-semibold ${TONE_TEXT[gsTone]}`}>
-                    {gs ? formatPercent(gs.utilizationPct) : "—"}
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(branch.gsGrossProfitPerRoMtd)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{bp ? formatCompact(bp.actualRoMtd) : "—"}</td>
-                  <td className={`px-4 py-2 text-right tabular-nums font-semibold ${TONE_TEXT[bpTone]}`}>
-                    {bp ? formatPercent(bp.utilizationPct) : "—"}
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(branch.bpGrossProfitPerRoMtd)}</td>
-                </tr>
+                <BranchRow
+                  key={branch.branch}
+                  name={branchName(branch.branch)}
+                  revenueMtd={branch.totalRevenueStreamMtd}
+                  profitMtd={branch.profitMtd}
+                  gsRos={gs?.actualRoMtd ?? null}
+                  gsUtilizationPct={gs?.utilizationPct ?? null}
+                  gsTone={gsTone}
+                  gsProfitPerRo={branch.gsGrossProfitPerRoMtd}
+                  bpRos={bp?.actualRoMtd ?? null}
+                  bpUtilizationPct={bp?.utilizationPct ?? null}
+                  bpTone={bpTone}
+                  bpProfitPerRo={branch.bpGrossProfitPerRoMtd}
+                  gsRevenuePerRo={branch.gsRevenuePerRoMtd}
+                  bpRevenuePerRo={branch.bpRevenuePerRoMtd}
+                  blendedRevenuePerRo={branch.blendedRevenuePerRoMtd}
+                  gsBays={gs?.bays ?? 0}
+                  bpBays={bp?.bays ?? 0}
+                  gsTargetPerBayPerDay={gsTargetPerBayPerDay}
+                  bpTargetPerBayPerDay={bpTargetPerBayPerDay}
+                />
               );
             })}
           </tbody>

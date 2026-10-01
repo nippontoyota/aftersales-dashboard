@@ -119,15 +119,19 @@ export function bpBayUtilization(branch: string, bpuRoMtd: number | null, workin
  * ceo-data.ts — and reuses that same object here and for the branch table,
  * rather than three independent recomputations of the same numbers).
  */
-export function sumBayUtilization(utils: (BayUtilization | null)[]): { utilizationPct: number; actualRoMtd: number; idealRoMtd: number } | null {
+export function sumBayUtilization(
+  utils: (BayUtilization | null)[]
+): { utilizationPct: number; actualRoMtd: number; idealRoMtd: number; bays: number } | null {
   let actual = 0;
   let ideal = 0;
+  let bays = 0;
   let any = false;
   for (const u of utils) {
     if (!u) continue;
     any = true;
     actual += u.actualRoMtd;
     ideal += u.idealRoMtd;
+    bays += u.bays;
   }
-  return any && ideal > 0 ? { utilizationPct: actual / ideal, actualRoMtd: actual, idealRoMtd: ideal } : null;
+  return any && ideal > 0 ? { utilizationPct: actual / ideal, actualRoMtd: actual, idealRoMtd: ideal, bays } : null;
 }

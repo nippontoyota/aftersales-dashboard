@@ -202,6 +202,18 @@ export type BranchReport = {
   profitMtd: number | null;
   gsGrossProfitPerRoMtd: number | null;
   bpGrossProfitPerRoMtd: number | null;
+  // Revenue per RO (2026-10-01, CEO dashboard) — raw Labour+Parts revenue,
+  // no 20%-of-parts margin weighting (contrast with the Profit/RO fields
+  // above). Same GS/BP-only scope as those — excludes External Sales,
+  // TGLOSS and scrap/oil, which aren't split by channel.
+  gsRevenuePerRoMtd: number | null;
+  bpRevenuePerRoMtd: number | null;
+  /** (GS + BP) revenue ÷ (GS + BP) ROs — note this is narrower-scope than
+   * group.profit.blendedGrossProfitPerRo (ceo-data.ts), which divides the
+   * full modelled profitMtd (incl. TGLOSS/External Sales) by total ROs. The
+   * two aren't directly comparable as a margin ratio; this field stays
+   * internally consistent with its own gs/bpRevenuePerRoMtd split instead. */
+  blendedRevenuePerRoMtd: number | null;
 };
 
 export type Report = {
@@ -571,6 +583,24 @@ function computeBranchReport(
     bpGrossProfitPerRoMtd:
       bpuLabourMtd !== null && bpuPartsMtd !== null && bpuRoMtd !== null && bpuRoMtd !== 0
         ? (bpuLabourMtd + 0.2 * bpuPartsMtd) / bpuRoMtd
+        : null,
+    gsRevenuePerRoMtd:
+      gusLabourMtd !== null && gusPartsMtd !== null && gusRoMtd !== null && gusRoMtd !== 0
+        ? (gusLabourMtd + gusPartsMtd) / gusRoMtd
+        : null,
+    bpRevenuePerRoMtd:
+      bpuLabourMtd !== null && bpuPartsMtd !== null && bpuRoMtd !== null && bpuRoMtd !== 0
+        ? (bpuLabourMtd + bpuPartsMtd) / bpuRoMtd
+        : null,
+    blendedRevenuePerRoMtd:
+      gusLabourMtd !== null &&
+      gusPartsMtd !== null &&
+      bpuLabourMtd !== null &&
+      bpuPartsMtd !== null &&
+      gusRoMtd !== null &&
+      bpuRoMtd !== null &&
+      gusRoMtd + bpuRoMtd !== 0
+        ? (gusLabourMtd + gusPartsMtd + bpuLabourMtd + bpuPartsMtd) / (gusRoMtd + bpuRoMtd)
         : null,
   };
 }

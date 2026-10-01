@@ -17,6 +17,7 @@ import { requireCeoAccess } from "./ceo-guard";
 import { CeoHeader } from "./ceo-header";
 import { Sparkline } from "./sparkline";
 import { CEO_HEATMAP_METRICS } from "./tkm-metrics";
+import { UnitEconomicsSection } from "./unit-economics-section";
 
 const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg" } as const;
 const TONE_BAR = { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" } as const;
@@ -279,6 +280,8 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         <ProfitTile label="BP Gross Profit / RO" value={group.profit.bpGrossProfitPerRo} sub="BP Labour + 20% BP Parts ÷ BPU ROs" />
         <ProfitTile label="Gross Profit / RO" value={group.profit.blendedGrossProfitPerRo} sub="Gross Profit ÷ total ROs, both channels" strong />
       </div>
+
+      <UnitEconomicsSection group={group.unitEconomics} regions={regions} />
 
       <div className="mt-4">
         <BranchPerformanceHeatmap

@@ -202,6 +202,16 @@ export function grossProfitPerRo(labourMtd: number | null, partsMtd: number | nu
   return (labourMtd + 0.2 * partsMtd) / roMtd;
 }
 
+/**
+ * GS/BP Revenue per RO — same shape as grossProfitPerRo above, but the raw
+ * top-line figure (Labour + Parts, no 20%-of-parts margin weighting) rather
+ * than a modelled profit. Same group/region-safe sum-then-divide contract.
+ */
+export function revenuePerRo(labourMtd: number | null, partsMtd: number | null, roMtd: number | null): number | null {
+  if (labourMtd === null || partsMtd === null || roMtd === null || roMtd === 0) return null;
+  return (labourMtd + partsMtd) / roMtd;
+}
+
 export type AchievementTone = "good" | "warn" | "critical" | "neutral";
 
 export function achievementRatio(actual: number | null, target: number | null): number | null {
