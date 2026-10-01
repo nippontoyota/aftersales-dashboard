@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
+import { recomputeAfterSsrv089Upload } from "@/lib/cancellation/adjustment-recompute";
 import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
@@ -101,6 +102,10 @@ export async function POST(request: Request) {
   } finally {
     dbClient.release();
   }
+
+  // Outside the upload transaction — a recompute failure shouldn't roll back
+  // an otherwise-successful upload (see adjustment-recompute.ts).
+  await recomputeAfterSsrv089Upload(admin.branch, date);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, totals });
 }

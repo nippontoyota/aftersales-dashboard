@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { listBranchCodes } from "@/lib/admin-store";
+import { recomputeAfterCancellationUpload } from "@/lib/cancellation/adjustment-recompute";
 import { parseCancellationReport } from "@/lib/cancellation/parse";
 import { saveCancellationReport } from "@/lib/cancellation/store";
 
@@ -91,6 +92,11 @@ export async function POST(request: Request) {
     }
 
     results.push({ fileName, saved, error: failed, warnings: parsed.warnings.length ? parsed.warnings : undefined });
+  }
+
+  const savedBranches = results.flatMap((r) => r.saved.map((s) => s.branch));
+  if (savedBranches.length > 0) {
+    await recomputeAfterCancellationUpload(savedBranches);
   }
 
   const allOk = results.every((r) => !r.error && r.saved.length > 0);

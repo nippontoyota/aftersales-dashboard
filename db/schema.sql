@@ -686,3 +686,39 @@ create table if not exists login_rate_limits (
   attempts     integer     not null default 1,
   window_start timestamptz not null default now()
 );
+
+-- Precomputed cancellation-revenue adjustments (2026-10-01). report.ts used
+-- to run ssrv089/cancellation-adjustment.ts's and cancellation/
+-- cross-month-replacement.ts's raw_upload_rows joins on every single
+-- /dashboard, /ceo and /queries page load — fine when that table was ~170k
+-- rows, but once it passed 3.7M rows concurrent page loads piled up on the
+-- same expensive joins and started blowing Vercel's 300s function timeout
+-- (63 timeouts across 8 users on 2026-09-30/10-01). These two tables hold
+-- the same results computed once at upload time instead (see
+-- src/lib/cancellation/adjustment-recompute.ts and its callers in the
+-- SSRV089 and cancellation upload routes) — report.ts now does a flat keyed
+-- lookup here, so read latency no longer depends on raw_upload_rows' size at
+-- all. db/backfill-cancellation-adjustments.mjs populates both from scratch.
+create table if not exists cancelled_accessories_adjustments (
+  branch        text        not null,
+  revenue_month text        not null, -- 'YYYY-MM' — the cancelled invoice's own revenue month, same key report.ts looks up by `date`'s month
+  part_sale     numeric     not null,
+  labour_sale   numeric     not null,
+  computed_at   timestamptz not null default now(),
+  primary key (branch, revenue_month)
+);
+
+create table if not exists cross_month_replacements (
+  branch             text        not null,
+  cancelled_doc_no   text        not null,
+  ref_doc_no         text        not null,
+  cancelled_month    text        not null,
+  replacement_doc_no text        not null,
+  replacement_month  text        not null,
+  part_sale          numeric     not null,
+  labour_sale        numeric     not null,
+  computed_at        timestamptz not null default now(),
+  primary key (branch, cancelled_doc_no, replacement_doc_no)
+);
+create index if not exists cross_month_replacements_month_idx
+  on cross_month_replacements (replacement_month);

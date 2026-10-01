@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { listBranchCodes } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
+import { recomputeAfterSsrv089Upload } from "@/lib/cancellation/adjustment-recompute";
 import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
@@ -233,6 +234,7 @@ export async function POST(request: Request) {
       } finally {
         sv089Client.release();
       }
+      await recomputeAfterSsrv089Upload(branch, date);
       return NextResponse.json({ success: true, type, variant, date, branch, totals });
     }
 
