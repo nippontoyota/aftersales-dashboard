@@ -289,6 +289,36 @@ create table if not exists ssrv089_snapshots (
   primary key (date, branch, variant)
 );
 
+-- Grey-brand (non-Toyota) Part/Labour Sale from SSRV089 GS exports, summed
+-- across every row regardless of Close SA Name (unlike the Accessories
+-- columns above). Added after ssrv089_snapshots already existed in
+-- production, hence the explicit alter. scom205's GUS Sp/Lab Rev MTD
+-- excludes Grey-brand transactions entirely (confirmed 2026-10-01 against a
+-- real TI01A file — see ssrv089/parse.ts and ssrv089-bp/parse.ts), so this
+-- is added into GUS Parts/Labour MTD in report.ts, currently gated to
+-- GREY_REVENUE_BRANCHES (TI01A only for now).
+alter table ssrv089_snapshots add column if not exists grey_part_sale numeric not null default 0;
+alter table ssrv089_snapshots add column if not exists grey_labour_sale numeric not null default 0;
+
+-- Cost and Sales Report - BP is otherwise never parsed (see
+-- raw_report_uploads below), but Grey-brand revenue needs capturing
+-- somewhere — scom205's BPU Sp/Lab Rev MTD excludes it entirely, same as
+-- the GS case above (confirmed 2026-10-01, see ssrv089-bp/parse.ts). Pnt Mat
+-- Sale (paint material) counts toward "Parts" here alongside the literal
+-- Part Sale column, per the user's explicit call: a Grey BP job's money
+-- sits almost entirely in Pnt Mat Sale, not Part Sale. Added into BPU
+-- Parts/Labour MTD in report.ts, gated to GREY_REVENUE_BRANCHES (TI01A only
+-- for now).
+create table if not exists ssrv089_bp_grey_snapshots (
+  date date not null,
+  branch text not null,
+  uploaded_at timestamptz not null,
+  source_file_name text not null,
+  grey_parts_sale numeric not null default 0,
+  grey_labour_sale numeric not null default 0,
+  primary key (date, branch)
+);
+
 -- scom205 Monthly KPI Report — values are already MTD-cumulative in the
 -- source file, so unlike every other snapshot table this one has nothing
 -- to accumulate across days; a given date's row is just that day's read.

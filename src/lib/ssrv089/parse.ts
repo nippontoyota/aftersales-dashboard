@@ -22,11 +22,23 @@ const CLOSE_SA_NAME_COLUMN = "Close SA Name";
 const PART_SALE_COLUMN = "Part Sale";
 const LABOUR_SALE_COLUMN = "Labour Sale";
 const PART_SALE_ALIAS = "Parts Sale";
+const BRAND_COLUMN = "Brand(Toyota/Grey)";
 const SSRV089_MAX_ROWS = 20_000;
 
 export type Ssrv089Totals = {
   accessoriesPartSale: number;
   accessoriesLabourSale: number;
+  /** Grey-brand (non-Toyota) Part/Labour Sale, summed across every row
+   * regardless of Close SA Name — unlike the Accessories totals above, this
+   * isn't staff-scoped. Confirmed 2026-10-01 (TI01A): scom205's GUS Sp/Lab
+   * Rev MTD excludes Grey-brand transactions entirely, so without this a
+   * Grey job's revenue doesn't show up anywhere on the dashboard. Only
+   * added into GUS Parts/Labour MTD for branches in report.ts's
+   * GREY_REVENUE_BRANCHES (TI01A only for now) — computed here for every
+   * branch regardless, same "store it, wire it in later" approach as the
+   * rest of this file. */
+  greyPartSale: number;
+  greyLabourSale: number;
 };
 
 export type ParsedSsrv089 = {
@@ -91,13 +103,21 @@ export function parseSsrv089Workbook(buffer: Buffer, staffNames: string[]): Pars
 
   let accessoriesPartSale = 0;
   let accessoriesLabourSale = 0;
+  let greyPartSale = 0;
+  let greyLabourSale = 0;
 
   for (const row of rows) {
     const closeSaName = String(row[CLOSE_SA_NAME_COLUMN] ?? "");
-    if (!isAccessoriesStaff(staffNames, closeSaName)) continue;
-    accessoriesPartSale += toAmount(row[PART_SALE_COLUMN]);
-    accessoriesLabourSale += toAmount(row[LABOUR_SALE_COLUMN]);
+    if (isAccessoriesStaff(staffNames, closeSaName)) {
+      accessoriesPartSale += toAmount(row[PART_SALE_COLUMN]);
+      accessoriesLabourSale += toAmount(row[LABOUR_SALE_COLUMN]);
+    }
+    const brand = String(row[BRAND_COLUMN] ?? "").trim().toUpperCase();
+    if (brand === "GREY") {
+      greyPartSale += toAmount(row[PART_SALE_COLUMN]);
+      greyLabourSale += toAmount(row[LABOUR_SALE_COLUMN]);
+    }
   }
 
-  return { totals: { accessoriesPartSale, accessoriesLabourSale }, rawRows: rows };
+  return { totals: { accessoriesPartSale, accessoriesLabourSale, greyPartSale, greyLabourSale }, rawRows: rows };
 }

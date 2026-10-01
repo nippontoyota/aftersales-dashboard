@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { hashBuffer } from "@/lib/duplicate-detection";
 import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { parseSsrv089BpGreyTotals } from "@/lib/ssrv089-bp/parse";
+import { saveSsrv089BpGreySnapshot } from "@/lib/ssrv089-bp/store";
 
 /** Cost and Sales Report - BP — required daily like every other upload, but
  * nothing is parsed out of it (2026-09-01, at the user's request). See
@@ -61,15 +63,27 @@ export async function POST(request: Request) {
     }
   }
 
+  const uploadedAt = new Date().toISOString();
   await saveRawReportUpload({
     date,
     branch: admin.branch,
     reportType: "ssrv089_bp",
-    uploadedAt: new Date().toISOString(),
+    uploadedAt,
     sourceFileName: file.name,
     fileData: buffer,
     uploadedBy: admin.username,
   });
+
+  // Best-effort — the rest of this report stays deliberately unparsed (see
+  // raw-report-uploads/store.ts), but Grey-brand revenue needs capturing
+  // somewhere (see ssrv089-bp/parse.ts). A parse failure here must never
+  // block the required daily upload, which just completed above.
+  try {
+    const totals = parseSsrv089BpGreyTotals(buffer);
+    await saveSsrv089BpGreySnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, totals });
+  } catch {
+    // ignore — see comment above
+  }
 
   return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name });
 }
