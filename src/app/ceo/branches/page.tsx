@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { achievementTone } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
+import { branchName } from "@/lib/branch-names";
 import { loadCeoData } from "@/lib/ceo-data";
 import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/format";
 import type { RegionName } from "@/lib/regions";
@@ -114,7 +115,7 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
               const bpTone = achievementTone(bp?.utilizationPct ?? null);
               return (
                 <tr key={branch.branch} className="border-t border-border-subtle hover:bg-surface-2/40">
-                  <td className="whitespace-nowrap py-2 pl-5 pr-3 font-semibold text-fg">{branch.branch}</td>
+                  <td className="whitespace-nowrap py-2 pl-5 pr-3 font-semibold text-fg">{branchName(branch.branch)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(branch.totalRevenueStreamMtd)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(branch.profitMtd)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{gs ? formatCompact(gs.actualRoMtd) : "—"}</td>
