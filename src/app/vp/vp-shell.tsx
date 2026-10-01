@@ -1,4 +1,5 @@
 import { logoutAction } from "@/lib/actions";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
@@ -8,10 +9,15 @@ import { ThemeToggle } from "@/components/theme-toggle";
  * else — no nav links, no tabs. Regions and Queries, formerly their own nav
  * items, are now a section on the one page and the corner popup
  * respectively (see vp-queries-popup.tsx).
+ *
+ * Replacing AppShell also dropped AutoRefresh (added to AppShell the same
+ * day, a few hours earlier) — the VP's page went silently static ever
+ * since. Mounted here directly too (2026-10-01).
  */
 export function VpShell({ identity, children }: { identity: string; children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-canvas text-fg">
+      <AutoRefresh />
       <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4 print:hidden">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-xs font-bold text-on-accent">NT</div>

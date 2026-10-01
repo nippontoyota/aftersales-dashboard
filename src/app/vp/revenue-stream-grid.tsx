@@ -84,23 +84,6 @@ const ROWS: Row[] = [
   },
   { kind: "metric", label: "GUS RO · MTD", get: (s) => formatNumber(s.gusRoMtd), detail: { metric: "gusRo", value: (s) => s.gusRoMtd } },
 
-  { kind: "section", label: "BPU · Body & Paint — BP-only branches (CO01E, KL01B, TR01B)" },
-  { kind: "metric", label: "BPU Parts · MTD", get: (s) => formatCompactCurrency(s.bpuPartsBodyPaintOnlyMtd) },
-  { kind: "metric", label: "BPU Labour · MTD", get: (s) => formatCompactCurrency(s.bpuLabourBodyPaintOnlyMtd) },
-  {
-    kind: "metric",
-    label: "BPU Parts / car",
-    sub: "Parts MTD ÷ BPU RO MTD (BP-only branches)",
-    get: (s) => formatCompactCurrency(s.bpuPartsPerCarBodyPaintOnly),
-  },
-  {
-    kind: "metric",
-    label: "BPU Labour / car",
-    sub: "Labour MTD ÷ BPU RO MTD (BP-only branches)",
-    get: (s) => formatCompactCurrency(s.bpuLabourPerCarBodyPaintOnly),
-  },
-  { kind: "metric", label: "BPU RO · MTD", get: (s) => formatNumber(s.bpuRoBodyPaintOnlyMtd) },
-
   { kind: "section", label: "BPU · Body & Paint — other branches" },
   { kind: "metric", label: "BPU Parts · MTD", sub: "BPU line at every GUS+BPU branch", get: (s) => formatCompactCurrency(s.bpuPartsOtherMtd) },
   { kind: "metric", label: "BPU Labour · MTD", get: (s) => formatCompactCurrency(s.bpuLabourOtherMtd) },
@@ -117,6 +100,23 @@ const ROWS: Row[] = [
     get: (s) => formatCompactCurrency(s.bpuLabourPerCarOther),
   },
   { kind: "metric", label: "BPU RO · MTD", get: (s) => formatNumber(s.bpuRoOtherMtd) },
+
+  { kind: "section", label: "BPU · Body & Paint — BP-only branches (CO01E, KL01B, TR01B)" },
+  { kind: "metric", label: "BPU Parts · MTD", get: (s) => formatCompactCurrency(s.bpuPartsBodyPaintOnlyMtd) },
+  { kind: "metric", label: "BPU Labour · MTD", get: (s) => formatCompactCurrency(s.bpuLabourBodyPaintOnlyMtd) },
+  {
+    kind: "metric",
+    label: "BPU Parts / car",
+    sub: "Parts MTD ÷ BPU RO MTD (BP-only branches)",
+    get: (s) => formatCompactCurrency(s.bpuPartsPerCarBodyPaintOnly),
+  },
+  {
+    kind: "metric",
+    label: "BPU Labour / car",
+    sub: "Labour MTD ÷ BPU RO MTD (BP-only branches)",
+    get: (s) => formatCompactCurrency(s.bpuLabourPerCarBodyPaintOnly),
+  },
+  { kind: "metric", label: "BPU RO · MTD", get: (s) => formatNumber(s.bpuRoBodyPaintOnlyMtd) },
 
   { kind: "section", label: "TGLOSS" },
   { kind: "metric", label: tglossText("TGLOSS · MTD"), get: (s) => formatCompactCurrency(s.tglossMtd), detail: { metric: "tglossMtd", value: (s) => s.tglossMtd } },
