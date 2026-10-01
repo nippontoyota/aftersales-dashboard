@@ -53,21 +53,21 @@ export function BranchRow({
   return (
     <tr className="border-t border-border-subtle hover:bg-surface-2/40">
       <td className="whitespace-nowrap py-2 pl-5 pr-3 font-semibold text-fg">{name}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(revenueMtd)}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(profitMtd)}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{gsRos !== null ? formatCompact(gsRos) : "—"}</td>
-      <td className={`px-4 py-2 text-right tabular-nums font-semibold ${TONE_TEXT[gsTone]}`}>
+      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(revenueMtd)}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(profitMtd)}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{gsRos !== null ? formatCompact(gsRos) : "—"}</td>
+      <td className={`whitespace-nowrap px-4 py-2 text-right tabular-nums font-semibold ${TONE_TEXT[gsTone]}`}>
         {gsUtilizationPct !== null ? formatPercent(gsUtilizationPct) : "—"}
       </td>
-      <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(gsProfitPerRo)}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{bpRos !== null ? formatCompact(bpRos) : "—"}</td>
-      <td className={`px-4 py-2 text-right tabular-nums font-semibold ${TONE_TEXT[bpTone]}`}>
+      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(gsProfitPerRo)}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{bpRos !== null ? formatCompact(bpRos) : "—"}</td>
+      <td className={`whitespace-nowrap px-4 py-2 text-right tabular-nums font-semibold ${TONE_TEXT[bpTone]}`}>
         {bpUtilizationPct !== null ? formatPercent(bpUtilizationPct) : "—"}
       </td>
-      <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(bpProfitPerRo)}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(gsRevenuePerRo)}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(bpRevenuePerRo)}</td>
-      <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(blendedRevenuePerRo)}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(bpProfitPerRo)}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(gsRevenuePerRo)}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(bpRevenuePerRo)}</td>
+      <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(blendedRevenuePerRo)}</td>
       <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-subtle">
         {formatCompact(gsBays)} bays
         {gsTargetPerBayPerDay !== null ? ` · ${formatNumber(gsTargetPerBayPerDay)}/day` : ""}
