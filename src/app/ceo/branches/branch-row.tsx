@@ -89,7 +89,7 @@ export function BranchRow({
       {open ? (
         <tr>
           <td colSpan={9} className="p-0">
-            <div className="my-1 mx-3 grid grid-cols-2 gap-2 rounded-lg border border-border-subtle bg-surface p-3 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="my-1 mx-3 grid grid-cols-5 gap-2 rounded-lg border border-border-subtle bg-surface p-3">
               <DetailStat label="GS Revenue/RO" value={formatCompactCurrency(gsRevenuePerRo)} />
               <DetailStat label="BP Revenue/RO" value={formatCompactCurrency(bpRevenuePerRo)} />
               <DetailStat label="Revenue/RO" value={formatCompactCurrency(blendedRevenuePerRo)} />
