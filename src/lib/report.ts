@@ -275,11 +275,13 @@ const DEACTIVATED_BRANCHES = new Set<string>(["CO01D"]);
  * GUS/BPU Parts/Labour MTD. scom205's own GUS/BPU Sp/Lab Rev MTD excludes
  * Grey-brand transactions entirely (confirmed 2026-10-01 against TI01A's own
  * data — see ssrv089/parse.ts and ssrv089-bp/parse.ts), so without this a
- * Grey job's revenue doesn't show up anywhere on the dashboard. TI01A only
- * for now — the branch this was found and verified against; widen only
- * after checking another branch's own data the same way, same precedent as
+ * Grey job's revenue doesn't show up anywhere on the dashboard. Widened
+ * 2026-10-01 to every branch found carrying Grey-brand rows in a September
+ * company-wide check (TI01A, CO01A, CO01B, KT01A, MV01A, TL01A, TR01A) —
+ * every other branch came back clean. New branches should only be added
+ * here after checking their own data the same way, same precedent as
  * CROSS_MONTH_REPLACEMENT_BRANCHES (cross-month-replacement.ts). */
-const GREY_REVENUE_BRANCHES = new Set<string>(["TI01A"]);
+const GREY_REVENUE_BRANCHES = new Set<string>(["TI01A", "CO01A", "CO01B", "KT01A", "MV01A", "TL01A", "TR01A"]);
 
 function excludeDeactivatedBranches(rows: BaToolBranchRow[]): BaToolBranchRow[] {
   return rows.filter((row) => !DEACTIVATED_BRANCHES.has(row.branch));
