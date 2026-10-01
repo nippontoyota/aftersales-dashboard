@@ -21,6 +21,8 @@ import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { saveSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { checkInvoiceDocDateSanity } from "@/lib/ssrv089/upload-validation";
+import { parseSsrv089BpGreyTotals } from "@/lib/ssrv089-bp/parse";
+import { saveSsrv089BpGreySnapshot } from "@/lib/ssrv089-bp/store";
 
 /**
  * The confirm/save half of Upload Sheet (HQ-only, /upload-sheet). Report
@@ -191,7 +193,14 @@ export async function POST(request: Request) {
 
     if (type === "ssrv089") {
       if (variant === "bp") {
+        // Structural check (2026-10-01) — same validation as the branch's
+        // own upload route (ssrv089-bp/route.ts), so a wrong-report-type or
+        // unreadable file can't sneak through via Upload Sheet either. A
+        // throw here is caught by this function's outer try/catch below,
+        // same as every other parse failure in this file.
+        const totals = parseSsrv089BpGreyTotals(buffer);
         await saveRawReportUpload({ date, branch, reportType: "ssrv089_bp", uploadedAt, sourceFileName: file.name, fileData: buffer, uploadedBy: admin.username });
+        await saveSsrv089BpGreySnapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals });
         return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name });
       }
       const staffNames = await listAccessoriesStaffNamesForBranch(branch);

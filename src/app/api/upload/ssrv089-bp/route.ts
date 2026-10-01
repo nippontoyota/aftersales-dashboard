@@ -5,11 +5,20 @@ import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload
 import { parseSsrv089BpGreyTotals } from "@/lib/ssrv089-bp/parse";
 import { saveSsrv089BpGreySnapshot } from "@/lib/ssrv089-bp/store";
 
-/** Cost and Sales Report - BP — required daily like every other upload, but
- * nothing is parsed out of it (2026-09-01, at the user's request). See
- * raw-report-uploads/store.ts. Not the same thing as the old SSRV089
- * "Body & Paint" variant dropped 2026-08-31 — this is a fresh, deliberately
- * unparsed upload, not a revival of that parsing path. */
+/** Cost and Sales Report - BP — required daily like every other upload.
+ * Its columns stay deliberately unparsed beyond the Brand(Toyota/Grey)
+ * check below (2026-09-01, at the user's request — see
+ * raw-report-uploads/store.ts). Not the same thing as the old SSRV089
+ * "Body & Paint" variant dropped 2026-08-31 — this is a fresh upload, not a
+ * revival of that parsing path.
+ *
+ * Structural validation (2026-10-01, at the user's request): before this,
+ * nothing ever opened the file to check it was actually a Cost and Sales
+ * Report - BP export — a handful of branches had silently gotten away with
+ * uploading the wrong report type, a `.zip`, or an otherwise unreadable
+ * file for months with no error at all (only noticed once Grey-brand
+ * revenue tracking needed to read these files for real). A file that
+ * doesn't parse is now rejected outright rather than silently accepted. */
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) {
@@ -44,6 +53,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not read the uploaded file." }, { status: 400 });
   }
 
+  // Structural check — rejects outright rather than silently accepting (see
+  // this route's doc comment above). Validated before the duplicate checks
+  // below so a genuinely corrupt/wrong-type file is never compared against
+  // prior uploads or saved at all.
+  let totals;
+  try {
+    totals = parseSsrv089BpGreyTotals(buffer);
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: `Could not read this file: ${err instanceof Error ? err.message : "unknown error"}. Is this a Cost and Sales Report - BP export?`,
+      },
+      { status: 422 }
+    );
+  }
+
   // Warn-and-allow duplicate check (2026-09-16, at the user's request) — see
   // service-info-bp's upload route for the full rationale (this report type
   // also keeps no parsed rows, so file bytes are compared directly, against
@@ -74,16 +99,8 @@ export async function POST(request: Request) {
     uploadedBy: admin.username,
   });
 
-  // Best-effort — the rest of this report stays deliberately unparsed (see
-  // raw-report-uploads/store.ts), but Grey-brand revenue needs capturing
-  // somewhere (see ssrv089-bp/parse.ts). A parse failure here must never
-  // block the required daily upload, which just completed above.
-  try {
-    const totals = parseSsrv089BpGreyTotals(buffer);
-    await saveSsrv089BpGreySnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, totals });
-  } catch {
-    // ignore — see comment above
-  }
+  // totals was already extracted and validated above.
+  await saveSsrv089BpGreySnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, totals });
 
   return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name });
 }
