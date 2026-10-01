@@ -1,5 +1,4 @@
 import { Suspense, type ReactNode } from "react";
-import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { StorefrontIcon, TargetIcon, WrenchIcon } from "@/components/dashboard-icons";
@@ -12,6 +11,7 @@ import { formatCompact, formatCompactCurrency, formatNumber, formatPercent } fro
 import { computePace, paceTone } from "@/lib/pace";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
 import { DraftWarning } from "@/components/draft-warning";
+import { CeoShell } from "./ceo-shell";
 import { requireCeoAccess } from "./ceo-guard";
 import { CeoHeader } from "./ceo-header";
 import { RegionCard } from "./region-card";
@@ -24,11 +24,11 @@ const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", 
 export default async function CeoOverviewPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const admin = await requireCeoAccess();
   return (
-    <AppShell current="ceo" showDashboardLink ceoNav identity={adminIdentityLabel(admin)}>
+    <CeoShell identity={adminIdentityLabel(admin)}>
       <Suspense fallback={<DashboardPageSkeleton heroCards={3} />}>
         <Overview searchParams={searchParams} />
       </Suspense>
-    </AppShell>
+    </CeoShell>
   );
 }
 

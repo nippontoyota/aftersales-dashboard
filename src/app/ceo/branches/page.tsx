@@ -1,11 +1,11 @@
 import { Suspense } from "react";
-import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { achievementTone } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { branchName } from "@/lib/branch-names";
 import { loadCeoData } from "@/lib/ceo-data";
 import type { RegionName } from "@/lib/regions";
+import { CeoShell } from "../ceo-shell";
 import { requireCeoAccess } from "../ceo-guard";
 import { CeoHeader } from "../ceo-header";
 import { BranchRow } from "./branch-row";
@@ -17,11 +17,11 @@ export default async function CeoBranchesPage({
 }) {
   const admin = await requireCeoAccess();
   return (
-    <AppShell current="ceo" showDashboardLink ceoNav identity={adminIdentityLabel(admin)}>
+    <CeoShell identity={adminIdentityLabel(admin)}>
       <Suspense fallback={<DashboardPageSkeleton />}>
         <Branches searchParams={searchParams} />
       </Suspense>
-    </AppShell>
+    </CeoShell>
   );
 }
 

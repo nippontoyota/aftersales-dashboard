@@ -32,16 +32,13 @@ const NAV_ITEMS = [
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false },
 ];
 
-/** The CEO view (role `ceo`) gets its own single-item nav — branch detail
- * (/ceo/branches) isn't a nav item, reached only by clicking a region on
- * Overview. See src/app/ceo/*. (The VP Service view, role `vp_service`, used
- * to have an equivalent small nav here too — retired 2026-09-26 in favour of
- * VpShell, a bare page with no sidebar/nav at all; see src/app/vp/vp-shell.tsx.) */
-const CEO_NAV_ITEMS = [{ href: "/ceo", label: "Overview", key: "ceo" as const }];
-
-/** The Accounts view (role `accounts`) gets its own single-item nav, same
- * shape as CEO_NAV_ITEMS — branch detail (/accounts/branches) isn't a nav
- * item, reached only by clicking a region on Overview. See src/app/accounts/*. */
+/** The Accounts view (role `accounts`) gets its own single-item nav —
+ * branch detail (/accounts/branches) isn't a nav item, reached only by
+ * clicking a region on Overview. See src/app/accounts/*. (The VP Service
+ * view and the CEO view, roles `vp_service` and `ceo`, used to have an
+ * equivalent single-item nav here too — retired 2026-09-26 and 2026-10-01
+ * respectively, in favour of their own bare shells with no sidebar/nav at
+ * all; see src/app/vp/vp-shell.tsx and src/app/ceo/ceo-shell.tsx.) */
 const ACCOUNTS_NAV_ITEMS = [{ href: "/accounts", label: "Overview", key: "accounts" as const }];
 
 /** The Central regional manager's own nav (2026-09-26, replacing the single
@@ -77,7 +74,6 @@ const UTILITY_NAV_ITEMS = [
 type NavKey =
   | (typeof NAV_ITEMS)[number]["key"]
   | (typeof UTILITY_NAV_ITEMS)[number]["key"]
-  | (typeof CEO_NAV_ITEMS)[number]["key"]
   | (typeof ACCOUNTS_NAV_ITEMS)[number]["key"]
   | (typeof CENTRAL_NAV_ITEMS)[number]["key"]
   | "bills";
@@ -270,7 +266,6 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   upload: UploadIcon,
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,
-  ceo: DashboardIcon,
   accounts: DashboardIcon,
   "central-tkm-targets": TkmTargetsIcon,
   "central-set-targets": SetTargetsIcon,
@@ -282,7 +277,6 @@ export function AppShell({
   isHq = false,
   companyTabs = true,
   canUpload = true,
-  ceoNav = false,
   accountsNav = false,
   centralNav = false,
   slimNav = false,
@@ -307,9 +301,6 @@ export function AppShell({
   /** When false, the Upload nav item is hidden — regional managers never
    * upload. Defaults to true. */
   canUpload?: boolean;
-  /** CEO: replace the whole nav with the single /ceo item (no upload, no
-   * company tabs, no HQ utilities). Defaults to false. */
-  ceoNav?: boolean;
   /** Accounts: replace the whole nav with the single /accounts item (no
    * upload, no company tabs, no HQ utilities). Defaults to false. */
   accountsNav?: boolean;
@@ -346,9 +337,7 @@ export function AppShell({
   // client syncs to the stored value on hydration.
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
 
-  const items = ceoNav
-    ? CEO_NAV_ITEMS
-    : accountsNav
+  const items = accountsNav
     ? ACCOUNTS_NAV_ITEMS
     : centralNav
     ? CENTRAL_NAV_ITEMS.map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item))
@@ -358,7 +347,7 @@ export function AppShell({
           (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
-  const utilityItems = isHq && !ceoNav && !accountsNav && !centralNav ? UTILITY_NAV_ITEMS : [];
+  const utilityItems = isHq && !accountsNav && !centralNav ? UTILITY_NAV_ITEMS : [];
 
   const navLink = (item: { href: string; label: string; key: NavKey }, compact: boolean) => {
     const Icon = ICONS[item.key];
