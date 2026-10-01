@@ -91,6 +91,12 @@ export type VpScopeMetrics = {
   /** Same as gusPartsPace, for External Sales MTD. */
   externalSalesPace: Pace;
   scrapAndUsedOilMtd: number | null;
+  /** Scrap and Used Oil split out separately — feeds the External Sales hero
+   * card, which now shows all three figures together (2026-10-01, at the
+   * VP's request). scrapAndUsedOilMtd above is kept as-is for the grid's
+   * combined row. */
+  scrapMtd: number | null;
+  usedOilMtd: number | null;
   /** Undefined when none of this scope's branches have a slab target loaded this month. */
   incentiveSlabs: IncentiveSlabTargets | undefined;
 };
@@ -213,6 +219,8 @@ function buildScopeMetrics(
     scrapAndUsedOilMtd: hero.scrapRevenueMtd !== null || hero.usedOilRevenueMtd !== null
       ? (hero.scrapRevenueMtd ?? 0) + (hero.usedOilRevenueMtd ?? 0)
       : null,
+    scrapMtd: hero.scrapRevenueMtd,
+    usedOilMtd: hero.usedOilRevenueMtd,
     incentiveSlabs: aggregateIncentiveSlabTargets(
       incentiveSlabTargets,
       branches.map((b) => b.branch)

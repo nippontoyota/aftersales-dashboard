@@ -118,6 +118,16 @@ const ROWS: Row[] = [
   },
   { kind: "metric", label: "BPU RO · MTD", get: (s) => formatNumber(s.bpuRoBodyPaintOnlyMtd) },
 
+  { kind: "section", label: "Other Revenue" },
+  {
+    kind: "scopeBreakdown",
+    label: "External Sales · MTD",
+    metricLabel: "External Sales · MTD",
+    value: (s) => s.externalSalesMtd,
+    branchValue: (b) => b.externalSalesMtd,
+  },
+  { kind: "metric", label: "Scrap & Used Oil · MTD", get: (s) => formatCompactCurrency(s.scrapAndUsedOilMtd) },
+
   { kind: "section", label: "TGLOSS" },
   { kind: "metric", label: tglossText("TGLOSS · MTD"), get: (s) => formatCompactCurrency(s.tglossMtd), detail: { metric: "tglossMtd", value: (s) => s.tglossMtd } },
   { kind: "metric", label: tglossText("TGLOSS Target"), get: (s) => formatCompactCurrency(s.tglossTarget) },
@@ -128,16 +138,6 @@ const ROWS: Row[] = [
     tone: (s) => achievementTone(s.tglossPct),
     detail: { metric: "tglossPct", value: (s) => s.tglossPct },
   },
-
-  { kind: "section", label: "Other Revenue" },
-  {
-    kind: "scopeBreakdown",
-    label: "External Sales · MTD",
-    metricLabel: "External Sales · MTD",
-    value: (s) => s.externalSalesMtd,
-    branchValue: (b) => b.externalSalesMtd,
-  },
-  { kind: "metric", label: "Scrap & Used Oil · MTD", get: (s) => formatCompactCurrency(s.scrapAndUsedOilMtd) },
 
   { kind: "section", label: "Incentive Target Slabs" },
   { kind: "slabs" },
@@ -185,9 +185,9 @@ function ColumnHeader({ scope, className }: { scope: VpScopeMetrics; className?:
  * same Parts/Labour MTD + per-car + RO shape for BPU — split into its own
  * Body & Paint-only-branches block and an everyone-else block, since their
  * RO counts aren't comparable (2026-10-01, mirroring the GUS layout at the
- * VP's request) — then TGLOSS, External Sales, Scrap & Used Oil, and the
- * incentive slab rings — explicitly no "for the day" or MoM/YoY figures,
- * per the VP brief.
+ * VP's request) — then External Sales + Scrap & Used Oil, then TGLOSS
+ * (swapped 2026-10-01, at the VP's request), and the incentive slab rings —
+ * explicitly no "for the day" or MoM/YoY figures, per the VP brief.
  * External Sales · MTD is clickable per scope (2026-09-25) — since these
  * columns are scopes, not branches, it opens a branch-contribution
  * breakdown rather than the rank-vs-company-wide modal GUS/BPU/TGLOSS use
