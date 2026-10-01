@@ -7,19 +7,16 @@ import { StorefrontIcon, TargetIcon, WrenchIcon } from "@/components/dashboard-i
 import { tglossText } from "@/components/tgloss-text";
 import { achievementRatio, achievementTone } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
+import { BRANCH_NAMES } from "@/lib/branch-names";
 import { loadCeoData, type CeoRegionRollup } from "@/lib/ceo-data";
 import { formatCompact, formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computePace, paceTone } from "@/lib/pace";
-import { computeTrendSeries } from "@/lib/trend";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
-import { MetricSyncProvider } from "../dashboard/metric-sync";
-import { RegionScorecard } from "../dashboard/region-scorecard";
-import { TrendChart } from "../dashboard/trend-chart";
 import { DraftWarning } from "@/components/draft-warning";
 import { requireCeoAccess } from "./ceo-guard";
 import { CeoHeader } from "./ceo-header";
 import { Sparkline } from "./sparkline";
-import { CEO_HEATMAP_METRICS, CEO_REGION_METRICS, CEO_TREND_METRICS } from "./tkm-metrics";
+import { CEO_HEATMAP_METRICS } from "./tkm-metrics";
 
 const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg" } as const;
 const TONE_BAR = { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" } as const;
@@ -283,31 +280,16 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         <ProfitTile label="Gross Profit / RO" value={group.profit.blendedGrossProfitPerRo} sub="Gross Profit ÷ total ROs, both channels" strong />
       </div>
 
-      <MetricSyncProvider initialMetric={CEO_TREND_METRICS[0].key}>
-        <div className="mt-4">
-          <TrendChart
-            seriesByMetric={{
-              partsRetail: computeTrendSeries(data.monthSnapshots, "All", "sprInternal", "sprInternalTarget"),
-              bpu: computeTrendSeries(data.monthSnapshots, "All", "bpus", "bpusTarget"),
-              offtake: computeTrendSeries(data.monthSnapshots, "All", "spoDealer", "spoDealerTarget"),
-              pmOc: computeTrendSeries(data.monthSnapshots, "All", "pm", "pmTarget"),
-              tyre: computeTrendSeries(data.monthSnapshots, "All", "tyreActual", "tyreTarget"),
-              battery: computeTrendSeries(data.monthSnapshots, "All", "batteryActuals", "batteryTarget"),
-            }}
-            metrics={CEO_TREND_METRICS}
-            date={data.date}
-            chartHeight={150}
-          />
-        </div>
-
-        <div className="mt-4">
-          <RegionScorecard branches={data.report.branches} monthSnapshots={data.monthSnapshots} metrics={CEO_REGION_METRICS} date={data.date} />
-        </div>
-
-        <div className="mt-4">
-          <BranchPerformanceHeatmap branches={data.report.branches} metrics={CEO_HEATMAP_METRICS} date={data.date} monthSnapshots={data.monthSnapshots} holidays={data.holidays} />
-        </div>
-      </MetricSyncProvider>
+      <div className="mt-4">
+        <BranchPerformanceHeatmap
+          branches={data.report.branches}
+          metrics={CEO_HEATMAP_METRICS}
+          date={data.date}
+          monthSnapshots={data.monthSnapshots}
+          holidays={data.holidays}
+          branchNames={BRANCH_NAMES}
+        />
+      </div>
 
       <details className="mt-4 max-w-3xl text-[11px] text-fg-faint">
         <summary className="cursor-pointer select-none font-medium text-fg-subtle hover:text-fg">How these numbers are calculated</summary>
