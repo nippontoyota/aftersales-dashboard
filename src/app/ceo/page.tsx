@@ -120,12 +120,14 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
           sub="General Service"
           utilization={group.utilization.gs}
           trend={data.gsRoTrend.map((p) => p.actual)}
+          targetPerBayPerDay={group.unitEconomics.gsTargetPerBayPerDay}
         />
         <UtilizationTile
           label="BP Bay Utilization"
           sub="Body & Paint"
           utilization={group.utilization.bp}
           trend={data.bpRoTrend.map((p) => p.actual)}
+          targetPerBayPerDay={group.unitEconomics.bpTargetPerBayPerDay}
         />
       </div>
 
@@ -371,11 +373,15 @@ function UtilizationTile({
   sub,
   utilization,
   trend,
+  targetPerBayPerDay,
 }: {
   label: string;
   sub: string;
-  utilization: { utilizationPct: number; actualRoMtd: number; idealRoMtd: number } | null;
+  utilization: { utilizationPct: number; actualRoMtd: number; idealRoMtd: number; bays: number } | null;
   trend: (number | null)[];
+  /** ROs/jobs per bay per day — shown alongside the bay count below (moved
+   * here from its own "Capacity" tile, 2026-10-01, at the user's request). */
+  targetPerBayPerDay: number | null;
 }) {
   const tone = achievementTone(utilization?.utilizationPct ?? null);
   return (
@@ -390,6 +396,12 @@ function UtilizationTile({
       {utilization ? (
         <div className="mt-1 text-[11px] text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">
           {formatCompact(utilization.actualRoMtd)} ROs vs {formatCompact(utilization.idealRoMtd)} ideal
+        </div>
+      ) : null}
+      {utilization ? (
+        <div className="mt-0.5 text-[11px] text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">
+          {formatCompact(utilization.bays)} bays
+          {targetPerBayPerDay !== null ? ` · ${formatNumber(targetPerBayPerDay)} ROs/bay/day target` : ""}
         </div>
       ) : null}
       <div className={`drop-shadow-sm ${TONE_TEXT[tone]}`}>
