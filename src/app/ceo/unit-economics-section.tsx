@@ -1,18 +1,18 @@
-import type { CeoRegionRollup, CeoUnitEconomics } from "@/lib/ceo-data";
+import type { CeoUnitEconomics } from "@/lib/ceo-data";
 import { formatCompact, formatCompactCurrency, formatNumber } from "@/lib/format";
 
 /**
- * Capacity & Unit Economics — Revenue/RO (GS/BP/blended), bay counts, and
- * per-bay productivity targets, at company and region scope (2026-10-01, at
- * the CEO's request). Branch-level figures live in /ceo/branches' row
- * expand panel instead (see branch-row.tsx) rather than here — this section
- * stays a company summary + a 3-row region table, matching the "new
- * dedicated section, don't touch the existing Profit Breakdown" scope
- * agreed with the user. Company-level Profit/RO isn't repeated here (it's
- * already visible in the Profit Breakdown section above); region-level
- * Profit/RO is new, so the region table does include it.
+ * Capacity & Unit Economics — company-wide Revenue/RO (GS/BP/blended), bay
+ * counts, and per-bay productivity targets (2026-10-01, at the CEO's
+ * request). Region-level figures moved into each region card's expand panel
+ * instead (see region-card.tsx) — the region table that used to live here
+ * was dropped in favor of that, at the user's request, so region data lives
+ * in one place rather than two. Branch-level figures live in
+ * /ceo/branches' row expand panel (see branches/branch-row.tsx).
+ * Company-level Profit/RO isn't repeated here — it's already visible in the
+ * Profit Breakdown section above.
  */
-export function UnitEconomicsSection({ group, regions }: { group: CeoUnitEconomics; regions: CeoRegionRollup[] }) {
+export function UnitEconomicsSection({ group }: { group: CeoUnitEconomics }) {
   return (
     <>
       <h2 className="mt-10 text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">Capacity &amp; Unit Economics — MTD</h2>
@@ -22,39 +22,6 @@ export function UnitEconomicsSection({ group, regions }: { group: CeoUnitEconomi
         <PerRoTile label="Revenue / RO" value={group.blendedRevenuePerRo} sub="GS + BP revenue ÷ total ROs" strong />
         <CapacityTile label="GS Capacity" bays={group.gsBays} targetPerBayPerDay={group.gsTargetPerBayPerDay} />
         <CapacityTile label="BP Capacity" bays={group.bpBays} targetPerBayPerDay={group.bpTargetPerBayPerDay} />
-      </div>
-
-      <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-surface shadow-card">
-        <table className="w-full border-separate border-spacing-0 text-[13px]">
-          <thead>
-            <tr className="[&>th]:border-b [&>th]:border-border">
-              <th className="bg-surface py-2.5 pl-5 pr-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint">Region</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GS Revenue/RO</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">BP Revenue/RO</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GS Profit/RO</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">BP Profit/RO</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GS Bays</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GS Target/Bay/Day</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">BP Bays</th>
-              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">BP Target/Bay/Day</th>
-            </tr>
-          </thead>
-          <tbody>
-            {regions.map((r) => (
-              <tr key={r.region} className="border-t border-border-subtle hover:bg-surface-2/40">
-                <td className="whitespace-nowrap py-2 pl-5 pr-3 font-semibold text-fg">{r.region}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(r.unitEconomics.gsRevenuePerRo)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-fg">{formatCompactCurrency(r.unitEconomics.bpRevenuePerRo)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(r.unitEconomics.gsProfitPerRo)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompactCurrency(r.unitEconomics.bpProfitPerRo)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompact(r.unitEconomics.gsBays)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatNumber(r.unitEconomics.gsTargetPerBayPerDay)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatCompact(r.unitEconomics.bpBays)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-fg-subtle">{formatNumber(r.unitEconomics.bpTargetPerBayPerDay)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </>
   );

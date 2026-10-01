@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
@@ -8,25 +7,19 @@ import { tglossText } from "@/components/tgloss-text";
 import { achievementRatio, achievementTone } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { BRANCH_NAMES } from "@/lib/branch-names";
-import { loadCeoData, type CeoRegionRollup } from "@/lib/ceo-data";
+import { loadCeoData } from "@/lib/ceo-data";
 import { formatCompact, formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computePace, paceTone } from "@/lib/pace";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
 import { DraftWarning } from "@/components/draft-warning";
 import { requireCeoAccess } from "./ceo-guard";
 import { CeoHeader } from "./ceo-header";
+import { RegionCard } from "./region-card";
 import { Sparkline } from "./sparkline";
 import { CEO_HEATMAP_METRICS } from "./tkm-metrics";
 import { UnitEconomicsSection } from "./unit-economics-section";
 
 const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg" } as const;
-const TONE_BAR = { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" } as const;
-
-const REGION_COLOR: Record<CeoRegionRollup["region"], string> = {
-  Central: "var(--color-cat-central)",
-  South: "var(--color-cat-south)",
-  North: "var(--color-cat-north)",
-};
 
 export default async function CeoOverviewPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const admin = await requireCeoAccess();
@@ -281,7 +274,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         <ProfitTile label="Gross Profit / RO" value={group.profit.blendedGrossProfitPerRo} sub="Gross Profit ÷ total ROs, both channels" strong />
       </div>
 
-      <UnitEconomicsSection group={group.unitEconomics} regions={regions} />
+      <UnitEconomicsSection group={group.unitEconomics} />
 
       <div className="mt-4">
         <BranchPerformanceHeatmap
@@ -406,46 +399,3 @@ function UtilizationTile({
   );
 }
 
-function RegionCard({ region, date }: { region: CeoRegionRollup; date: string }) {
-  const gsTone = achievementTone(region.utilization.gs?.utilizationPct ?? null);
-  const bpTone = achievementTone(region.utilization.bp?.utilizationPct ?? null);
-  return (
-    <Link
-      href={`/ceo/branches?date=${date}&region=${region.region}`}
-      className="group block rounded-xl border border-border-subtle bg-surface/60 p-4 shadow-[0_4px_20px_rgb(0,0,0,0.02)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-accent/40 hover:bg-surface hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)]"
-    >
-      <div className="flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-tight text-fg">
-          <span className="h-2 w-2 rounded-full shadow-sm" style={{ background: REGION_COLOR[region.region] }} />
-          {region.region}
-        </span>
-        <span className="text-[11px] font-medium text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">{region.branches.length} branches</span>
-      </div>
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(region.hero.totalRevenueStreamMtd)}</span>
-        <span className="text-[11px] text-fg-subtle transition-colors duration-200 group-hover:text-fg">· {formatCompactCurrency(region.hero.profitMtd)} profit</span>
-      </div>
-      <div className="mt-4 space-y-2">
-        <UtilizationBar label="GS" pct={region.utilization.gs?.utilizationPct ?? null} tone={gsTone} />
-        <UtilizationBar label="BP" pct={region.utilization.bp?.utilizationPct ?? null} tone={bpTone} />
-      </div>
-    </Link>
-  );
-}
-
-function UtilizationBar({ label, pct, tone }: { label: string; pct: number | null; tone: ReturnType<typeof achievementTone> }) {
-  return (
-    <div className="flex items-center gap-2 text-[11px]">
-      <span className="w-6 shrink-0 font-medium text-fg-subtle">{label}</span>
-      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2 shadow-inner">
-        <span
-          className={`block h-full rounded-full transition-all duration-1000 ease-out ${TONE_BAR[tone]}`}
-          style={{ width: `${Math.min(100, Math.round((pct ?? 0) * 100))}%` }}
-        />
-      </span>
-      <span className={`w-9 shrink-0 text-right tabular-nums font-medium ${TONE_TEXT[tone]}`}>
-        {pct === null ? "—" : `${Math.round(pct * 100)}%`}
-      </span>
-    </div>
-  );
-}
