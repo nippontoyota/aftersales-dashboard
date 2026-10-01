@@ -157,3 +157,11 @@ export async function countScom205BranchesForDate(date: string): Promise<number>
   );
   return Number(rows[0]?.count ?? 0);
 }
+
+/** Which distinct branches have uploaded their scom205 for `date` — lets a
+ * caller diff against the full branch list to name who's still missing
+ * (VP's DraftWarning, 2026-10-01). */
+export async function loadScom205BranchesForDate(date: string): Promise<string[]> {
+  const { rows } = await pool.query<{ branch: string }>(`select distinct branch from scom205_snapshots where date = $1`, [date]);
+  return rows.map((r) => r.branch);
+}

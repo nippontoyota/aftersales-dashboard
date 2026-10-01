@@ -14,7 +14,7 @@ import { REGIONS, regionForBranch, type RegionName } from "./regions";
 import { buildReport, isBodyPaintOnly, type BranchReport, type Report } from "./report";
 import { listSnapshotDates } from "./snapshot-store";
 import { isDatePublished } from "./publish-store";
-import { countScom205BranchesForDate } from "./scom205/store";
+import { loadScom205BranchesForDate } from "./scom205/store";
 import { loadReportHolidaySet } from "./report-holidays/store";
 
 /**
@@ -107,6 +107,11 @@ export type VpData = {
   isPublished: boolean;
   uploadedBranchCount: number;
   totalBranchCount: number;
+  /** Branch codes present in the report that haven't filed their scom205 for
+   * `date` yet — feeds the DraftWarning banner's "who's missing" list
+   * (VP-only, 2026-10-01). Always [] once published (nobody's waiting on
+   * anyone by then) or when there's no report. */
+  missingBranches: string[];
   /** Branches off-pace for their own TGLOSS incentive-slab target this month, worst first —
    * see computeTglossExceptions() below. */
   tglossExceptions: TglossException[];
@@ -262,10 +267,10 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
   if (dates.length === 0) return null;
 
   const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
-  const [report, published, scom205Count, incentiveSlabTargetsMap, holidaySet] = await Promise.all([
+  const [report, published, uploadedBranches, incentiveSlabTargetsMap, holidaySet] = await Promise.all([
     buildReport(date),
     isDatePublished(date),
-    countScom205BranchesForDate(date),
+    loadScom205BranchesForDate(date),
     loadIncentiveSlabTargets(date.slice(0, 7)),
     loadReportHolidaySet(),
   ]);
@@ -283,6 +288,7 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
       isPublished: published,
       uploadedBranchCount: 0,
       totalBranchCount: 18,
+      missingBranches: [],
       tglossExceptions: [],
       previousScope: null,
       lastMonthScope: null,
@@ -330,8 +336,9 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
     scopes,
     tglossExceptions: computeTglossExceptions(report.branches, date, holidaySet),
     isPublished: published,
-    uploadedBranchCount: scom205Count,
+    uploadedBranchCount: uploadedBranches.length,
     totalBranchCount: 18 + (hasCo01c ? 1 : 0),
+    missingBranches: report.branches.map((b) => b.branch).filter((code) => !uploadedBranches.includes(code)),
     previousScope,
     lastMonthScope,
     incentiveSlabTargetsByBranch: incentiveSlabTargets,

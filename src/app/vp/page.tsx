@@ -121,7 +121,7 @@ async function Overview({
     <VpCompareProvider data={compareData}>
     <div className="mx-auto max-w-[1440px] px-6 py-8">
       {!data.isPublished && (
-        <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} />
+        <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} missingBranches={data.missingBranches} />
       )}
       {/* Scrolls away with the page (un-frozen 2026-09-28 at the VP's request).
           What stays pinned is each table's own column-header row, just under
