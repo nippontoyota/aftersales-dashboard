@@ -126,6 +126,19 @@ function bpuColumn(renderGusCell?: GusCellRenderer): SectionColumn {
   };
 }
 
+/** HQ dashboard only (no renderGusCell caller passes one) — BPU split into
+ * its own Parts/Labour columns like GUS, instead of one combined
+ * click-to-expand cell (confirmed with the user 2026-10-01). */
+const bpuPartsColumn: SectionColumn = {
+  label: "BPU Parts (Rs/Car)",
+  render: (r) => perVehicleCell(r.bpuPartsMtd, r.bpuRoMtd),
+};
+
+const bpuLabourColumn: SectionColumn = {
+  label: "BPU Labour (Rs/Car)",
+  render: (r) => perVehicleCell(r.bpuLabourMtd, r.bpuRoMtd),
+};
+
 function tglossColumn(renderGusCell?: GusCellRenderer): SectionColumn {
   return {
     // Relabeled from "VAS (Rs/Car)" — the underlying figure is still total
@@ -140,14 +153,18 @@ function tglossColumn(renderGusCell?: GusCellRenderer): SectionColumn {
   };
 }
 
-/** First 4 entries are GUS Parts, GUS Labour, BPU, TGLOSS/GUS — what the VP
- * view shows (its own "compact" variant below); Parts Retail and Offtake
- * are HQ-dashboard-only additions the VP doesn't need (confirmed 2026-09-25). */
+/** First 4 entries (when the BPU column is the single combined one) are GUS
+ * Parts, GUS Labour, BPU, TGLOSS/GUS — what the VP view shows (its own
+ * "compact" variant below); Parts Retail and Offtake are HQ-dashboard-only
+ * additions the VP doesn't need (confirmed 2026-09-25). The plain HQ
+ * dashboard (no renderGusCell) splits BPU into Parts/Labour columns instead
+ * (confirmed 2026-10-01) — compact/VP callers always pass renderGusCell, so
+ * this never shifts the VP's 4-column slice below. */
 function buildColumns(renderGusCell?: GusCellRenderer): SectionColumn[] {
   return [
     gusPartsColumn(renderGusCell),
     gusLabourColumn(renderGusCell),
-    bpuColumn(renderGusCell),
+    ...(renderGusCell ? [bpuColumn(renderGusCell)] : [bpuPartsColumn, bpuLabourColumn]),
     tglossColumn(renderGusCell),
     { label: "Parts Retail (Rs/Car)", render: (r) => perVehicleCell(r.partsRetailAchievementForTheMonth, r.gusRoMtd) },
     { label: "Offtake (Rs/Car)", render: (r) => perVehicleCell(r.offtakeAchievementForTheMonth, r.gusRoMtd) },
