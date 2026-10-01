@@ -175,18 +175,7 @@ function buildColumns(renderGusCell?: GusCellRenderer): SectionColumn[] {
  * export in case anything still imports COLUMNS directly. */
 export const COLUMNS: SectionColumn[] = buildColumns();
 
-const BP_ONLY_COLUMNS: SectionColumn[] = [
-  {
-    label: "BPU (Rs/Car)",
-    render: (r) => (
-      <BpuCell
-        combined={achievementRatio((r.bpuPartsMtd ?? 0) + (r.bpuLabourMtd ?? 0), r.bpuRoMtd)}
-        parts={achievementRatio(r.bpuPartsMtd, r.bpuRoMtd)}
-        labour={achievementRatio(r.bpuLabourMtd, r.bpuRoMtd)}
-      />
-    ),
-  },
-];
+const BP_ONLY_COLUMNS: SectionColumn[] = [bpuPartsColumn, bpuLabourColumn];
 
 /** Company-wide row — sum/sum, not an average of each branch's own ratio
  * (same weighted-ratio convention as Service Gentan I, confirmed with the
