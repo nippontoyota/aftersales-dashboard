@@ -30,3 +30,19 @@ export async function addReportHoliday(date: string, note: string, createdBy: st
 export async function removeReportHoliday(date: string): Promise<void> {
   await pool.query("delete from report_holidays where date = $1", [date]);
 }
+
+export type PendingHolidayMerge = { date: string; note: string | null };
+
+/**
+ * Holidays a branch should fold into their *next* upload rather than file
+ * separately — any flagged date strictly after the canonical report date
+ * (so already skipped by reportingDate()) up through today. Drives the
+ * HolidayMergePopupGate reminder; empty once the canonical date catches up
+ * past the holiday, no manual cleanup needed.
+ */
+export function pendingHolidaysToMerge(holidays: ReportHoliday[], canonicalDate: string, today: string): PendingHolidayMerge[] {
+  return holidays
+    .filter((h) => h.date > canonicalDate && h.date <= today)
+    .map((h) => ({ date: h.date, note: h.note }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}

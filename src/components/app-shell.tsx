@@ -4,6 +4,7 @@ import Link, { useLinkStatus } from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions";
 import { AutoRefresh } from "./auto-refresh";
+import { HolidayMergePopupGate } from "./holiday-merge-popup-gate";
 import { QueryPopupGate } from "./query-popup-gate";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -454,6 +455,7 @@ export function AppShell({
     <div className="flex min-h-screen bg-canvas text-fg">
       <AutoRefresh />
       <QueryPopupGate />
+      <HolidayMergePopupGate />
       {/* Desktop sidebar — collapsible to an icon rail */}
       <aside
         className={`hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex print:!hidden ${
