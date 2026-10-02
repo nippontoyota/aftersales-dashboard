@@ -2,8 +2,15 @@ import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { hashBuffer } from "@/lib/duplicate-detection";
 import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { detectReportType, type DetectedReportType } from "@/lib/report-sniffer";
 import { parseSsrv089BpGreyTotals } from "@/lib/ssrv089-bp/parse";
 import { saveSsrv089BpGreySnapshot } from "@/lib/ssrv089-bp/store";
+
+const WRONG_TYPE_LABELS: Record<Exclude<DetectedReportType, "ssrv089">, string> = {
+  "service-info": "Service Info Report",
+  "part-sale": "Part Sale Report",
+  scom205: "scom205 Monthly KPI Report",
+};
 
 /** Cost and Sales Report - BP — required daily like every other upload.
  * Its columns stay deliberately unparsed beyond the Brand(Toyota/Grey)
@@ -54,12 +61,31 @@ export async function POST(request: Request) {
   }
 
   // Structural check — rejects outright rather than silently accepting (see
-  // this route's doc comment above). Validated before the duplicate checks
-  // below so a genuinely corrupt/wrong-type file is never compared against
-  // prior uploads or saved at all.
-  let totals;
+  // this route's doc comment above). Two steps: first rule out a different
+  // known report type entirely, using the same signatures report-sniffer.ts
+  // uses for Upload Sheet's auto-detect; then confirm this file at least has
+  // the Cost & Sales shape (2026-10-02: loosened to not require
+  // Brand(Toyota/Grey) specifically — some branches' DMS genuinely never
+  // includes it, see ssrv089-bp/parse.ts). Validated before the duplicate
+  // checks below so a bad file is never compared against prior uploads or
+  // saved at all.
+  let detectedType: DetectedReportType | null = null;
   try {
-    totals = parseSsrv089BpGreyTotals(buffer);
+    detectedType = detectReportType(buffer);
+  } catch {
+    // Unreadable as a spreadsheet at all — the Cost & Sales check below
+    // produces the real error.
+  }
+  if (detectedType && detectedType !== "ssrv089") {
+    return NextResponse.json(
+      { error: `This looks like a ${WRONG_TYPE_LABELS[detectedType]}, not a Cost and Sales Report - BP export.` },
+      { status: 422 }
+    );
+  }
+
+  let parsed;
+  try {
+    parsed = parseSsrv089BpGreyTotals(buffer);
   } catch (err) {
     return NextResponse.json(
       {
@@ -99,8 +125,19 @@ export async function POST(request: Request) {
     uploadedBy: admin.username,
   });
 
-  // totals was already extracted and validated above.
-  await saveSsrv089BpGreySnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, totals });
+  // parsed was already extracted and validated above.
+  await saveSsrv089BpGreySnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, totals: parsed.totals });
 
-  return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name });
+  return NextResponse.json({
+    success: true,
+    date,
+    branch: admin.branch,
+    sourceFileName: file.name,
+    // Header matched but there were zero data rows underneath it — accepted
+    // (see ssrv089-bp/parse.ts), but worth the uploader double-checking this
+    // wasn't a broken DMS export rather than a genuinely quiet day.
+    warning: parsed.isEmpty
+      ? "This file has the right structure but contains no data rows. If the branch had Cost and Sales - BP business today, check the export — this might be a partial or broken pull from the DMS."
+      : undefined,
+  });
 }

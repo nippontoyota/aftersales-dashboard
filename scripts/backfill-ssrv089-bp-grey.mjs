@@ -24,6 +24,7 @@ if (!BRANCH || !/^[A-Z]{2}\d{2}[A-Z]$/.test(BRANCH)) {
   process.exit(1);
 }
 
+const CLOSE_SA_NAME_COLUMN = "Close SA Name";
 const BRAND_COLUMN = "Brand(Toyota/Grey)";
 const PART_SALE_COLUMN = "Part Sale";
 const PNT_MAT_SALE_COLUMN = "Pnt Mat Sale";
@@ -34,11 +35,18 @@ function toAmount(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Mirrors src/lib/ssrv089-bp/parse.ts exactly (2026-10-02): the header row
+// is checked directly, not `column in rows[0]`, so a correctly-shaped file
+// with zero data rows is still recognized rather than rejected; Brand is
+// optional beyond that baseline (some branches' DMS never includes it).
 function findDataSheet(workbook) {
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
-    if (rows.length > 0 && BRAND_COLUMN in rows[0] && PART_SALE_COLUMN in rows[0]) return rows;
+    const headerRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    const header = (headerRows[0] ?? []).map((c) => String(c ?? "").trim());
+    if (header.includes(CLOSE_SA_NAME_COLUMN) && header.includes(PART_SALE_COLUMN)) {
+      return XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+    }
   }
   return null;
 }
@@ -46,7 +54,8 @@ function findDataSheet(workbook) {
 function parseGreyTotals(buffer) {
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const rows = findDataSheet(workbook);
-  if (!rows) throw new Error(`no sheet with a "${BRAND_COLUMN}" column`);
+  if (!rows) throw new Error(`no sheet with a "${CLOSE_SA_NAME_COLUMN}" column`);
+  if (rows.length === 0 || !(BRAND_COLUMN in rows[0])) return { greyPartsSale: 0, greyLabourSale: 0 };
 
   let greyPartsSale = 0;
   let greyLabourSale = 0;

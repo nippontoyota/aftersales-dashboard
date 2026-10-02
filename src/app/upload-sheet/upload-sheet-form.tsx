@@ -118,7 +118,8 @@ export function UploadSheetForm() {
       setDuplicateWarning(null);
       if (!detection) return;
       const label = HAS_VARIANT[detection.type] ? `${TYPE_LABEL[detection.type]} - ${variant.toUpperCase()}` : TYPE_LABEL[detection.type];
-      setSuccess(`Saved ${label} for ${branch}, ${date}.`);
+      const base = `Saved ${label} for ${branch}, ${date}.`;
+      setSuccess(data.warning ? `${base} ⚠ ${data.warning as string}` : base);
       setFile(null);
       setDetection(null);
       setBranch("");

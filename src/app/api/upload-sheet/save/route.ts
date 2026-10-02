@@ -197,11 +197,23 @@ export async function POST(request: Request) {
         // own upload route (ssrv089-bp/route.ts), so a wrong-report-type or
         // unreadable file can't sneak through via Upload Sheet either. A
         // throw here is caught by this function's outer try/catch below,
-        // same as every other parse failure in this file.
-        const totals = parseSsrv089BpGreyTotals(buffer);
+        // same as every other parse failure in this file. A correctly-shaped
+        // but zero-row file (2026-10-02, see ssrv089-bp/parse.ts) is still
+        // accepted — just surfaced as a warning rather than silently saved.
+        const parsed = parseSsrv089BpGreyTotals(buffer);
         await saveRawReportUpload({ date, branch, reportType: "ssrv089_bp", uploadedAt, sourceFileName: file.name, fileData: buffer, uploadedBy: admin.username });
-        await saveSsrv089BpGreySnapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals });
-        return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name });
+        await saveSsrv089BpGreySnapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals: parsed.totals });
+        return NextResponse.json({
+          success: true,
+          type,
+          variant,
+          date,
+          branch,
+          sourceFileName: file.name,
+          warning: parsed.isEmpty
+            ? "This file has the right structure but contains no data rows. If the branch had Cost and Sales - BP business this day, check the export — this might be a partial or broken pull from the DMS."
+            : undefined,
+        });
       }
       const staffNames = await listAccessoriesStaffNamesForBranch(branch);
       const { totals, rawRows } = parseSsrv089Workbook(buffer, staffNames);
