@@ -95,23 +95,20 @@ export async function POST(request: Request) {
     );
   }
 
-  // Warn-and-allow duplicate check (2026-09-16, at the user's request) — see
-  // service-info-bp's upload route for the full rationale (this report type
-  // also keeps no parsed rows, so file bytes are compared directly, against
-  // every prior upload this month rather than just the most recent one).
-  const confirmed = formData.get("confirmDuplicate") === "true";
-  if (!confirmed) {
-    const priorUploads = await loadAllRawReportUploadsBefore(admin.branch, "ssrv089_bp", date);
-    const newHash = hashBuffer(buffer);
-    const match = priorUploads.find((u) => hashBuffer(u.fileData) === newHash);
-    if (match) {
-      return NextResponse.json({
-        duplicate: true,
-        previousDate: match.date,
-        previousFileName: match.sourceFileName,
-        message: `This file looks identical to your upload from ${match.date} (${match.sourceFileName}). Are you sure this is ${date}'s file?`,
-      });
-    }
+  // Hard-blocking duplicate check (upgraded from warn-and-allow 2026-10-05,
+  // matching every other report type) — see service-info-bp's upload route
+  // for the full rationale (this report type also keeps no parsed rows, so
+  // file bytes are compared directly, against every prior upload this month
+  // rather than just the most recent one). A genuine false positive now
+  // needs HQ (Upload Sheet).
+  const priorUploads = await loadAllRawReportUploadsBefore(admin.branch, "ssrv089_bp", date);
+  const newHash = hashBuffer(buffer);
+  const match = priorUploads.find((u) => hashBuffer(u.fileData) === newHash);
+  if (match) {
+    return NextResponse.json(
+      { error: `This file looks identical to your upload from ${match.date} (${match.sourceFileName}). If this really is ${date}'s file, contact HQ (Upload Sheet).` },
+      { status: 422 }
+    );
   }
 
   const uploadedAt = new Date().toISOString();

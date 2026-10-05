@@ -47,7 +47,10 @@ export function UploadSheetForm() {
   const [detecting, setDetecting] = useState(false);
   const [detection, setDetection] = useState<Detection | null>(null);
   const [branch, setBranch] = useState("");
-  const [variant, setVariant] = useState<Variant>("gs");
+  // No default (2026-10-05, after TI01A's 2026-09-23 incident — GS was
+  // pre-selected here and a BP file got saved under it unnoticed). HQ must
+  // explicitly click GS or BP; Save stays disabled until they do.
+  const [variant, setVariant] = useState<Variant | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -74,7 +77,7 @@ export function UploadSheetForm() {
     setFile(picked);
     setDetection(null);
     setBranch("");
-    setVariant("gs");
+    setVariant(null);
     setError(null);
     setSuccess(null);
     setDuplicateWarning(null);
@@ -117,13 +120,13 @@ export function UploadSheetForm() {
       }
       setDuplicateWarning(null);
       if (!detection) return;
-      const label = HAS_VARIANT[detection.type] ? `${TYPE_LABEL[detection.type]} - ${variant.toUpperCase()}` : TYPE_LABEL[detection.type];
+      const label = HAS_VARIANT[detection.type] ? `${TYPE_LABEL[detection.type]} - ${(variant ?? "").toUpperCase()}` : TYPE_LABEL[detection.type];
       const base = `Saved ${label} for ${branch}, ${date}.`;
       setSuccess(data.warning ? `${base} ⚠ ${data.warning as string}` : base);
       setFile(null);
       setDetection(null);
       setBranch("");
-      setVariant("gs");
+      setVariant(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       router.refresh();
     } catch {
@@ -140,12 +143,16 @@ export function UploadSheetForm() {
       setError("Choose which branch this file belongs to.");
       return;
     }
+    if (HAS_VARIANT[detection.type] && !variant) {
+      setError("Choose whether this is the GS or BP file.");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);
     formData.append("date", date);
     formData.append("branch", branch);
-    if (HAS_VARIANT[detection.type]) formData.append("variant", variant);
+    if (HAS_VARIANT[detection.type] && variant) formData.append("variant", variant);
     await doSave(formData);
   }
 
@@ -204,7 +211,9 @@ export function UploadSheetForm() {
 
           {HAS_VARIANT[detection.type] ? (
             <div>
-              <label className="block text-xs font-medium text-fg-muted">Variant</label>
+              <label className="block text-xs font-medium text-fg-muted">
+                Variant <span className="font-normal text-fg-faint">(neither is picked by default — confirm which file this is)</span>
+              </label>
               <div className="mt-1 flex gap-3 text-sm">
                 <label className="inline-flex items-center gap-1.5">
                   <input type="radio" name="variant" checked={variant === "gs"} onChange={() => setVariant("gs")} />
@@ -269,7 +278,7 @@ export function UploadSheetForm() {
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || !branch || (HAS_VARIANT[detection.type] && !variant)}
               className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 disabled:opacity-60"
             >
               {saving ? "Saving…" : "Save"}

@@ -7,7 +7,7 @@ import { hashRows } from "@/lib/duplicate-detection";
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { loadSsrv089Snapshot, saveSsrv089Snapshot } from "@/lib/ssrv089/store";
-import { checkInvoiceDocDateSanity } from "@/lib/ssrv089/upload-validation";
+import { checkInvoiceDocDateSanity, checkInvoiceOverlap } from "@/lib/ssrv089/upload-validation";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -81,6 +81,14 @@ export async function POST(request: Request) {
       { error: `This file looks identical to your upload from ${duplicateDate} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
       { status: 422 }
     );
+  }
+
+  // Partial-duplicate check (2026-10-05) — catches a resend that isn't
+  // byte-identical to any single prior upload (extra/missing rows), which
+  // the exact-hash check above can't see. See ssrv089/upload-validation.ts.
+  const overlap = await checkInvoiceOverlap(admin.branch, rawRows, date);
+  if (overlap.duplicate) {
+    return NextResponse.json({ error: `${overlap.message} If this really is new data, contact HQ (Upload Sheet).` }, { status: 422 });
   }
 
   const uploadedAt = new Date().toISOString();

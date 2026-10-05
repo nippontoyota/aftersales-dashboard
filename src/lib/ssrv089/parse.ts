@@ -53,9 +53,35 @@ function toAmount(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | null {
+/** Checks the HEADER row independently of row count (2026-10-05 — same fix
+ * applied to service-info/parse.ts and already present in ssrv089-bp/
+ * parse.ts). The old version required `column in rows[0]`, which can't see a
+ * header at all once there are zero data rows — so an empty-but-correctly-
+ * headed file and an actually-wrong report type produced the identical
+ * "could not find a column" message. Treats the "Parts Sale" alias (see
+ * below) as equivalent to "Part Sale" for this check alone — the rename
+ * itself still happens on the real rows further down. */
+function sheetHeaderMatches(sheet: XLSX.WorkSheet): boolean {
+  const header = (XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" })[0] ?? []).map((c) => String(c ?? "").trim());
+  const hasPartSale = header.includes(PART_SALE_COLUMN) || header.includes(PART_SALE_ALIAS);
+  return header.includes(CLOSE_SA_NAME_COLUMN) && hasPartSale && header.includes(LABOUR_SALE_COLUMN);
+}
+
+function findDataSheet(workbook: XLSX.WorkBook): { rows: Record<string, unknown>[] } | null {
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
+    // All three, not just "Close SA Name" alone — a pivot-table summary
+    // sheet can legitimately have "Close SA Name" as a cell value too (its
+    // filter label, e.g. "Close SA Name: (Multiple Items)"), which becomes
+    // a column key the same way a real header would once read with
+    // headers-from-row-1. It won't also have real Part Sale/Labour Sale
+    // columns, which is what actually distinguishes real transaction data.
+    if (!sheetHeaderMatches(sheet)) continue;
+
+    const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
+    if (range.e.r >= SSRV089_MAX_ROWS) {
+      throw new Error(`File has more than ${SSRV089_MAX_ROWS.toLocaleString()} rows — is this the right file?`);
+    }
     // raw: false (2026-09-25, after a false-rejected MV01A upload) — without
     // it, xlsx's own CSV type-guessing silently mis-parses an ambiguous
     // dash/slash date string (e.g. "02-03-2026") as MM-DD-YYYY whenever the
@@ -68,7 +94,7 @@ function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | nul
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
     // Some branch exports (2026-09-28, IR01A) label the column "Parts Sale"
     // (and "Parts Cost ") instead of "Part Sale". Rename to the canonical
-    // spelling in place so both the check below and the stored raw rows
+    // spelling in place so both downstream readers and the stored raw rows
     // (read by the cancellation SQL as row_data->>'Part Sale') stay uniform.
     for (const row of rows) {
       if (PART_SALE_ALIAS in row && !(PART_SALE_COLUMN in row)) {
@@ -76,30 +102,22 @@ function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | nul
         delete row[PART_SALE_ALIAS];
       }
     }
-    // All three, not just "Close SA Name" alone — a pivot-table summary
-    // sheet can legitimately have "Close SA Name" as a cell value too (its
-    // filter label, e.g. "Close SA Name: (Multiple Items)"), which becomes
-    // a column key the same way a real header would once read with
-    // headers-from-row-1. It won't also have real Part Sale/Labour Sale
-    // columns, which is what actually distinguishes real transaction data.
-    if (rows.length > 0 && CLOSE_SA_NAME_COLUMN in rows[0] && PART_SALE_COLUMN in rows[0] && LABOUR_SALE_COLUMN in rows[0]) {
-      const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
-      if (range.e.r >= SSRV089_MAX_ROWS) {
-        throw new Error(`File has more than ${SSRV089_MAX_ROWS.toLocaleString()} rows — is this the right file?`);
-      }
-      return rows;
-    }
+    return { rows };
   }
   return null;
 }
 
 export function parseSsrv089Workbook(buffer: Buffer, staffNames: string[]): ParsedSsrv089 {
   const workbook = XLSX.read(buffer, { type: "buffer", sheetRows: SSRV089_MAX_ROWS + 1 });
-  const rows = findDataSheet(workbook);
+  const found = findDataSheet(workbook);
 
-  if (!rows) {
+  if (!found) {
     throw new Error(`Could not find a sheet with a "${CLOSE_SA_NAME_COLUMN}" column — is this an SSRV089 Cost & Sales Report export?`);
   }
+  if (found.rows.length === 0) {
+    throw new Error("This file has the right columns but no data rows — looks like an empty export. Check the DMS pull and try again.");
+  }
+  const { rows } = found;
 
   let accessoriesPartSale = 0;
   let accessoriesLabourSale = 0;
