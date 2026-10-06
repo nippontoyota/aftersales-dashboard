@@ -41,6 +41,42 @@ The ☐ open items below were re-checked against current data and are still open
 listed, except where a section says otherwise — this pass didn't re-litigate
 each one, just confirmed no *new* instances of either bug class have appeared.
 
+## TI01B · September 1-13 (ssrv089/BP) / 1-14 (Part Sale) — turned out NOT to be a live gap (2026-10-06)
+
+A 2026-10-06 investigation found TI01B's `ssrv089_snapshots` (1-13 Sep) and
+`part_sale_snapshots` (1-14 Sep) raw rows + snapshots **under their own
+dates** completely missing — no committed script deleted them, so most
+likely a manual/ad-hoc delete (motivated building `deleted_rows_log`, see
+[src/lib/audit/deleted-rows-log.ts](../src/lib/audit/deleted-rows-log.ts)).
+The user supplied the real files (`GS_CostAndSalesReport-TI01B
+01-13.09.2026.xlsx`, `BP_CostAndSalesReport-TI01B 01-13.09.2026.xlsx`,
+`PartSaleReport-TI01B 01-14.09.2026.xlsx`) to backfill the gap —
+`scripts/backfill-ti01b-sep-1-13-gap.mts --commit` inserted them under
+2026-09-13 (ssrv089/BP) and 2026-09-14 (Part Sale), each verified against
+its own row dates first (not the filename).
+
+**That insert turned out to double-count.** TI01B's pre-existing 2026-09-15
+snapshot (uploaded 2026-09-16, never touched by anything today) is *itself*
+a cumulative export that already fully contains the 1-13/1-14 span — 100%
+of the newly-inserted JobOrder No (ssrv089/BP) and BillNo (Part Sale) keys
+were already present in the 15th's rows. So the "missing" span was never
+actually missing from the MTD *total* — it survived via the 15th's resend —
+only from the raw data filed under its own correct date. Caught via the
+same overlap check this doc's cumulative-upload fixes have always used;
+reverted with `scripts/revert-ti01b-sep-1-13-overlap.mts --commit` (itself
+now a real end-to-end test of the new `deleted_rows_log` guardrail).
+
+**Net effect: none.** TI01B's September GUS Parts/Labour MTD is unchanged
+by any of this — still **₹50,74,418.29 / ₹28,58,108.11** (accessories
+deduction ₹5,45,202.70 parts / ₹1,12,011.71 labour, same as before
+2026-10-06). The ₹61,642 (parts) / ₹19,372 (labour) gap against the
+branch's own cross-checked figures, the question this was investigating,
+remains **unexplained** — this wasn't it.
+
+Still true and still fixed regardless of the above: BP's separately-held
+2026-09-03/08/09/10/11 entries were genuinely superseded (same containment
+check against the 15th) and stay deleted.
+
 ---
 
 ## August · External Sales stuck on the old rule  →  Total External Sales **understated** (2026-09-30)
