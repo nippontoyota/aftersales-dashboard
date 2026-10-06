@@ -752,3 +752,24 @@ create table if not exists cross_month_replacements (
 );
 create index if not exists cross_month_replacements_month_idx
   on cross_month_replacements (replacement_month);
+
+-- Backup-before-delete audit trail (2026-10-06), added after TI01B's
+-- September SSRV089-GS (1-13) and Part Sale (1-14) snapshots + raw rows were
+-- found deleted with no trace anywhere — no committed script did it, so it
+-- was most likely a manual/ad-hoc delete, and there was nothing to query
+-- afterward to confirm what was lost or when. See src/lib/audit/deleted-rows-log.ts's
+-- logDeletedRows() — called immediately before any delete on the two paths
+-- that can remove upload data (the live per-upload replace in
+-- raw-upload-rows/store.ts, and scripts/reset-branch-uploads.mjs), always in
+-- the same transaction as the delete so a rolled-back delete never leaves a
+-- stray log entry behind. `source` identifies which of those two wrote the
+-- entry. Not wired into every historical one-off scripts/fix-*.mjs (those
+-- already ran; this covers paths that can run again).
+create table if not exists deleted_rows_log (
+  id         bigserial    primary key,
+  table_name text         not null,
+  source     text         not null,
+  deleted_at timestamptz  not null default now(),
+  row_data   jsonb        not null
+);
+create index if not exists deleted_rows_log_lookup_idx on deleted_rows_log (table_name, deleted_at);

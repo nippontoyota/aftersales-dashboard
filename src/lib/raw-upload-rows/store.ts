@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { logDeletedRows } from "../audit/deleted-rows-log";
 import { pool } from "../db";
 
 /** Every row of every uploaded file, verbatim (see db/schema.sql's
@@ -49,6 +50,13 @@ export async function saveRawUploadRows(
   const run = async (qc: Pick<PoolClient, "query">) => {
     const branchesInvolved = [...new Set(rows.map((r) => r.branch))];
     if (branchesInvolved.length > 0) {
+      await logDeletedRows(
+        qc,
+        "raw_upload_rows",
+        "saveRawUploadRows",
+        "report_type = $1 and date = $2 and branch = any($3::text[])",
+        [reportType, date, branchesInvolved]
+      );
       await qc.query(`delete from raw_upload_rows where report_type = $1 and date = $2 and branch = any($3::text[])`, [
         reportType,
         date,
