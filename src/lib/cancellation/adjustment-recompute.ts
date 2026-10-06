@@ -2,7 +2,7 @@ import {
   listCancellationRevenueMonthsForBranch,
   recomputeCancelledAccessoriesAdjustmentForBranchMonth,
 } from "../ssrv089/cancellation-adjustment";
-import { CROSS_MONTH_REPLACEMENT_BRANCHES, recomputeCrossMonthReplacements } from "./cross-month-replacement";
+import { recomputeCrossMonthReplacements } from "./cross-month-replacement";
 
 /**
  * Keeps cancelled_accessories_adjustments and cross_month_replacements (see
@@ -20,9 +20,11 @@ import { CROSS_MONTH_REPLACEMENT_BRANCHES, recomputeCrossMonthReplacements } fro
 export async function recomputeAfterSsrv089Upload(branch: string, date: string): Promise<void> {
   const month = date.slice(0, 7);
   await recomputeCancelledAccessoriesAdjustmentForBranchMonth(branch, month);
-  if (CROSS_MONTH_REPLACEMENT_BRANCHES.has(branch)) {
-    await recomputeCrossMonthReplacements();
-  }
+  // A replacement is always matched within one branch (same join condition
+  // as the cancelled invoice's own branch), so scoping to just this branch
+  // is both correct and what keeps this cheap — see
+  // computeCrossMonthReplacementsFresh's doc comment.
+  await recomputeCrossMonthReplacements([branch]);
 }
 
 /** After a cancellation report upload for one or more branches: a new or
@@ -38,7 +40,7 @@ export async function recomputeAfterCancellationUpload(branches: string[]): Prom
       await recomputeCancelledAccessoriesAdjustmentForBranchMonth(branch, month);
     }
   }
-  if (uniqueBranches.some((b) => CROSS_MONTH_REPLACEMENT_BRANCHES.has(b))) {
-    await recomputeCrossMonthReplacements();
+  if (uniqueBranches.length > 0) {
+    await recomputeCrossMonthReplacements(uniqueBranches);
   }
 }

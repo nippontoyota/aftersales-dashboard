@@ -279,8 +279,7 @@ const DEACTIVATED_BRANCHES = new Set<string>(["CO01D"]);
  * 2026-10-01 to every branch found carrying Grey-brand rows in a September
  * company-wide check (TI01A, CO01A, CO01B, KT01A, MV01A, TL01A, TR01A) —
  * every other branch came back clean. New branches should only be added
- * here after checking their own data the same way, same precedent as
- * CROSS_MONTH_REPLACEMENT_BRANCHES (cross-month-replacement.ts). */
+ * here after checking their own data the same way. */
 const GREY_REVENUE_BRANCHES = new Set<string>(["TI01A", "CO01A", "CO01B", "KT01A", "MV01A", "TL01A", "TR01A"]);
 
 function excludeDeactivatedBranches(rows: BaToolBranchRow[]): BaToolBranchRow[] {

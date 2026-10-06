@@ -13,8 +13,18 @@ import { pool } from "../db";
  * replacement's value from the month it actually landed in.
  *
  * Matching is by RO (Job Order No) alone, no amount-closeness check — at
- * the user's explicit request. Scoped to CROSS_MONTH_REPLACEMENT_BRANCHES
- * only, not company-wide yet (see that constant's own comment).
+ * the user's explicit request.
+ *
+ * Company-wide as of 2026-10-06 (user's explicit call): earlier this only
+ * ran for branches individually vetted for implausible RO-match gaps (a tell
+ * for a reused Job Order number rather than real re-invoicing — the issue
+ * that excluded IR01A, and that held TR01A back pending its own look). The
+ * user decided a questionable match isn't a real risk here, because it never
+ * disappears silently — every match, including a wrong one, sits permanently
+ * in the "Cross-month replacements — adjusted" section of /cancellations
+ * (docNo, RO, replacement doc, amounts all shown), so a bad match stays
+ * visible to catch and fix rather than vanishing into a correct-looking
+ * total. No branch allowlist needed any more; this runs for every branch.
  *
  * As of 2026-10-01 the result is precomputed into cross_month_replacements
  * at upload time (see adjustment-recompute.ts and its callers) instead of
@@ -23,16 +33,6 @@ import { pool } from "../db";
  * viable once raw_upload_rows passed 3.7M rows. computeCrossMonthReplacementsFresh
  * below is now only ever called by the recompute path.
  */
-
-/** Branches this adjustment applies to. IR01A was checked the same way as
- * KT01A (2026-09-24) and excluded: its cancellation data has an unrelated
- * data-integrity issue (a corrupted cancellation-report file record for
- * September — byte-identical to June's file), and several of its RO matches
- * span implausible gaps (up to 5 months, one RO matching 3 different
- * cancelled invoices) that look like reused Job Order numbers rather than
- * real re-invoicing. Widen this list only after a branch's own cancellation
- * data has been checked the same way, not by default. */
-export const CROSS_MONTH_REPLACEMENT_BRANCHES = new Set(["KT01A"]);
 
 export type CrossMonthReplacement = {
   branch: string;
@@ -84,7 +84,7 @@ export type CrossMonthReplacementAdjustment = { partSale: number; labourSale: nu
  * across possibly-multiple cancelled docs on the same RO — for report.ts's GUS Parts/Labour
  * MTD formula. Excludes a replacement whose own month isn't `date`'s month: this only ever
  * reduces the month the replacement itself landed in, never any other month. Reads the
- * precomputed table (tiny — bounded by CROSS_MONTH_REPLACEMENT_BRANCHES), not raw_upload_rows. */
+ * precomputed table (company-wide, but small — one row per cancelled/replacement pair), not raw_upload_rows. */
 export async function loadCrossMonthReplacementAdjustmentForMonth(date: string): Promise<Map<string, CrossMonthReplacementAdjustment>> {
   const month = date.slice(0, 7);
   const all = await loadCrossMonthReplacements();
@@ -109,16 +109,22 @@ export async function loadCrossMonthReplacementAdjustmentForMonth(date: string):
  * below by `s.row_month > c.revenue_month`) — rows before that can never
  * match, so there's no reason to keep scanning further back as history
  * grows (2026-10-01; this query previously had no date bound at all and got
- * slower every single day). */
-export async function computeCrossMonthReplacementsFresh(): Promise<CrossMonthReplacement[]> {
-  if (CROSS_MONTH_REPLACEMENT_BRANCHES.size === 0) return [];
-  const branches = [...CROSS_MONTH_REPLACEMENT_BRANCHES];
+ * slower every single day).
+ *
+ * `branches` scopes both sides of the match to just those branches — pass it
+ * from the per-upload recompute path so one branch's upload only ever costs
+ * a scan of that branch's own rows (full company-wide run, ~47s as of
+ * 2026-10-06 with 3.7M+ raw_upload_rows, is far too slow to run inside the
+ * blocking upload request every branch triggers). Omit it only for an
+ * explicit full recompute (e.g. a one-off backfill script). */
+export async function computeCrossMonthReplacementsFresh(branches?: string[]): Promise<CrossMonthReplacement[]> {
+  if (branches && branches.length === 0) return [];
 
   const { rows: boundRows } = await pool.query<{ earliest: string | null }>(
     `select min(coalesce(issue_date, (month || '-01')::date))::text as earliest
      from invoice_cancellations
-     where branch = any($1::text[]) and ref_doc_no is not null and ref_doc_no <> ''`,
-    [branches]
+     where ref_doc_no is not null and ref_doc_no <> '' and ($1::text[] is null or branch = any($1::text[]))`,
+    [branches ?? null]
   );
   const earliest = boundRows[0]?.earliest;
   if (!earliest) return []; // nothing to match against — skip the raw_upload_rows scan entirely
@@ -139,7 +145,7 @@ export async function computeCrossMonthReplacementsFresh(): Promise<CrossMonthRe
              coalesce(to_char(issue_date, 'YYYY-MM'), month) as revenue_month,
              replace(doc_no, '-', '') as doc_key
       from invoice_cancellations
-      where branch = any($1::text[]) and ref_doc_no is not null and ref_doc_no <> ''
+      where ref_doc_no is not null and ref_doc_no <> '' and ($2::text[] is null or branch = any($2::text[]))
     ),
     ssrv_dedup as (
       select branch, ro, inv, row_month,
@@ -153,7 +159,7 @@ export async function computeCrossMonthReplacementsFresh(): Promise<CrossMonthRe
                ${toNumericExpr("Oil Sale")} as oil_sale,
                ${toNumericExpr("Labour Sale")} as labour_sale
         from raw_upload_rows r
-        where r.report_type = 'ssrv089' and r.branch = any($1::text[]) and r.date >= $2::date
+        where r.report_type = 'ssrv089' and r.date >= $1::date and ($2::text[] is null or r.branch = any($2::text[]))
       ) x
       group by branch, ro, inv, row_month
     )
@@ -165,7 +171,7 @@ export async function computeCrossMonthReplacementsFresh(): Promise<CrossMonthRe
     where s.row_month > c.revenue_month
     order by c.branch, c.revenue_month, c.doc_no
     `,
-    [branches, earliest]
+    [earliest, branches ?? null]
   );
 
   return rows.map((r) => ({
@@ -180,17 +186,21 @@ export async function computeCrossMonthReplacementsFresh(): Promise<CrossMonthRe
   }));
 }
 
-/** Recomputes cross_month_replacements from scratch and replaces every row
- * scoped to CROSS_MONTH_REPLACEMENT_BRANCHES (the only branches this table
- * ever holds data for) in one transaction. */
-export async function recomputeCrossMonthReplacements(): Promise<void> {
-  const fresh = await computeCrossMonthReplacementsFresh();
-  const branches = [...CROSS_MONTH_REPLACEMENT_BRANCHES];
+/** Recomputes cross_month_replacements and replaces every row — scoped to
+ * `branches` when given (the normal per-upload path, cheap), or every
+ * branch in the table when omitted (an explicit full recompute only; see
+ * computeCrossMonthReplacementsFresh's doc comment on why that's slow). */
+export async function recomputeCrossMonthReplacements(branches?: string[]): Promise<void> {
+  const fresh = await computeCrossMonthReplacementsFresh(branches);
 
   const client = await pool.connect();
   try {
     await client.query("begin");
-    await client.query(`delete from cross_month_replacements where branch = any($1::text[])`, [branches]);
+    if (branches) {
+      await client.query(`delete from cross_month_replacements where branch = any($1::text[])`, [branches]);
+    } else {
+      await client.query(`delete from cross_month_replacements`);
+    }
     for (const r of fresh) {
       await client.query(
         `insert into cross_month_replacements
