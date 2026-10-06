@@ -15,6 +15,7 @@ import { isBodyPaintOnly, onlineStoreCodeFor } from "@/lib/report";
 import { BaToolUploadForm } from "./ba-tool-upload-form";
 import { BillUploadForm } from "./bill-upload-form";
 import { CancellationUploadForm } from "./cancellation-upload-form";
+import { LabourSalesUploadForm } from "./labour-sales-upload-form";
 import { PartSaleUploadForm, OnlineStorePartSaleUploadForm } from "./part-sale-upload-form";
 import { Scom205UploadForm } from "./scom205-upload-form";
 import { ServiceInfoUploadForm } from "./service-info-upload-form";
@@ -186,6 +187,7 @@ export default async function UploadPage({
                     <OnlineStorePartSaleUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.partSaleOnline} />
                   )}
                   <Scom205UploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.scom205} />
+                  <LabourSalesUploadForm />
                 </div>
               </>
             }
