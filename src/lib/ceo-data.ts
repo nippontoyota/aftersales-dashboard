@@ -9,6 +9,7 @@ import { isDatePublished } from "./publish-store";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
 import { loadIncentiveSlabTargets } from "./incentive-slabs/store";
 import { countScom205BranchesForDate } from "./scom205/store";
+import { loadGusSplitForMonth, sumGusSplits, type GusSplitBreakdown } from "./gus-split";
 import {
   computeBranchProfitTarget,
   computeBranchRevenueTarget,
@@ -37,6 +38,11 @@ export type CeoBranchRow = {
   bp: BayUtilization | null;
   revenueTarget: CeoRevenueTarget | null;
   profitTarget: CeoProfitTarget | null;
+  /** From Service Info Report raw rows, not BA Tool — see gus-split.ts's
+   * module doc comment for why this is its own figure, not forced to equal
+   * this branch's GUS MTD. Undefined (not zero) when the branch has no
+   * Service Info upload this month at all. */
+  gusSplit: GusSplitBreakdown | undefined;
 };
 
 export type CeoRegionRollup = {
@@ -47,6 +53,7 @@ export type CeoRegionRollup = {
   revenueTarget: CeoRevenueTarget | null;
   profitTarget: CeoProfitTarget | null;
   unitEconomics: CeoUnitEconomics;
+  gusSplit: GusSplitBreakdown;
 };
 
 /** The Profit family, properly weighted at whatever scope (group/region) the
@@ -176,6 +183,7 @@ export type CeoData = {
     revenueTarget: CeoRevenueTarget | null;
     profitTarget: CeoProfitTarget | null;
     unitEconomics: CeoUnitEconomics;
+    gusSplit: GusSplitBreakdown;
   } | null;
   regions: CeoRegionRollup[];
   revenueTrend: { date: string; actual: number | null }[];
@@ -234,13 +242,14 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
 
   const month = date.substring(0, 7);
 
-  const [report, holidays, monthSnapshots, slabTargets, published, scom205Count] = await Promise.all([
+  const [report, holidays, monthSnapshots, slabTargets, published, scom205Count, gusSplitByBranch] = await Promise.all([
     buildReport(date),
     loadReportHolidaySet(),
     loadSnapshotsForMonthUpTo(date),
     loadIncentiveSlabTargets(month),
     isDatePublished(date),
     countScom205BranchesForDate(date),
+    loadGusSplitForMonth(date),
   ]);
 
   if (!report) {
@@ -288,6 +297,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
       bp: BP_BAYS[branch.branch] ? bpBayUtilization(branch.branch, branch.bpuRoMtd, workingDaysElapsed) : null,
       revenueTarget,
       profitTarget: revenueTarget ? computeBranchProfitTarget(revenueTarget, branch.scrapRevenueMtd + branch.usedOilRevenueMtd) : null,
+      gusSplit: gusSplitByBranch.get(branch.branch),
     };
   });
   const rowsByBranch = new Map(allRows.map((r) => [r.branch.branch, r]));
@@ -305,6 +315,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
       revenueTarget: sumRevenueTargets(rows.map((r) => r.revenueTarget)),
       profitTarget: sumProfitTargets(rows.map((r) => r.profitTarget)),
       unitEconomics: computeUnitEconomics(hero, utilization.gs, utilization.bp, workingDaysElapsed),
+      gusSplit: sumGusSplits(rows.map((r) => r.gusSplit)),
     };
   });
 
@@ -330,6 +341,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
       revenueTarget: sumRevenueTargets(allRows.map((r) => r.revenueTarget)),
       profitTarget: sumProfitTargets(allRows.map((r) => r.profitTarget)),
       unitEconomics: computeUnitEconomics(groupHero, groupUtilization.gs, groupUtilization.bp, workingDaysElapsed),
+      gusSplit: sumGusSplits(allRows.map((r) => r.gusSplit)),
     },
     regions,
     // Total Revenue has no single BA Tool column (it's GUS+BPU parts/labour +
