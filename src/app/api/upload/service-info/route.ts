@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
+import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
-import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-info/store";
 import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
@@ -75,12 +76,11 @@ export async function POST(request: Request) {
   // mislabeled backfill can land months away. A genuine false positive now
   // needs HQ (Upload Sheet) to push it through — there's no more self-service
   // click-through.
-  const priorUploads = await loadAllRawUploadRowsBefore("service_info", admin.branch, date);
   const newHash = hashRows(rawRows);
-  const exactMatch = priorUploads.find((u) => hashRows(u.rows) === newHash);
-  if (exactMatch) {
+  const duplicateDate = await findDuplicateBatch("service_info", admin.branch, date, newHash);
+  if (duplicateDate) {
     return NextResponse.json(
-      { error: `This file looks identical to your upload from ${exactMatch.date} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
+      { error: `This file looks identical to your upload from ${duplicateDate} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
       { status: 422 }
     );
   }
@@ -91,20 +91,24 @@ export async function POST(request: Request) {
   }
 
   const uploadedAt = new Date().toISOString();
-  await saveServiceInfoSnapshot({
-    date,
-    branch: admin.branch,
-    uploadedAt,
-    sourceFileName: file.name,
-    counts,
-  });
-  await saveRawUploadRows({
-    reportType: "service_info",
-    date,
-    uploadedAt,
-    sourceFileName: file.name,
-    rows: rawRows.map((data) => ({ branch: admin.branch, data })),
-  });
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query("begin");
+    await saveServiceInfoSnapshot(
+      { date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username },
+      dbClient
+    );
+    await saveRawUploadRows(
+      { reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })), uploadedBy: admin.username, contentHash: newHash },
+      dbClient
+    );
+    await dbClient.query("commit");
+  } catch {
+    await dbClient.query("rollback");
+    return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+  } finally {
+    dbClient.release();
+  }
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }

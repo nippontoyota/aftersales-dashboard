@@ -10,11 +10,14 @@
  * workbook's original CO01B row (27 bays / 6609.6 ideal BPU) is split 4/23
  * by bay count between the two branches — CO01E has no per-branch job-mix
  * data of its own yet, so its ideal BPU is prorated the same way.
+ *
+ * CO01B's GS bay count corrected from 24 to 20 (2026-10-01, user-confirmed —
+ * the workbook figure was wrong; company-wide GS bays is 164, not 168).
  */
 
 export const GS_BAYS: Readonly<Record<string, number>> = {
   CO01A: 24,
-  CO01B: 24,
+  CO01B: 20,
   IR01A: 5,
   KL01A: 10,
   KT01A: 10,
@@ -119,15 +122,19 @@ export function bpBayUtilization(branch: string, bpuRoMtd: number | null, workin
  * ceo-data.ts — and reuses that same object here and for the branch table,
  * rather than three independent recomputations of the same numbers).
  */
-export function sumBayUtilization(utils: (BayUtilization | null)[]): { utilizationPct: number; actualRoMtd: number; idealRoMtd: number } | null {
+export function sumBayUtilization(
+  utils: (BayUtilization | null)[]
+): { utilizationPct: number; actualRoMtd: number; idealRoMtd: number; bays: number } | null {
   let actual = 0;
   let ideal = 0;
+  let bays = 0;
   let any = false;
   for (const u of utils) {
     if (!u) continue;
     any = true;
     actual += u.actualRoMtd;
     ideal += u.idealRoMtd;
+    bays += u.bays;
   }
-  return any && ideal > 0 ? { utilizationPct: actual / ideal, actualRoMtd: actual, idealRoMtd: ideal } : null;
+  return any && ideal > 0 ? { utilizationPct: actual / ideal, actualRoMtd: actual, idealRoMtd: ideal, bays } : null;
 }

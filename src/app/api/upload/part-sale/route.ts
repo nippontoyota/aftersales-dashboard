@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
+import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
 import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { loadPartSaleSnapshot, savePartSaleSnapshot } from "@/lib/part-sale/store";
 import { checkBillOverlap, checkSaleDateSanity } from "@/lib/part-sale/upload-validation";
-import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -74,12 +75,11 @@ export async function POST(request: Request) {
   // request. A genuine false positive now needs HQ (Upload Sheet). Checked
   // against every prior upload this month, not just the most recent one (see
   // raw-upload-rows/store.ts for why).
-  const priorUploads = await loadAllRawUploadRowsBefore("part_sale", admin.branch, date);
   const newHash = hashRows(rawRows);
-  const exactMatch = priorUploads.find((u) => hashRows(u.rows) === newHash);
-  if (exactMatch) {
+  const duplicateDate = await findDuplicateBatch("part_sale", admin.branch, date, newHash);
+  if (duplicateDate) {
     return NextResponse.json(
-      { error: `This file looks identical to your upload from ${exactMatch.date} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
+      { error: `This file looks identical to your upload from ${duplicateDate} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
       { status: 422 }
     );
   }
@@ -90,20 +90,21 @@ export async function POST(request: Request) {
   }
 
   const uploadedAt = new Date().toISOString();
-  await savePartSaleSnapshot({
-    date,
-    branch: admin.branch,
-    uploadedAt,
-    sourceFileName: file.name,
-    counts,
-  });
-  await saveRawUploadRows({
-    reportType: "part_sale",
-    date,
-    uploadedAt,
-    sourceFileName: file.name,
-    rows: rawRows.map((data) => ({ branch: admin.branch, data })),
-  });
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query("begin");
+    await savePartSaleSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username }, dbClient);
+    await saveRawUploadRows(
+      { reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })), uploadedBy: admin.username, contentHash: newHash },
+      dbClient
+    );
+    await dbClient.query("commit");
+  } catch {
+    await dbClient.query("rollback");
+    return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+  } finally {
+    dbClient.release();
+  }
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }

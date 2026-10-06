@@ -23,9 +23,15 @@ function toAmount(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+const INCENTIVE_SLAB_MAX_ROWS = 500;
+
 export function parseIncentiveSlabWorkbook(buffer: Buffer): ParsedIncentiveSlabRow[] {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const workbook = XLSX.read(buffer, { type: "buffer", sheetRows: INCENTIVE_SLAB_MAX_ROWS + 1 });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
+  if (range.e.r >= INCENTIVE_SLAB_MAX_ROWS) {
+    throw new Error(`File has more than ${INCENTIVE_SLAB_MAX_ROWS.toLocaleString()} rows — is this the right file?`);
+  }
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 
   const parsed: ParsedIncentiveSlabRow[] = [];

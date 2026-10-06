@@ -1,43 +1,34 @@
-import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
-import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { StorefrontIcon, TargetIcon, WrenchIcon } from "@/components/dashboard-icons";
 import { tglossText } from "@/components/tgloss-text";
 import { achievementRatio, achievementTone } from "@/lib/aggregate";
 import { adminIdentityLabel } from "@/lib/admin-store";
-import { loadCeoData, type CeoRegionRollup } from "@/lib/ceo-data";
+import { BRANCH_NAMES } from "@/lib/branch-names";
+import { loadCeoData } from "@/lib/ceo-data";
 import { formatCompact, formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { computePace, paceTone } from "@/lib/pace";
-import { computeTrendSeries } from "@/lib/trend";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
-import { MetricSyncProvider } from "../dashboard/metric-sync";
-import { RegionScorecard } from "../dashboard/region-scorecard";
-import { TrendChart } from "../dashboard/trend-chart";
 import { DraftWarning } from "@/components/draft-warning";
+import { CeoShell } from "./ceo-shell";
 import { requireCeoAccess } from "./ceo-guard";
 import { CeoHeader } from "./ceo-header";
+import { RegionCard } from "./region-card";
 import { Sparkline } from "./sparkline";
-import { CEO_HEATMAP_METRICS, CEO_REGION_METRICS, CEO_TREND_METRICS } from "./tkm-metrics";
+import { CEO_HEATMAP_METRICS } from "./tkm-metrics";
+import { UnitEconomicsSection } from "./unit-economics-section";
 
 const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg" } as const;
-const TONE_BAR = { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" } as const;
-
-const REGION_COLOR: Record<CeoRegionRollup["region"], string> = {
-  Central: "var(--color-cat-central)",
-  South: "var(--color-cat-south)",
-  North: "var(--color-cat-north)",
-};
 
 export default async function CeoOverviewPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const admin = await requireCeoAccess();
   return (
-    <AppShell current="ceo" showDashboardLink ceoNav identity={adminIdentityLabel(admin)}>
+    <CeoShell identity={adminIdentityLabel(admin)}>
       <Suspense fallback={<DashboardPageSkeleton heroCards={3} />}>
         <Overview searchParams={searchParams} />
       </Suspense>
-    </AppShell>
+    </CeoShell>
   );
 }
 
@@ -129,12 +120,14 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
           sub="General Service"
           utilization={group.utilization.gs}
           trend={data.gsRoTrend.map((p) => p.actual)}
+          targetPerBayPerDay={group.unitEconomics.gsTargetPerBayPerDay}
         />
         <UtilizationTile
           label="BP Bay Utilization"
           sub="Body & Paint"
           utilization={group.utilization.bp}
           trend={data.bpRoTrend.map((p) => p.actual)}
+          targetPerBayPerDay={group.unitEconomics.bpTargetPerBayPerDay}
         />
       </div>
 
@@ -283,31 +276,18 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         <ProfitTile label="Gross Profit / RO" value={group.profit.blendedGrossProfitPerRo} sub="Gross Profit ÷ total ROs, both channels" strong />
       </div>
 
-      <MetricSyncProvider initialMetric={CEO_TREND_METRICS[0].key}>
-        <div className="mt-4">
-          <TrendChart
-            seriesByMetric={{
-              partsRetail: computeTrendSeries(data.monthSnapshots, "All", "sprInternal", "sprInternalTarget"),
-              bpu: computeTrendSeries(data.monthSnapshots, "All", "bpus", "bpusTarget"),
-              offtake: computeTrendSeries(data.monthSnapshots, "All", "spoDealer", "spoDealerTarget"),
-              pmOc: computeTrendSeries(data.monthSnapshots, "All", "pm", "pmTarget"),
-              tyre: computeTrendSeries(data.monthSnapshots, "All", "tyreActual", "tyreTarget"),
-              battery: computeTrendSeries(data.monthSnapshots, "All", "batteryActuals", "batteryTarget"),
-            }}
-            metrics={CEO_TREND_METRICS}
-            date={data.date}
-            chartHeight={150}
-          />
-        </div>
+      <UnitEconomicsSection group={group.unitEconomics} />
 
-        <div className="mt-4">
-          <RegionScorecard branches={data.report.branches} monthSnapshots={data.monthSnapshots} metrics={CEO_REGION_METRICS} date={data.date} />
-        </div>
-
-        <div className="mt-4">
-          <BranchPerformanceHeatmap branches={data.report.branches} metrics={CEO_HEATMAP_METRICS} date={data.date} monthSnapshots={data.monthSnapshots} holidays={data.holidays} />
-        </div>
-      </MetricSyncProvider>
+      <div className="mt-4">
+        <BranchPerformanceHeatmap
+          branches={data.report.branches}
+          metrics={CEO_HEATMAP_METRICS}
+          date={data.date}
+          monthSnapshots={data.monthSnapshots}
+          holidays={data.holidays}
+          branchNames={BRANCH_NAMES}
+        />
+      </div>
 
       <details className="mt-4 max-w-3xl text-[11px] text-fg-faint">
         <summary className="cursor-pointer select-none font-medium text-fg-subtle hover:text-fg">How these numbers are calculated</summary>
@@ -393,11 +373,15 @@ function UtilizationTile({
   sub,
   utilization,
   trend,
+  targetPerBayPerDay,
 }: {
   label: string;
   sub: string;
-  utilization: { utilizationPct: number; actualRoMtd: number; idealRoMtd: number } | null;
+  utilization: { utilizationPct: number; actualRoMtd: number; idealRoMtd: number; bays: number } | null;
   trend: (number | null)[];
+  /** ROs/jobs per bay per day — shown alongside the bay count below (moved
+   * here from its own "Capacity" tile, 2026-10-01, at the user's request). */
+  targetPerBayPerDay: number | null;
 }) {
   const tone = achievementTone(utilization?.utilizationPct ?? null);
   return (
@@ -414,6 +398,12 @@ function UtilizationTile({
           {formatCompact(utilization.actualRoMtd)} ROs vs {formatCompact(utilization.idealRoMtd)} ideal
         </div>
       ) : null}
+      {utilization ? (
+        <div className="mt-0.5 text-[11px] text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">
+          {formatCompact(utilization.bays)} bays
+          {targetPerBayPerDay !== null ? ` · ${formatNumber(targetPerBayPerDay)} ROs/bay/day target` : ""}
+        </div>
+      ) : null}
       <div className={`drop-shadow-sm ${TONE_TEXT[tone]}`}>
         <Sparkline points={trend} className="mt-2 opacity-80 transition-opacity duration-200 group-hover:opacity-100" />
       </div>
@@ -421,46 +411,3 @@ function UtilizationTile({
   );
 }
 
-function RegionCard({ region, date }: { region: CeoRegionRollup; date: string }) {
-  const gsTone = achievementTone(region.utilization.gs?.utilizationPct ?? null);
-  const bpTone = achievementTone(region.utilization.bp?.utilizationPct ?? null);
-  return (
-    <Link
-      href={`/ceo/branches?date=${date}&region=${region.region}`}
-      className="group block rounded-xl border border-border-subtle bg-surface/60 p-4 shadow-[0_4px_20px_rgb(0,0,0,0.02)] backdrop-blur-sm transition-all duration-200 hover:-translate-y-1 hover:border-accent/40 hover:bg-surface hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)]"
-    >
-      <div className="flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-tight text-fg">
-          <span className="h-2 w-2 rounded-full shadow-sm" style={{ background: REGION_COLOR[region.region] }} />
-          {region.region}
-        </span>
-        <span className="text-[11px] font-medium text-fg-faint transition-colors duration-200 group-hover:text-fg-subtle">{region.branches.length} branches</span>
-      </div>
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(region.hero.totalRevenueStreamMtd)}</span>
-        <span className="text-[11px] text-fg-subtle transition-colors duration-200 group-hover:text-fg">· {formatCompactCurrency(region.hero.profitMtd)} profit</span>
-      </div>
-      <div className="mt-4 space-y-2">
-        <UtilizationBar label="GS" pct={region.utilization.gs?.utilizationPct ?? null} tone={gsTone} />
-        <UtilizationBar label="BP" pct={region.utilization.bp?.utilizationPct ?? null} tone={bpTone} />
-      </div>
-    </Link>
-  );
-}
-
-function UtilizationBar({ label, pct, tone }: { label: string; pct: number | null; tone: ReturnType<typeof achievementTone> }) {
-  return (
-    <div className="flex items-center gap-2 text-[11px]">
-      <span className="w-6 shrink-0 font-medium text-fg-subtle">{label}</span>
-      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2 shadow-inner">
-        <span
-          className={`block h-full rounded-full transition-all duration-1000 ease-out ${TONE_BAR[tone]}`}
-          style={{ width: `${Math.min(100, Math.round((pct ?? 0) * 100))}%` }}
-        />
-      </span>
-      <span className={`w-9 shrink-0 text-right tabular-nums font-medium ${TONE_TEXT[tone]}`}>
-        {pct === null ? "—" : `${Math.round(pct * 100)}%`}
-      </span>
-    </div>
-  );
-}

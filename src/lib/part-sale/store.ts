@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { pool } from "../db";
 import type { PartSaleCounts } from "./parse";
 
@@ -8,13 +9,17 @@ export type PartSaleSnapshot = {
   uploadedAt: string; // ISO timestamp
   sourceFileName: string;
   counts: PartSaleCounts;
+  /** The admin account (username) that performed this upload — undefined/null
+   * for uploads saved before this column existed. See db/schema.sql. */
+  uploadedBy?: string | null;
 };
 
-export async function savePartSaleSnapshot(snapshot: PartSaleSnapshot): Promise<void> {
-  await pool.query(
+/** Pass `client` to run inside a caller-managed transaction. */
+export async function savePartSaleSnapshot(snapshot: PartSaleSnapshot, client?: PoolClient): Promise<void> {
+  await (client ?? pool).query(
     `insert into part_sale_snapshots
-       (date, branch, uploaded_at, source_file_name, engine_flush, injector_cleaner, synthetic_oil_ltrs, brake_cleaning_spray, external_sales, diy_count, diy_revenue)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (date, branch, uploaded_at, source_file_name, engine_flush, injector_cleaner, synthetic_oil_ltrs, brake_cleaning_spray, external_sales, diy_count, diy_revenue, uploaded_by)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      on conflict (date, branch) do update set
        uploaded_at = excluded.uploaded_at,
        source_file_name = excluded.source_file_name,
@@ -24,7 +29,8 @@ export async function savePartSaleSnapshot(snapshot: PartSaleSnapshot): Promise<
        brake_cleaning_spray = excluded.brake_cleaning_spray,
        external_sales = excluded.external_sales,
        diy_count = excluded.diy_count,
-       diy_revenue = excluded.diy_revenue`,
+       diy_revenue = excluded.diy_revenue,
+       uploaded_by = excluded.uploaded_by`,
     [
       snapshot.date,
       snapshot.branch,
@@ -37,6 +43,7 @@ export async function savePartSaleSnapshot(snapshot: PartSaleSnapshot): Promise<
       snapshot.counts.externalSales,
       snapshot.counts.diyCount,
       snapshot.counts.diyRevenue,
+      snapshot.uploadedBy ?? null,
     ]
   );
 }

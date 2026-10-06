@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
+import { pool } from "@/lib/db";
 import { parseBaToolWorkbook } from "@/lib/ba-tool/parse";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { saveSnapshot } from "@/lib/snapshot-store";
@@ -46,19 +47,18 @@ export async function POST(request: Request) {
   }
 
   const uploadedAt = new Date().toISOString();
-  await saveSnapshot({
-    date,
-    uploadedAt,
-    sourceFileName: file.name,
-    branches: parsed.branches,
-  });
-  await saveRawUploadRows({
-    reportType: "ba_tool",
-    date,
-    uploadedAt,
-    sourceFileName: file.name,
-    rows: parsed.rawRows,
-  });
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query("begin");
+    await saveSnapshot({ date, uploadedAt, sourceFileName: file.name, branches: parsed.branches }, dbClient);
+    await saveRawUploadRows({ reportType: "ba_tool", date, uploadedAt, sourceFileName: file.name, rows: parsed.rawRows, uploadedBy: admin.username }, dbClient);
+    await dbClient.query("commit");
+  } catch {
+    await dbClient.query("rollback");
+    return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+  } finally {
+    dbClient.release();
+  }
 
   return NextResponse.json({
     success: true,

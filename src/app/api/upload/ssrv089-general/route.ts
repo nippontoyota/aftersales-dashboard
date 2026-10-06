@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
+import { recomputeAfterSsrv089Upload } from "@/lib/cancellation/adjustment-recompute";
+import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
-import { loadAllRawUploadRowsBefore, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { loadSsrv089Snapshot, saveSsrv089Snapshot } from "@/lib/ssrv089/store";
-import { checkInvoiceDocDateSanity } from "@/lib/ssrv089/upload-validation";
+import { checkInvoiceDocDateSanity, checkInvoiceOverlap } from "@/lib/ssrv089/upload-validation";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -72,32 +74,46 @@ export async function POST(request: Request) {
   // 14th, which is exactly why every prior date is checked here now, not
   // just the most recent one. A genuine false positive now needs HQ
   // (Upload Sheet).
-  const priorUploads = await loadAllRawUploadRowsBefore("ssrv089", admin.branch, date);
   const newHash = hashRows(rawRows);
-  const exactMatch = priorUploads.find((u) => hashRows(u.rows) === newHash);
-  if (exactMatch) {
+  const duplicateDate = await findDuplicateBatch("ssrv089", admin.branch, date, newHash);
+  if (duplicateDate) {
     return NextResponse.json(
-      { error: `This file looks identical to your upload from ${exactMatch.date} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
+      { error: `This file looks identical to your upload from ${duplicateDate} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
       { status: 422 }
     );
   }
 
+  // Partial-duplicate check (2026-10-05) — catches a resend that isn't
+  // byte-identical to any single prior upload (extra/missing rows), which
+  // the exact-hash check above can't see. See ssrv089/upload-validation.ts.
+  const overlap = await checkInvoiceOverlap(admin.branch, rawRows, date);
+  if (overlap.duplicate) {
+    return NextResponse.json({ error: `${overlap.message} If this really is new data, contact HQ (Upload Sheet).` }, { status: 422 });
+  }
+
   const uploadedAt = new Date().toISOString();
-  await saveSsrv089Snapshot({
-    date,
-    branch: admin.branch,
-    variant: "general",
-    uploadedAt,
-    sourceFileName: file.name,
-    totals,
-  });
-  await saveRawUploadRows({
-    reportType: "ssrv089",
-    date,
-    uploadedAt,
-    sourceFileName: file.name,
-    rows: rawRows.map((data) => ({ branch: admin.branch, data })),
-  });
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query("begin");
+    await saveSsrv089Snapshot(
+      { date, branch: admin.branch, variant: "general", uploadedAt, sourceFileName: file.name, totals, uploadedBy: admin.username },
+      dbClient
+    );
+    await saveRawUploadRows(
+      { reportType: "ssrv089", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })), uploadedBy: admin.username, contentHash: newHash },
+      dbClient
+    );
+    await dbClient.query("commit");
+  } catch {
+    await dbClient.query("rollback");
+    return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+  } finally {
+    dbClient.release();
+  }
+
+  // Outside the upload transaction — a recompute failure shouldn't roll back
+  // an otherwise-successful upload (see adjustment-recompute.ts).
+  await recomputeAfterSsrv089Upload(admin.branch, date);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, totals });
 }

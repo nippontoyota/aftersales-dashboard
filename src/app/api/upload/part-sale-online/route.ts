@@ -69,6 +69,7 @@ export async function POST(request: Request) {
     uploadedAt,
     sourceFileName: file.name,
     counts,
+    uploadedBy: admin.username,
   });
   await saveRawUploadRows({
     reportType: "part_sale",
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
     uploadedAt,
     sourceFileName: file.name,
     rows: rawRows.map((data) => ({ branch: onlineBranch, data })),
+    uploadedBy: admin.username,
   });
 
   return NextResponse.json({ success: true, date, branch: onlineBranch, counts });

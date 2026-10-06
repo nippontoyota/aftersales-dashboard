@@ -186,13 +186,22 @@ function parseDataRow(row: string[], col: Record<string, number>): CancellationR
   const cancelAt = toIsoDateTime(cancelCell);
 
   const beforeTax = toNumber(firstMoney(cell("before")));
-  const tax = toNumber(firstMoney(cell("tax")));
+
+  const taxCell = cell("tax");
+  const afterCell = cell("after");
+
+  // "Tax" and "Tot Sales After Tax" sometimes get merged into the Tax cell
+  // when both amounts are six figures wide (e.g. a large insurance
+  // cancellation — "117,818.23 772,364.00" in one cell), leaving the After
+  // Tax cell empty. Recover it by splitting the Tax cell's two money values.
+  const taxMoneyValues = taxCell.match(/-?[\d,]+\.\d{1,2}/g) ?? [];
+  const taxAfterMerged = !afterCell.trim() && taxMoneyValues.length >= 2;
+  const tax = toNumber(taxAfterMerged ? taxMoneyValues[0] ?? "" : firstMoney(taxCell));
 
   // "Tot Sales After Tax" sometimes swallows a non-wrapping "Cancel By" name
   // ("584,394.00 Rahul V G" with an empty Cancel By cell). Split it back out.
-  const afterCell = cell("after");
   const afterMatch = afterCell.match(/^([\d,]+\.\d{2})\s*(.*)$/);
-  const afterTax = toNumber(afterMatch ? afterMatch[1] : firstMoney(afterCell));
+  const afterTax = toNumber(taxAfterMerged ? taxMoneyValues[1] ?? "" : afterMatch ? afterMatch[1] : firstMoney(afterCell));
   let cancelledBy = cell("cancelby").replace(/\s+/g, " ").trim() || null;
   if (!cancelledBy && afterMatch && afterMatch[2].trim()) cancelledBy = afterMatch[2].trim();
 

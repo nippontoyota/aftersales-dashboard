@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { pool } from "./db";
 import { BA_TOOL_COLUMNS, type BaToolKey } from "./ba-tool/columns";
 import type { BaToolBranchRow } from "./ba-tool/parse";
@@ -43,12 +44,11 @@ const COLUMN_NAME: Record<Exclude<BaToolKey, "branch">, string> = {
   serviceUnits: "service_units",
 };
 
-export async function saveSnapshot(snapshot: Snapshot): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    await client.query("delete from ba_tool_snapshots where date = $1", [snapshot.date]);
-
+/** Pass `client` to participate in a caller-managed transaction (the caller
+ * owns BEGIN/COMMIT/ROLLBACK/release). When omitted, manages its own tx. */
+export async function saveSnapshot(snapshot: Snapshot, client?: PoolClient): Promise<void> {
+  const run = async (qc: Pick<PoolClient, "query">) => {
+    await qc.query("delete from ba_tool_snapshots where date = $1", [snapshot.date]);
     for (const row of snapshot.branches) {
       const columns = ["date", "branch", "uploaded_at", "source_file_name", ...NUMERIC_KEYS.map((k) => COLUMN_NAME[k])];
       const values: unknown[] = [
@@ -59,15 +59,25 @@ export async function saveSnapshot(snapshot: Snapshot): Promise<void> {
         ...NUMERIC_KEYS.map((k) => (typeof row[k] === "number" ? row[k] : null)),
       ];
       const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
-      await client.query(`insert into ba_tool_snapshots (${columns.join(", ")}) values (${placeholders})`, values);
+      await qc.query(`insert into ba_tool_snapshots (${columns.join(", ")}) values (${placeholders})`, values);
     }
+  };
 
-    await client.query("commit");
+  if (client) {
+    await run(client);
+    return;
+  }
+
+  const ownClient = await pool.connect();
+  try {
+    await ownClient.query("begin");
+    await run(ownClient);
+    await ownClient.query("commit");
   } catch (err) {
-    await client.query("rollback");
+    await ownClient.query("rollback");
     throw err;
   } finally {
-    client.release();
+    ownClient.release();
   }
 }
 

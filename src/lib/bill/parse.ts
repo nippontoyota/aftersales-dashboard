@@ -68,7 +68,8 @@ export async function parseBillPdf(buffer: Buffer): Promise<BillParseResult> {
 
 /** Reads the invoice's date as ISO `YYYY-MM-DD`. Handles the two Nippon
  * formats: format 2's "Invoice Date : 29-8-2026" (D-M-YYYY) and format 1's
- * bare "29/08/2026" (DD/MM/YYYY) near the top of the page. Indian
+ * bare "29/08/2026" (DD/MM/YYYY) near the top of the page, plus the
+ * Kayamkulam branch template's "Dated\n26-Sep-26" (D-Mon-YY). Indian
  * day-first ordering throughout. */
 export function extractInvoiceDate(text: string): string | null {
   const labelled = [
@@ -76,6 +77,7 @@ export function extractInvoiceDate(text: string): string | null {
     /Bill\s*Date\s*:?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
     /Invoice\s*Date\s*:?\s*(\d{4}-\d{2}-\d{2})/i,
     /Acknowledgement\s*Date\s*:?\s*(\d{4}-\d{2}-\d{2})/i,
+    /\bDated\s*:?\s*\n?\s*(\d{1,2}[-\s][A-Za-z]{3}[-\s]\d{2,4})/i,
   ];
   for (const pat of labelled) {
     const m = text.match(pat);
@@ -90,14 +92,26 @@ export function extractInvoiceDate(text: string): string | null {
   return loose ? toIsoDate(loose[1]) : null;
 }
 
-/** `dd/mm/yyyy`, `d-m-yyyy`, `dd-mm-yy`, or `yyyy-mm-dd` → `yyyy-mm-dd`.
- * Everything day-first except an already-ISO string. Returns null if the
- * result isn't a real calendar date. */
+const MONTH_ABBREVIATIONS: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+/** `dd/mm/yyyy`, `d-m-yyyy`, `dd-mm-yy`, `d-Mon-yy`, or `yyyy-mm-dd` →
+ * `yyyy-mm-dd`. Everything day-first except an already-ISO string. Returns
+ * null if the result isn't a real calendar date. */
 function toIsoDate(raw: string): string | null {
   const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const nameMatch = raw.match(/^(\d{1,2})[-\s]([A-Za-z]{3})[-\s](\d{2,4})$/);
   let y: number, mo: number, d: number;
   if (isoMatch) {
     [, y, mo, d] = isoMatch.map(Number) as [number, number, number, number];
+  } else if (nameMatch) {
+    mo = MONTH_ABBREVIATIONS[nameMatch[2].toLowerCase()];
+    if (!mo) return null;
+    d = Number(nameMatch[1]);
+    y = Number(nameMatch[3]);
+    if (y < 100) y += 2000;
   } else {
     const parts = raw.split(/[-/]/).map(Number);
     if (parts.length !== 3) return null;
@@ -149,6 +163,7 @@ export function extractTaxableValue(text: string): number | null {
     fromLineTotalRow, // Format 2: "Line Total: ₹ 22,903.68 ₹ 2,061.33 ..."
     fromTotalLabelBlock, // multi-item invoices: "Total:" row wrapped onto its own lines
     fromGstRate, // Format 1: CGST amount ÷ its rate = taxable base
+    fromCentralStateTaxIdentity, // CGST=SGST pair + their sum identifies the taxable outlier regardless of column order
     fromTotalsRow, // Format 1: "<afterTax> <tax> <taxable> <disc> <total>" row
     fromGrandTotalMinusGst, // generic: grand total − all GST amounts
     fromMathHeuristic, // legacy: scan every line for a self-consistent set
@@ -255,6 +270,57 @@ function fromGstRate(text: string): number | null {
     if (gstTotal !== null && Math.abs(taxable + gstTotal - grand) > 1.5) return null;
   }
   return taxable;
+}
+
+/**
+ * The Kayamkulam (KY01A) branch template — and any other invoice whose grand
+ * total we can't find (grandTotalWithPaise/Rounded return null, e.g. because
+ * this template's ₹ glyph comes out of pdf.js as "ī") — has its per-line and
+ * summary-row tokens in whatever left-to-right order the source PDF was
+ * drawn in, not a fixed column order. CGST and SGST are always equal for an
+ * intrastate sale, and their sum is the line's total tax, so a 4-number line
+ * containing that pair identifies the remaining outlier as the taxable value
+ * regardless of column order. Without this, fromTotalsRow's "first three
+ * tokens are afterTax/tax/taxable" assumption can misfire on this template —
+ * the per-line total-tax/SGST/CGST triple coincidentally also satisfies its
+ * "afterTax = tax + taxable" check, so it returns the CGST amount instead of
+ * the real taxable value, and — because the grand-total sanity check is
+ * skipped when grand is null — nothing catches it. Confirmed 2026-09-29 on
+ * three KY01A uploads (ATJ/26-27/021, /022, /023) that had a tax amount
+ * saved instead of the taxable value. Prefers a line literally labelled
+ * "Total" (the invoice's aggregate row) over a single line item's row when
+ * both match, since a multi-item invoice's per-line rows satisfy this same
+ * identity individually.
+ */
+function fromCentralStateTaxIdentity(text: string): number | null {
+  let best: { taxable: number; hasTotalLabel: boolean } | null = null;
+
+  for (const line of text.split("\n")) {
+    const nums = moneyTokens(line);
+    if (nums.length !== 4) continue;
+    const hasTotalLabel = /^\s*Total\b/i.test(line);
+
+    for (let a = 0; a < 4; a++) {
+      for (let b = a + 1; b < 4; b++) {
+        const half = nums[a];
+        if (half <= 0 || Math.abs(half - nums[b]) > 0.02) continue;
+
+        const rest = [0, 1, 2, 3].filter((i) => i !== a && i !== b);
+        for (const sumIdx of rest) {
+          if (Math.abs(nums[sumIdx] - 2 * half) > 0.05) continue;
+          const taxableIdx = rest.find((i) => i !== sumIdx)!;
+          const taxable = nums[taxableIdx];
+          if (taxable <= 0 || Math.abs(taxable - half) < 0.5) continue;
+
+          if (!best || (hasTotalLabel && !best.hasTotalLabel) || (hasTotalLabel === best.hasTotalLabel && taxable > best.taxable)) {
+            best = { taxable, hasTotalLabel };
+          }
+        }
+      }
+    }
+  }
+
+  return best ? best.taxable : null;
 }
 
 /**

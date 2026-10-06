@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
+import { pool } from "@/lib/db";
 import { totalsMatch } from "@/lib/duplicate-detection";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
@@ -92,21 +93,24 @@ export async function POST(request: Request) {
   }
 
   const uploadedAt = new Date().toISOString();
-  await saveScom205Snapshot({
-    date,
-    branch: admin.branch,
-    uploadedAt,
-    sourceFileName: file.name,
-    totals,
-    stockAndServiceRate,
-  });
-  await saveRawUploadRows({
-    reportType: "scom205",
-    date,
-    uploadedAt,
-    sourceFileName: file.name,
-    rows: rawRows.map((data) => ({ branch: admin.branch, data })),
-  });
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query("begin");
+    await saveScom205Snapshot(
+      { date, branch: admin.branch, uploadedAt, sourceFileName: file.name, totals, stockAndServiceRate, uploadedBy: admin.username },
+      dbClient
+    );
+    await saveRawUploadRows(
+      { reportType: "scom205", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })), uploadedBy: admin.username },
+      dbClient
+    );
+    await dbClient.query("commit");
+  } catch {
+    await dbClient.query("rollback");
+    return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+  } finally {
+    dbClient.release();
+  }
 
   return NextResponse.json({ success: true, date, branch: admin.branch, totals });
 }

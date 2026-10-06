@@ -203,6 +203,7 @@ export function BranchPerformanceHeatmap({
   date,
   monthSnapshots,
   holidays: holidaysProp,
+  branchNames,
 }: {
   branches: BranchReport[];
   /** Defaults to the main dashboard's own set (TGLOSS Revenue); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics instead. */
@@ -213,7 +214,14 @@ export function BranchPerformanceHeatmap({
   monthSnapshots?: Snapshot[];
   /** HQ-flagged report_holidays — required whenever `date` is passed (pace mode), so the pace grading here matches every other dashboard (2026-09-29). */
   holidays?: string[];
+  /** Branch code -> display label, e.g. branch-names.ts's BRANCH_NAMES.
+   * Omitted by every existing caller (unchanged — shows the raw code); the
+   * CEO page passes it to show city names instead (2026-10-01). A plain
+   * object, not a function, since this crosses the server/client boundary as
+   * a prop from a Server Component page. */
+  branchNames?: Record<string, string>;
 }) {
+  const branchName = (code: string) => branchNames?.[code] ?? code;
   const paceMode = Boolean(date);
   const holidays = useMemo(() => new Set(holidaysProp ?? []), [holidaysProp]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -348,7 +356,7 @@ export function BranchPerformanceHeatmap({
                             type="button"
                             onClick={() => toggle(b.branch)}
                             className="inline-flex items-center gap-1 rounded hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                            title={`${b.branch} includes ${breakdown.onlineBranchCode} (online store) — click to split Offtake back apart`}
+                            title={`${branchName(b.branch)} includes ${branchName(breakdown.onlineBranchCode)} (online store) — click to split Offtake back apart`}
                           >
                             <ExpandIcon open={isOpen} />
                           </button>
@@ -358,12 +366,12 @@ export function BranchPerformanceHeatmap({
                             type="button"
                             onClick={() => setDrilldownBranch(isDrilldownOpen ? null : b.branch)}
                             className="rounded hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                            title={`${b.branch} — click for detail`}
+                            title={`${branchName(b.branch)} — click for detail`}
                           >
-                            {b.branch}
+                            {branchName(b.branch)}
                           </button>
                         ) : (
-                          b.branch
+                          branchName(b.branch)
                         )}
                       </span>
                     </td>
@@ -372,7 +380,7 @@ export function BranchPerformanceHeatmap({
                       const target = typeof m.target === "number" ? m.target : (b[m.target] as number | null);
                       return (
                         <td key={m.label} className="p-0">
-                          <MetricCell actual={actual} target={target} label={m.label} branch={b.branch} date={date} holidays={holidays} />
+                          <MetricCell actual={actual} target={target} label={m.label} branch={branchName(b.branch)} date={date} holidays={holidays} />
                         </td>
                       );
                     })}
@@ -380,11 +388,11 @@ export function BranchPerformanceHeatmap({
                   {breakdown && isOpen ? (
                     <>
                       <tr key={`${b.branch}-own`} className="text-[11px] text-fg-faint">
-                        <td className="whitespace-nowrap py-0.5 pr-2 text-right">└ {b.branch} (physical)</td>
+                        <td className="whitespace-nowrap py-0.5 pr-2 text-right">└ {branchName(b.branch)} (physical)</td>
                         {metrics.map((m, i) =>
                           i === offtakeColumnIndex ? (
                             <td key={m.label} className="p-0">
-                              <MetricCell actual={breakdown.ownOfftake} target={breakdown.ownOfftakeTarget} label={`${m.label} (physical)`} branch={b.branch} date={date} holidays={holidays} />
+                              <MetricCell actual={breakdown.ownOfftake} target={breakdown.ownOfftakeTarget} label={`${m.label} (physical)`} branch={branchName(b.branch)} date={date} holidays={holidays} />
                             </td>
                           ) : (
                             <td key={m.label} className="p-0">
@@ -394,7 +402,7 @@ export function BranchPerformanceHeatmap({
                         )}
                       </tr>
                       <tr key={`${b.branch}-online`} className="text-[11px] text-fg-faint">
-                        <td className="whitespace-nowrap py-0.5 pr-2 text-right">└ {breakdown.onlineBranchCode} (online)</td>
+                        <td className="whitespace-nowrap py-0.5 pr-2 text-right">└ {branchName(breakdown.onlineBranchCode)} (online)</td>
                         {metrics.map((m, i) =>
                           i === offtakeColumnIndex ? (
                             <td key={m.label} className="p-0">
@@ -402,7 +410,7 @@ export function BranchPerformanceHeatmap({
                                 actual={breakdown.onlineOfftake}
                                 target={breakdown.onlineOfftakeTarget}
                                 label={`${m.label} (online)`}
-                                branch={breakdown.onlineBranchCode}
+                                branch={branchName(breakdown.onlineBranchCode)}
                                 date={date}
                                 holidays={holidays}
                               />

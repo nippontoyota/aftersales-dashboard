@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { pool } from "../db";
 import type { ServiceInfoCounts } from "./parse";
 import {
@@ -13,13 +14,17 @@ export type ServiceInfoSnapshot = {
   uploadedAt: string; // ISO timestamp
   sourceFileName: string;
   counts: ServiceInfoCounts;
+  /** The admin account (username) that performed this upload — undefined/null
+   * for uploads saved before this column existed. See db/schema.sql. */
+  uploadedBy?: string | null;
 };
 
-export async function saveServiceInfoSnapshot(snapshot: ServiceInfoSnapshot): Promise<void> {
-  await pool.query(
+/** Pass `client` to run inside a caller-managed transaction. */
+export async function saveServiceInfoSnapshot(snapshot: ServiceInfoSnapshot, client?: PoolClient): Promise<void> {
+  await (client ?? pool).query(
     `insert into service_info_snapshots
-       (date, branch, uploaded_at, source_file_name, wheel_balancing, wheel_alignment, brake_skimming, evaporator_cleaning, vas_revenue)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (date, branch, uploaded_at, source_file_name, wheel_balancing, wheel_alignment, brake_skimming, evaporator_cleaning, vas_revenue, uploaded_by)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      on conflict (date, branch) do update set
        uploaded_at = excluded.uploaded_at,
        source_file_name = excluded.source_file_name,
@@ -27,7 +32,8 @@ export async function saveServiceInfoSnapshot(snapshot: ServiceInfoSnapshot): Pr
        wheel_alignment = excluded.wheel_alignment,
        brake_skimming = excluded.brake_skimming,
        evaporator_cleaning = excluded.evaporator_cleaning,
-       vas_revenue = excluded.vas_revenue`,
+       vas_revenue = excluded.vas_revenue,
+       uploaded_by = excluded.uploaded_by`,
     [
       snapshot.date,
       snapshot.branch,
@@ -38,6 +44,7 @@ export async function saveServiceInfoSnapshot(snapshot: ServiceInfoSnapshot): Pr
       snapshot.counts.brakeSkimming,
       snapshot.counts.evaporatorCleaning,
       snapshot.counts.vasRevenue,
+      snapshot.uploadedBy ?? null,
     ]
   );
 }

@@ -6,6 +6,8 @@ import { loadAllPartSaleSnapshotsForDate, loadAllPartSaleSnapshotsForMonthUpTo }
 import type { PartSaleSnapshot } from "./part-sale/store";
 import { loadAllSsrv089SnapshotsForMonthUpTo } from "./ssrv089/store";
 import type { Ssrv089Snapshot } from "./ssrv089/store";
+import { loadAllSsrv089BpGreySnapshotsForMonthUpTo } from "./ssrv089-bp/store";
+import type { Ssrv089BpGreySnapshot } from "./ssrv089-bp/store";
 import { loadCancelledAccessoriesAdjustmentForMonth } from "./ssrv089/cancellation-adjustment";
 import type { CancelledAccessoriesAdjustment } from "./ssrv089/cancellation-adjustment";
 import { loadCrossMonthReplacementAdjustmentForMonth } from "./cancellation/cross-month-replacement";
@@ -118,9 +120,12 @@ export type BranchReport = {
 
   // GUS/BPU Parts & Labour MTD (Rs) — scom205's cumulative revenue rows,
   // GUS additionally netted against the branch's cumulative Accessories
-  // sales from SSRV089 (General variant only). MTD-only, no daily figure —
-  // that's how the user defined these. Null whenever scom205 hasn't been
-  // uploaded for this branch/date yet.
+  // sales from SSRV089 (General variant only). Both also have Grey-brand
+  // (non-Toyota) Cost & Sales revenue added back in, for branches in
+  // GREY_REVENUE_BRANCHES (TI01A only for now) — scom205 excludes Grey
+  // entirely, confirmed 2026-10-01. MTD-only, no daily figure — that's how
+  // the user defined these. Null whenever scom205 hasn't been uploaded for
+  // this branch/date yet.
   gusPartsMtd: number | null;
   gusLabourMtd: number | null;
   bpuPartsMtd: number | null;
@@ -202,6 +207,18 @@ export type BranchReport = {
   profitMtd: number | null;
   gsGrossProfitPerRoMtd: number | null;
   bpGrossProfitPerRoMtd: number | null;
+  // Revenue per RO (2026-10-01, CEO dashboard) — raw Labour+Parts revenue,
+  // no 20%-of-parts margin weighting (contrast with the Profit/RO fields
+  // above). Same GS/BP-only scope as those — excludes External Sales,
+  // TGLOSS and scrap/oil, which aren't split by channel.
+  gsRevenuePerRoMtd: number | null;
+  bpRevenuePerRoMtd: number | null;
+  /** (GS + BP) revenue ÷ (GS + BP) ROs — note this is narrower-scope than
+   * group.profit.blendedGrossProfitPerRo (ceo-data.ts), which divides the
+   * full modelled profitMtd (incl. TGLOSS/External Sales) by total ROs. The
+   * two aren't directly comparable as a margin ratio; this field stays
+   * internally consistent with its own gs/bpRevenuePerRoMtd split instead. */
+  blendedRevenuePerRoMtd: number | null;
 };
 
 export type Report = {
@@ -253,6 +270,17 @@ function sumBy<T>(snapshots: T[], get: (s: T) => number): number | null {
  * be removed from its region in regions.ts, so it doesn't silently count
  * toward a region/company trend total either. */
 const DEACTIVATED_BRANCHES = new Set<string>(["CO01D"]);
+
+/** Branches where Grey-brand (non-Toyota) Cost & Sales revenue is added into
+ * GUS/BPU Parts/Labour MTD. scom205's own GUS/BPU Sp/Lab Rev MTD excludes
+ * Grey-brand transactions entirely (confirmed 2026-10-01 against TI01A's own
+ * data — see ssrv089/parse.ts and ssrv089-bp/parse.ts), so without this a
+ * Grey job's revenue doesn't show up anywhere on the dashboard. Widened
+ * 2026-10-01 to every branch found carrying Grey-brand rows in a September
+ * company-wide check (TI01A, CO01A, CO01B, KT01A, MV01A, TL01A, TR01A) —
+ * every other branch came back clean. New branches should only be added
+ * here after checking their own data the same way. */
+const GREY_REVENUE_BRANCHES = new Set<string>(["TI01A", "CO01A", "CO01B", "KT01A", "MV01A", "TL01A", "TR01A"]);
 
 function excludeDeactivatedBranches(rows: BaToolBranchRow[]): BaToolBranchRow[] {
   return rows.filter((row) => !DEACTIVATED_BRANCHES.has(row.branch));
@@ -382,6 +410,7 @@ function computeBranchReport(
   partSaleToday: PartSaleSnapshot | undefined,
   partSaleMonth: PartSaleSnapshot[],
   ssrv089GeneralMonth: Ssrv089Snapshot[],
+  ssrv089BpGreyMonth: Ssrv089BpGreySnapshot[],
   scom205Today: Scom205Snapshot | undefined,
   billRevenue: { scrapRevenue: number; usedOilRevenue: number },
   billRevenueForTheDay: { scrapRevenue: number; usedOilRevenue: number },
@@ -404,6 +433,16 @@ function computeBranchReport(
     accessoriesPartSaleMtdRaw === null ? null : accessoriesPartSaleMtdRaw - (cancelledAccessoriesAdjustment?.partSale ?? 0);
   const accessoriesLabourSaleMtd =
     accessoriesLabourSaleMtdRaw === null ? null : accessoriesLabourSaleMtdRaw - (cancelledAccessoriesAdjustment?.labourSale ?? 0);
+
+  // Grey-brand (non-Toyota) revenue — see GREY_REVENUE_BRANCHES above. 0 for
+  // every other branch, and 0 (not null) when this branch has no Grey rows
+  // this month, since absence of Grey revenue should never null out GUS/BPU
+  // Parts/Labour MTD.
+  const greyEligible = GREY_REVENUE_BRANCHES.has(branch);
+  const greyGsPartSaleMtd = greyEligible ? sumBy(ssrv089GeneralMonth, (s) => s.totals.greyPartSale) ?? 0 : 0;
+  const greyGsLabourSaleMtd = greyEligible ? sumBy(ssrv089GeneralMonth, (s) => s.totals.greyLabourSale) ?? 0 : 0;
+  const greyBpPartsSaleMtd = greyEligible ? sumBy(ssrv089BpGreyMonth, (s) => s.totals.greyPartsSale) ?? 0 : 0;
+  const greyBpLabourSaleMtd = greyEligible ? sumBy(ssrv089BpGreyMonth, (s) => s.totals.greyLabourSale) ?? 0 : 0;
   const externalSalesFromPartsMtd = sumBy(partSaleMonth, (s) => s.counts.externalSales);
   const partsRetailAchievementForTheMonth = t("sprInternal");
 
@@ -426,15 +465,15 @@ function computeBranchReport(
   const gusPartsMtd = bodyPaintOnly
     ? 0
     : scom205Today && accessoriesPartSaleMtd !== null
-      ? scom205Today.totals.gusSpRevMtd - accessoriesPartSaleMtd - (crossMonthReplacementAdjustment?.partSale ?? 0)
+      ? scom205Today.totals.gusSpRevMtd - accessoriesPartSaleMtd - (crossMonthReplacementAdjustment?.partSale ?? 0) + greyGsPartSaleMtd
       : null;
   const gusLabourMtd = bodyPaintOnly
     ? 0
     : scom205Today && accessoriesLabourSaleMtd !== null
-      ? scom205Today.totals.gusLabRevMtd - accessoriesLabourSaleMtd - (crossMonthReplacementAdjustment?.labourSale ?? 0)
+      ? scom205Today.totals.gusLabRevMtd - accessoriesLabourSaleMtd - (crossMonthReplacementAdjustment?.labourSale ?? 0) + greyGsLabourSaleMtd
       : null;
-  const bpuPartsMtd = scom205Today?.totals.bpuSpRevMtd ?? null;
-  const bpuLabourMtd = scom205Today?.totals.bpuLabRevMtd ?? null;
+  const bpuPartsMtd = scom205Today ? scom205Today.totals.bpuSpRevMtd + greyBpPartsSaleMtd : null;
+  const bpuLabourMtd = scom205Today ? scom205Today.totals.bpuLabRevMtd + greyBpLabourSaleMtd : null;
   const externalSalesMtd = externalSalesFromPartsMtd ?? (bodyPaintOnly ? 0 : null);
   const sprExternalMtd = t("sprExternal");
 
@@ -572,6 +611,24 @@ function computeBranchReport(
       bpuLabourMtd !== null && bpuPartsMtd !== null && bpuRoMtd !== null && bpuRoMtd !== 0
         ? (bpuLabourMtd + 0.2 * bpuPartsMtd) / bpuRoMtd
         : null,
+    gsRevenuePerRoMtd:
+      gusLabourMtd !== null && gusPartsMtd !== null && gusRoMtd !== null && gusRoMtd !== 0
+        ? (gusLabourMtd + gusPartsMtd) / gusRoMtd
+        : null,
+    bpRevenuePerRoMtd:
+      bpuLabourMtd !== null && bpuPartsMtd !== null && bpuRoMtd !== null && bpuRoMtd !== 0
+        ? (bpuLabourMtd + bpuPartsMtd) / bpuRoMtd
+        : null,
+    blendedRevenuePerRoMtd:
+      gusLabourMtd !== null &&
+      gusPartsMtd !== null &&
+      bpuLabourMtd !== null &&
+      bpuPartsMtd !== null &&
+      gusRoMtd !== null &&
+      bpuRoMtd !== null &&
+      gusRoMtd + bpuRoMtd !== 0
+        ? (gusLabourMtd + gusPartsMtd + bpuLabourMtd + bpuPartsMtd) / (gusRoMtd + bpuRoMtd)
+        : null,
   };
 }
 
@@ -599,6 +656,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     partSaleTodayList,
     partSaleMonthList,
     ssrv089GeneralMonthList,
+    ssrv089BpGreyMonthList,
     scom205TodayList,
     billRevenueList,
     billRevenueDayList,
@@ -611,6 +669,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     loadAllPartSaleSnapshotsForDate(date),
     loadAllPartSaleSnapshotsForMonthUpTo(date),
     loadAllSsrv089SnapshotsForMonthUpTo(date, "general"),
+    loadAllSsrv089BpGreySnapshotsForMonthUpTo(date),
     loadAllScom205SnapshotsForDate(date),
     loadBillRevenueByBranchForMonth(date.slice(0, 7)),
     loadBillRevenueByBranchForDate(date),
@@ -644,6 +703,7 @@ export async function buildReport(date: string): Promise<Report | null> {
   }
 
   const ssrv089GeneralMonth = groupByBranch(ssrv089GeneralMonthList);
+  const ssrv089BpGreyMonth = groupByBranch(ssrv089BpGreyMonthList);
   const scom205Today = byBranch(scom205TodayList);
   const billRevenue = new Map(billRevenueList.map((r) => [r.branch, r]));
   const billRevenueDay = new Map(billRevenueDayList.map((r) => [r.branch, r]));
@@ -684,6 +744,7 @@ export async function buildReport(date: string): Promise<Report | null> {
         partSaleToday.get(branch),
         partSaleMonth.get(branch) ?? [],
         ssrv089GeneralMonth.get(branch) ?? [],
+        ssrv089BpGreyMonth.get(branch) ?? [],
         scom205Today.get(branch),
         billRevenue.get(branch) ?? NO_BILL_REVENUE,
         billRevenueDay.get(branch) ?? NO_BILL_REVENUE,
@@ -747,6 +808,7 @@ export async function buildReport(date: string): Promise<Report | null> {
       partSaleToday.get(branchRow.branch),
       partSaleMonth.get(branchRow.branch) ?? [],
       ssrv089GeneralMonth.get(branchRow.branch) ?? [],
+      ssrv089BpGreyMonth.get(branchRow.branch) ?? [],
       scom205Today.get(branchRow.branch),
       billRevenue.get(branchRow.branch) ?? NO_BILL_REVENUE,
       billRevenueDay.get(branchRow.branch) ?? NO_BILL_REVENUE,

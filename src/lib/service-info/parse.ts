@@ -123,9 +123,29 @@ export type ParsedServiceInfo = {
  * back 0. Requiring every column the parser actually reads (not just one)
  * is what actually distinguishes real transaction data from a pivot sheet
  * that happens to share one column name. */
-function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | null {
+const SERVICE_INFO_MAX_ROWS = 20_000;
+
+const REQUIRED_COLUMNS = [JOB_DESC_COLUMN, JOB_CODE_COLUMN, SERIES_COLUMN, JOB_ORDER_NO_COLUMN, CLOSE_SA_NAME_COLUMN];
+
+/** Checks the HEADER row independently of row count (2026-10-05 — same fix
+ * ssrv089-bp/parse.ts already had, generalized here). The old version
+ * required `column in rows[0]`, which can't see a header at all once there
+ * are zero data rows — so a genuinely empty-but-correctly-headed file and an
+ * actually-wrong report type produced the identical "could not find a sheet
+ * with these columns" message, telling the uploader nothing useful about
+ * which one they're actually looking at. Returns `{ rows, headerMatched }`
+ * for the first sheet whose header matches (rows is [] when there's no data
+ * underneath it) — or null if no sheet's header matches at all. */
+function findDataSheet(workbook: XLSX.WorkBook): { rows: Record<string, unknown>[] } | null {
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
+    const headerRow = (XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" })[0] ?? []).map((c) => String(c ?? "").trim());
+    if (!REQUIRED_COLUMNS.every((col) => headerRow.includes(col))) continue;
+
+    const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
+    if (range.e.r >= SERVICE_INFO_MAX_ROWS) {
+      throw new Error(`File has more than ${SERVICE_INFO_MAX_ROWS.toLocaleString()} rows — is this the right file?`);
+    }
     // raw: false (2026-09-25) — without it, xlsx's own CSV type-guessing
     // silently mis-parses an ambiguous dash/slash date string as MM-DD-YYYY
     // whenever the day is ≤12, corrupting Invoice Date before this code ever
@@ -136,27 +156,22 @@ function findDataSheet(workbook: XLSX.WorkBook): Record<string, unknown>[] | nul
     // Order No, Job Code, Close SA Name, Series) is string-compared, never
     // parsed as a number.
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
-    if (
-      rows.length > 0 &&
-      JOB_DESC_COLUMN in rows[0] &&
-      JOB_CODE_COLUMN in rows[0] &&
-      SERIES_COLUMN in rows[0] &&
-      JOB_ORDER_NO_COLUMN in rows[0] &&
-      CLOSE_SA_NAME_COLUMN in rows[0]
-    ) {
-      return rows;
-    }
+    return { rows };
   }
   return null;
 }
 
 export function parseServiceInfoWorkbook(buffer: Buffer, branch: string, staffNames: string[]): ParsedServiceInfo {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  const rows = findDataSheet(workbook);
+  const workbook = XLSX.read(buffer, { type: "buffer", sheetRows: SERVICE_INFO_MAX_ROWS + 1 });
+  const found = findDataSheet(workbook);
 
-  if (!rows) {
+  if (!found) {
     throw new Error(`Could not find a sheet with "${JOB_DESC_COLUMN}", "${JOB_CODE_COLUMN}", "${SERIES_COLUMN}", "${JOB_ORDER_NO_COLUMN}", and "${CLOSE_SA_NAME_COLUMN}" columns — is this a Service Info Report export?`);
   }
+  if (found.rows.length === 0) {
+    throw new Error("This file has the right columns but no data rows — looks like an empty export. Check the DMS pull and try again.");
+  }
+  const { rows } = found;
 
   const tier = tierForBranch(branch);
   const counts: ServiceInfoCounts = { wheelBalancing: 0, wheelAlignment: 0, brakeSkimming: 0, evaporatorCleaning: 0, vasRevenue: 0 };

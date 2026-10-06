@@ -43,9 +43,15 @@ function toNumberOrRaw(value: unknown): number | string | null {
  * columns.ts. Unmatched headers are reported, not silently dropped — the
  * file may have columns beyond what the confirmed KPI formulas use.
  */
+const BA_TOOL_MAX_ROWS = 1_000;
+
 export function parseBaToolWorkbook(buffer: Buffer): ParsedBaTool {
-  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true, sheetRows: BA_TOOL_MAX_ROWS + 1 });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
+  if (range.e.r >= BA_TOOL_MAX_ROWS) {
+    throw new Error(`File has more than ${BA_TOOL_MAX_ROWS.toLocaleString()} rows — is this the right file?`);
+  }
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: false, blankrows: true });
 
   if (rows.length === 0) return { branches: [], unmatchedColumns: [], rawRows: [] };

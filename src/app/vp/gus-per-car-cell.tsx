@@ -9,13 +9,16 @@ import { METRICS, type MetricKey } from "./vp-metrics";
 
 /**
  * The VP's "why is this branch low or high" detail for one GUS Parts/Car,
- * Labour/Car, BPU/Car or TGLOSS/GUS-Car figure (2026-09-25, at the VP's
- * explicit request; extended to BPU and TGLOSS the same day). Wraps the
- * same coloured badge revenue-per-vehicle-table.tsx already renders — click
- * opens a modal with where the branch ranks, who's #1, who's last, and the
- * company average, plus the branch's add-on services (Engine Flush, Wheel Alignment, etc. — the same block as the metric popups, from the
- * precomputed compare data, so nothing is fetched). For BPU, it also shows the Parts/Labour split behind the
- * combined figure. For TGLOSS, it shows the gap and required daily run-rate to hit this month's target
+ * Labour/Car, BPU Parts/Car, BPU Labour/Car or TGLOSS/GUS-Car figure
+ * (2026-09-25, at the VP's explicit request; extended to BPU and TGLOSS the
+ * same day; BPU split into its own Parts/Labour cells 2026-10-01, replacing
+ * the old combined cell's click-to-expand split). Wraps the same coloured
+ * badge revenue-per-vehicle-table.tsx already renders — click opens a modal
+ * with where the branch ranks, who's #1, who's last, and the company
+ * average, plus the branch's add-on services (Engine Flush, Wheel
+ * Alignment, etc. — the same block as the metric popups, from the
+ * precomputed compare data, so nothing is fetched). For TGLOSS, it shows
+ * the gap and required daily run-rate to hit this month's target
  * (lib/pace.ts).
  *
  * This used to also show a day-by-day trend for the month — dropped
@@ -29,13 +32,20 @@ import { METRICS, type MetricKey } from "./vp-metrics";
 const METRIC_LABEL = {
   parts: "GUS Parts / Car",
   labour: "GUS Labour / Car",
-  bpu: "BPU / Car",
+  bpuParts: "BPU Parts / Car",
+  bpuLabour: "BPU Labour / Car",
   tgloss: "TGLOSS / GUS Car",
 } as const;
 type Metric = keyof typeof METRIC_LABEL;
 
 /** The page-wide metric whose add-on items each per-car popup shows. */
-const PER_CAR_METRIC: Record<Metric, MetricKey> = { parts: "gusPartsPerCar", labour: "gusLabourPerCar", bpu: "bpuPerCar", tgloss: "tglossPerGusCar" };
+const PER_CAR_METRIC: Record<Metric, MetricKey> = {
+  parts: "gusPartsPerCar",
+  labour: "gusLabourPerCar",
+  bpuParts: "bpuPartsPerCar",
+  bpuLabour: "bpuLabourPerCar",
+  tgloss: "tglossPerGusCar",
+};
 
 function rankTone(rank: number, total: number): "good" | "warn" | "critical" {
   if (total <= 1) return "good";
@@ -52,7 +62,6 @@ function DetailModal({
   metric,
   value,
   rank,
-  bpuSplit,
   tglossPace,
   onClose,
 }: {
@@ -60,7 +69,6 @@ function DetailModal({
   metric: Metric;
   value: number;
   rank: RankInfo | null;
-  bpuSplit?: { parts: number | null; labour: number | null };
   tglossPace?: { target: number | null; gap: number | null; requiredRatePerDay: number | null };
   onClose: () => void;
 }) {
@@ -131,22 +139,6 @@ function DetailModal({
           <p className="mt-3 text-xs text-fg-faint">No other branch has a figure to rank against yet this month.</p>
         )}
 
-        {metric === "bpu" && bpuSplit ? (
-          <div className="mt-5">
-            <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">Parts / Labour split</div>
-            <div className="mt-2.5 grid grid-cols-2 gap-2">
-              <div className="rounded-lg border border-border-subtle bg-surface-2/40 p-2.5 text-center">
-                <div className="text-[9.5px] uppercase tracking-[0.08em] text-fg-faint">Parts</div>
-                <div className="mt-1 text-sm font-semibold tabular-nums text-fg">{formatCompactCurrency(bpuSplit.parts)}</div>
-              </div>
-              <div className="rounded-lg border border-border-subtle bg-surface-2/40 p-2.5 text-center">
-                <div className="text-[9.5px] uppercase tracking-[0.08em] text-fg-faint">Labour</div>
-                <div className="mt-1 text-sm font-semibold tabular-nums text-fg">{formatCompactCurrency(bpuSplit.labour)}</div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
         {metric === "tgloss" && tglossPace ? (
           <div className="mt-5">
             <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">Pace to this month&apos;s target</div>
@@ -197,7 +189,6 @@ export function GusPerCarCell({
   value,
   className,
   rank,
-  bpuSplit,
   tglossPace,
 }: {
   branch: string;
@@ -205,7 +196,6 @@ export function GusPerCarCell({
   value: number;
   className: string;
   rank: RankInfo | null;
-  bpuSplit?: { parts: number | null; labour: number | null };
   tglossPace?: { target: number | null; gap: number | null; requiredRatePerDay: number | null };
 }) {
   const [open, setOpen] = useState(false);
@@ -225,7 +215,6 @@ export function GusPerCarCell({
           metric={metric}
           value={value}
           rank={rank}
-          bpuSplit={bpuSplit}
           tglossPace={tglossPace}
           onClose={() => setOpen(false)}
         />

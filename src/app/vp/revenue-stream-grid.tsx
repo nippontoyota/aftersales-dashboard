@@ -84,20 +84,49 @@ const ROWS: Row[] = [
   },
   { kind: "metric", label: "GUS RO · MTD", get: (s) => formatNumber(s.gusRoMtd), detail: { metric: "gusRo", value: (s) => s.gusRoMtd } },
 
-  { kind: "section", label: "BPU · Body & Paint" },
+  { kind: "section", label: "BPU · Body & Paint — other branches" },
+  { kind: "metric", label: "BPU Parts · MTD", sub: "BPU line at every GUS+BPU branch", get: (s) => formatCompactCurrency(s.bpuPartsOtherMtd) },
+  { kind: "metric", label: "BPU Labour · MTD", get: (s) => formatCompactCurrency(s.bpuLabourOtherMtd) },
   {
     kind: "metric",
-    label: "BPU Revenue · MTD — BP-only branches",
-    sub: "CO01E, KL01B, TR01B",
-    get: (s) => formatCompactCurrency(s.bpuRevenueBodyPaintOnlyMtd),
+    label: "BPU Parts / car",
+    sub: "Parts MTD ÷ BPU RO MTD (other branches)",
+    get: (s) => formatCompactCurrency(s.bpuPartsPerCarOther),
   },
   {
     kind: "metric",
-    label: "BPU Revenue · MTD — other branches",
-    sub: "BPU line at every GUS+BPU branch",
-    get: (s) => formatCompactCurrency(s.bpuRevenueOtherMtd),
+    label: "BPU Labour / car",
+    sub: "Labour MTD ÷ BPU RO MTD (other branches)",
+    get: (s) => formatCompactCurrency(s.bpuLabourPerCarOther),
   },
-  { kind: "metric", label: "BPU RO · MTD", get: (s) => formatNumber(s.bpuRoMtd), detail: { metric: "bpuRo", value: (s) => s.bpuRoMtd } },
+  { kind: "metric", label: "BPU RO · MTD", get: (s) => formatNumber(s.bpuRoOtherMtd) },
+
+  { kind: "section", label: "BPU · Body & Paint — BP-only branches (CO01E, KL01B, TR01B)" },
+  { kind: "metric", label: "BPU Parts · MTD", get: (s) => formatCompactCurrency(s.bpuPartsBodyPaintOnlyMtd) },
+  { kind: "metric", label: "BPU Labour · MTD", get: (s) => formatCompactCurrency(s.bpuLabourBodyPaintOnlyMtd) },
+  {
+    kind: "metric",
+    label: "BPU Parts / car",
+    sub: "Parts MTD ÷ BPU RO MTD (BP-only branches)",
+    get: (s) => formatCompactCurrency(s.bpuPartsPerCarBodyPaintOnly),
+  },
+  {
+    kind: "metric",
+    label: "BPU Labour / car",
+    sub: "Labour MTD ÷ BPU RO MTD (BP-only branches)",
+    get: (s) => formatCompactCurrency(s.bpuLabourPerCarBodyPaintOnly),
+  },
+  { kind: "metric", label: "BPU RO · MTD", get: (s) => formatNumber(s.bpuRoBodyPaintOnlyMtd) },
+
+  { kind: "section", label: "Other Revenue" },
+  {
+    kind: "scopeBreakdown",
+    label: "External Sales · MTD",
+    metricLabel: "External Sales · MTD",
+    value: (s) => s.externalSalesMtd,
+    branchValue: (b) => b.externalSalesMtd,
+  },
+  { kind: "metric", label: "Scrap & Used Oil · MTD", get: (s) => formatCompactCurrency(s.scrapAndUsedOilMtd) },
 
   { kind: "section", label: "TGLOSS" },
   { kind: "metric", label: tglossText("TGLOSS · MTD"), get: (s) => formatCompactCurrency(s.tglossMtd), detail: { metric: "tglossMtd", value: (s) => s.tglossMtd } },
@@ -109,16 +138,6 @@ const ROWS: Row[] = [
     tone: (s) => achievementTone(s.tglossPct),
     detail: { metric: "tglossPct", value: (s) => s.tglossPct },
   },
-
-  { kind: "section", label: "Other Revenue" },
-  {
-    kind: "scopeBreakdown",
-    label: "External Sales · MTD",
-    metricLabel: "External Sales · MTD",
-    value: (s) => s.externalSalesMtd,
-    branchValue: (b) => b.externalSalesMtd,
-  },
-  { kind: "metric", label: "Scrap & Used Oil · MTD", get: (s) => formatCompactCurrency(s.scrapAndUsedOilMtd) },
 
   { kind: "section", label: "Incentive Target Slabs" },
   { kind: "slabs" },
@@ -162,10 +181,13 @@ function ColumnHeader({ scope, className }: { scope: VpScopeMetrics; className?:
  * the old hero-card strip + VpScoreboard) — Group and the 3 regions as
  * columns, every metric the VP asked to see as a row, in the order they
  * gave it: Total Revenue Stream first, then GUS Parts/Labour MTD (their
- * most important figures) with the per-car breakdown, BPU revenue split
- * between Body & Paint-only branches and everyone else's own BPU line, RO
- * MTD, TGLOSS, External Sales, Scrap & Used Oil, and the incentive slab
- * rings — explicitly no "for the day" or MoM/YoY figures, per the VP brief.
+ * most important figures) with the per-car breakdown and RO MTD, then the
+ * same Parts/Labour MTD + per-car + RO shape for BPU — split into its own
+ * Body & Paint-only-branches block and an everyone-else block, since their
+ * RO counts aren't comparable (2026-10-01, mirroring the GUS layout at the
+ * VP's request) — then External Sales + Scrap & Used Oil, then TGLOSS
+ * (swapped 2026-10-01, at the VP's request), and the incentive slab rings —
+ * explicitly no "for the day" or MoM/YoY figures, per the VP brief.
  * External Sales · MTD is clickable per scope (2026-09-25) — since these
  * columns are scopes, not branches, it opens a branch-contribution
  * breakdown rather than the rank-vs-company-wide modal GUS/BPU/TGLOSS use

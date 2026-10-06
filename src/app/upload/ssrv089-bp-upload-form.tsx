@@ -13,7 +13,10 @@ export function Ssrv089BpUploadForm({ reportDate, alreadyUploaded }: { reportDat
       fileLabel="Cost and Sales Report file (.csv/.xlsx)"
       accept=".csv,.xlsx,.xls"
       reportDate={reportDate}
-      formatSuccess={(data) => `Saved for ${data.date} — ${data.sourceFileName}.`}
+      formatSuccess={(data) => {
+        const base = `Saved for ${data.date} — ${data.sourceFileName}.`;
+        return data.warning ? `${base} ⚠ ${data.warning as string}` : base;
+      }}
       alreadyUploaded={alreadyUploaded}
     />
   );

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
 import { REGIONS, type RegionName } from "@/lib/regions";
+import { canReplyToVpRecipient } from "@/lib/vp-flags/permissions";
 import {
   createVpQuery,
   getVpQueryRecipient,
@@ -96,11 +97,7 @@ export async function replyVpFlagAction(_prev: FlagState, formData: FormData): P
   const recipient = await getVpQueryRecipient(id);
   if (!recipient) return { error: "Query not found.", ok: false };
 
-  const allowed =
-    (recipient.type === "hq" && (admin.role === "hq" || admin.role === "hq_viewer")) ||
-    (recipient.type === "regional" && admin.role === "regional" && admin.region === recipient.region) ||
-    (recipient.type === "branch" && admin.role === "branch" && admin.branch === recipient.branch);
-  if (!allowed) return { error: "This query isn't addressed to you.", ok: false };
+  if (!canReplyToVpRecipient(admin, recipient)) return { error: "This query isn't addressed to you.", ok: false };
 
   await replyToVpQueryRecipient({ id, repliedBy: admin.username, reply });
   revalidateEverywhere();
@@ -117,7 +114,8 @@ export async function setVpFlagStatusAction(_prev: FlagState, formData: FormData
   if (!Number.isFinite(id) || id <= 0) return { error: "Bad query id.", ok: false };
   if (status !== "open" && status !== "closed") return { error: "Bad status.", ok: false };
 
-  await setVpQueryThreadArchived(id, status === "closed");
+  const updated = await setVpQueryThreadArchived(id, status === "closed", admin.username);
+  if (!updated) return { error: "Not your thread.", ok: false };
   revalidateEverywhere();
   return { error: null, ok: true };
 }

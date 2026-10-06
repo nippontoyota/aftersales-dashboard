@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { parseBillPdf } from "@/lib/bill/parse";
 import { loadBillByInvoiceNumber, saveBillUpload, type BillCategory } from "@/lib/bill/store";
+import { parseStrictPositiveAmount } from "@/lib/bill/validate";
 
 type PartialData = { invoiceNumber: string | null; taxableValue: number | null; invoiceDate: string | null };
 
@@ -33,7 +34,6 @@ export async function POST(request: Request) {
   const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
   const manualInvoiceNumber = String(formData.get("manualInvoiceNumber") ?? "").trim() || null;
   const manualTaxableValueStr = String(formData.get("manualTaxableValue") ?? "").trim();
-  const manualTaxableValue = manualTaxableValueStr ? parseFloat(manualTaxableValueStr) : null;
   const manualInvoiceDateRaw = String(formData.get("manualInvoiceDate") ?? "").trim();
   const manualInvoiceDate = ISO_DATE.test(manualInvoiceDateRaw) ? manualInvoiceDateRaw : null;
 
@@ -87,8 +87,13 @@ export async function POST(request: Request) {
       invoiceNumber = manualInvoiceNumber;
       extractionMethod = "manual";
     }
-    if (files.length === 1 && manualTaxableValue !== null && !isNaN(manualTaxableValue)) {
-      taxableValue = manualTaxableValue;
+    if (files.length === 1 && manualTaxableValueStr) {
+      const parsed = parseStrictPositiveAmount(manualTaxableValueStr);
+      if (!parsed.ok) {
+        results.push({ fileName, error: parsed.error });
+        continue;
+      }
+      taxableValue = parsed.value;
       extractionMethod = "manual";
     }
     if (manualInvoiceDate && (files.length === 1 || !invoiceDate)) {

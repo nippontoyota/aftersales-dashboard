@@ -105,11 +105,8 @@ async function Overview({
   const generalBranches = data.report.branches.filter((b) => !isBodyPaintOnly(b.branch));
   const partsRank = rankGusPerCar(generalBranches, (b) => (b.gusRoMtd === null || b.gusRoMtd === 0 ? null : achievementRatio(b.gusPartsMtd, b.gusRoMtd)));
   const labourRank = rankGusPerCar(generalBranches, (b) => (b.gusRoMtd === null || b.gusRoMtd === 0 ? null : achievementRatio(b.gusLabourMtd, b.gusRoMtd)));
-  const bpuRank = rankGusPerCar(generalBranches, (b) =>
-    b.bpuRoMtd === null || b.bpuRoMtd === 0 || (b.bpuPartsMtd === null && b.bpuLabourMtd === null)
-      ? null
-      : achievementRatio((b.bpuPartsMtd ?? 0) + (b.bpuLabourMtd ?? 0), b.bpuRoMtd)
-  );
+  const bpuPartsRank = rankGusPerCar(generalBranches, (b) => (b.bpuRoMtd === null || b.bpuRoMtd === 0 ? null : achievementRatio(b.bpuPartsMtd, b.bpuRoMtd)));
+  const bpuLabourRank = rankGusPerCar(generalBranches, (b) => (b.bpuRoMtd === null || b.bpuRoMtd === 0 ? null : achievementRatio(b.bpuLabourMtd, b.bpuRoMtd)));
   const tglossRank = rankGusPerCar(generalBranches, (b) => (b.gusRoMtd === null || b.gusRoMtd === 0 ? null : achievementRatio(b.vasAchievementForTheMonth, b.gusRoMtd)));
 
   const labourItems = await loadVpLabourItems(data.date);
@@ -121,7 +118,7 @@ async function Overview({
     <VpCompareProvider data={compareData}>
     <div className="mx-auto max-w-[1440px] px-6 py-8">
       {!data.isPublished && (
-        <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} />
+        <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} missingBranches={data.missingBranches} />
       )}
       {/* Scrolls away with the page (un-frozen 2026-09-28 at the VP's request).
           What stays pinned is each table's own column-header row, just under
@@ -167,7 +164,16 @@ async function Overview({
           renderBranchCell={(row) => <VpBranchLabel label={row.branch} />}
           renderGusCell={(row, metric, value, plain) => {
             if (row.branch === "All branches" || value === null) return plain();
-            const rankPool = metric === "parts" ? partsRank : metric === "labour" ? labourRank : metric === "bpu" ? bpuRank : tglossRank;
+            const rankPool =
+              metric === "parts"
+                ? partsRank
+                : metric === "labour"
+                  ? labourRank
+                  : metric === "bpuParts"
+                    ? bpuPartsRank
+                    : metric === "bpuLabour"
+                      ? bpuLabourRank
+                      : tglossRank;
             const rank = rankPool.get(row.branch) ?? null;
             const className =
               metric === "parts"
@@ -177,10 +183,6 @@ async function Overview({
                   : metric === "tgloss"
                     ? softBandClassName(value, TGLOSS_PER_RO_BANDS)
                     : "bg-surface-2 text-fg"; // BPU has no fixed per-RO target yet
-            const bpuSplit =
-              metric === "bpu"
-                ? { parts: achievementRatio(row.bpuPartsMtd, row.bpuRoMtd), labour: achievementRatio(row.bpuLabourMtd, row.bpuRoMtd) }
-                : undefined;
             const tglossPace =
               metric === "tgloss"
                 ? (() => {
@@ -195,7 +197,6 @@ async function Overview({
                 value={value}
                 className={className}
                 rank={rank}
-                bpuSplit={bpuSplit}
                 tglossPace={tglossPace}
               />
             );

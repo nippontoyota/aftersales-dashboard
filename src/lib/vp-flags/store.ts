@@ -268,7 +268,13 @@ export async function replyToVpQueryRecipient(input: { id: number; repliedBy: st
   );
 }
 
-/** VP archives (or reopens) their own thread once they're satisfied. */
-export async function setVpQueryThreadArchived(id: number, archived: boolean): Promise<void> {
-  await pool.query(`update vp_query_threads set archived = $2 where id = $1`, [id, archived]);
+/** VP archives (or reopens) their own thread once they're satisfied.
+ * Returns true when a row was updated, false when no row matched (either
+ * the thread doesn't exist or it belongs to a different VP account). */
+export async function setVpQueryThreadArchived(id: number, archived: boolean, createdBy: string): Promise<boolean> {
+  const result = await pool.query(
+    `update vp_query_threads set archived = $2 where id = $1 and created_by = $3`,
+    [id, archived, createdBy]
+  );
+  return (result.rowCount ?? 0) > 0;
 }

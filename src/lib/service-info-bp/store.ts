@@ -36,18 +36,22 @@ export async function saveServiceInfoBpSnapshot(snapshot: {
   uploadedAt: string;
   sourceFileName: string;
   counts: ServiceInfoBpCounts;
+  /** The admin account (username) that performed this upload — undefined/null
+   * for uploads saved before this column existed. See db/schema.sql. */
+  uploadedBy?: string | null;
 }): Promise<void> {
   await pool.query(
     `insert into service_info_bp_snapshots
-       (date, branch, uploaded_at, source_file_name, wheel_balancing, wheel_alignment, brake_skimming, vas_revenue)
-     values ($1, $2, $3, $4, $5, $6, $7, $8)
+       (date, branch, uploaded_at, source_file_name, wheel_balancing, wheel_alignment, brake_skimming, vas_revenue, uploaded_by)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      on conflict (date, branch) do update set
        uploaded_at = excluded.uploaded_at,
        source_file_name = excluded.source_file_name,
        wheel_balancing = excluded.wheel_balancing,
        wheel_alignment = excluded.wheel_alignment,
        brake_skimming = excluded.brake_skimming,
-       vas_revenue = excluded.vas_revenue`,
+       vas_revenue = excluded.vas_revenue,
+       uploaded_by = excluded.uploaded_by`,
     [
       snapshot.date,
       snapshot.branch,
@@ -57,6 +61,7 @@ export async function saveServiceInfoBpSnapshot(snapshot: {
       snapshot.counts.wheelAlignment,
       snapshot.counts.brakeSkimming,
       snapshot.counts.vasRevenue,
+      snapshot.uploadedBy ?? null,
     ]
   );
 }

@@ -19,9 +19,19 @@
 // Does NOT touch: BA Tool snapshots, Bills, Cancellation Reports, the
 // Accessories roster, or any date before FROM-DATE.
 //
+// Every delete is preceded by a logDeletedRows() snapshot into
+// deleted_rows_log (2026-10-06, added after a run of this kind left TI01B's
+// September SSRV089/Part Sale data gone with no record of when or by what —
+// see db/schema.sql's deleted_rows_log comment) — query that table by
+// source = 'reset-branch-uploads.mjs' to recover exactly what a past run
+// removed.
+//
 // History: first run for MV01A, 2026-09-01 onward, 2026-09-08.
 import { Client } from "pg";
 import "./load-env.mjs";
+import { logDeletedRows } from "../src/lib/audit/deleted-rows-log.ts";
+
+const SOURCE = "reset-branch-uploads.mjs";
 
 const args = process.argv.slice(2);
 const COMMIT = args.includes("--commit");
@@ -90,9 +100,29 @@ try {
 
   await client.query("begin");
   for (const tbl of SNAPSHOT_TABLES) {
+    await logDeletedRows(client, tbl, SOURCE, "branch = $1 and date >= $2", [BRANCH, FROM]);
     await client.query(`delete from ${tbl} where branch = $1 and date >= $2`, [BRANCH, FROM]);
   }
+  // Excludes file_data (bytea) from the snapshot — logging every deleted
+  // file's raw bytes would bloat deleted_rows_log for no benefit; the
+  // metadata (which date/branch/report_type/filename) is what answers
+  // "where did this go".
+  await logDeletedRows(
+    client,
+    "raw_report_uploads",
+    SOURCE,
+    "branch = $1 and date >= $2",
+    [BRANCH, FROM],
+    "report_type, date, branch, uploaded_at, source_file_name, uploaded_by, octet_length(file_data) as file_bytes"
+  );
   await client.query(`delete from raw_report_uploads where branch = $1 and date >= $2`, [BRANCH, FROM]);
+  await logDeletedRows(
+    client,
+    "raw_upload_rows",
+    SOURCE,
+    "branch = $1 and date >= $2 and report_type <> 'ba_tool'",
+    [BRANCH, FROM]
+  );
   await client.query(
     `delete from raw_upload_rows where branch = $1 and date >= $2 and report_type <> 'ba_tool'`,
     [BRANCH, FROM]

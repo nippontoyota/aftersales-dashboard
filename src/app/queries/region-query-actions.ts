@@ -5,6 +5,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { REGIONS, regionForBranch, type RegionName } from "@/lib/regions";
 import {
   createRegionQuery,
+  getRegionQuery,
   listRegionQueriesForBranch,
   listRegionQueriesForRegion,
   replyToRegionQuery,
@@ -110,8 +111,9 @@ export async function raiseRegionQueryToBranchAction(_prev: RegionQueryState, fo
 
 /** Whoever the thread is addressed to replying — HQ answering "to_hq",
  * a regional manager answering "to_region", or a branch admin answering
- * "to_branch". The store doesn't care which; the caller only ever sees the
- * reply form on threads addressed to them. */
+ * "to_branch". Ownership is re-checked server-side against the thread's
+ * direction and context fields — a submitted id only ever gets a reply
+ * posted by the admin it's actually addressed to. */
 export async function replyRegionQueryAction(_prev: RegionQueryState, formData: FormData): Promise<RegionQueryState> {
   const admin = await getCurrentAdmin();
   if (admin?.role !== "hq" && admin?.role !== "regional" && admin?.role !== "branch") return { error: "Not allowed.", ok: false };
@@ -121,6 +123,15 @@ export async function replyRegionQueryAction(_prev: RegionQueryState, formData: 
   const close = formData.get("close") === "on";
   if (!Number.isFinite(id) || id <= 0) return { error: "Bad query id.", ok: false };
   if (!reply) return { error: "Type a reply first.", ok: false };
+
+  const query = await getRegionQuery(id);
+  if (!query) return { error: "Query not found.", ok: false };
+
+  const allowed =
+    (query.direction === "to_hq"     && admin.role === "hq") ||
+    (query.direction === "to_region" && admin.role === "regional" && admin.region === query.region) ||
+    (query.direction === "to_branch" && admin.role === "branch"   && admin.branch === query.contextBranch);
+  if (!allowed) return { error: "This query isn't addressed to you.", ok: false };
 
   await replyToRegionQuery({ id, repliedBy: admin.username, reply, status: close ? "closed" : "answered" });
   revalidatePath("/queries");
@@ -137,6 +148,14 @@ export async function setRegionQueryStatusAction(_prev: RegionQueryState, formDa
   const status = String(formData.get("status") ?? "");
   if (!Number.isFinite(id) || id <= 0) return { error: "Bad query id.", ok: false };
   if (status !== "open" && status !== "closed") return { error: "Bad status.", ok: false };
+
+  const query = await getRegionQuery(id);
+  if (!query) return { error: "Query not found.", ok: false };
+
+  const allowed =
+    admin.username === query.createdBy ||
+    (query.direction === "to_branch" && admin.role === "branch" && admin.branch === query.contextBranch);
+  if (!allowed) return { error: "Not your query.", ok: false };
 
   await setRegionQueryStatus(id, status);
   revalidatePath("/queries");

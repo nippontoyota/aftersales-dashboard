@@ -14,7 +14,7 @@ import { REGIONS, regionForBranch, type RegionName } from "./regions";
 import { buildReport, isBodyPaintOnly, type BranchReport, type Report } from "./report";
 import { listSnapshotDates } from "./snapshot-store";
 import { isDatePublished } from "./publish-store";
-import { countScom205BranchesForDate } from "./scom205/store";
+import { loadScom205BranchesForDate } from "./scom205/store";
 import { loadReportHolidaySet } from "./report-holidays/store";
 
 /**
@@ -53,8 +53,21 @@ export type VpScopeMetrics = {
   gusPartsPerCar: number | null;
   gusLabourPerCar: number | null;
   gusRoMtd: number | null;
-  bpuRevenueBodyPaintOnlyMtd: number | null;
-  bpuRevenueOtherMtd: number | null;
+  /** BPU, split the same way GUS is (Parts/Labour MTD + per-car), but with
+   * an extra outer split between Body & Paint-only branches and everyone
+   * else's own BPU line — their RO counts aren't comparable to a mixed
+   * branch's, so each half gets its own RO denominator rather than sharing
+   * bpuRoMtd (the VP's own request, confirmed 2026-10-01). */
+  bpuPartsBodyPaintOnlyMtd: number | null;
+  bpuLabourBodyPaintOnlyMtd: number | null;
+  bpuRoBodyPaintOnlyMtd: number | null;
+  bpuPartsPerCarBodyPaintOnly: number | null;
+  bpuLabourPerCarBodyPaintOnly: number | null;
+  bpuPartsOtherMtd: number | null;
+  bpuLabourOtherMtd: number | null;
+  bpuRoOtherMtd: number | null;
+  bpuPartsPerCarOther: number | null;
+  bpuLabourPerCarOther: number | null;
   bpuRoMtd: number | null;
   tglossMtd: number | null;
   tglossTarget: number | null;
@@ -69,8 +82,8 @@ export type VpScopeMetrics = {
   /** Same as gusPartsPace, for GUS Labour MTD. */
   gusLabourPace: Pace;
   /** Same as gusPartsPace, for BPU Parts MTD (straight group total — not the
-   * Body & Paint-only-vs-other split that bpuRevenueBodyPaintOnlyMtd/
-   * bpuRevenueOtherMtd carry). */
+   * Body & Paint-only-vs-other split that bpuPartsBodyPaintOnlyMtd/
+   * bpuPartsOtherMtd carry). */
   bpuPartsPace: Pace;
   /** Same as bpuPartsPace, for BPU Labour MTD. */
   bpuLabourPace: Pace;
@@ -78,6 +91,12 @@ export type VpScopeMetrics = {
   /** Same as gusPartsPace, for External Sales MTD. */
   externalSalesPace: Pace;
   scrapAndUsedOilMtd: number | null;
+  /** Scrap and Used Oil split out separately — feeds the External Sales hero
+   * card, which now shows all three figures together (2026-10-01, at the
+   * VP's request). scrapAndUsedOilMtd above is kept as-is for the grid's
+   * combined row. */
+  scrapMtd: number | null;
+  usedOilMtd: number | null;
   /** Undefined when none of this scope's branches have a slab target loaded this month. */
   incentiveSlabs: IncentiveSlabTargets | undefined;
 };
@@ -107,6 +126,11 @@ export type VpData = {
   isPublished: boolean;
   uploadedBranchCount: number;
   totalBranchCount: number;
+  /** Branch codes present in the report that haven't filed their scom205 for
+   * `date` yet — feeds the DraftWarning banner's "who's missing" list
+   * (VP-only, 2026-10-01). Always [] once published (nobody's waiting on
+   * anyone by then) or when there's no report. */
+  missingBranches: string[];
   /** Branches off-pace for their own TGLOSS incentive-slab target this month, worst first —
    * see computeTglossExceptions() below. */
   tglossExceptions: TglossException[];
@@ -131,21 +155,18 @@ function perCar(amount: number | null, ro: number | null): number | null {
   return amount / ro;
 }
 
-/** Sums BPU Parts + BPU Labour across branches on one side of the Body &
- * Paint-only split. Mirrors sumField's null convention (aggregate.ts): null
- * only if not a single branch in this half contributed a number, 0/summed
- * otherwise. */
-function sumBpuRevenue(branches: BranchReport[], bodyPaintOnly: boolean): number | null {
+/** Sums one BPU field (Parts MTD, Labour MTD, or RO MTD) across branches on
+ * one side of the Body & Paint-only split. Mirrors sumField's null
+ * convention (aggregate.ts): null only if not a single branch in this half
+ * contributed a number, 0/summed otherwise. */
+function sumBpuField(branches: BranchReport[], bodyPaintOnly: boolean, key: "bpuPartsMtd" | "bpuLabourMtd" | "bpuRoMtd"): number | null {
   let total = 0;
   let found = false;
   for (const b of branches) {
     if (isBodyPaintOnly(b.branch) !== bodyPaintOnly) continue;
-    if (b.bpuPartsMtd !== null) {
-      total += b.bpuPartsMtd;
-      found = true;
-    }
-    if (b.bpuLabourMtd !== null) {
-      total += b.bpuLabourMtd;
+    const v = b[key];
+    if (v !== null) {
+      total += v;
       found = true;
     }
   }
@@ -173,8 +194,16 @@ function buildScopeMetrics(
     gusPartsPerCar: perCar(hero.gusPartsMtd, hero.gusRoMtd),
     gusLabourPerCar: perCar(hero.gusLabourMtd, hero.gusRoMtd),
     gusRoMtd: hero.gusRoMtd,
-    bpuRevenueBodyPaintOnlyMtd: sumBpuRevenue(branches, true),
-    bpuRevenueOtherMtd: sumBpuRevenue(branches, false),
+    bpuPartsBodyPaintOnlyMtd: sumBpuField(branches, true, "bpuPartsMtd"),
+    bpuLabourBodyPaintOnlyMtd: sumBpuField(branches, true, "bpuLabourMtd"),
+    bpuRoBodyPaintOnlyMtd: sumBpuField(branches, true, "bpuRoMtd"),
+    bpuPartsPerCarBodyPaintOnly: perCar(sumBpuField(branches, true, "bpuPartsMtd"), sumBpuField(branches, true, "bpuRoMtd")),
+    bpuLabourPerCarBodyPaintOnly: perCar(sumBpuField(branches, true, "bpuLabourMtd"), sumBpuField(branches, true, "bpuRoMtd")),
+    bpuPartsOtherMtd: sumBpuField(branches, false, "bpuPartsMtd"),
+    bpuLabourOtherMtd: sumBpuField(branches, false, "bpuLabourMtd"),
+    bpuRoOtherMtd: sumBpuField(branches, false, "bpuRoMtd"),
+    bpuPartsPerCarOther: perCar(sumBpuField(branches, false, "bpuPartsMtd"), sumBpuField(branches, false, "bpuRoMtd")),
+    bpuLabourPerCarOther: perCar(sumBpuField(branches, false, "bpuLabourMtd"), sumBpuField(branches, false, "bpuRoMtd")),
     bpuRoMtd: hero.bpuRoMtd,
     tglossMtd: kpis.vasAchievementForTheMonth,
     tglossTarget: kpis.vasBillTarget,
@@ -190,6 +219,8 @@ function buildScopeMetrics(
     scrapAndUsedOilMtd: hero.scrapRevenueMtd !== null || hero.usedOilRevenueMtd !== null
       ? (hero.scrapRevenueMtd ?? 0) + (hero.usedOilRevenueMtd ?? 0)
       : null,
+    scrapMtd: hero.scrapRevenueMtd,
+    usedOilMtd: hero.usedOilRevenueMtd,
     incentiveSlabs: aggregateIncentiveSlabTargets(
       incentiveSlabTargets,
       branches.map((b) => b.branch)
@@ -262,10 +293,10 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
   if (dates.length === 0) return null;
 
   const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
-  const [report, published, scom205Count, incentiveSlabTargetsMap, holidaySet] = await Promise.all([
+  const [report, published, uploadedBranches, incentiveSlabTargetsMap, holidaySet] = await Promise.all([
     buildReport(date),
     isDatePublished(date),
-    countScom205BranchesForDate(date),
+    loadScom205BranchesForDate(date),
     loadIncentiveSlabTargets(date.slice(0, 7)),
     loadReportHolidaySet(),
   ]);
@@ -283,6 +314,7 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
       isPublished: published,
       uploadedBranchCount: 0,
       totalBranchCount: 18,
+      missingBranches: [],
       tglossExceptions: [],
       previousScope: null,
       lastMonthScope: null,
@@ -330,8 +362,9 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
     scopes,
     tglossExceptions: computeTglossExceptions(report.branches, date, holidaySet),
     isPublished: published,
-    uploadedBranchCount: scom205Count,
+    uploadedBranchCount: uploadedBranches.length,
     totalBranchCount: 18 + (hasCo01c ? 1 : 0),
+    missingBranches: report.branches.map((b) => b.branch).filter((code) => !uploadedBranches.includes(code)),
     previousScope,
     lastMonthScope,
     incentiveSlabTargetsByBranch: incentiveSlabTargets,

@@ -2,8 +2,11 @@
 
 import { useEffect, type ReactNode } from "react";
 import { formatCompact, formatCompactCurrency, formatPercent } from "@/lib/format";
+import { REGIONS, type RegionName } from "@/lib/regions";
 import type { CompareBranchData } from "./vp-compare-data";
 import { ITEMS, METRICS, formatMetric, itemPool, rankPool, type ItemKey, type MetricKey, type RankedRow } from "./vp-metrics";
+
+const REGION_ORDER = Object.keys(REGIONS) as RegionName[];
 
 /**
  * "Why is this number what it is" for any figure on the VP page (2026-09-28,
@@ -35,6 +38,30 @@ function rankTone(rank: number, total: number): keyof typeof TONE_BADGE {
 
 function average(rows: RankedRow[]): number | null {
   return rows.length ? rows.reduce((s, r) => s + r.value, 0) / rows.length : null;
+}
+
+type RegionRollup = { region: RegionName; value: number; branchCount: number };
+
+/** Rolls a Group-level pool up by region, Central/South/North order — shown
+ * above the flat branch list so the VP sees "which region" before "which
+ * branch" (2026-10-01, at the VP's request). Additive metrics (MTD rupee/
+ * count figures) sum each region's branches; non-additive ones (achievement
+ * %) average them, same unweighted convention the Average tile already
+ * uses. Branches with no mapped region (shouldn't happen with real data)
+ * are left out rather than guessed into one. */
+function regionRollups(pool: RankedRow[], all: CompareBranchData[], additive: boolean | undefined): RegionRollup[] {
+  const byRegion = new Map<RegionName, RankedRow[]>();
+  for (const row of pool) {
+    const region = all.find((d) => d.branch === row.branch)?.region as RegionName | null | undefined;
+    if (!region) continue;
+    if (!byRegion.has(region)) byRegion.set(region, []);
+    byRegion.get(region)!.push(row);
+  }
+  return REGION_ORDER.filter((r) => byRegion.has(r)).map((region) => {
+    const rows = byRegion.get(region)!;
+    const value = additive ? rows.reduce((s, r) => s + r.value, 0) : (average(rows) ?? 0);
+    return { region, value, branchCount: rows.length };
+  });
 }
 
 function CloseButton({ onClose }: { onClose: () => void }) {
@@ -160,6 +187,11 @@ export function MetricDetailModal({ request, all, onClose }: { request: MetricRe
   const last = pool[pool.length - 1];
   const avg = average(pool);
   const total = request.value ?? 0;
+  /** Only when this is a Group-level figure (no branch, no region already
+   * picked) — a region-scoped grid column or a branch's own cell has
+   * nothing left to roll up further. */
+  const showRegions = !isBranch && !request.scope?.region;
+  const regions = showRegions ? regionRollups(pool, all, def.additive) : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -216,6 +248,28 @@ export function MetricDetailModal({ request, all, onClose }: { request: MetricRe
               {def.items.map((item) => (
                 <ItemRow key={item} item={item} branch={request.branch} scopeBranches={scoped} all={all} />
               ))}
+            </div>
+          </div>
+        ) : null}
+
+        {showRegions && regions.length > 0 ? (
+          <div className="mt-5">
+            <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fg-faint">By region</div>
+            <div className="mt-2.5 space-y-1.5">
+              {regions.map((r) => {
+                const share = def.additive && total > 0 ? r.value / total : null;
+                return (
+                  <div key={r.region} className="flex items-center justify-between gap-2 rounded-lg border border-border-subtle bg-surface-2/30 px-3 py-2">
+                    <span className="text-[12px] font-medium text-fg">
+                      {r.region} <span className="text-[10.5px] font-normal text-fg-faint">({r.branchCount} branch{r.branchCount === 1 ? "" : "es"})</span>
+                    </span>
+                    <span className="text-right">
+                      <span className="text-sm font-semibold tabular-nums text-fg">{formatMetric(r.value, def.kind)}</span>
+                      {share !== null ? <span className="ml-1.5 text-[10.5px] tabular-nums text-fg-faint">{formatPercent(share)}</span> : null}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : null}

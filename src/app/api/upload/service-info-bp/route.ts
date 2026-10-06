@@ -8,18 +8,22 @@ import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 
 /** Service Information Report - BP — required daily like every other
  * upload. The raw file is always kept (see raw-report-uploads/store.ts),
- * same as before 2026-09-11; on top of that it's now also parsed with the
- * exact same rules as the GS report (service-info/parse.ts) for Wheel
- * Balancing / Wheel Alignment / Brake Skimming / VAS Revenue — never
- * Evaporator Cleaning, which stays GS-only (at the user's request). Those
- * four get added onto the branch's GS totals at read time (see
+ * same as before 2026-09-11; on top of that it's also parsed with the exact
+ * same rules as the GS report (service-info/parse.ts) for Wheel Balancing /
+ * Wheel Alignment / Brake Skimming / VAS Revenue — never Evaporator
+ * Cleaning, which stays GS-only (at the user's request). Those four get
+ * added onto the branch's GS totals at read time (see
  * loadCombinedServiceInfoSnapshots* in service-info/store.ts), not merged
  * into service_info_snapshots itself.
  *
- * A BP job order rarely carries these job codes, so a parse failure here
- * (an unexpected file shape) doesn't block the upload — the raw file is
- * still saved and locked exactly as before; it just has nothing pulled out
- * of it, same as if this parsing step didn't exist. */
+ * A parse failure here now hard-rejects the whole upload (2026-10-05, after
+ * TI01A's 2026-09-23 incident: a Body & Paint file got saved into the GS
+ * slot, and this route's old silent-swallow let a wrong file through here
+ * with no error and no warning at all — same root failure mode, worse,
+ * since nothing was even surfaced). A BP job order rarely carries GS-style
+ * job codes, so a *correctly-shaped* file with zero matches is still fine
+ * (Wheel Balancing/Alignment/Brake Skimming/VAS Revenue all come back 0) —
+ * only a file that isn't Service-Info-shaped at all is rejected. */
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) {
@@ -54,25 +58,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not read the uploaded file." }, { status: 400 });
   }
 
-  // Warn-and-allow duplicate check (2026-09-16, at the user's request) — this
-  // report type kept no parsed rows to hash (see raw-report-uploads/store.ts),
-  // which is exactly what let TI01C's resent BP file slip past the row-hash
-  // check that caught its GS-side twin (see docs/data-reconciliation.md).
-  // Compares raw file bytes directly against every prior upload this month,
-  // not just the most recent one (see raw-report-uploads/store.ts for why).
-  const confirmed = formData.get("confirmDuplicate") === "true";
-  if (!confirmed) {
-    const priorUploads = await loadAllRawReportUploadsBefore(admin.branch, "service_info_bp", date);
-    const newHash = hashBuffer(buffer);
-    const match = priorUploads.find((u) => hashBuffer(u.fileData) === newHash);
-    if (match) {
-      return NextResponse.json({
-        duplicate: true,
-        previousDate: match.date,
-        previousFileName: match.sourceFileName,
-        message: `This file looks identical to your upload from ${match.date} (${match.sourceFileName}). Are you sure this is ${date}'s file?`,
-      });
-    }
+  // Structural check — hard reject, nothing saved (2026-10-05). Parsed
+  // before any save so a bad file never gets saved half-done.
+  let bpCounts;
+  try {
+    const staffNames = await listAccessoriesStaffNamesForBranch(admin.branch);
+    ({ counts: bpCounts } = parseServiceInfoWorkbook(buffer, admin.branch, staffNames));
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
+      { status: 422 }
+    );
+  }
+
+  // Hard-blocking duplicate check (upgraded from warn-and-allow 2026-10-05,
+  // matching every other report type — see this route's doc comment). This
+  // report type keeps no parsed rows to hash (see raw-report-uploads/
+  // store.ts), which is exactly what let TI01C's resent BP file slip past
+  // the row-hash check that caught its GS-side twin (see docs/data-
+  // reconciliation.md). Compares raw file bytes directly against every
+  // prior upload this month, not just the most recent one. A genuine false
+  // positive now needs HQ (Upload Sheet).
+  const priorUploads = await loadAllRawReportUploadsBefore(admin.branch, "service_info_bp", date);
+  const newHash = hashBuffer(buffer);
+  const match = priorUploads.find((u) => hashBuffer(u.fileData) === newHash);
+  if (match) {
+    return NextResponse.json(
+      { error: `This file looks identical to your upload from ${match.date} (${match.sourceFileName}). If this really is ${date}'s file, contact HQ (Upload Sheet).` },
+      { status: 422 }
+    );
   }
 
   const uploadedAt = new Date().toISOString();
@@ -83,19 +97,9 @@ export async function POST(request: Request) {
     uploadedAt,
     sourceFileName: file.name,
     fileData: buffer,
+    uploadedBy: admin.username,
   });
-
-  let bpCounts = null;
-  try {
-    const staffNames = await listAccessoriesStaffNamesForBranch(admin.branch);
-    const { counts } = parseServiceInfoWorkbook(buffer, admin.branch, staffNames);
-    await saveServiceInfoBpSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts });
-    bpCounts = counts;
-  } catch {
-    // Not a Service Info-shaped export (or some other unexpected shape) —
-    // the raw file above is still saved and locked either way; there's
-    // just nothing to add to Wheel Balancing/Alignment/Brake Skimming/VAS.
-  }
+  await saveServiceInfoBpSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts: bpCounts, uploadedBy: admin.username });
 
   return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name, bpCounts });
 }

@@ -289,6 +289,36 @@ create table if not exists ssrv089_snapshots (
   primary key (date, branch, variant)
 );
 
+-- Grey-brand (non-Toyota) Part/Labour Sale from SSRV089 GS exports, summed
+-- across every row regardless of Close SA Name (unlike the Accessories
+-- columns above). Added after ssrv089_snapshots already existed in
+-- production, hence the explicit alter. scom205's GUS Sp/Lab Rev MTD
+-- excludes Grey-brand transactions entirely (confirmed 2026-10-01 against a
+-- real TI01A file — see ssrv089/parse.ts and ssrv089-bp/parse.ts), so this
+-- is added into GUS Parts/Labour MTD in report.ts, currently gated to
+-- GREY_REVENUE_BRANCHES (TI01A only for now).
+alter table ssrv089_snapshots add column if not exists grey_part_sale numeric not null default 0;
+alter table ssrv089_snapshots add column if not exists grey_labour_sale numeric not null default 0;
+
+-- Cost and Sales Report - BP is otherwise never parsed (see
+-- raw_report_uploads below), but Grey-brand revenue needs capturing
+-- somewhere — scom205's BPU Sp/Lab Rev MTD excludes it entirely, same as
+-- the GS case above (confirmed 2026-10-01, see ssrv089-bp/parse.ts). Pnt Mat
+-- Sale (paint material) counts toward "Parts" here alongside the literal
+-- Part Sale column, per the user's explicit call: a Grey BP job's money
+-- sits almost entirely in Pnt Mat Sale, not Part Sale. Added into BPU
+-- Parts/Labour MTD in report.ts, gated to GREY_REVENUE_BRANCHES (TI01A only
+-- for now).
+create table if not exists ssrv089_bp_grey_snapshots (
+  date date not null,
+  branch text not null,
+  uploaded_at timestamptz not null,
+  source_file_name text not null,
+  grey_parts_sale numeric not null default 0,
+  grey_labour_sale numeric not null default 0,
+  primary key (date, branch)
+);
+
 -- scom205 Monthly KPI Report — values are already MTD-cumulative in the
 -- source file, so unlike every other snapshot table this one has nothing
 -- to accumulate across days; a given date's row is just that day's read.
@@ -640,3 +670,106 @@ create table if not exists central_metric_targets (
   set_at                timestamptz not null default now(),
   primary key (month, branch)
 );
+
+-- Which admin account performed each daily-report upload (2026-09-30) — added
+-- after a duplicate SSRV089 upload for MV01A landed with no way to tell
+-- whether it came from the branch's own upload portal or HQ's Upload Sheet
+-- tool acting on the branch's behalf. Nullable: every row uploaded before
+-- this column existed has no known uploader.
+alter table raw_upload_rows add column if not exists uploaded_by text;
+alter table raw_report_uploads add column if not exists uploaded_by text;
+alter table ssrv089_snapshots add column if not exists uploaded_by text;
+alter table scom205_snapshots add column if not exists uploaded_by text;
+alter table service_info_snapshots add column if not exists uploaded_by text;
+alter table service_info_bp_snapshots add column if not exists uploaded_by text;
+alter table part_sale_snapshots add column if not exists uploaded_by text;
+
+-- Batch-level content hashes for duplicate-upload detection (2026-09-30).
+-- One row per (report_type, branch, date) — the same granularity that
+-- saveRawUploadRows deletes and re-inserts atomically. The PRIMARY KEY
+-- enforces the one-batch-per-date invariant at the schema level and makes
+-- concurrent re-uploads safe (ON CONFLICT UPDATE). The hash index turns the
+-- duplicate check from a ~6 s full-scan + JS loop into a single keyed lookup.
+-- Covers service_info / ssrv089 / part_sale only — scom205 and ba_tool use
+-- their own duplicate-detection paths. Backfilled from raw_upload_rows via
+-- db/backfill-batch-hashes.mjs before code deployment.
+create table if not exists raw_upload_batches (
+  report_type  text        not null check (report_type in ('service_info', 'ssrv089', 'part_sale')),
+  branch       text        not null,
+  date         date        not null,
+  content_hash text        not null,
+  uploaded_at  timestamptz not null,
+  primary key (report_type, branch, date)
+);
+create index if not exists raw_upload_batches_hash_idx
+  on raw_upload_batches (report_type, branch, content_hash);
+
+-- Login rate-limiting counters (2026-09-30). One row per HMAC-keyed account or
+-- IP prefix. A single atomic upsert both records the attempt and resets an
+-- expired window in one round-trip (see src/lib/login-rate-limit.ts). Rows are
+-- left to decay naturally — a 1%-probability cleanup pass deletes rows older
+-- than 24 hours on each login attempt. No FK to admins intentionally: a failed
+-- login against a non-existent username still increments a counter so username
+-- enumeration doesn't bypass the limit.
+create table if not exists login_rate_limits (
+  key          text        primary key,
+  attempts     integer     not null default 1,
+  window_start timestamptz not null default now()
+);
+
+-- Precomputed cancellation-revenue adjustments (2026-10-01). report.ts used
+-- to run ssrv089/cancellation-adjustment.ts's and cancellation/
+-- cross-month-replacement.ts's raw_upload_rows joins on every single
+-- /dashboard, /ceo and /queries page load — fine when that table was ~170k
+-- rows, but once it passed 3.7M rows concurrent page loads piled up on the
+-- same expensive joins and started blowing Vercel's 300s function timeout
+-- (63 timeouts across 8 users on 2026-09-30/10-01). These two tables hold
+-- the same results computed once at upload time instead (see
+-- src/lib/cancellation/adjustment-recompute.ts and its callers in the
+-- SSRV089 and cancellation upload routes) — report.ts now does a flat keyed
+-- lookup here, so read latency no longer depends on raw_upload_rows' size at
+-- all. db/backfill-cancellation-adjustments.mjs populates both from scratch.
+create table if not exists cancelled_accessories_adjustments (
+  branch        text        not null,
+  revenue_month text        not null, -- 'YYYY-MM' — the cancelled invoice's own revenue month, same key report.ts looks up by `date`'s month
+  part_sale     numeric     not null,
+  labour_sale   numeric     not null,
+  computed_at   timestamptz not null default now(),
+  primary key (branch, revenue_month)
+);
+
+create table if not exists cross_month_replacements (
+  branch             text        not null,
+  cancelled_doc_no   text        not null,
+  ref_doc_no         text        not null,
+  cancelled_month    text        not null,
+  replacement_doc_no text        not null,
+  replacement_month  text        not null,
+  part_sale          numeric     not null,
+  labour_sale        numeric     not null,
+  computed_at        timestamptz not null default now(),
+  primary key (branch, cancelled_doc_no, replacement_doc_no)
+);
+create index if not exists cross_month_replacements_month_idx
+  on cross_month_replacements (replacement_month);
+
+-- Backup-before-delete audit trail (2026-10-06), added after TI01B's
+-- September SSRV089-GS (1-13) and Part Sale (1-14) snapshots + raw rows were
+-- found deleted with no trace anywhere — no committed script did it, so it
+-- was most likely a manual/ad-hoc delete, and there was nothing to query
+-- afterward to confirm what was lost or when. See src/lib/audit/deleted-rows-log.ts's
+-- logDeletedRows() — called immediately before any delete on the two paths
+-- that can remove upload data (the live per-upload replace in
+-- raw-upload-rows/store.ts, and scripts/reset-branch-uploads.mjs), always in
+-- the same transaction as the delete so a rolled-back delete never leaves a
+-- stray log entry behind. `source` identifies which of those two wrote the
+-- entry. Not wired into every historical one-off scripts/fix-*.mjs (those
+-- already ran; this covers paths that can run again).
+create table if not exists deleted_rows_log (
+  id         bigserial    primary key,
+  table_name text         not null,
+  source     text         not null,
+  deleted_at timestamptz  not null default now(),
+  row_data   jsonb        not null
+);
+create index if not exists deleted_rows_log_lookup_idx on deleted_rows_log (table_name, deleted_at);

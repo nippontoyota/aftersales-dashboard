@@ -41,7 +41,71 @@ The ☐ open items below were re-checked against current data and are still open
 listed, except where a section says otherwise — this pass didn't re-litigate
 each one, just confirmed no *new* instances of either bug class have appeared.
 
+## TI01B · September 1-13 (ssrv089/BP) / 1-14 (Part Sale) — turned out NOT to be a live gap (2026-10-06)
+
+A 2026-10-06 investigation found TI01B's `ssrv089_snapshots` (1-13 Sep) and
+`part_sale_snapshots` (1-14 Sep) raw rows + snapshots **under their own
+dates** completely missing — no committed script deleted them, so most
+likely a manual/ad-hoc delete (motivated building `deleted_rows_log`, see
+[src/lib/audit/deleted-rows-log.ts](../src/lib/audit/deleted-rows-log.ts)).
+The user supplied the real files (`GS_CostAndSalesReport-TI01B
+01-13.09.2026.xlsx`, `BP_CostAndSalesReport-TI01B 01-13.09.2026.xlsx`,
+`PartSaleReport-TI01B 01-14.09.2026.xlsx`) to backfill the gap —
+`scripts/backfill-ti01b-sep-1-13-gap.mts --commit` inserted them under
+2026-09-13 (ssrv089/BP) and 2026-09-14 (Part Sale), each verified against
+its own row dates first (not the filename).
+
+**That insert turned out to double-count.** TI01B's pre-existing 2026-09-15
+snapshot (uploaded 2026-09-16, never touched by anything today) is *itself*
+a cumulative export that already fully contains the 1-13/1-14 span — 100%
+of the newly-inserted JobOrder No (ssrv089/BP) and BillNo (Part Sale) keys
+were already present in the 15th's rows. So the "missing" span was never
+actually missing from the MTD *total* — it survived via the 15th's resend —
+only from the raw data filed under its own correct date. Caught via the
+same overlap check this doc's cumulative-upload fixes have always used;
+reverted with `scripts/revert-ti01b-sep-1-13-overlap.mts --commit` (itself
+now a real end-to-end test of the new `deleted_rows_log` guardrail).
+
+**Net effect: none.** TI01B's September GUS Parts/Labour MTD is unchanged
+by any of this — still **₹50,74,418.29 / ₹28,58,108.11** (accessories
+deduction ₹5,45,202.70 parts / ₹1,12,011.71 labour, same as before
+2026-10-06). The ₹61,642 (parts) / ₹19,372 (labour) gap against the
+branch's own cross-checked figures, the question this was investigating,
+remains **unexplained** — this wasn't it.
+
+Still true and still fixed regardless of the above: BP's separately-held
+2026-09-03/08/09/10/11 entries were genuinely superseded (same containment
+check against the 15th) and stay deleted.
+
 ---
+
+## August · External Sales stuck on the old rule  →  Total External Sales **understated** (2026-09-30)
+
+Almost every branch's August Part Sale files were uploaded 2026-08-29–09-02, **before**
+the External Sales rule was rewritten (any `A`-type BillNo, 2026-09-15) and before the FK
+cross-month netting change (2026-09-23). Their stored `external_sales` still reflects the
+old rule (literal `"AA"` prefix + PartNo filter), which scores ~0 for every branch but
+CO01B. September and earlier months were swept by `scripts/recompute-part-sale-fk-all-months.mts`,
+but that script is scoped `FROM = "2026-09-01"` — August fell through the gap.
+
+**Fixed 2026-09-30** in two passes:
+1. `scripts/backfill-part-sale-external-august.mts --commit` — 17 branches with no overlap risk,
+   38 snapshots recomputed under the current rule, **+₹65,46,223** net.
+2. `scripts/fix-kl-co01b-august-dedup.mts --commit` — CO01B's duplicate `08-28` orphan deleted
+   (same file as `08-27`, was double-counting ₹1,02,379); KL01A/KL01B's weekly uploads were found
+   fully contained inside their monthly cumulative file (every weekly bill reappears in the
+   cumulative), so the cumulative was kept as the source of truth and the redundant weeklies
+   deleted (KL01A: `08-07`/`08-14`/`08-21`/`08-30`; KL01B: `08-09`/`08-16`/`08-24`/`08-28`).
+
+August External Sales grand total: ₹9,53,856 (stale) → **₹74,00,870**, verified with zero
+remaining BillNo overlaps across any branch/date pair.
+
+**Fully missing** (no snapshot at all for that branch/day — needs a fresh upload, nothing to recompute):
+CO01A 30 Aug, CO01B 30 Aug, IR01A 30 Aug, KL01B 30 Aug.
+
+**Orphaned** (a snapshot exists but predates raw-row capture (2026-09-01), so it can't be
+recomputed — stuck at its old-rule value, mostly ₹0): 29 Aug for KT01A, KT01B, KY01A, MV01A,
+PH01A, TI01B, TI01C, TL01A, TR01A, TR01B, TR01C. Needs re-upload to correct.
 
 ## September · went dark after 3 Sep  →  GUS + BPU + Total Revenue MTD **blank** on the live dashboard
 
@@ -148,6 +212,7 @@ Clean for 4–6 Sep: **CO01B** (two proper separate uploads), PH01A, TR01A, TR01
 | ✅ | **TI01A** | Same sweep: dashboard External Sales ₹2,16,223.27 vs the sheet, ₹27,212 higher on the sheet's side. Traced almost entirely to **09-01 and 09-02 having no Part Sale Report on file for TI01A at all** (first upload is 09-03) — not a bug, just not yet filed; user is filling in the 1st/2nd from their side. Separately (unrelated to the gap — zero `A`-type bills that day, so no External Sales effect either way), found "09 Sep" (`PART SALE 09-09-2026.csv`, 108 rows) is a full, exact duplicate of rows already in "10 Sep" (`PARTS & SALES 10-09-2026.csv`) on all 6 fields (BillNo/PartNo/NetAmnt/Sale Qty/VinNo/CustomerName). | Deleted the 09 Sep `part_sale` snapshot + 108 raw rows entirely (`scripts/fix-ti01a-sep09-part-sale-duplicate.mjs --commit`), reverting to "not yet uploaded for the 9th" — 10 Sep's snapshot remains the sole, correct holder. | Engine Flush MTD 113 → **112**; Injector Cleaner 42 → **41**; Synthetic Oil 1,138.1 → **1,100.6** Ltrs; Brake Cleaning Spray 286 → **279**. External Sales unchanged (₹2,16,223.27 both before and after — 09-09 had no external-type bills). Gap vs the sheet still open pending the 1st/2nd upload. |
 | ✅ | **TI01A** | The user then uploaded a combined 1st+2nd Sep file (`SPRT014_PartSaleReport-TI01A.csv`, 1,016 rows, filed as "02 Sep" — its `SaleDate` values span exactly 2 distinct days under this branch's SPRT014 date encoding). Turned out **1,010 of its 1,016 rows were already in 03 Sep's file** (`...-1788498238765_1.csv`, 1,652 rows) — user confirmed 03 Sep was already a 1st–3rd cumulative export. Only 6 rows were genuinely new (1 external `A`-type bill +₹114.95; the other 5 — a `D`-type bill's 3 lines, an `E`-type bill's 2 lines — don't match any tracked part category). | Moved the 6 unique raw rows onto 03 Sep (the correct cumulative holder), added their ₹114.95 to 03 Sep's `external_sales`, and deleted the "02 Sep" snapshot + remaining 1,010 raw rows entirely (`scripts/fix-ti01a-sep02-part-sale-cumulative.mjs --commit`) — reverting 02 Sep to "not yet uploaded" (its real data was always inside 03 Sep's cumulative). Re-ran the full date-pair overlap check afterward — clean, no remaining duplicates anywhere in September. | External Sales MTD ₹2,16,223.27 → **₹2,16,338.22** (+₹114.95, not the ~₹1.2L the redundant file's own total suggested). 01/02 Sep still show as "not uploaded" individually — their real data lives inside 03 Sep's cumulative snapshot, same as IR01A/TI01C's cumulative-upload pattern elsewhere in this doc. |
 | ✅ | **TI01C** | A full-company audit 2026-09-18 found TI01C's "16 Sep" Part Sale upload (2,698 rows) was a full **1–16 Sep cumulative export** (16 distinct `SaleDate` values, verified) — a clean superset of the 8 days that already had their own standalone snapshots (3, 6, 7, 8, 9, 13, 14, 15 Sep), double-counting each into MTD. The other 8 days inside it (1, 2, 4, 5, 10, 11, 12, plus the 16th itself) were genuinely new, incidentally filling gaps the same audit had flagged as missing. | Deleted the 8 now-redundant standalone snapshots + 2,521 raw rows (`scripts/fix-ti01c-sep16-part-sale-cumulative.mjs --commit`), leaving 16 Sep as the sole (already-cumulative) holder for the 1–16 Sep span — same remedy as IR01A/TI01B/TI01A's cumulative-upload fixes above. Checked Service Info and SSRV089 for the same pattern — both clean, normal-sized daily files, no fix needed there. | External Sales MTD unaffected in total (₹1,27,244.37 both before and after — the newly-recovered days had zero qualifying `A`-type bills of their own). Engine Flush 85→**90**, Synthetic Oil 385.6→**433.1** Ltrs picked up real contributions from the previously-missing days. |
+| ✅ | **MV01A** | Flagged 2026-09-30 investigating a GUS Parts MTD gap vs. the branch's manual report (₹95,44,072 vs ₹94,96,198): MV01A's "28 Sep" SSRV089-General upload (`260926.csv`) was a byte-identical resend of 27 Sep's file (same 110 raw rows, hash-verified) — went in through HQ's Upload Sheet, which had no duplicate check for SSRV089 at the time (Service Info/Part Sale had one; SSRV089 never did on that specific route). Was over-deducting Accessories by the 27th's ₹14,692 parts / ₹1,984.15 labour a second time, understating GUS Parts/Labour MTD (the opposite direction from the reported gap — a separate issue, not its cause). | Deleted the 28 Sep `ssrv089` (general) snapshot + 110 raw rows (`scripts/fix-mv01a-sep28-ssrv089-duplicate.mjs --commit`), reverting to "not yet uploaded for the 28th" so a real file can be submitted. Also added the missing date-sanity + exact-hash duplicate checks to HQ Upload Sheet's SSRV089 path (mirroring Part Sale/Service Info in the same route), and added an `uploaded_by` column across every upload table so a future "who uploaded this" question has an answer. | Accessories deduction MTD: parts ₹20,06,817.24 → **₹19,92,125.24** (−₹14,692), labour −₹1,984.15. GUS Parts/Labour MTD move up by the same amount once recomputed. MV01A still owes a real 28 Sep SSRV089-General file. |
 
 ## August · double-counted  →  GUS Labour / Parts MTD read **low** (closed month)
 

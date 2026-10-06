@@ -1,10 +1,11 @@
-import { ExternalSalesIcon, RevenueIcon, StorefrontIcon, TargetIcon, WrenchIcon } from "@/components/dashboard-icons";
+import { RevenueIcon, StorefrontIcon, TargetIcon, WrenchIcon } from "@/components/dashboard-icons";
 import { RichKpiCard, type TrendInfo } from "@/components/rich-kpi-card";
 import { formatCompactCurrency } from "@/lib/format";
 import type { VpScopeMetrics } from "@/lib/vp-data";
 import { IncentiveSlabIndicator } from "../dashboard/incentive-slab-indicator";
 import { tglossText } from "@/components/tgloss-text";
 import { VpMetricArea } from "./vp-compare";
+import { VpExternalSalesKpiCard } from "./vp-external-sales-kpi-card";
 import type { MetricKey } from "./vp-metrics";
 import { VpPairedKpiCard } from "./vp-paired-kpi-card";
 
@@ -30,11 +31,13 @@ function trendFor(current: number | null, previous: number | null | undefined, p
  * Priority order follows the VP's own brief: Total Revenue Stream (with its
  * incentive slab rings), then Parts and Labour (GUS + BPU together — no
  * confirmed MTD target exists for either, so these show a projected
- * month-end figure and run rate instead of a target bar), then TGLOSS
- * (which does have a target, so it gets the full bar/gap/required-rate
- * treatment), then External Sales. The detailed grid with every region and
- * every metric still exists below, collapsed by default — this is a
- * summary, not a replacement.
+ * month-end figure and run rate instead of a target bar), then External
+ * Sales (now paired with Scrap and Used Oil as two plain mini-stats — see
+ * vp-external-sales-kpi-card.tsx), then TGLOSS (which does have a target,
+ * so it gets the full bar/gap/required-rate treatment) — swapped ahead of
+ * TGLOSS 2026-10-01, at the VP's request. The detailed grid with every
+ * region and every metric still exists below, collapsed by default — this
+ * is a summary, not a replacement.
  */
 export function VpKpiCards({
   group,
@@ -98,6 +101,14 @@ export function VpKpiCards({
         secondaryTrend={trendFor(group.bpuLabourMtd, previous?.bpuLabourMtd, previousDate)}
         formatPaceValue={formatCompactCurrency}
       />
+      <VpExternalSalesKpiCard
+        target={groupTarget("externalSales", group.externalSalesMtd)}
+        value={formatCompactCurrency(group.externalSalesMtd)}
+        trend={trendFor(group.externalSalesMtd, previous?.externalSalesMtd, previousDate)}
+        pace={group.externalSalesPace}
+        scrapValue={formatCompactCurrency(group.scrapMtd)}
+        usedOilValue={formatCompactCurrency(group.usedOilMtd)}
+      />
       <VpMetricArea className="h-full" target={groupTarget("tglossMtd", group.tglossMtd)}>
       <RichKpiCard
         compact
@@ -111,19 +122,6 @@ export function VpKpiCards({
         target={group.tglossTarget}
         pace={group.tglossPace}
         paceTone={group.tglossPaceTone}
-        formatPaceValue={formatCompactCurrency}
-      />
-      </VpMetricArea>
-      <VpMetricArea className="h-full" target={groupTarget("externalSales", group.externalSalesMtd)}>
-      <RichKpiCard
-        compact
-        icon={<ExternalSalesIcon />}
-        color="teal"
-        label="External Sales · MTD"
-        value={formatCompactCurrency(group.externalSalesMtd)}
-        trend={trendFor(group.externalSalesMtd, previous?.externalSalesMtd, previousDate)}
-        sub={group.externalSalesPace.projectedEom !== null ? `Projected EOM ${formatCompactCurrency(group.externalSalesPace.projectedEom)}` : undefined}
-        pace={group.externalSalesPace}
         formatPaceValue={formatCompactCurrency}
       />
       </VpMetricArea>

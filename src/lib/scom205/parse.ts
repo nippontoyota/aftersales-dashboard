@@ -129,9 +129,15 @@ export type ParsedScom205 = {
   rawRows: unknown[][];
 };
 
+const SCOM205_MAX_ROWS = 1_000;
+
 export function parseScom205Workbook(buffer: Buffer): ParsedScom205 {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const workbook = XLSX.read(buffer, { type: "buffer", sheetRows: SCOM205_MAX_ROWS + 1 });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
+  if (range.e.r >= SCOM205_MAX_ROWS) {
+    throw new Error(`File has more than ${SCOM205_MAX_ROWS.toLocaleString()} rows — is this the right file?`);
+  }
   const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", blankrows: true });
 
   let stockAndServiceRate: Scom205StockAndServiceRate | null = null;
