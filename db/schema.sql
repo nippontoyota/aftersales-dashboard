@@ -773,3 +773,46 @@ create table if not exists deleted_rows_log (
   row_data   jsonb        not null
 );
 create index if not exists deleted_rows_log_lookup_idx on deleted_rows_log (table_name, deleted_at);
+
+-- Labour Sales Report (7th report type, 2026-10-06) — a repair-order-level
+-- labour line export (Job No./RO, Job Code, Sub Total before and after
+-- discount) used to check actual billed VAS revenue against the fixed
+-- price-list estimate in vas-price-list.ts. Not wired into report.ts or any
+-- dashboard figure yet — local/dev only until the user says to roll it out.
+--
+-- Unlike the other six, this one does NOT key dates off a picked upload
+-- date: a real file can be a single day or a cumulative multi-day/month
+-- dump (confirmed by the user — backfills especially), so the parser derives
+-- each row's own date from its "Doc. Date" column and this table ends up
+-- with one row per (branch, real calendar date) found in the file,
+-- regardless of how many dates one upload touched. A re-upload overwrites
+-- whichever dates it contains (on conflict do update) rather than being
+-- rejected as a duplicate — the latest file wins for those days, since the
+-- same cumulative export may legitimately be re-pulled during backfill.
+create table if not exists labour_sales_snapshots (
+  date date not null,
+  branch text not null,
+  uploaded_at timestamptz not null,
+  source_file_name text not null,
+  uploaded_by text,
+  row_count integer not null,
+  -- All labour lines that day, Toyota-genuine or VAS or anything else.
+  total_labour_before numeric not null,
+  total_labour_after numeric not null,
+  -- Just the VAS/T-Gloss-coded lines (Job Code like '99TG%') — not yet
+  -- excluding accessories-staff rows (that needs a join against that day's
+  -- Service Info Report by Job Order No., done at read time, not stored
+  -- here).
+  vas_labour_before numeric not null,
+  vas_labour_after numeric not null,
+  -- Distinct Job No. count by prefix (GSJ = General Service, BPJ = Body &
+  -- Paint) — informational; not used as a GUS/BPU substitute (confirmed
+  -- against BA Tool's own GUS figure, the two don't reconcile cleanly).
+  gs_ro_count integer not null,
+  bp_ro_count integer not null,
+  primary key (date, branch)
+);
+
+alter table raw_upload_rows drop constraint if exists raw_upload_rows_report_type_check;
+alter table raw_upload_rows add constraint raw_upload_rows_report_type_check
+  check (report_type in ('service_info', 'ssrv089', 'part_sale', 'scom205', 'ba_tool', 'labour_sales'));
