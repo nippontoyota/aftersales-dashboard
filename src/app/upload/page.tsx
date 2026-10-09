@@ -11,6 +11,7 @@ import { loadPartSaleSnapshot } from "@/lib/part-sale/store";
 import { loadSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { loadScom205Snapshot } from "@/lib/scom205/store";
 import { loadRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { loadLabourSalesSnapshot } from "@/lib/labour-sales/store";
 import { isBodyPaintOnly, onlineStoreCodeFor } from "@/lib/report";
 import { BaToolUploadForm } from "./ba-tool-upload-form";
 import { BillUploadForm } from "./bill-upload-form";
@@ -69,7 +70,7 @@ export default async function UploadPage({
           // set 2026-09-01, at the user's request — six report types per
           // branch per day now, nothing parsed out of the two BP ones (see
           // raw-report-uploads/store.ts).
-          const [serviceInfo, serviceInfoBp, ssrvGeneral, ssrvBp, partSale, scom205, partSaleOnline] = await Promise.all([
+          const [serviceInfo, serviceInfoBp, ssrvGeneral, ssrvBp, partSale, scom205, partSaleOnline, labourSales] = await Promise.all([
             loadServiceInfoSnapshot(reportDate, admin.branch),
             loadRawReportUpload(reportDate, admin.branch, "service_info_bp"),
             loadSsrv089Snapshot(reportDate, admin.branch, "general"),
@@ -77,6 +78,7 @@ export default async function UploadPage({
             loadPartSaleSnapshot(reportDate, admin.branch),
             loadScom205Snapshot(reportDate, admin.branch),
             onlineStoreCode ? loadPartSaleSnapshot(reportDate, onlineStoreCode) : Promise.resolve(null),
+            loadLabourSalesSnapshot(reportDate, admin.branch),
           ]);
           const pick = (s: { sourceFileName: string; uploadedAt: string } | null) =>
             s ? { sourceFileName: s.sourceFileName, uploadedAt: s.uploadedAt } : null;
@@ -88,6 +90,7 @@ export default async function UploadPage({
             partSale: pick(partSale),
             scom205: pick(scom205),
             partSaleOnline: pick(partSaleOnline),
+            labourSales: pick(labourSales),
           };
         })()
       : null;
@@ -187,7 +190,7 @@ export default async function UploadPage({
                     <OnlineStorePartSaleUploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.partSaleOnline} />
                   )}
                   <Scom205UploadForm reportDate={reportDate} alreadyUploaded={alreadyUploaded?.scom205} />
-                  <LabourSalesUploadForm />
+                  <LabourSalesUploadForm alreadyUploaded={alreadyUploaded?.labourSales} />
                 </div>
               </>
             }
