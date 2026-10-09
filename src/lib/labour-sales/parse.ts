@@ -57,16 +57,27 @@ function parseAmount(value: unknown): number {
 
 type SlashOrder = "DMY" | "MDY";
 
-/** Picks day/month order from the file's OWN data — same approach as
+/** Days since 1899-12-30, same constant used everywhere else in this
+ * codebase that converts an Excel serial date (e.g. upload-date-sanity.ts). */
+function excelSerialToDate(serial: number): string | null {
+  const utcDays = Math.floor(serial - 25569);
+  const d = new Date(utcDays * 86400 * 1000);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+/** Picks day/month order from the file's OWN text values — same approach as
  * upload-date-sanity.ts's detectSlashDateFormat, reimplemented here because
  * this needs the full date (year-month-day), not just year-month. A
  * component > 12 can only be a day, so the first such row settles it;
- * defaults to DMY (every real Doc. Date sample seen so far is day-first)
- * when every row in the file is ambiguous. */
-function detectSlashOrder(rawRows: Record<string, unknown>[]): SlashOrder {
-  for (const row of rawRows) {
+ * defaults to DMY (every CSV Doc. Date sample seen so far is day-first)
+ * when every row in the file is ambiguous. Only ever used for the text
+ * fallback path — see resolveDocDate's doc comment for why a genuine xlsx
+ * date cell never needs this at all. */
+function detectSlashOrder(textRows: Record<string, unknown>[]): SlashOrder {
+  for (const row of textRows) {
     const str = normalize(row[DOC_DATE_COLUMN]);
-    const match = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    const match = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})$/);
     if (!match) continue;
     const a = Number(match[1]);
     const b = Number(match[2]);
@@ -76,17 +87,49 @@ function detectSlashOrder(rawRows: Record<string, unknown>[]): SlashOrder {
   return "DMY";
 }
 
-/** Returns YYYY-MM-DD, or null if unparseable. */
-function parseDocDate(raw: unknown, order: SlashOrder): string | null {
-  const str = normalize(raw);
-  const match = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+/** Text fallback — "DD/MM/YYYY"-or-"MM/DD/YY"-shaped, "-" or "/" separated,
+ * 2- or 4-digit year (a 2-digit year is assumed 20YY — every real sample
+ * seen so far is 2026). Returns YYYY-MM-DD, or null if unparseable. */
+function parseSlashDateText(str: string, order: SlashOrder): string | null {
+  const match = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})$/);
   if (!match) return null;
-  const [, a, b, yyyy] = match;
+  const [, a, b, yy] = match;
   const [dd, mm] = order === "DMY" ? [a, b] : [b, a];
   const day = Number(dd);
   const month = Number(mm);
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const yyyy = yy.length === 2 ? `20${yy}` : yy;
   return `${yyyy}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Resolves one row's real date from BOTH how it reads natively (`rawValue` —
+ * a genuine Excel date cell comes through as a plain serial number, no
+ * guessing involved at all) and how it reads as forced text (`textValue`).
+ *
+ * Confirmed 2026-10-09 against a real branch's upload (CO01B's "LABOUR SALE
+ * REPORT 08-10-26.xlsx", rejected with "no readable Doc. Date"): its Doc.
+ * Date column is a true xlsx date cell, serial 46296 etc. — but formatted as
+ * text it reads "10/1/26", a 2-digit-year, MONTH-FIRST string every row of
+ * which has day ≤ 12 (so detectSlashOrder can't disambiguate it from the
+ * text alone, and the CSV samples this parser was first built against were
+ * all day-first — a silent wrong guess was the actual risk, not just a
+ * parse failure). The exact serial sidesteps the ambiguity entirely, so it's
+ * preferred whenever `isNativeSpreadsheet` is true (an actual .xlsx/.xls,
+ * not a .csv — see parseLabourSalesWorkbook) and the row's raw value is
+ * genuinely numeric. A CSV's `rawValue` can ALSO come through numeric
+ * (xlsx's own CSV date-guessing — the exact risky behavior
+ * service-info/parse.ts's raw:false comment already documents), so this
+ * path is deliberately never trusted for a CSV — the text fallback (with
+ * this module's own day/month detection) is used instead, unchanged from
+ * before.
+ */
+function resolveDocDate(rawValue: unknown, textValue: unknown, isNativeSpreadsheet: boolean, order: SlashOrder): string | null {
+  if (isNativeSpreadsheet && typeof rawValue === "number" && rawValue > 1000) {
+    const fromSerial = excelSerialToDate(rawValue);
+    if (fromSerial) return fromSerial;
+  }
+  return parseSlashDateText(normalize(textValue), order);
 }
 
 export type LabourSalesCounts = {
@@ -112,7 +155,7 @@ export type ParsedLabourSales = {
   skippedRowCount: number;
 };
 
-function findDataSheet(workbook: XLSX.WorkBook): { rows: Record<string, unknown>[] } | null {
+function findDataSheet(workbook: XLSX.WorkBook): { rowsRaw: Record<string, unknown>[]; rowsText: Record<string, unknown>[] } | null {
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
     const headerRow = (XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" })[0] ?? []).map((c) => String(c ?? "").trim());
@@ -122,11 +165,16 @@ function findDataSheet(workbook: XLSX.WorkBook): { rows: Record<string, unknown>
     if (range.e.r >= LABOUR_SALES_MAX_ROWS) {
       throw new Error(`File has more than ${LABOUR_SALES_MAX_ROWS.toLocaleString()} rows — is this the right file?`);
     }
-    // raw: false, same reasoning as service-info/parse.ts — Doc. Date is
-    // read and parsed as plain text below (parseDocDate), never left to
-    // xlsx's own ambiguous date guessing.
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
-    return { rows };
+    // Read the sheet twice, same row order both times: `rowsRaw` keeps a
+    // genuine date cell's native numeric serial (resolveDocDate's preferred,
+    // unambiguous path for a real .xlsx/.xls); `rowsText` forces everything
+    // to text, same reasoning as service-info/parse.ts's raw:false — a CSV's
+    // own ambiguous date-guessing never gets a chance to run, and this is
+    // also what every OTHER column (and what gets archived to
+    // raw_upload_rows) uses regardless of date handling.
+    const rowsRaw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    const rowsText = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
+    return { rowsRaw, rowsText };
   }
   return null;
 }
@@ -138,17 +186,22 @@ export function parseLabourSalesWorkbook(buffer: Buffer): ParsedLabourSales {
   if (!found) {
     throw new Error(`Could not find a sheet with "${JOB_NO_COLUMN}", "${DOC_DATE_COLUMN}", "${JOB_CODE_COLUMN}", "${SUB_TOTAL_BEFORE_COLUMN}", and "${SUB_TOTAL_AFTER_COLUMN}" columns — is this a Labour Sales Report export?`);
   }
-  if (found.rows.length === 0) {
+  if (found.rowsText.length === 0) {
     throw new Error("This file has the right columns but no data rows — looks like an empty export. Check the DMS pull and try again.");
   }
-  const { rows } = found;
-  const order = detectSlashOrder(rows);
+  // SheetJS's own "xlsx"/"xls"/"xlsb" (never set for a .csv, which has no
+  // real cell typing at all — see resolveDocDate's doc comment on why that
+  // distinction matters here).
+  const isNativeSpreadsheet = workbook.bookType !== undefined;
+  const { rowsRaw, rowsText } = found;
+  const order = detectSlashOrder(rowsText);
 
   const byDate = new Map<string, Record<string, unknown>[]>();
   let skippedRowCount = 0;
 
-  for (const row of rows) {
-    const date = parseDocDate(row[DOC_DATE_COLUMN], order);
+  for (let i = 0; i < rowsText.length; i++) {
+    const row = rowsText[i];
+    const date = resolveDocDate(rowsRaw[i]?.[DOC_DATE_COLUMN], row[DOC_DATE_COLUMN], isNativeSpreadsheet, order);
     if (!date) {
       skippedRowCount++;
       continue;
