@@ -17,6 +17,9 @@ import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import type { Scom205Snapshot } from "./scom205/store";
 import { loadBillRevenueByBranchForMonth, loadBillRevenueByBranchForDate } from "./bill/store";
 import { BODY_PAINT_ONLY_BRANCHES, isBodyPaintOnly } from "./body-paint-only";
+import { loadAllVasRevenueRealForMonthUpTo } from "./vas-revenue-real/store";
+import type { VasRevenueRealSnapshot } from "./vas-revenue-real/store";
+import { VAS_REAL_CUTOVER_DATE } from "./vas-revenue-real/compute";
 
 const FIXED_TGLOSS_SERVICE_TARGET = 0.38;
 
@@ -26,6 +29,15 @@ const FIXED_TGLOSS_SERVICE_TARGET = 0.38;
 // FIXED_TGLOSS_SERVICE_TARGET above, which grades a different BA Tool field).
 const VAS_BILL_TARGET_RO_SHARE = 0.38;
 const VAS_BILL_TARGET_PER_RO = 3000;
+
+// VAS revenue real-amount cutover (2026-10-09, at the user's explicit
+// request): any month from here on sums vas_revenue_real (Labour Sales
+// Report real billed amounts, price-list fallback per unmatched row — see
+// vas-revenue-real/compute.ts); any earlier month keeps the original
+// price-list-only calculation (service_info_snapshots.vas_revenue),
+// completely untouched. Derived from the same constant the precompute uses,
+// so the two can never drift apart.
+const VAS_REAL_CUTOVER_MONTH = VAS_REAL_CUTOVER_DATE.slice(0, 7);
 
 export type BranchReport = {
   branch: string;
@@ -407,6 +419,7 @@ function computeBranchReport(
   yesterday: BaToolBranchRow | undefined,
   serviceInfoToday: ServiceInfoSnapshot | undefined,
   serviceInfoMonth: ServiceInfoSnapshot[],
+  vasRevenueRealMonth: VasRevenueRealSnapshot[],
   partSaleToday: PartSaleSnapshot | undefined,
   partSaleMonth: PartSaleSnapshot[],
   ssrv089GeneralMonth: Ssrv089Snapshot[],
@@ -449,7 +462,15 @@ function computeBranchReport(
   const gusRoMtd = t("gus");
   const bpuRoMtd = t("bpus");
   const vasBillTarget = gusRoMtd !== null ? gusRoMtd * VAS_BILL_TARGET_RO_SHARE * VAS_BILL_TARGET_PER_RO : null;
-  const vasAchievementForTheMonth = sumBy(serviceInfoMonth, (s) => s.counts.vasRevenue);
+
+  // Real amounts (Labour Sales Report) for this month onwards if it's
+  // 2026-10 or later, otherwise the original price-list-only figure,
+  // completely unchanged — see VAS_REAL_CUTOVER_MONTH above.
+  const vasRealCutoverActive = date.slice(0, 7) >= VAS_REAL_CUTOVER_MONTH;
+  const vasAchievementForTheMonth = vasRealCutoverActive
+    ? sumBy(vasRevenueRealMonth, (s) => s.vasRevenue)
+    : sumBy(serviceInfoMonth, (s) => s.counts.vasRevenue);
+  const vasRevenueRealToday = vasRevenueRealMonth.find((s) => s.date === date)?.vasRevenue;
 
   // A Body & Paint-only branch has no general service, so its GUS Parts/
   // Labour is 0 (not "unknown"), and it never files the SSRV089-General /
@@ -529,7 +550,7 @@ function computeBranchReport(
     pmOcAchievementForTheMonth: t("pm"),
 
     vasBillTarget,
-    vasAchievementForTheDay: serviceInfoToday?.counts.vasRevenue ?? null,
+    vasAchievementForTheDay: vasRealCutoverActive ? (vasRevenueRealToday ?? null) : (serviceInfoToday?.counts.vasRevenue ?? null),
     vasAchievementForTheMonth,
     vasAchievementPercent: ratio(vasAchievementForTheMonth, vasBillTarget),
     vasGentani: ratio(vasAchievementForTheMonth, gusRoMtd),
@@ -653,6 +674,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     previous,
     serviceInfoTodayList,
     serviceInfoMonthList,
+    vasRevenueRealMonthList,
     partSaleTodayList,
     partSaleMonthList,
     ssrv089GeneralMonthList,
@@ -666,6 +688,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     loadPreviousSnapshot(date),
     loadCombinedServiceInfoSnapshotsForDate(date),
     loadCombinedServiceInfoSnapshotsForMonthUpTo(date),
+    loadAllVasRevenueRealForMonthUpTo(date),
     loadAllPartSaleSnapshotsForDate(date),
     loadAllPartSaleSnapshotsForMonthUpTo(date),
     loadAllSsrv089SnapshotsForMonthUpTo(date, "general"),
@@ -684,6 +707,7 @@ export async function buildReport(date: string): Promise<Report | null> {
 
   const serviceInfoToday = byBranch(serviceInfoTodayList);
   const serviceInfoMonth = groupByBranch(serviceInfoMonthList);
+  const vasRevenueRealMonth = groupByBranch(vasRevenueRealMonthList);
   const partSaleToday = byBranch(partSaleTodayList);
   const partSaleMonth = groupByBranch(partSaleMonthList);
 
@@ -741,6 +765,7 @@ export async function buildReport(date: string): Promise<Report | null> {
         undefined,
         serviceInfoToday.get(branch),
         serviceInfoMonth.get(branch) ?? [],
+        vasRevenueRealMonth.get(branch) ?? [],
         partSaleToday.get(branch),
         partSaleMonth.get(branch) ?? [],
         ssrv089GeneralMonth.get(branch) ?? [],
@@ -805,6 +830,7 @@ export async function buildReport(date: string): Promise<Report | null> {
       yesterdayRow,
       serviceInfoToday.get(branchRow.branch),
       serviceInfoMonth.get(branchRow.branch) ?? [],
+      vasRevenueRealMonth.get(branchRow.branch) ?? [],
       partSaleToday.get(branchRow.branch),
       partSaleMonth.get(branchRow.branch) ?? [],
       ssrv089GeneralMonth.get(branchRow.branch) ?? [],

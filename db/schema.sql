@@ -816,3 +816,51 @@ create table if not exists labour_sales_snapshots (
 alter table raw_upload_rows drop constraint if exists raw_upload_rows_report_type_check;
 alter table raw_upload_rows add constraint raw_upload_rows_report_type_check
   check (report_type in ('service_info', 'ssrv089', 'part_sale', 'scom205', 'ba_tool', 'labour_sales'));
+
+-- 2026-10-09: service_info_bp — Service Info Report - BP's individual rows
+-- now also get stored (previously only its aggregate counts + the whole
+-- file as raw bytes, see service-info-bp/store.ts and raw-report-uploads/
+-- store.ts) — needed so BP's VAS/T-Gloss-coded rows can be joined against
+-- Labour Sales Report by Job Order No. + Job Code, the same way GS's
+-- already are (see vas-revenue-real/compute.ts). A separate report_type
+-- from 'service_info' (not merged in) because saveRawUploadRows deletes
+-- whatever it previously saved for the exact (report_type, date, branch)
+-- it's given before inserting — sharing 'service_info' with the GS upload
+-- for the same branch/date would wipe one variant's rows out from under the
+-- other.
+alter table raw_upload_rows drop constraint if exists raw_upload_rows_report_type_check;
+alter table raw_upload_rows add constraint raw_upload_rows_report_type_check
+  check (report_type in ('service_info', 'service_info_bp', 'ssrv089', 'part_sale', 'scom205', 'ba_tool', 'labour_sales'));
+
+-- Real VAS revenue (2026-10-09) — precomputed at upload time (Service Info
+-- GS/BP or Labour Sales Report, whichever lands) so report.ts's hot read
+-- path stays a flat keyed lookup, same reasoning as cancelled_accessories_
+-- adjustments above: this needs a raw_upload_rows join (Service Info's
+-- VAS-coded rows matched to Labour Sales Report by Job Order No. + Job
+-- Code, accessories-staff rows excluded) that must never run on every
+-- dashboard page load. One row per (branch, real calendar date) — MTD sums
+-- every day's row in the month, same accumulation pattern as the other
+-- per-day-summed reports.
+--
+-- Scoped to 2026-10-01 onwards only (see vas-revenue-real/compute.ts's
+-- VAS_REAL_CUTOVER_DATE, at the user's explicit request) — report.ts falls
+-- back to the old price-list-only calculation for any earlier month, and
+-- this table is never populated for a date before the cutover at all.
+--
+-- A VAS-coded Service Info row with no matching Labour Sales Report row yet
+-- (that day's Labour Sales Report hasn't been uploaded, or never will be)
+-- falls back to the price-list estimate for just that one row (at the
+-- user's explicit request) rather than either being dropped (which would
+-- understate revenue) or holding the whole branch back on the old method
+-- for the month (which would discard real data already matched on other
+-- days) — fallback_rows counts how many of a day's rows took that path.
+create table if not exists vas_revenue_real (
+  date date not null,
+  branch text not null,
+  vas_revenue numeric not null,
+  matched_rows integer not null,
+  fallback_rows integer not null,
+  excluded_rows integer not null,
+  computed_at timestamptz not null default now(),
+  primary key (date, branch)
+);

@@ -4,6 +4,7 @@ import { pool } from "@/lib/db";
 import { parseLabourSalesWorkbook } from "@/lib/labour-sales/parse";
 import { saveLabourSalesSnapshot } from "@/lib/labour-sales/store";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
 
 /**
  * Labour Sales Report upload — see db/schema.sql's comment on
@@ -81,6 +82,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
   } finally {
     dbClient.release();
+  }
+
+  // Outside the save above — a recompute failure shouldn't block an
+  // otherwise-successful upload. One call per date this upload touched
+  // (vas-revenue-real/recompute.ts is a no-op before 2026-10-01).
+  for (const day of parsed.days) {
+    await recomputeVasRevenueReal(admin.branch, day.date);
   }
 
   const totals = parsed.days.reduce(
