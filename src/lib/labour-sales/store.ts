@@ -84,3 +84,12 @@ export async function loadLabourSalesSnapshotsForMonth(branch: string, yearMonth
   ]);
   return rows.map(rowToSnapshot);
 }
+
+/** All branches' snapshots for exactly one date — used by pending-uploads.ts
+ * to check "has this branch's Labour Sales Report covered this date yet",
+ * the same presence check that works whether the date came from today's
+ * single-day upload or an earlier multi-day backfill file. */
+export async function loadAllLabourSalesSnapshotsForDate(date: string): Promise<LabourSalesSnapshot[]> {
+  const { rows } = await pool.query(`select ${SELECT_COLUMNS} from labour_sales_snapshots where date = $1`, [date]);
+  return rows.map(rowToSnapshot);
+}

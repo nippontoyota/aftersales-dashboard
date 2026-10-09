@@ -4,15 +4,22 @@ import { loadAllPartSaleSnapshotsForDate } from "./part-sale/store";
 import { loadAllSsrv089SnapshotsForDate } from "./ssrv089/store";
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import { loadAllRawReportUploadsForDate } from "./raw-report-uploads/store";
+import { loadAllLabourSalesSnapshotsForDate } from "./labour-sales/store";
 import { isBodyPaintOnly, onlineStoreCodeFor } from "./report";
 
-/** The 6 report types every branch uploads daily, in the same order they
+/** The 7 report types every branch uploads daily, in the same order they
  * appear on /upload — used here so "what's missing" reads in that order
- * too, not an arbitrary one. */
-export type ReportTypeKey = "serviceInfoGs" | "serviceInfoBp" | "ssrv089Gs" | "ssrv089Bp" | "partSale" | "scom205";
+ * too, not an arbitrary one. Labour Sales Report joined 2026-10-09 — unlike
+ * the other six, "uploaded for this date" is a presence check against
+ * whichever real Doc. Date(s) a file covered (see labour-sales/parse.ts),
+ * not a single picked-date lock, but that check works identically whether
+ * the date came from a same-day upload or an earlier multi-day backfill. */
+export type ReportTypeKey = "serviceInfoGs" | "serviceInfoBp" | "ssrv089Gs" | "ssrv089Bp" | "partSale" | "scom205" | "labourSales";
 
 /** The GS-variant reports a Body & Paint-only branch (CO01E/KL01B/TR01B)
- * never receives — dropped from its required set, so it's "complete" on 4. */
+ * never receives — dropped from its required set, so it's "complete" on 4.
+ * Labour Sales Report is NOT in this set — every branch uploads it,
+ * BP-only included (confirmed 2026-10-06). */
 const GS_ONLY_TYPES: ReadonlySet<ReportTypeKey> = new Set(["serviceInfoGs", "ssrv089Gs"]);
 
 export const REPORT_TYPE_LABELS: Record<ReportTypeKey, string> = {
@@ -22,9 +29,10 @@ export const REPORT_TYPE_LABELS: Record<ReportTypeKey, string> = {
   ssrv089Bp: "Cost and Sales Report - BP",
   partSale: "Part Sale Report",
   scom205: "KPI",
+  labourSales: "Labour Sales Report",
 };
 
-export const REPORT_TYPE_ORDER: ReportTypeKey[] = ["serviceInfoGs", "serviceInfoBp", "ssrv089Gs", "ssrv089Bp", "partSale", "scom205"];
+export const REPORT_TYPE_ORDER: ReportTypeKey[] = ["serviceInfoGs", "serviceInfoBp", "ssrv089Gs", "ssrv089Bp", "partSale", "scom205", "labourSales"];
 
 export type BranchUploadStatus = {
   branch: string;
@@ -62,7 +70,7 @@ export type PendingUploadsSummary = {
  * already uses. HQ checks this each morning to see who still needs
  * chasing (2026-09-01, at the user's request). */
 export async function loadPendingUploadsSummary(date: string): Promise<PendingUploadsSummary> {
-  const [branches, serviceInfo, serviceInfoBp, ssrv089, ssrv089Bp, partSale, scom205] = await Promise.all([
+  const [branches, serviceInfo, serviceInfoBp, ssrv089, ssrv089Bp, partSale, scom205, labourSales] = await Promise.all([
     listBranchCodes(),
     loadAllServiceInfoSnapshotsForDate(date),
     loadAllRawReportUploadsForDate(date, "service_info_bp"),
@@ -70,6 +78,7 @@ export async function loadPendingUploadsSummary(date: string): Promise<PendingUp
     loadAllRawReportUploadsForDate(date, "ssrv089_bp"),
     loadAllPartSaleSnapshotsForDate(date),
     loadAllScom205SnapshotsForDate(date),
+    loadAllLabourSalesSnapshotsForDate(date),
   ]);
 
   const done: Record<ReportTypeKey, Set<string>> = {
@@ -79,6 +88,7 @@ export async function loadPendingUploadsSummary(date: string): Promise<PendingUp
     ssrv089Bp: new Set(ssrv089Bp.map((r) => r.branch)),
     partSale: new Set(partSale.map((r) => r.branch)),
     scom205: new Set(scom205.map((r) => r.branch)),
+    labourSales: new Set(labourSales.map((r) => r.branch)),
   };
 
   const pending: BranchUploadStatus[] = [];
