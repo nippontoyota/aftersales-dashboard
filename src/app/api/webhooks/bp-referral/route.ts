@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { pool } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -14,12 +14,10 @@ export async function POST(req: Request) {
       submitted_at,
     } = data;
 
-    // Log for debugging
     console.log("Received B&P Referral Webhook:", data);
 
-    // Optional: Save to Database if table exists
     try {
-      await query(
+      await pool.query(
         `INSERT INTO bp_referrals (
           referring_employee_id,
           referring_employee_name,
@@ -39,8 +37,6 @@ export async function POST(req: Request) {
       );
       console.log("Successfully saved B&P referral to database.");
     } catch (dbError: any) {
-      // If table doesn't exist yet, just log and continue. 
-      // This prevents the webhook from failing while the schema is being setup.
       console.error("Could not save to DB (table might not exist yet):", dbError.message);
     }
 
