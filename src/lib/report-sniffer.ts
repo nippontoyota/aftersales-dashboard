@@ -9,22 +9,27 @@ import * as XLSX from "xlsx";
  *   its file against a real column/label signature before accepting it
  *   (see each report type's parse.ts). This just tries each signature in
  *   turn.
- * - **Branch is NOT reliably detectable from file content** for three of
- *   the four types — confirmed when their parsers were originally built:
- *   Service Info, Part Sale, and SSRV089 exports have no branch column at
- *   all (every row says "NIPPON TOYOTA" regardless of branch); only
- *   scom205 self-identifies (its own header names the branch). So
+ * - **Branch is NOT reliably detectable from file content** for four of
+ *   the five types — confirmed when their parsers were originally built:
+ *   Service Info, Part Sale, SSRV089, and Labour Sales exports have no
+ *   branch column at all (every row says "NIPPON TOYOTA" regardless of
+ *   branch); only scom205 self-identifies (its own header names the
+ *   branch). So
  *   `suggestBranch` is exactly that — a suggestion from the filename (and,
  *   for scom205, the file's own header) that the HQ admin must confirm or
  *   override, never something saved without a human choosing it.
  */
-export type DetectedReportType = "service-info" | "part-sale" | "ssrv089" | "scom205";
+export type DetectedReportType = "service-info" | "part-sale" | "ssrv089" | "scom205" | "labour-sales";
 
 const PART_SALE_COLUMNS = ["PartNo", "Sale Qty"];
 const SERVICE_INFO_COLUMN = "Job Desc";
 const SSRV089_COLUMN = "Close SA Name";
 const SCOM205_GUS_LABEL = "Total General Units Serviced";
 const SCOM205_BPU_LABEL = "Total Body & Paint Units Serviced";
+/** Labour Sales Report — "Sub Total After Discount" is distinctive enough
+ * on its own, but paired with "Job No." the same way Part Sale's two-column
+ * check works, for the same safety margin. */
+const LABOUR_SALES_COLUMNS = ["Job No.", "Sub Total After Discount"];
 
 /** Same-signature checks as each dedicated parser's own file-type
  * validation — this is the reliable half of detection. Returns null for a
@@ -39,6 +44,7 @@ export function detectReportType(buffer: Buffer): DetectedReportType | null {
   if (PART_SALE_COLUMNS.every((c) => c in firstRow)) return "part-sale";
   if (SERVICE_INFO_COLUMN in firstRow) return "service-info";
   if (SSRV089_COLUMN in firstRow) return "ssrv089";
+  if (LABOUR_SALES_COLUMNS.every((c) => c in firstRow)) return "labour-sales";
 
   // scom205 isn't column-header shaped — it's a fixed report with two
   // labeled total rows further down the sheet, same check parseScom205Workbook uses.

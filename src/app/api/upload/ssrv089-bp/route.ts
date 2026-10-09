@@ -10,6 +10,7 @@ const WRONG_TYPE_LABELS: Record<Exclude<DetectedReportType, "ssrv089">, string> 
   "service-info": "Service Info Report",
   "part-sale": "Part Sale Report",
   scom205: "scom205 Monthly KPI Report",
+  "labour-sales": "Labour Sales Report",
 };
 
 /** Cost and Sales Report - BP — required daily like every other upload.
