@@ -89,8 +89,11 @@ export function CentralRegionDashboard({
       ext: view.totals.ext,
       totalMonthlyTarget: view.totals.totalMonthlyTarget,
       totalAchieved: view.totals.totalAchieved,
+      scrapAndUsedOil: view.totals.scrapAndUsedOil,
+      totalRevenue: view.totals.totalRevenue,
       includesCo01e: false,
       slab: undefined,
+      slabActual: view.totals.totalAchieved,
     },
   ];
 
@@ -168,12 +171,28 @@ export function CentralRegionDashboard({
               ))}
             </tr>
             <tr className="border-t border-border-subtle">
+              <td className="py-2 pr-3 text-[12px] font-semibold text-fg">Scrap & Used Oil</td>
+              {columns.map((c) => (
+                <td key={c.branch} className="py-2 pr-4 text-[12px] font-semibold tabular-nums text-fg">
+                  {formatCompactCurrency(c.scrapAndUsedOil)}
+                </td>
+              ))}
+            </tr>
+            <tr className="border-t border-border-subtle">
+              <td className="py-2 pr-3 text-[12px] font-semibold text-fg">Total Revenue</td>
+              {columns.map((c) => (
+                <td key={c.branch} className="py-2 pr-4 text-[12px] font-semibold tabular-nums text-fg">
+                  {formatCompactCurrency(c.totalRevenue)}
+                </td>
+              ))}
+            </tr>
+            <tr className="border-t border-border-subtle">
               <td className="py-3 pr-3 text-[12px] font-semibold text-fg">Slab</td>
               {columns.map((c) => (
                 <td key={c.branch} className="py-3 pr-4">
                   <IncentiveSlabIndicator
                     scopeLabel={c.label}
-                    actual={c.totalAchieved}
+                    actual={c.slabActual}
                     slabs={c.branch === "Central Rgn" ? view.regionSlab : c.slab}
                     date={view.date}
                     holidays={view.holidays}

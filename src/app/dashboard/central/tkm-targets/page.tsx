@@ -5,7 +5,7 @@ import { adminIdentityLabel } from "@/lib/admin-store";
 import { loadCentralMetricTargetsView } from "@/lib/central-metric-targets/view-data";
 import { loadNavState } from "@/lib/dashboard-data";
 import { loadReportHolidaySet } from "@/lib/report-holidays/store";
-import { buildReport } from "@/lib/report";
+import { buildReport, type BranchReport } from "@/lib/report";
 import { listSnapshotDates } from "@/lib/snapshot-store";
 import { requireCentralRmAccess } from "../central-guard";
 import { DateSelect } from "../../date-select";
@@ -63,7 +63,13 @@ async function TkmTargetsContent({ searchParams }: { searchParams: Promise<{ dat
     );
   }
 
-  const branches = report.branches.filter((b) => CENTRAL_METRIC_BRANCHES.includes(b.branch));
+  // Follow CENTRAL_METRIC_BRANCHES's own order (Muvattupuzha before
+  // Kayamkulam), not report.branches's alphabetical order — keeps this page
+  // uniform with the RM dashboard and Set Targets, which both already show
+  // Muvattupuzha first.
+  const branches = CENTRAL_METRIC_BRANCHES.map((code) => report.branches.find((b) => b.branch === code)).filter(
+    (b): b is BranchReport => b !== undefined,
+  );
   const co01eReport = report.branches.find((b) => b.branch === "CO01E");
   const metrics = await loadCentralMetricTargetsView(branches, date, holidays, co01eReport);
 
