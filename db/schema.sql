@@ -942,7 +942,12 @@ create table if not exists vas_revenue_real (
 -- vas_revenue — their BP uploads for 4/8 Oct landed before service-info-bp/
 -- route.ts started saving individual rows, so vas_revenue_real had nothing
 -- to compute from and silently zeroed those days out instead of falling
--- back to the known-good aggregate). True whenever a day's figure is that
--- aggregate fallback rather than a row-by-row computation — see
+-- back to the known-good aggregate). True whenever any side (GS or BP) of a
+-- day's figure is that side's aggregate fallback rather than a row-by-row
+-- computation. Generalized same day once a manual-report comparison across
+-- all branches showed every mixed GS+BP branch understating VAS by its BP
+-- portion for pre-10-09 dates: the original check looked at GS+BP combined,
+-- so a branch with GS rows present never tripped the fallback at all, and
+-- its BP revenue (no rows to join against) was just silently dropped — see
 -- vas-revenue-real/compute.ts's usedDayAggregateFallback doc comment.
 alter table vas_revenue_real add column if not exists used_day_aggregate_fallback boolean not null default false;

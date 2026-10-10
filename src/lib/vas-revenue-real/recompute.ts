@@ -26,11 +26,13 @@ export async function recomputeVasRevenueReal(branch: string, date: string): Pro
       loadServiceInfoSnapshot(date, branch),
       loadServiceInfoBpSnapshot(date, branch),
     ]);
-    // Old price-list total for this one day — the fallback compute.ts uses
-    // only when raw_upload_rows has nothing at all for this branch/date
-    // (see usedDayAggregateFallback's doc comment).
-    const dayAggregateVasRevenue = (gsSnapshot?.counts.vasRevenue ?? 0) + (bpSnapshot?.counts.vasRevenue ?? 0);
-    const result = await computeVasRevenueReal(branch, date, staffNames, dayAggregateVasRevenue);
+    // Old price-list totals for this one day, GS and BP separately — the
+    // fallback compute.ts uses for whichever side has nothing at all in
+    // raw_upload_rows for this branch/date (see usedDayAggregateFallback's
+    // doc comment for why this has to stay split instead of combined).
+    const gsAggregateVasRevenue = gsSnapshot?.counts.vasRevenue ?? 0;
+    const bpAggregateVasRevenue = bpSnapshot?.counts.vasRevenue ?? 0;
+    const result = await computeVasRevenueReal(branch, date, staffNames, gsAggregateVasRevenue, bpAggregateVasRevenue);
     await saveVasRevenueReal({ date, branch, ...result });
   } catch (err) {
     console.error(`recomputeVasRevenueReal failed for ${branch}/${date}:`, err);

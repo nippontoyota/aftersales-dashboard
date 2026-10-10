@@ -49,16 +49,19 @@ export type VasRevenueRealResult = {
   fallbackRows: number;
   /** Closed by an Accessories-department staff member — contributes nothing, same exclusion as the old price-list-only calculation. */
   excludedRows: number;
-  /** True when this day had zero Service Info rows on file at all (GS or
-   * BP) — not zero VAS-coded rows, zero rows, period — so vasRevenue is the
-   * day's old aggregate figure, not a row-by-row computation. Confirmed
-   * 2026-10-10 against KL01B: their BP uploads for 4 and 8 Oct landed
-   * before service-info-bp/route.ts started saving individual rows
-   * (2026-10-09), so service_info_bp_snapshots has real vas_revenue
-   * (₹4,042 / ₹8,213.43) with nothing in raw_upload_rows to compute from —
-   * without this fallback those two days silently became ₹0 instead of
-   * falling back to the known-good aggregate, understating the branch's
-   * whole month by the real amount. */
+  /** True when GS and/or BP had zero raw Service Info rows on file for this
+   * day — not zero VAS-coded rows, zero rows, period — so that side's
+   * contribution is its old aggregate figure instead of a row-by-row
+   * computation. Originally added 2026-10-10 for KL01B (a BP-only branch
+   * whose 4/8 Oct BP uploads landed before service-info-bp/route.ts started
+   * saving individual rows on 2026-10-09, leaving nothing in
+   * raw_upload_rows to compute from) and generalized the same day once the
+   * same gap turned up on every mixed GS+BP branch: a branch with GS rows
+   * present was never hitting this fallback at all, because the row-count
+   * check looked at GS+BP combined — so its BP VAS revenue for pre-10-09
+   * dates was silently dropped (no match, no fallback, just missing)
+   * instead of using the known-good BP aggregate. See recomputeVasRevenueReal
+   * for the per-side aggregates this now checks against independently. */
   usedDayAggregateFallback: boolean;
 };
 
@@ -80,34 +83,67 @@ export type VasRevenueRealResult = {
  * (see store.ts for that) or check the cutover date (see recompute.ts,
  * the only caller that matters for correctness here).
  *
- * `dayAggregateVasRevenue` is the day's OLD price-list total (Service Info
- * GS snapshot's vasRevenue + BP snapshot's, same figure the pre-2026-10
- * calculation would have used) — only ever used as a fallback when this
- * branch/date has literally zero Service Info rows on file in
- * raw_upload_rows (see usedDayAggregateFallback's doc comment), never
- * blended with a row-by-row result.
+ * `gsAggregateVasRevenue` / `bpAggregateVasRevenue` are the day's OLD
+ * price-list totals (Service Info GS snapshot's vasRevenue, BP snapshot's —
+ * same figures the pre-2026-10 calculation would have used), each used as
+ * that side's fallback independently whenever THAT side has literally zero
+ * raw rows on file for this branch/date — never blended with a row-by-row
+ * result for the side that does have rows (see usedDayAggregateFallback's
+ * doc comment for why this has to be checked per-side, not combined).
  */
 export async function computeVasRevenueReal(
   branch: string,
   date: string,
   staffNames: string[],
-  dayAggregateVasRevenue: number
+  gsAggregateVasRevenue: number,
+  bpAggregateVasRevenue: number
 ): Promise<VasRevenueRealResult> {
-  const svcInfoRowCount = await pool.query<{ count: string }>(
-    `select count(*) from raw_upload_rows where report_type in ('service_info', 'service_info_bp') and branch = $1 and date = $2`,
+  const rowCounts = await pool.query<{ report_type: string; count: string }>(
+    `select report_type, count(*) as count from raw_upload_rows
+     where report_type in ('service_info', 'service_info_bp') and branch = $1 and date = $2
+     group by report_type`,
     [branch, date]
   );
-  if (Number(svcInfoRowCount.rows[0].count) === 0) {
-    return { vasRevenue: dayAggregateVasRevenue, matchedRows: 0, fallbackRows: 0, excludedRows: 0, usedDayAggregateFallback: true };
+  const gsRowCount = Number(rowCounts.rows.find((r) => r.report_type === "service_info")?.count ?? 0);
+  const bpRowCount = Number(rowCounts.rows.find((r) => r.report_type === "service_info_bp")?.count ?? 0);
+
+  if (gsRowCount === 0 && bpRowCount === 0) {
+    return {
+      vasRevenue: gsAggregateVasRevenue + bpAggregateVasRevenue,
+      matchedRows: 0,
+      fallbackRows: 0,
+      excludedRows: 0,
+      usedDayAggregateFallback: true,
+    };
+  }
+
+  // Only join against whichever side(s) actually have raw rows for this day
+  // — a side with zero rows contributes its own aggregate below instead
+  // (added to `vasRevenue` directly), rather than silently contributing
+  // nothing because the loop below never sees any of its rows.
+  const presentReportTypes: string[] = [];
+  let vasRevenue = 0;
+  let usedDayAggregateFallback = false;
+  if (gsRowCount === 0) {
+    vasRevenue += gsAggregateVasRevenue;
+    usedDayAggregateFallback = true;
+  } else {
+    presentReportTypes.push("service_info");
+  }
+  if (bpRowCount === 0) {
+    vasRevenue += bpAggregateVasRevenue;
+    usedDayAggregateFallback = true;
+  } else {
+    presentReportTypes.push("service_info_bp");
   }
 
   const svcInfoRes = await pool.query<{ job_order_no: string | null; job_code: string | null; series: string | null; sa_name: string | null }>(
     `select row_data->>'Job Order No' as job_order_no, row_data->>'Job Code' as job_code,
             row_data->>'Series' as series, row_data->>'Close Service Advisor Name' as sa_name
      from raw_upload_rows
-     where report_type in ('service_info', 'service_info_bp') and branch = $1 and date = $2
+     where report_type = any($3) and branch = $1 and date = $2
        and row_data->>'Job Code' ilike '99TG%'`,
-    [branch, date]
+    [branch, date, presentReportTypes]
   );
 
   const labourRes = await pool.query<{ job_no: string | null; job_code: string | null; after_raw: string | null }>(
@@ -122,7 +158,6 @@ export async function computeVasRevenueReal(
   }
 
   const tier = tierForBranch(branch);
-  let vasRevenue = 0;
   let matchedRows = 0;
   let fallbackRows = 0;
   let excludedRows = 0;
@@ -145,5 +180,5 @@ export async function computeVasRevenueReal(
     }
   }
 
-  return { vasRevenue, matchedRows, fallbackRows, excludedRows, usedDayAggregateFallback: false };
+  return { vasRevenue, matchedRows, fallbackRows, excludedRows, usedDayAggregateFallback };
 }
