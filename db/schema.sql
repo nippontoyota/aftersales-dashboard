@@ -878,18 +878,17 @@ create table if not exists labour_sales_snapshots (
   primary key (date, branch)
 );
 
-alter table raw_upload_rows drop constraint if exists raw_upload_rows_report_type_check;
-alter table raw_upload_rows add constraint raw_upload_rows_report_type_check
-  check (report_type in ('service_info', 'ssrv089', 'part_sale', 'scom205', 'ba_tool', 'labour_sales'));
-
 -- 2026-10-07: ssrv089_bp — Cost & Sales - BP's rows get stored the same way
 -- the GS variant's already are (see ssrv089-bp/parse.ts, ssrv089-bp/route.ts)
 -- so a cancelled BP invoice's original row can be looked up for
 -- reconciliation/cross-month-adjustment the same way a GS one already is.
-alter table raw_upload_rows drop constraint if exists raw_upload_rows_report_type_check;
-alter table raw_upload_rows add constraint raw_upload_rows_report_type_check
-  check (report_type in ('service_info', 'ssrv089', 'ssrv089_bp', 'part_sale', 'scom205', 'ba_tool', 'labour_sales'));
-
+--
+-- 2026-10-10: this used to be three separate drop+add pairs, one per report
+-- type added over time — each one superseded by the next, so once real rows
+-- existed for a type an EARLIER (narrower) pair in the sequence would fail
+-- on re-run (not idempotent). Collapsed into the one final constraint below;
+-- the end state is identical, just reachable on a fresh re-run too.
+--
 -- 2026-10-09: service_info_bp — Service Info Report - BP's individual rows
 -- now also get stored (previously only its aggregate counts + the whole
 -- file as raw bytes, see service-info-bp/store.ts and raw-report-uploads/
