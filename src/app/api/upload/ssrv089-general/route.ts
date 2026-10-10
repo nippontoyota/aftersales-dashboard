@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
   if (admin.role !== "branch") {
-    return NextResponse.json({ error: "Only a branch account can upload an SSRV089 report." }, { status: 403 });
+    return NextResponse.json({ error: "Only a branch account can upload a Cost & Sales (GS) report." }, { status: 403 });
   }
 
   const formData = await request.formData();

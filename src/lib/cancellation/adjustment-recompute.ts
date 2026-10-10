@@ -27,6 +27,16 @@ export async function recomputeAfterSsrv089Upload(branch: string, date: string):
   await recomputeCrossMonthReplacements([branch]);
 }
 
+/** After an SSRV089-BP upload for one branch+date: no accessories-staff
+ * deduction (that's GS-only — Accessories-staff matching has never covered
+ * BP), but a cross-month replacement can now be matched against a BP job
+ * (ref GSJ.../BPE... ROs are looked up across both report types as of
+ * 2026-10-07 — see reconcile.ts and cross-month-replacement.ts), so the
+ * same recompute still needs to run. */
+export async function recomputeAfterSsrv089BpUpload(branch: string): Promise<void> {
+  await recomputeCrossMonthReplacements([branch]);
+}
+
 /** After a cancellation report upload for one or more branches: a new or
  * changed cancellation can affect any revenue month that branch has ever had
  * a cancellation in (not just the upload's own cancel-month), so every such

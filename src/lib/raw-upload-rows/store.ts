@@ -7,7 +7,7 @@ import { pool } from "../db";
  * totals, so this is the piece that lets a later question (a new formula, a
  * correction, an audit) be answered by querying instead of hunting down the
  * original file again. */
-export type RawUploadReportType = "service_info" | "service_info_bp" | "ssrv089" | "part_sale" | "scom205" | "ba_tool" | "labour_sales";
+export type RawUploadReportType = "service_info" | "service_info_bp" | "ssrv089" | "ssrv089_bp" | "part_sale" | "scom205" | "ba_tool" | "labour_sales";
 
 /** Saves every row from one upload, replacing whatever was previously saved
  * for the exact (reportType, date, branch) combos this upload covers — a

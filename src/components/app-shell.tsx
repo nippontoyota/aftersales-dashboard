@@ -4,6 +4,7 @@ import Link, { useLinkStatus } from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { logoutAction } from "@/lib/actions";
 import { AutoRefresh } from "./auto-refresh";
+import { AdjustmentAckPopupGate } from "./adjustment-ack-popup-gate";
 import { HolidayMergePopupGate } from "./holiday-merge-popup-gate";
 import { LabourSalesIntroPopupGate } from "./labour-sales-intro-popup-gate";
 import { QueryPopupGate } from "./query-popup-gate";
@@ -457,6 +458,7 @@ export function AppShell({
       <AutoRefresh />
       <QueryPopupGate />
       <HolidayMergePopupGate />
+      <AdjustmentAckPopupGate />
       {isBranch ? <LabourSalesIntroPopupGate /> : null}
       {/* Desktop sidebar — collapsible to an icon rail */}
       <aside

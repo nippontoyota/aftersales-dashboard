@@ -753,6 +753,71 @@ create table if not exists cross_month_replacements (
 create index if not exists cross_month_replacements_month_idx
   on cross_month_replacements (replacement_month);
 
+-- 2026-10-07: the VP's cross-month rule — the amount actually excluded from
+-- the replacement's month is the ORIGINAL (cancelled) invoice's own
+-- Part+Labour value, not the replacement's (see cross-month-replacement.ts's
+-- doc comment). part_sale/labour_sale above stay as the REPLACEMENT's own
+-- values (informational — shown in the UI alongside the adjustment).
+-- original_part_sale/original_labour_sale are null when the cancelled
+-- invoice's own row can't be found at all (falls back to the old
+-- replacement-value behavior for that one row — see loadCrossMonthReplacementAdjustmentForMonth).
+-- replacement_date is the replacement's actual row date (not just month),
+-- used to cut over to the new rule only for replacements landing on/after
+-- NEW_RULE_CUTOVER_DATE — see that constant's own comment.
+alter table cross_month_replacements add column if not exists replacement_date date;
+alter table cross_month_replacements add column if not exists original_part_sale numeric;
+alter table cross_month_replacements add column if not exists original_labour_sale numeric;
+
+-- 2026-10-10: a cancellation raised AND cancelled within the same month (the
+-- "billed last month, cancelled last month, rebilled this month" case) only
+-- still has its value frozen in that original month's Monthly KPI (scom205)
+-- if the cancellation came in AFTER that month's own KPI pull. If it was
+-- cancelled before the pull, scom205 already excluded it there — nothing is
+-- double-counted, so no subtraction should be applied to the replacement's
+-- month either (subtracting here would make the replacement's month wrong
+-- instead). skip_adjustment marks that case: the row is still tracked/shown
+-- as "adjusted" (no justification burden — a known, already-correct
+-- outcome), but loadCrossMonthReplacementAdjustmentForMonth contributes
+-- $0 for it. See cross-month-replacement.ts's doc comment.
+alter table cross_month_replacements add column if not exists skip_adjustment boolean not null default false;
+
+-- 2026-10-07: tracks which cross-month adjustment each branch/regional admin
+-- has explicitly acknowledged (the "Got it" popup — see
+-- adjustment-ack-popup-gate.tsx), independently per username so a branch and
+-- its regional manager each get their own pop-up and their own "Got it".
+-- Keyed to match cross_month_replacements' own natural key (minus username);
+-- an adjustment with no row here for a given admin is still pending for them.
+create table if not exists cancellation_adjustment_acks (
+  branch             text        not null,
+  cancelled_doc_no   text        not null,
+  replacement_doc_no text        not null,
+  username           text        not null references admins(username),
+  acknowledged_at    timestamptz not null default now(),
+  primary key (branch, cancelled_doc_no, replacement_doc_no, username)
+);
+
+-- 2026-10-07: a flagged (stale/after_kpi_cutoff) cancellation needs the
+-- branch, then its regional manager, to say why it's still unresolved —
+-- the user's explicit call, to discourage cancelling bills freely. Branch
+-- fills in first; "resolved" only once the regional manager has separately
+-- co-signed their own note on top of it (see justifications.ts). doc_no
+-- alone is the key (not branch+doc_no) since it's already the primary key
+-- on invoice_cancellations itself — branch is kept here too, denormalized,
+-- purely so a query doesn't need the join to filter/display it.
+create table if not exists cancellation_justifications (
+  doc_no                text        primary key references invoice_cancellations(doc_no),
+  branch                text        not null,
+  branch_note           text,
+  branch_submitted_by   text        references admins(username),
+  branch_submitted_at   timestamptz,
+  regional_note         text,
+  regional_submitted_by text        references admins(username),
+  regional_submitted_at timestamptz,
+  created_at            timestamptz not null default now()
+);
+create index if not exists cancellation_justifications_branch_idx
+  on cancellation_justifications (branch);
+
 -- Backup-before-delete audit trail (2026-10-06), added after TI01B's
 -- September SSRV089-GS (1-13) and Part Sale (1-14) snapshots + raw rows were
 -- found deleted with no trace anywhere — no committed script did it, so it
@@ -817,6 +882,14 @@ alter table raw_upload_rows drop constraint if exists raw_upload_rows_report_typ
 alter table raw_upload_rows add constraint raw_upload_rows_report_type_check
   check (report_type in ('service_info', 'ssrv089', 'part_sale', 'scom205', 'ba_tool', 'labour_sales'));
 
+-- 2026-10-07: ssrv089_bp — Cost & Sales - BP's rows get stored the same way
+-- the GS variant's already are (see ssrv089-bp/parse.ts, ssrv089-bp/route.ts)
+-- so a cancelled BP invoice's original row can be looked up for
+-- reconciliation/cross-month-adjustment the same way a GS one already is.
+alter table raw_upload_rows drop constraint if exists raw_upload_rows_report_type_check;
+alter table raw_upload_rows add constraint raw_upload_rows_report_type_check
+  check (report_type in ('service_info', 'ssrv089', 'ssrv089_bp', 'part_sale', 'scom205', 'ba_tool', 'labour_sales'));
+
 -- 2026-10-09: service_info_bp — Service Info Report - BP's individual rows
 -- now also get stored (previously only its aggregate counts + the whole
 -- file as raw bytes, see service-info-bp/store.ts and raw-report-uploads/
@@ -830,7 +903,7 @@ alter table raw_upload_rows add constraint raw_upload_rows_report_type_check
 -- other.
 alter table raw_upload_rows drop constraint if exists raw_upload_rows_report_type_check;
 alter table raw_upload_rows add constraint raw_upload_rows_report_type_check
-  check (report_type in ('service_info', 'service_info_bp', 'ssrv089', 'part_sale', 'scom205', 'ba_tool', 'labour_sales'));
+  check (report_type in ('service_info', 'service_info_bp', 'ssrv089', 'ssrv089_bp', 'part_sale', 'scom205', 'ba_tool', 'labour_sales'));
 
 -- Real VAS revenue (2026-10-09) — precomputed at upload time (Service Info
 -- GS/BP or Labour Sales Report, whichever lands) so report.ts's hot read

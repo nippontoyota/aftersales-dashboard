@@ -3,6 +3,7 @@ import { REGIONS } from "@/lib/regions";
 import type { AdminAccount } from "@/lib/admin-store";
 import { loadCancellationMonths } from "@/lib/cancellation/store";
 import { reconcileCancellations } from "@/lib/cancellation/reconcile";
+import { isJustificationOverdue, loadJustifications } from "@/lib/cancellation/justifications";
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 const monthLabel = (m: string) => {
@@ -15,6 +16,15 @@ const monthLabel = (m: string) => {
  * cancellations may still be in <month>'s figures", linking to the full
  * Cancellations view. Renders nothing when there's no uploaded report or
  * nothing is flagged.
+ *
+ * For HQ only (2026-10-07), this doubles as the "auto-escalate to HQ" delivery
+ * for an overdue justification (see justifications.ts) — a second line
+ * naming how many of the flagged set have gone past their 3-day grace period
+ * with no branch+regional sign-off yet. Reuses the SAME reconcileCancellations
+ * call this component already makes for the latest month, rather than a new
+ * company-wide query — deliberately scoped to just the latest month (not
+ * all of history) for that reason; see this component's own cost profile,
+ * already proven safe at this scale.
  */
 export async function CancellationFlag({ admin }: { admin: AdminAccount }) {
   const scope = admin.role === "branch" ? admin.branch : undefined;
@@ -31,6 +41,12 @@ export async function CancellationFlag({ admin }: { admin: AdminAccount }) {
 
   const value = flagged.reduce((s, r) => s + r.beforeTax, 0);
 
+  let overdueCount = 0;
+  if (admin.role === "hq" || admin.role === "hq_viewer") {
+    const justifications = await loadJustifications(flagged.map((r) => r.docNo));
+    overdueCount = flagged.filter((r) => isJustificationOverdue(r.cancelAt, justifications.get(r.docNo))).length;
+  }
+
   return (
     <Link
       href={`/cancellations?month=${month}`}
@@ -43,6 +59,9 @@ export async function CancellationFlag({ admin }: { admin: AdminAccount }) {
       <span>
         {flagged.length} cancellation{flagged.length === 1 ? "" : "s"} ({inr(value)} before tax) may still be in{" "}
         {monthLabel(month)}&apos;s figures — review
+        {overdueCount > 0
+          ? ` · ${overdueCount} overdue for justification (past 3 days, no branch+regional sign-off yet)`
+          : ""}
       </span>
     </Link>
   );

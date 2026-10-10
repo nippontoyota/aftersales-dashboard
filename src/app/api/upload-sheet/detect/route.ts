@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
   if (!type) {
     return NextResponse.json(
-      { error: "Could not recognize this file as a Service Info, Part Sale, SSRV089, scom205, or Labour Sales report." },
+      { error: "Could not recognize this file as a Service Info, Part Sale, Cost & Sales, KPI, or Labour Sales report." },
       { status: 422 }
     );
   }

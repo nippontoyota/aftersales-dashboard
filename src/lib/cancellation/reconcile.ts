@@ -1,5 +1,5 @@
 import { pool } from "../db";
-import { loadCrossMonthReplacements } from "./cross-month-replacement";
+import { loadCrossMonthReplacements, NEW_RULE_CUTOVER_DATE } from "./cross-month-replacement";
 
 /**
  * Option A — the reconciliation check. For each cancelled invoice in a month,
@@ -44,13 +44,15 @@ export type ReconcileStatus =
   | "replaced" //  a different invoice now sits on the same RO — cancellation absorbed
   | "stale" //     the cancelled invoice number is still in SSRV089
   | "after_kpi_cutoff" // cancelled after the last scom205 pull this month
-  | "unverified"; //   RO not in SSRV089 (BP job, or SSRV089 not uploaded)
+  | "unverified"; //   RO not in SSRV089 or SSRV089-BP at all (neither report uploaded for this RO)
 
 export type ReconcileRow = {
   docNo: string;
   branch: string;
   refDocNo: string | null;
   cancelDate: string;
+  /** ISO timestamp — cancel_at when the report gave one, else cancel_date at midnight. Used for the 3-day justification grace period (see justifications.ts). */
+  cancelAt: string;
   cancelReason: string;
   regNo: string | null;
   ownerName: string | null;
@@ -67,9 +69,27 @@ export type ReconcileRow = {
    * (latest report date vs. last upload). Null when no scom205 on file. */
   lastKpiCutoff: string | null;
   /** Only set when status === "adjusted" — the replacement invoice found on
-   * the same RO in a later month, and the Parts/Labour value excluded from
-   * that month's revenue because of it. See cross-month-replacement.ts. */
-  crossMonthReplacement?: { replacementDocNo: string; replacementMonth: string; partSale: number; labourSale: number };
+   * the same RO in a later month. See cross-month-replacement.ts for the
+   * rule: usingOriginalValue true means originalPartSale/originalLabourSale
+   * (the CANCELLED invoice's own value) is what's actually excluded from
+   * that month's revenue; false means it fell back to partSale/labourSale
+   * (the REPLACEMENT's own value — either because the original row couldn't
+   * be found, or the replacement landed before NEW_RULE_CUTOVER_DATE). */
+  crossMonthReplacement?: {
+    replacementDocNo: string;
+    replacementMonth: string;
+    partSale: number;
+    labourSale: number;
+    originalPartSale: number | null;
+    originalLabourSale: number | null;
+    usingOriginalValue: boolean;
+    /** True when nothing was actually subtracted anywhere — the cancellation
+     * came in before its own month's KPI pull, so that month's scom205
+     * already excluded it and there's nothing to fix in the replacement's
+     * month either. See cross-month-replacement.ts's SKIP-ADJUSTMENT doc
+     * comment. */
+    skipAdjustment: boolean;
+  };
 };
 
 export type ReconcileResult = {
@@ -92,6 +112,7 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
     branch: string;
     ref_doc_no: string | null;
     cancel_date: string;
+    cancel_at: string;
     cancel_reason: string;
     reg_no: string | null;
     owner_name: string | null;
@@ -128,7 +149,11 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
       -- (2026-09-19): the old string comparison couldn't use
       -- raw_upload_rows_lookup_idx's date column, forcing a scan of every
       -- SSRV089 row ever uploaded instead of just this month's.
-      where r.report_type = 'ssrv089'
+      -- 'ssrv089_bp' included as of 2026-10-07 (see ssrv089-bp/parse.ts) —
+      -- a Body & Paint cancellation (BPE… RO) can now be verified the same
+      -- way a GS one (GSJ…) already was, instead of always coming back
+      -- "unverified".
+      where r.report_type in ('ssrv089', 'ssrv089_bp')
         and r.date >= $3::date
         and r.date < $4::date
     ),
@@ -145,7 +170,7 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
       from scom205_snapshots
       order by branch, to_char(date, 'YYYY-MM'), date desc, uploaded_at desc
     )
-    select c.doc_no, c.branch, c.ref_doc_no, c.cancel_date::text as cancel_date, c.cancel_reason,
+    select c.doc_no, c.branch, c.ref_doc_no, c.cancel_date::text as cancel_date, c.cancel_moment::text as cancel_at, c.cancel_reason,
            c.reg_no, c.owner_name, c.before_tax, c.after_tax,
            greatest(lk.last_uploaded, lk.last_date::timestamptz)::text as last_kpi_cutoff,
            (lk.branch is not null and c.cancel_moment > greatest(lk.last_uploaded, lk.last_date::timestamptz)) as after_last_kpi,
@@ -186,6 +211,7 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
       branch: r.branch,
       refDocNo: r.ref_doc_no,
       cancelDate: r.cancel_date,
+      cancelAt: new Date(r.cancel_at).toISOString(),
       cancelReason: r.cancel_reason,
       regNo: r.reg_no,
       ownerName: r.owner_name,
@@ -201,6 +227,13 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
             replacementMonth: crossMonth.replacementMonth,
             partSale: crossMonth.partSale,
             labourSale: crossMonth.labourSale,
+            originalPartSale: crossMonth.originalPartSale,
+            originalLabourSale: crossMonth.originalLabourSale,
+            usingOriginalValue:
+              crossMonth.originalPartSale !== null &&
+              crossMonth.originalLabourSale !== null &&
+              crossMonth.replacementDate >= NEW_RULE_CUTOVER_DATE,
+            skipAdjustment: crossMonth.skipAdjustment,
           }
         : undefined,
     };
