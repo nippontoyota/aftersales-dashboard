@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { yesterdayIso } from "@/lib/utils";
 
-type DetectedReportType = "service-info" | "part-sale" | "ssrv089" | "scom205";
+type DetectedReportType = "service-info" | "part-sale" | "ssrv089" | "scom205" | "labour-sales";
 type Variant = "gs" | "bp";
 
 const TYPE_LABEL: Record<DetectedReportType, string> = {
@@ -12,15 +12,29 @@ const TYPE_LABEL: Record<DetectedReportType, string> = {
   "part-sale": "Part Sale Report",
   ssrv089: "Cost and Sales Report",
   scom205: "KPI",
+  "labour-sales": "Labour Sales Report",
 };
 
-/** Only Service Info and Cost and Sales split into GS/BP — Part Sale and
- * KPI have no such variant, so the picker only shows up for those two. */
+/** Only Service Info and Cost and Sales split into GS/BP — Part Sale, KPI,
+ * and Labour Sales have no such variant, so the picker only shows up for
+ * those two. */
 const HAS_VARIANT: Record<DetectedReportType, boolean> = {
   "service-info": true,
   "part-sale": false,
   ssrv089: true,
   scom205: false,
+  "labour-sales": false,
+};
+
+/** Labour Sales Report ignores the picked date entirely — every row's own
+ * Doc. Date decides which day it belongs to (see labour-sales/parse.ts),
+ * same as the branch's own upload form. */
+const IGNORES_DATE: Record<DetectedReportType, boolean> = {
+  "service-info": false,
+  "part-sale": false,
+  ssrv089: false,
+  scom205: false,
+  "labour-sales": true,
 };
 
 type Detection = { type: DetectedReportType; suggestedBranch: string | null; branchCodes: string[]; sourceFileName: string };
@@ -121,7 +135,19 @@ export function UploadSheetForm() {
       setDuplicateWarning(null);
       if (!detection) return;
       const label = HAS_VARIANT[detection.type] ? `${TYPE_LABEL[detection.type]} - ${(variant ?? "").toUpperCase()}` : TYPE_LABEL[detection.type];
-      const base = `Saved ${label} for ${branch}, ${date}.`;
+      let base: string;
+      if (detection.type === "labour-sales") {
+        const dates = (data.dates as string[]) ?? [];
+        const totals = data.totals as { rowCount: number; vasLabourBefore: number; vasLabourAfter: number } | undefined;
+        const range = dates.length === 0 ? "" : dates.length === 1 ? dates[0] : `${dates[0]} – ${dates[dates.length - 1]} (${dates.length} days)`;
+        const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+        base = `Saved ${label} for ${branch}, ${range}.`;
+        if (totals) base += ` ${totals.rowCount} rows. VAS after discount ${inr(totals.vasLabourAfter)} (before discount ${inr(totals.vasLabourBefore)}).`;
+        const skipped = Number(data.skippedRowCount ?? 0);
+        if (skipped > 0) base += ` ${skipped} row(s) had no readable Doc. Date and were skipped.`;
+      } else {
+        base = `Saved ${label} for ${branch}, ${date}.`;
+      }
       setSuccess(data.warning ? `${base} ⚠ ${data.warning as string}` : base);
       setFile(null);
       setDetection(null);
@@ -168,8 +194,9 @@ export function UploadSheetForm() {
         <h2 className="text-sm font-semibold text-fg">Upload Sheet</h2>
         <p className="mt-0.5 text-xs text-fg-subtle">
           For when a branch can&apos;t upload themselves — pick any Service Information Report, Cost and Sales Report,
-          Part Sale Report, or KPI file and the report type is detected automatically. Confirm the branch (and, for
-          Service Info / Cost and Sales, the GS or BP variant) before saving — neither is ever guessed.
+          Part Sale Report, KPI, or Labour Sales Report file and the report type is detected automatically. Confirm
+          the branch (and, for Service Info / Cost and Sales, the GS or BP variant) before saving — neither is ever
+          guessed.
         </p>
       </div>
 
@@ -185,6 +212,9 @@ export function UploadSheetForm() {
           required
           className="mt-1 h-9 w-full rounded-md border border-border-strong px-3 text-sm"
         />
+        {detection && IGNORES_DATE[detection.type] ? (
+          <p className="mt-1 text-xs text-fg-faint">Ignored for Labour Sales Report — every row&apos;s own Doc. Date decides which day it belongs to.</p>
+        ) : null}
       </div>
 
       <div>

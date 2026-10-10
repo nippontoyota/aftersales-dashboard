@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
+import { recomputeAfterSsrv089BpUpload } from "@/lib/cancellation/adjustment-recompute";
 import { hashBuffer } from "@/lib/duplicate-detection";
 import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { detectReportType, type DetectedReportType } from "@/lib/report-sniffer";
 import { parseSsrv089BpGreyTotals } from "@/lib/ssrv089-bp/parse";
 import { saveSsrv089BpGreySnapshot } from "@/lib/ssrv089-bp/store";
@@ -9,15 +11,20 @@ import { saveSsrv089BpGreySnapshot } from "@/lib/ssrv089-bp/store";
 const WRONG_TYPE_LABELS: Record<Exclude<DetectedReportType, "ssrv089">, string> = {
   "service-info": "Service Info Report",
   "part-sale": "Part Sale Report",
-  scom205: "scom205 Monthly KPI Report",
+  scom205: "KPI Report",
+  "labour-sales": "Labour Sales Report",
 };
 
 /** Cost and Sales Report - BP — required daily like every other upload.
- * Its columns stay deliberately unparsed beyond the Brand(Toyota/Grey)
- * check below (2026-09-01, at the user's request — see
- * raw-report-uploads/store.ts). Not the same thing as the old SSRV089
- * "Body & Paint" variant dropped 2026-08-31 — this is a fresh upload, not a
- * revival of that parsing path.
+ * Totals stay deliberately limited to Grey-brand Part/Labour (2026-09-01, at
+ * the user's request — see raw-report-uploads/store.ts); every row's full
+ * column set is still saved to raw_upload_rows as of 2026-10-07 (report_type
+ * 'ssrv089_bp'), the same way the GS variant's rows already are, so a
+ * cancelled BP invoice's original row (JobOrder No / Invoice Doc No.) can be
+ * looked up for reconciliation the same way a GS one already is — see
+ * reconcile.ts and cross-month-replacement.ts. Not the same thing as the old
+ * SSRV089 "Body & Paint" variant dropped 2026-08-31 — this is a fresh
+ * upload, not a revival of that parsing path.
  *
  * Structural validation (2026-10-01, at the user's request): before this,
  * nothing ever opened the file to check it was actually a Cost and Sales
@@ -124,6 +131,18 @@ export async function POST(request: Request) {
 
   // parsed was already extracted and validated above.
   await saveSsrv089BpGreySnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, totals: parsed.totals });
+  await saveRawUploadRows({
+    reportType: "ssrv089_bp",
+    date,
+    uploadedAt,
+    sourceFileName: file.name,
+    rows: parsed.rawRows.map((data) => ({ branch: admin.branch, data })),
+    uploadedBy: admin.username,
+  });
+
+  // Outside the save above — a recompute failure shouldn't block an
+  // otherwise-successful upload (see adjustment-recompute.ts).
+  await recomputeAfterSsrv089BpUpload(admin.branch);
 
   return NextResponse.json({
     success: true,

@@ -1,7 +1,36 @@
 import type { AchievementTone } from "@/lib/aggregate";
+import type { GusSplitBreakdown } from "@/lib/gus-split";
 import { formatCompact, formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 
 const TONE_TEXT = { good: "text-good", warn: "text-warn", critical: "text-bad", neutral: "text-fg-faint" } as const;
+
+/** Same category colours as gus-split-section.tsx's group-level bar, so the
+ * branch row and the overview card read as the same chart at two scopes. */
+const GUS_SPLIT_BAR: [key: keyof Omit<GusSplitBreakdown, "total">, cls: string][] = [
+  ["pm", "bg-good-solid"],
+  ["pdi", "bg-info-solid"],
+  ["accessories", "bg-violet"],
+  ["generalRepair", "bg-warn-solid"],
+];
+
+function GusSplitCell({ split }: { split: GusSplitBreakdown | undefined }) {
+  if (!split || split.total === 0) return <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-fg-faint">—</td>;
+  return (
+    <td className="whitespace-nowrap px-4 py-2 text-right" title={`PM ${split.pm} · PDI ${split.pdi} · Accessories ${split.accessories} · General Repair ${split.generalRepair}`}>
+      <div className="ml-auto h-1.5 w-20 overflow-hidden rounded-full bg-surface-2 ring-1 ring-inset ring-border-subtle">
+        <div className="flex h-full w-full">
+          {GUS_SPLIT_BAR.map(([key, cls]) => {
+            const pct = split[key] / split.total;
+            return pct > 0 ? <div key={key} className={cls} style={{ width: `${pct * 100}%` }} /> : null;
+          })}
+        </div>
+      </div>
+      <div className="mt-0.5 text-[10.5px] tabular-nums text-fg-faint">
+        {formatCompact(split.pm)} PM · {formatCompact(split.total)} total
+      </div>
+    </td>
+  );
+}
 
 /**
  * One branch's row on /ceo/branches — all 13 figures (Revenue/Profit MTD,
@@ -32,6 +61,7 @@ export function BranchRow({
   bpBays,
   gsTargetPerBayPerDay,
   bpTargetPerBayPerDay,
+  gusSplit,
 }: {
   name: string;
   revenueMtd: number | null;
@@ -51,6 +81,7 @@ export function BranchRow({
   bpBays: number;
   gsTargetPerBayPerDay: number | null;
   bpTargetPerBayPerDay: number | null;
+  gusSplit: GusSplitBreakdown | undefined;
 }) {
   return (
     <tr className="border-t border-border-subtle hover:bg-surface-2/40">
@@ -78,6 +109,7 @@ export function BranchRow({
         {formatCompact(bpBays)} bays
         {bpTargetPerBayPerDay !== null ? ` · ${formatNumber(bpTargetPerBayPerDay)}/day` : ""}
       </td>
+      <GusSplitCell split={gusSplit} />
     </tr>
   );
 }

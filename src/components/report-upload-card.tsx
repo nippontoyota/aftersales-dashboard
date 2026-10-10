@@ -30,6 +30,7 @@ export function ReportUploadCard({
   reportDate,
   formatSuccess,
   alreadyUploaded,
+  noDateField,
 }: {
   endpoint: string;
   title: string;
@@ -44,6 +45,11 @@ export function ReportUploadCard({
    * through HQ's Upload Sheet instead. Omit entirely for uploads this lock
    * doesn't apply to (HQ's own BA Tool upload). */
   alreadyUploaded?: UploadedInfo | null;
+  /** True for an upload whose date comes from the file's own rows, not a
+   * picked date (Labour Sales Report, 2026-10-06) — suppresses the
+   * self-contained date field BA Tool-style forms would otherwise show when
+   * `reportDate` is omitted. */
+  noDateField?: boolean;
 }) {
   // Whether this card participates in the once-per-day lock at all. `null`
   // (branch, not yet uploaded) still participates; only `undefined` (HQ BA
@@ -107,6 +113,7 @@ export function ReportUploadCard({
           reportDate={reportDate}
           formatSuccess={formatSuccess}
           onUploaded={participatesInLock ? handleUploaded : undefined}
+          noDateField={noDateField}
         />
       )}
     </div>
@@ -122,6 +129,7 @@ function ReportUploadForm({
   reportDate,
   formatSuccess,
   onUploaded,
+  noDateField,
 }: {
   endpoint: string;
   title: string;
@@ -134,6 +142,7 @@ function ReportUploadForm({
    * parent can show a persistent confirmation. Omitted for HQ's re-usable
    * BA Tool form, which just shows the inline success line and stays open. */
   onUploaded?: (info: UploadedInfo, message: string) => void;
+  noDateField?: boolean;
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -208,7 +217,7 @@ function ReportUploadForm({
         {description ? <p className="mt-0.5 text-xs text-fg-subtle">{description}</p> : null}
       </div>
 
-      {reportDate ? null : (
+      {reportDate || noDateField ? null : (
         <div>
           <label htmlFor={dateId} className="block text-xs font-medium text-fg-muted">
             Report date

@@ -14,6 +14,7 @@ import { DraftWarning } from "@/components/draft-warning";
 import { CeoShell } from "./ceo-shell";
 import { requireCeoAccess } from "./ceo-guard";
 import { CeoHeader } from "./ceo-header";
+import { GusSplitTiles } from "./gus-split-section";
 import { RegionCard } from "./region-card";
 import { Sparkline } from "./sparkline";
 import { CEO_HEATMAP_METRICS } from "./tkm-metrics";
@@ -249,6 +250,10 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
           <div className="text-[10px] font-semibold tracking-wide text-fg-subtle">Other Scrap Revenue · MTD</div>
           <div className="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-fg">{formatCompactCurrency(group.hero.scrapRevenueMtd)}</div>
         </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <GusSplitTiles split={group.gusSplit} />
       </div>
 
       <h2 className="mt-10 text-[10px] font-semibold uppercase tracking-widest text-fg-subtle">Profit Breakdown — MTD</h2>

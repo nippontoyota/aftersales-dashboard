@@ -110,10 +110,11 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Revenue/RO</th>
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GS Capacity</th>
               <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">BP Capacity</th>
+              <th className="bg-surface px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">GUS Split</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ branch, gs, bp }) => {
+            {rows.map(({ branch, gs, bp, gusSplit }) => {
               const gsTone = achievementTone(gs?.utilizationPct ?? null);
               const bpTone = achievementTone(bp?.utilizationPct ?? null);
               const gsTargetPerBayPerDay =
@@ -141,6 +142,7 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
                   bpBays={bp?.bays ?? 0}
                   gsTargetPerBayPerDay={gsTargetPerBayPerDay}
                   bpTargetPerBayPerDay={bpTargetPerBayPerDay}
+                  gusSplit={gusSplit}
                 />
               );
             })}
@@ -150,7 +152,9 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
 
       <p className="mt-3 text-[11px] text-fg-faint">
         GS Utilization is blank for Body &amp; Paint-only branches (no general-service bays). Ranked by whichever
-        utilization figure is available, worst first.
+        utilization figure is available, worst first. GUS Split is built from Service Info Report job lines (PM ·
+        PDI · Accessories · General Repair, left to right) — its total is a separate figure from GS ROs above and
+        can run a small amount apart from it.
       </p>
     </div>
   );

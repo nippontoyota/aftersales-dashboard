@@ -53,6 +53,12 @@ export type ParsedSsrv089Bp = {
    * zero data rows underneath it — accepted, but worth surfacing to the
    * uploader rather than treated as a silent, ordinary zero-business day. */
   isEmpty: boolean;
+  /** Every row exactly as read from the file, every column — stored into
+   * raw_upload_rows (report_type 'ssrv089_bp') the same way the GS variant's
+   * rawRows is, so a BP cancellation's original invoice (JobOrder No /
+   * Invoice Doc No.) can be looked up the same way a GS one already is. See
+   * reconcile.ts and cross-month-replacement.ts. */
+  rawRows: Record<string, unknown>[];
 };
 
 function toAmount(value: unknown): number {
@@ -89,10 +95,10 @@ export function parseSsrv089BpGreyTotals(buffer: Buffer): ParsedSsrv089Bp {
   const { rows } = found;
 
   if (rows.length === 0) {
-    return { totals: { greyPartsSale: 0, greyLabourSale: 0 }, rowCount: 0, isEmpty: true };
+    return { totals: { greyPartsSale: 0, greyLabourSale: 0 }, rowCount: 0, isEmpty: true, rawRows: [] };
   }
   if (!(BRAND_COLUMN in rows[0])) {
-    return { totals: { greyPartsSale: 0, greyLabourSale: 0 }, rowCount: rows.length, isEmpty: false };
+    return { totals: { greyPartsSale: 0, greyLabourSale: 0 }, rowCount: rows.length, isEmpty: false, rawRows: rows };
   }
 
   let greyPartsSale = 0;
@@ -103,5 +109,5 @@ export function parseSsrv089BpGreyTotals(buffer: Buffer): ParsedSsrv089Bp {
     greyPartsSale += toAmount(row[PART_SALE_COLUMN]) + toAmount(row[PNT_MAT_SALE_COLUMN]);
     greyLabourSale += toAmount(row[LABOUR_SALE_COLUMN]);
   }
-  return { totals: { greyPartsSale, greyLabourSale }, rowCount: rows.length, isEmpty: false };
+  return { totals: { greyPartsSale, greyLabourSale }, rowCount: rows.length, isEmpty: false, rawRows: rows };
 }

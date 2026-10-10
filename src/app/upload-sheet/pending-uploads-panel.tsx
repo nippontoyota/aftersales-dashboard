@@ -3,7 +3,7 @@ import { REPORT_TYPE_LABELS } from "@/lib/pending-uploads";
 
 /** What HQ checks each morning (by ~11am, at the user's request) to see
  * which branches still need chasing — cross-references every branch against
- * its required daily report types for the day (6 normally; 4 for the Body &
+ * its required daily report types for the day (7 normally; 5 for the Body &
  * Paint-only branches, which get no GS-variant files — see
  * pending-uploads.ts). Sits above the Upload Sheet form itself: seeing
  * what's missing and fixing it (on a branch's behalf, right below) are the

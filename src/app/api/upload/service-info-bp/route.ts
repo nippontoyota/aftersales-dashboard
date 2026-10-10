@@ -3,8 +3,10 @@ import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-stor
 import { getCurrentAdmin } from "@/lib/auth";
 import { hashBuffer } from "@/lib/duplicate-detection";
 import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
+import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
+import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
 
 /** Service Information Report - BP — required daily like every other
  * upload. The raw file is always kept (see raw-report-uploads/store.ts),
@@ -60,10 +62,10 @@ export async function POST(request: Request) {
 
   // Structural check — hard reject, nothing saved (2026-10-05). Parsed
   // before any save so a bad file never gets saved half-done.
-  let bpCounts;
+  let bpCounts, bpRawRows;
   try {
     const staffNames = await listAccessoriesStaffNamesForBranch(admin.branch);
-    ({ counts: bpCounts } = parseServiceInfoWorkbook(buffer, admin.branch, staffNames));
+    ({ counts: bpCounts, rawRows: bpRawRows } = parseServiceInfoWorkbook(buffer, admin.branch, staffNames));
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
@@ -100,6 +102,25 @@ export async function POST(request: Request) {
     uploadedBy: admin.username,
   });
   await saveServiceInfoBpSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts: bpCounts, uploadedBy: admin.username });
+  // Every row, individually (2026-10-09) — previously only the aggregate
+  // counts above and the whole file as raw bytes (saveRawReportUpload
+  // above) were kept, so a BP VAS-coded row couldn't be matched against
+  // Labour Sales Report the way a GS one already can (see
+  // vas-revenue-real/compute.ts). A separate report_type from GS's
+  // 'service_info' — see db/schema.sql's 2026-10-09 comment on why.
+  await saveRawUploadRows({
+    reportType: "service_info_bp",
+    date,
+    uploadedAt,
+    sourceFileName: file.name,
+    rows: bpRawRows.map((data) => ({ branch: admin.branch, data })),
+    uploadedBy: admin.username,
+  });
+
+  // Outside the saves above — a recompute failure shouldn't block an
+  // otherwise-successful upload (see vas-revenue-real/recompute.ts, which
+  // already swallows its own errors; this is a no-op before 2026-10-01).
+  await recomputeVasRevenueReal(admin.branch, date);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name, bpCounts });
 }

@@ -83,10 +83,26 @@ export type CentralBranchRow = {
   ext: CentralExtSalesBlock;
   totalMonthlyTarget: number | null;
   totalAchieved: number | null;
+  /** Scrap + used-oil bill revenue, MTD — always a number, never null (same
+   * as BranchReport's own scrapRevenueMtd/usedOilRevenueMtd). */
+  scrapAndUsedOil: number;
+  /** totalAchieved (GS+BP+Ext) + scrapAndUsedOil — mirrors report.ts's
+   * totalRevenueStreamMtd formula, assembled from this view's own achieved
+   * figures so CO01B's pre-split fold-in still applies. Null exactly when
+   * totalAchieved is null — scrap/used-oil never resurrects a null total on
+   * its own, same rule as totalRevenueStreamMtd. */
+  totalRevenue: number | null;
   /** True for CO01B while CO01E hasn't split out yet — every figure in gs/bp/ext
    * above already has CO01E's own revenue added in (see the module comment). */
   includesCo01e: boolean;
   slab: IncentiveSlabTargets | undefined;
+  /** The figure compared against `slab`'s thresholds. Equal to totalAchieved,
+   * except CO01B this month (Oct 2026): its Slab target still lumps in
+   * CO01E's share (unlike gs/bp/ext above, which already split out), so its
+   * comparison figure folds CO01E's totalAchieved back in until CO01E gets
+   * its own Slab target. Deliberately GS+BP+Ext only, not totalRevenue —
+   * Slab achievement stays on the same basis it's always used. */
+  slabActual: number | null;
 };
 
 export type CentralRegionView = {
@@ -98,6 +114,8 @@ export type CentralRegionView = {
     ext: CentralExtSalesBlock;
     totalMonthlyTarget: number | null;
     totalAchieved: number | null;
+    scrapAndUsedOil: number;
+    totalRevenue: number | null;
   };
   /** Sum of each branch's Slab 4 threshold — the region's "everyone at the
    * top slab" target, mirroring his sheet's I3. */
@@ -145,7 +163,14 @@ function sumOrNull(values: (number | null)[]): number | null {
   return present.length ? present.reduce((a, b) => a + b, 0) : null;
 }
 
-type BranchAchieved = { gs: number | null; bp: number | null; ext: number | null; sprExternal: number | null };
+type BranchAchieved = {
+  gs: number | null;
+  bp: number | null;
+  ext: number | null;
+  sprExternal: number | null;
+  /** Scrap + used-oil bill revenue, MTD — always a number, never null. */
+  scrapAndUsedOil: number;
+};
 
 /** GS/BP/Ext-Sales achieved for one branch's report row, same formula used
  * everywhere on this dashboard — pulled out so CO01B's pre-split fold-in
@@ -158,7 +183,8 @@ function branchAchieved(b: BranchReport | undefined): BranchAchieved {
   const bp = b && b.bpuPartsMtd !== null && b.bpuLabourMtd !== null ? b.bpuPartsMtd + b.bpuLabourMtd : null;
   const ext = b?.externalSalesMtd ?? null;
   const sprExternal = b?.sprExternalMtd ?? null;
-  return { gs, bp, ext, sprExternal };
+  const scrapAndUsedOil = (b?.scrapRevenueMtd ?? 0) + (b?.usedOilRevenueMtd ?? 0);
+  return { gs, bp, ext, sprExternal, scrapAndUsedOil };
 }
 
 function addAchieved(a: BranchAchieved, b: BranchAchieved): BranchAchieved {
@@ -167,7 +193,15 @@ function addAchieved(a: BranchAchieved, b: BranchAchieved): BranchAchieved {
     bp: sumOrNull([a.bp, b.bp]),
     ext: sumOrNull([a.ext, b.ext]),
     sprExternal: sumOrNull([a.sprExternal, b.sprExternal]),
+    scrapAndUsedOil: a.scrapAndUsedOil + b.scrapAndUsedOil,
   };
+}
+
+/** GS+BP+Ext only (excludes scrapAndUsedOil) — the basis Slab achievement
+ * has always used. Kept separate from totalRevenue so adding Scrap & Used
+ * Oil to the page doesn't change what Slab compares against. */
+function totalGsBpExt(a: BranchAchieved): number | null {
+  return sumOrNull([a.gs, a.bp, a.ext]);
 }
 
 export async function loadCentralRegionView(date: string, report: Report): Promise<CentralRegionView> {
@@ -199,6 +233,15 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
     const extBase = metricBlock(t?.extTarget ?? null, achieved.ext, elapsed, total);
     const ext: CentralExtSalesBlock = { ...extBase, sprExternalReference: achieved.sprExternal };
 
+    const totalAchieved = sumOrNull([gs.achieved, bp.achieved, ext.achieved]);
+
+    // CO01B's Slab target still lumps in CO01E's share even after the Oct
+    // revenue split (see slabActual's own comment) — fold CO01E's GS+BP+Ext
+    // achieved back in for the comparison, on top of whatever's already
+    // folded in by the pre-split includesCo01e branch above.
+    const slabActual =
+      branch === "CO01B" && co01eIsSplit ? sumOrNull([totalAchieved, totalGsBpExt(branchAchieved(byBranch.get("CO01E")))]) : totalAchieved;
+
     return {
       branch,
       label: CENTRAL_BRANCH_LABELS[branch],
@@ -206,9 +249,12 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
       bp,
       ext,
       totalMonthlyTarget: sumOrNull([gs.target, bp.target, ext.target]),
-      totalAchieved: sumOrNull([gs.achieved, bp.achieved, ext.achieved]),
+      totalAchieved,
+      scrapAndUsedOil: achieved.scrapAndUsedOil,
+      totalRevenue: totalAchieved !== null ? totalAchieved + achieved.scrapAndUsedOil : null,
       includesCo01e,
       slab: slabs.get(branch),
+      slabActual,
     };
   });
 
@@ -220,6 +266,8 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
   const extTotals: CentralExtSalesBlock = { ...extTotalsBase, sprExternalReference: sumOrNull(branches.map((r) => r.ext.sprExternalReference)) };
 
   const totalAchieved = sumOrNull([gsTotals.achieved, bpTotals.achieved, extTotals.achieved]);
+  const scrapAndUsedOilTotal = branches.reduce((sum, r) => sum + r.scrapAndUsedOil, 0);
+  const totalRevenue = totalAchieved !== null ? totalAchieved + scrapAndUsedOilTotal : null;
   const slab4Total = sumOrNull(branches.map((r) => r.slab?.slab4 ?? null));
 
   const allSlabsPresent = branches.every((r) => r.slab !== undefined);
@@ -248,6 +296,8 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
       ext: extTotals,
       totalMonthlyTarget: sumOrNull([gsTotals.target, bpTotals.target, extTotals.target]),
       totalAchieved,
+      scrapAndUsedOil: scrapAndUsedOilTotal,
+      totalRevenue,
     },
     slab4Total,
     balanceToSlab4: slab4Total !== null && totalAchieved !== null ? slab4Total - totalAchieved : null,

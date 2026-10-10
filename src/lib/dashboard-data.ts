@@ -5,6 +5,7 @@ import { buildReport, type Report } from "./report";
 import { REGIONS, type RegionName } from "./regions";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
 import { loadCombinedServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
+import { loadAllVasRevenueRealForMonthUpTo, applyVasRevenueRealOverride } from "./vas-revenue-real/store";
 import { isDatePublished } from "./publish-store";
 import { countActionableForBranch, countActionableForHq, countActionableForRegion } from "./region-queries/store";
 import { countOpenForBranch as countOpenVpForBranch, countOpenForHq, countOpenForRegion } from "./vp-flags/store";
@@ -117,14 +118,21 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
 
   const latestDate = allDates.at(-1)!;
   const billBranch = admin.role === "branch" ? admin.branch : undefined;
-  const [reportRaw, monthSnapshots, serviceInfoMonthSnapshots, isPublished, billTotalsRaw, latestPublished] = await Promise.all([
+  const [reportRaw, monthSnapshots, serviceInfoMonthSnapshotsRaw, vasRevenueRealMonth, isPublished, billTotalsRaw, latestPublished] = await Promise.all([
     buildReport(date),
     loadSnapshotsForMonthUpTo(date),
     loadCombinedServiceInfoSnapshotsForMonthUpTo(date),
+    loadAllVasRevenueRealForMonthUpTo(date),
     isDatePublished(date),
     loadBillTotalsByMonth(billBranch),
     date === latestDate ? Promise.resolve(null) : isDatePublished(latestDate),
   ]);
+  // Real (Labour Sales Report) VAS amounts for 2026-10-01 onwards, same
+  // cutover report.ts's own MTD total uses — keeps the VAS trend line
+  // (trend.ts's computeVasTrendSeries, the only other reader of these
+  // snapshots' vasRevenue) in sync with it without that function needing
+  // its own cutover-aware branch.
+  const serviceInfoMonthSnapshots = applyVasRevenueRealOverride(serviceInfoMonthSnapshotsRaw, vasRevenueRealMonth);
 
   // A branch admin's own revenue is masked before Aug 2026 (backfilled data
   // stays real for HQ/regional/VP/CEO/Accounts — see

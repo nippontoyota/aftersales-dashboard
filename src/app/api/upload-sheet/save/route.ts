@@ -12,6 +12,8 @@ import { loadAllRawReportUploadsBefore, saveRawReportUpload } from "@/lib/raw-re
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { detectReportType } from "@/lib/report-sniffer";
 import { ONLINE_STORE_CODES } from "@/lib/report";
+import { parseLabourSalesWorkbook } from "@/lib/labour-sales/parse";
+import { saveLabourSalesSnapshot } from "@/lib/labour-sales/store";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
 import { loadAllScom205SnapshotsBefore, saveScom205Snapshot } from "@/lib/scom205/store";
 import { checkGrowth, checkPeriodHeaderSanity } from "@/lib/scom205/upload-validation";
@@ -19,6 +21,7 @@ import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoSnapshot } from "@/lib/service-info/store";
 import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
+import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { saveSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { checkInvoiceDocDateSanity, checkInvoiceOverlap } from "@/lib/ssrv089/upload-validation";
@@ -82,7 +85,7 @@ export async function POST(request: Request) {
   const type = detectReportType(buffer);
   if (!type) {
     return NextResponse.json(
-      { error: "Could not recognize this file as a Service Info, Part Sale, SSRV089, or scom205 report." },
+      { error: "Could not recognize this file as a Service Info, Part Sale, Cost & Sales, KPI, or Labour Sales report." },
       { status: 422 }
     );
   }
@@ -118,7 +121,7 @@ export async function POST(request: Request) {
         // silent swallow that let a wrong file through with no error at all
         // — see service-info-bp/route.ts's doc comment for the incident).
         const bpStaffNames = await listAccessoriesStaffNamesForBranch(branch);
-        const { counts: bpCounts } = parseServiceInfoWorkbook(buffer, branch, bpStaffNames);
+        const { counts: bpCounts, rawRows: bpRawRows } = parseServiceInfoWorkbook(buffer, branch, bpStaffNames);
 
         // Soft, click-through duplicate check (added 2026-10-05 — this
         // branch previously had none at all). Stays soft here, unlike the
@@ -140,6 +143,17 @@ export async function POST(request: Request) {
 
         await saveRawReportUpload({ date, branch, reportType: "service_info_bp", uploadedAt, sourceFileName: file.name, fileData: buffer, uploadedBy: admin.username });
         await saveServiceInfoBpSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts: bpCounts, uploadedBy: admin.username });
+        // Every row, individually (2026-10-09) — see service-info-bp/route.ts's
+        // own addition of this for the same reason.
+        await saveRawUploadRows({
+          reportType: "service_info_bp",
+          date,
+          uploadedAt,
+          sourceFileName: file.name,
+          rows: bpRawRows.map((data) => ({ branch, data })),
+          uploadedBy: admin.username,
+        });
+        await recomputeVasRevenueReal(branch, date);
         return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name, bpCounts });
       }
       const svcInfoStaffNames = await listAccessoriesStaffNamesForBranch(branch);
@@ -177,6 +191,7 @@ export async function POST(request: Request) {
       } finally {
         siClient.release();
       }
+      await recomputeVasRevenueReal(branch, date);
       return NextResponse.json({ success: true, type, variant, date, branch, counts });
     }
 
@@ -221,6 +236,68 @@ export async function POST(request: Request) {
         psClient.release();
       }
       return NextResponse.json({ success: true, type, date, branch, counts });
+    }
+
+    if (type === "labour-sales") {
+      // No variant, no date-sanity/duplicate check (see labour-sales/parse.ts
+      // and the branch's own route — re-uploads are meant to overwrite
+      // whichever dates a file contains, so there's nothing to warn about).
+      // The picked `date` above is ignored entirely: every row's own Doc.
+      // Date decides which day it belongs to, same as the branch's own form.
+      const parsed = parseLabourSalesWorkbook(buffer);
+      if (parsed.days.length === 0) {
+        return NextResponse.json({ error: "No row in this file had a readable Doc. Date — check the file and try again." }, { status: 422 });
+      }
+
+      const lsClient = await pool.connect();
+      try {
+        await lsClient.query("begin");
+        for (const day of parsed.days) {
+          await saveLabourSalesSnapshot(
+            { date: day.date, branch, uploadedAt, sourceFileName: file.name, counts: day.counts, uploadedBy: admin.username },
+            lsClient
+          );
+          await saveRawUploadRows(
+            {
+              reportType: "labour_sales",
+              date: day.date,
+              uploadedAt,
+              sourceFileName: file.name,
+              rows: day.rawRows.map((data) => ({ branch, data })),
+              uploadedBy: admin.username,
+            },
+            lsClient
+          );
+        }
+        await lsClient.query("commit");
+      } catch {
+        await lsClient.query("rollback");
+        return NextResponse.json({ error: "Failed to save upload — please try again." }, { status: 500 });
+      } finally {
+        lsClient.release();
+      }
+
+      for (const day of parsed.days) {
+        await recomputeVasRevenueReal(branch, day.date);
+      }
+
+      const totals = parsed.days.reduce(
+        (acc, d) => ({
+          rowCount: acc.rowCount + d.counts.rowCount,
+          vasLabourBefore: acc.vasLabourBefore + d.counts.vasLabourBefore,
+          vasLabourAfter: acc.vasLabourAfter + d.counts.vasLabourAfter,
+        }),
+        { rowCount: 0, vasLabourBefore: 0, vasLabourAfter: 0 }
+      );
+      return NextResponse.json({
+        success: true,
+        type,
+        branch,
+        sourceFileName: file.name,
+        dates: parsed.days.map((d) => d.date),
+        skippedRowCount: parsed.skippedRowCount,
+        totals,
+      });
     }
 
     if (type === "ssrv089") {

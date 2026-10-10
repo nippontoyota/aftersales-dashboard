@@ -7,6 +7,7 @@ import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/sto
 import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-info/store";
 import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
+import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -109,6 +110,11 @@ export async function POST(request: Request) {
   } finally {
     dbClient.release();
   }
+
+  // Outside the save above — a recompute failure shouldn't block an
+  // otherwise-successful upload (see vas-revenue-real/recompute.ts, which
+  // already swallows its own errors; this is a no-op before 2026-10-01).
+  await recomputeVasRevenueReal(admin.branch, date);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }
