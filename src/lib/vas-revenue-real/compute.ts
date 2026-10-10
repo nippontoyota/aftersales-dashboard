@@ -49,6 +49,17 @@ export type VasRevenueRealResult = {
   fallbackRows: number;
   /** Closed by an Accessories-department staff member — contributes nothing, same exclusion as the old price-list-only calculation. */
   excludedRows: number;
+  /** True when this day had zero Service Info rows on file at all (GS or
+   * BP) — not zero VAS-coded rows, zero rows, period — so vasRevenue is the
+   * day's old aggregate figure, not a row-by-row computation. Confirmed
+   * 2026-10-10 against KL01B: their BP uploads for 4 and 8 Oct landed
+   * before service-info-bp/route.ts started saving individual rows
+   * (2026-10-09), so service_info_bp_snapshots has real vas_revenue
+   * (₹4,042 / ₹8,213.43) with nothing in raw_upload_rows to compute from —
+   * without this fallback those two days silently became ₹0 instead of
+   * falling back to the known-good aggregate, understating the branch's
+   * whole month by the real amount. */
+  usedDayAggregateFallback: boolean;
 };
 
 /**
@@ -68,8 +79,28 @@ export type VasRevenueRealResult = {
  * Pure computation only — does not read or write vas_revenue_real itself
  * (see store.ts for that) or check the cutover date (see recompute.ts,
  * the only caller that matters for correctness here).
+ *
+ * `dayAggregateVasRevenue` is the day's OLD price-list total (Service Info
+ * GS snapshot's vasRevenue + BP snapshot's, same figure the pre-2026-10
+ * calculation would have used) — only ever used as a fallback when this
+ * branch/date has literally zero Service Info rows on file in
+ * raw_upload_rows (see usedDayAggregateFallback's doc comment), never
+ * blended with a row-by-row result.
  */
-export async function computeVasRevenueReal(branch: string, date: string, staffNames: string[]): Promise<VasRevenueRealResult> {
+export async function computeVasRevenueReal(
+  branch: string,
+  date: string,
+  staffNames: string[],
+  dayAggregateVasRevenue: number
+): Promise<VasRevenueRealResult> {
+  const svcInfoRowCount = await pool.query<{ count: string }>(
+    `select count(*) from raw_upload_rows where report_type in ('service_info', 'service_info_bp') and branch = $1 and date = $2`,
+    [branch, date]
+  );
+  if (Number(svcInfoRowCount.rows[0].count) === 0) {
+    return { vasRevenue: dayAggregateVasRevenue, matchedRows: 0, fallbackRows: 0, excludedRows: 0, usedDayAggregateFallback: true };
+  }
+
   const svcInfoRes = await pool.query<{ job_order_no: string | null; job_code: string | null; series: string | null; sa_name: string | null }>(
     `select row_data->>'Job Order No' as job_order_no, row_data->>'Job Code' as job_code,
             row_data->>'Series' as series, row_data->>'Close Service Advisor Name' as sa_name
@@ -114,5 +145,5 @@ export async function computeVasRevenueReal(branch: string, date: string, staffN
     }
   }
 
-  return { vasRevenue, matchedRows, fallbackRows, excludedRows };
+  return { vasRevenue, matchedRows, fallbackRows, excludedRows, usedDayAggregateFallback: false };
 }

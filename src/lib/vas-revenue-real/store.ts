@@ -13,15 +13,16 @@ export async function saveVasRevenueReal(
   client?: PoolClient
 ): Promise<void> {
   await (client ?? pool).query(
-    `insert into vas_revenue_real (date, branch, vas_revenue, matched_rows, fallback_rows, excluded_rows, computed_at)
-     values ($1, $2, $3, $4, $5, $6, now())
+    `insert into vas_revenue_real (date, branch, vas_revenue, matched_rows, fallback_rows, excluded_rows, used_day_aggregate_fallback, computed_at)
+     values ($1, $2, $3, $4, $5, $6, $7, now())
      on conflict (date, branch) do update set
        vas_revenue = excluded.vas_revenue,
        matched_rows = excluded.matched_rows,
        fallback_rows = excluded.fallback_rows,
        excluded_rows = excluded.excluded_rows,
+       used_day_aggregate_fallback = excluded.used_day_aggregate_fallback,
        computed_at = excluded.computed_at`,
-    [params.date, params.branch, params.vasRevenue, params.matchedRows, params.fallbackRows, params.excludedRows]
+    [params.date, params.branch, params.vasRevenue, params.matchedRows, params.fallbackRows, params.excludedRows, params.usedDayAggregateFallback]
   );
 }
 

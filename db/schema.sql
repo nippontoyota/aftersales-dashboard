@@ -936,3 +936,13 @@ create table if not exists vas_revenue_real (
   computed_at timestamptz not null default now(),
   primary key (date, branch)
 );
+
+-- 2026-10-10: found against KL01B's real data (manual VAS report comparison
+-- turned up a ₹0 where their Service Info - BP snapshots had real nonzero
+-- vas_revenue — their BP uploads for 4/8 Oct landed before service-info-bp/
+-- route.ts started saving individual rows, so vas_revenue_real had nothing
+-- to compute from and silently zeroed those days out instead of falling
+-- back to the known-good aggregate). True whenever a day's figure is that
+-- aggregate fallback rather than a row-by-row computation — see
+-- vas-revenue-real/compute.ts's usedDayAggregateFallback doc comment.
+alter table vas_revenue_real add column if not exists used_day_aggregate_fallback boolean not null default false;

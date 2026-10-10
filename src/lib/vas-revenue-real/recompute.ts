@@ -1,4 +1,6 @@
 import { listAccessoriesStaffNamesForBranch } from "../accessories-staff-store";
+import { loadServiceInfoSnapshot } from "../service-info/store";
+import { loadServiceInfoBpSnapshot } from "../service-info-bp/store";
 import { computeVasRevenueReal, VAS_REAL_CUTOVER_DATE } from "./compute";
 import { saveVasRevenueReal } from "./store";
 
@@ -19,8 +21,16 @@ import { saveVasRevenueReal } from "./store";
 export async function recomputeVasRevenueReal(branch: string, date: string): Promise<void> {
   if (date < VAS_REAL_CUTOVER_DATE) return;
   try {
-    const staffNames = await listAccessoriesStaffNamesForBranch(branch);
-    const result = await computeVasRevenueReal(branch, date, staffNames);
+    const [staffNames, gsSnapshot, bpSnapshot] = await Promise.all([
+      listAccessoriesStaffNamesForBranch(branch),
+      loadServiceInfoSnapshot(date, branch),
+      loadServiceInfoBpSnapshot(date, branch),
+    ]);
+    // Old price-list total for this one day — the fallback compute.ts uses
+    // only when raw_upload_rows has nothing at all for this branch/date
+    // (see usedDayAggregateFallback's doc comment).
+    const dayAggregateVasRevenue = (gsSnapshot?.counts.vasRevenue ?? 0) + (bpSnapshot?.counts.vasRevenue ?? 0);
+    const result = await computeVasRevenueReal(branch, date, staffNames, dayAggregateVasRevenue);
     await saveVasRevenueReal({ date, branch, ...result });
   } catch (err) {
     console.error(`recomputeVasRevenueReal failed for ${branch}/${date}:`, err);
