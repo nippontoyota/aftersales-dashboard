@@ -290,9 +290,25 @@ const DEACTIVATED_BRANCHES = new Set<string>(["CO01D"]);
  * Grey job's revenue doesn't show up anywhere on the dashboard. Widened
  * 2026-10-01 to every branch found carrying Grey-brand rows in a September
  * company-wide check (TI01A, CO01A, CO01B, KT01A, MV01A, TL01A, TR01A) —
- * every other branch came back clean. New branches should only be added
- * here after checking their own data the same way. */
-const GREY_REVENUE_BRANCHES = new Set<string>(["TI01A", "CO01A", "CO01B", "KT01A", "MV01A", "TL01A", "TR01A"]);
+ * every other branch came back clean. Widened again 2026-10-10 after that
+ * check turned out to have only covered GS-desk branches: KL01B and TR01B
+ * (both Body & Paint-only, see BODY_PAINT_ONLY_BRANCHES) also carry
+ * Grey-brand SSRV089-BP rows all-time (KL01B: 4 rows/₹9,079 parts+₹20,653
+ * labour; TR01B: 20 rows/₹105,408 parts+₹45,769 labour) and were missing
+ * their BPU-side Grey revenue entirely. CO01E (also BP-only) checked clean —
+ * zero Grey rows found, left out. New branches should only be added here
+ * after checking their own data the same way. */
+const GREY_REVENUE_BRANCHES = new Set<string>([
+  "TI01A",
+  "CO01A",
+  "CO01B",
+  "KT01A",
+  "MV01A",
+  "TL01A",
+  "TR01A",
+  "KL01B",
+  "TR01B",
+]);
 
 function excludeDeactivatedBranches(rows: BaToolBranchRow[]): BaToolBranchRow[] {
   return rows.filter((row) => !DEACTIVATED_BRANCHES.has(row.branch));
