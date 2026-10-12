@@ -93,3 +93,15 @@ export async function loadAllLabourSalesSnapshotsForDate(date: string): Promise<
   const { rows } = await pool.query(`select ${SELECT_COLUMNS} from labour_sales_snapshots where date = $1`, [date]);
   return rows.map(rowToSnapshot);
 }
+
+/** Most recent Labour Sales snapshot for a branch, across any date — used by
+ * the upload page's "already uploaded" check. Unlike the other 6 report types
+ * whose date comes from the picker, Labour Sales dates come from the file's
+ * own Doc. Date rows, so a file uploaded for a Saturday reporting window will
+ * have a doc date one day before the picked reportDate — an exact-date match
+ * would always show it as not uploaded after reload. */
+export async function loadMostRecentLabourSalesSnapshot(branch: string): Promise<LabourSalesSnapshot | null> {
+  const { rows } = await pool.query(`select ${SELECT_COLUMNS} from labour_sales_snapshots where branch = $1 order by date desc limit 1`, [branch]);
+  const r = rows[0];
+  return r ? rowToSnapshot(r) : null;
+}
