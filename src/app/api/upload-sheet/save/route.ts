@@ -396,20 +396,26 @@ export async function POST(request: Request) {
     // type === "scom205" — previously had zero validation here (2026-10-05
     // fix): no period-header check, no growth check, no duplicate check,
     // unlike every other type in this file and unlike the branch's own
-    // scom205/route.ts, which has all three. Mirrors that route exactly:
-    // period-header and growth are hard rejects (same as every other sanity
-    // check in this file), the exact-duplicate check stays soft/click-through
-    // (same as every other duplicate check in this file — Upload Sheet is
-    // HQ's override path).
+    // scom205/route.ts, which has all three. Mirrors that route exactly for
+    // period-header (hard reject) and exact-duplicate (soft/click-through —
+    // same as every other duplicate check in this file, Upload Sheet is
+    // HQ's override path). Growth is a hard reject on the branch's own route
+    // (a branch hitting it must come here), but here it's soft/click-through
+    // too (2026-10-12, TR01C — a genuine ~₹4L cancellation posted between two
+    // KPI pulls legitimately dipped the MTD total; checkGrowth had no escape
+    // hatch anywhere, so HQ couldn't get the real file in either).
     const { totals, rawRows, stockAndServiceRate } = parseScom205Workbook(buffer);
 
     const periodSanity = checkPeriodHeaderSanity(rawRows, date);
     if (!periodSanity.ok) {
       return NextResponse.json({ error: periodSanity.error }, { status: 422 });
     }
-    const growth = await checkGrowth(branch, date, totals);
-    if (!growth.ok) {
-      return NextResponse.json({ error: growth.error }, { status: 422 });
+    const growthConfirmed = formData.get("confirmGrowth") === "true";
+    if (!growthConfirmed) {
+      const growth = await checkGrowth(branch, date, totals);
+      if (!growth.ok) {
+        return NextResponse.json({ growthWarning: true, message: growth.error });
+      }
     }
     const scConfirmed = formData.get("confirmDuplicate") === "true";
     if (!scConfirmed) {
