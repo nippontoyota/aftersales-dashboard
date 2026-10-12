@@ -64,11 +64,16 @@ export async function POST(request: Request) {
   }
 
   // Growth check (2026-09-24) — the four cumulative-MTD totals must never be
-  // lower than the branch's most recent prior upload this month. See
-  // scom205/upload-validation.ts.
-  const growth = await checkGrowth(admin.branch, date, totals);
-  if (!growth.ok) {
-    return NextResponse.json({ error: growth.error }, { status: 422 });
+  // lower than the branch's most recent prior upload this month. Soft
+  // confirm-through added 2026-10-12: a genuine cancellation posted between
+  // two KPI pulls can legitimately dip the MTD total; the branch can confirm
+  // it is real rather than being forced to go through HQ.
+  const growthConfirmed = formData.get("confirmGrowth") === "true";
+  if (!growthConfirmed) {
+    const growth = await checkGrowth(admin.branch, date, totals);
+    if (!growth.ok) {
+      return NextResponse.json({ growthWarning: true, message: growth.error });
+    }
   }
 
   // Hard-blocking duplicate check (2026-09-16, at the user's request; upgraded
