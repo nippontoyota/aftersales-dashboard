@@ -72,6 +72,12 @@ export function UploadSheetForm() {
   // — holds the built FormData so "Save anyway" can resubmit it with
   // confirmDuplicate set, same pattern as the branch upload cards.
   const [duplicateWarning, setDuplicateWarning] = useState<{ message: string; formData: FormData } | null>(null);
+  // scom205's growth warning (checkGrowth, upload-validation.ts) — a KPI
+  // file whose MTD totals dipped below the last upload on file, usually a
+  // genuine mid-month cancellation (2026-10-12, TR01C). Same confirm-and-
+  // resubmit pattern as duplicateWarning above, kept separate since the two
+  // can in principle both apply to one file and need their own message.
+  const [growthWarning, setGrowthWarning] = useState<{ message: string; formData: FormData } | null>(null);
   const successRef = useRef<HTMLParagraphElement>(null);
 
   // On save, the detected-type block (branch picker + Save) collapses and
@@ -95,6 +101,7 @@ export function UploadSheetForm() {
     setError(null);
     setSuccess(null);
     setDuplicateWarning(null);
+    setGrowthWarning(null);
     if (!picked) return;
 
     setDetecting(true);
@@ -126,8 +133,14 @@ export function UploadSheetForm() {
       if (!res.ok) {
         setError(data.error ?? "Save failed.");
         setDuplicateWarning(null);
+        setGrowthWarning(null);
         return;
       }
+      if (data.growthWarning) {
+        setGrowthWarning({ message: data.message ?? "This file's totals are lower than the last upload on file.", formData });
+        return;
+      }
+      setGrowthWarning(null);
       if (data.duplicate) {
         setDuplicateWarning({ message: data.message ?? "This looks like a duplicate upload.", formData });
         return;
@@ -158,6 +171,7 @@ export function UploadSheetForm() {
     } catch {
       setError("Could not reach the server to save this file.");
       setDuplicateWarning(null);
+      setGrowthWarning(null);
     } finally {
       setSaving(false);
     }
@@ -180,6 +194,12 @@ export function UploadSheetForm() {
     formData.append("branch", branch);
     if (HAS_VARIANT[detection.type] && variant) formData.append("variant", variant);
     await doSave(formData);
+  }
+
+  async function handleConfirmGrowth() {
+    if (!growthWarning) return;
+    growthWarning.formData.set("confirmGrowth", "true");
+    await doSave(growthWarning.formData);
   }
 
   async function handleConfirmDuplicate() {
@@ -282,7 +302,29 @@ export function UploadSheetForm() {
             </select>
           </div>
 
-          {duplicateWarning ? (
+          {growthWarning ? (
+            <div className="space-y-2 rounded-md border border-warn/30 bg-warn-soft p-3" role="alert" aria-live="assertive">
+              <p className="text-sm text-warn">{growthWarning.message}</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmGrowth}
+                  disabled={saving}
+                  className="h-8 rounded-md border border-warn/40 bg-surface px-3 text-xs font-medium text-warn hover:bg-warn-soft disabled:opacity-60"
+                >
+                  {saving ? "Saving…" : "Yes, this is genuine — save anyway"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGrowthWarning(null)}
+                  disabled={saving}
+                  className="h-8 rounded-md px-3 text-xs font-medium text-fg-subtle hover:text-fg"
+                >
+                  Cancel — let me check
+                </button>
+              </div>
+            </div>
+          ) : duplicateWarning ? (
             <div className="space-y-2 rounded-md border border-warn/30 bg-warn-soft p-3" role="alert" aria-live="assertive">
               <p className="text-sm text-warn">{duplicateWarning.message}</p>
               <div className="flex gap-2">

@@ -11,15 +11,6 @@ const TONE_CHIP = {
   critical: "bg-bad-soft text-bad",
   neutral: "bg-surface-2 text-fg-faint",
 } as const;
-const RANK_TONE = { good: "bg-good-soft text-good", warn: "bg-warn-soft text-warn", critical: "bg-bad-soft text-bad" } as const;
-
-function rankTone(rank: number, total: number): "good" | "warn" | "critical" {
-  if (total <= 1) return "good";
-  const pct = (rank - 1) / (total - 1);
-  if (pct <= 1 / 3) return "good";
-  if (pct <= 2 / 3) return "warn";
-  return "critical";
-}
 
 function BranchMetricCard({
   branch,
@@ -38,11 +29,6 @@ function BranchMetricCard({
     <div className="min-w-[190px] flex-1 space-y-1.5 rounded-lg border border-border-subtle bg-surface-2/30 p-2.5">
       <div className="flex items-center justify-between gap-1">
         <span className="text-[11px] font-semibold text-fg">{CENTRAL_BRANCH_LABELS[branch as keyof typeof CENTRAL_BRANCH_LABELS] ?? branch}</span>
-        {row.rank ? (
-          <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${RANK_TONE[rankTone(row.rank.rank, row.rank.total)]}`}>
-            #{row.rank.rank} of {row.rank.total}
-          </span>
-        ) : null}
       </div>
 
       <div className="flex items-baseline justify-between gap-1 text-[12px]">

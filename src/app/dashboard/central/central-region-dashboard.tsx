@@ -93,7 +93,7 @@ export function CentralRegionDashboard({
       totalRevenue: view.totals.totalRevenue,
       includesCo01e: false,
       slab: undefined,
-      slabActual: view.totals.totalAchieved,
+      slabActual: view.totals.totalRevenue,
     },
   ];
 

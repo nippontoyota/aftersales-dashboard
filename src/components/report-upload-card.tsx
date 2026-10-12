@@ -154,6 +154,9 @@ function ReportUploadForm({
   // it with confirmDuplicate set, rather than asking the admin to re-pick
   // the file. Cleared on cancel, on a fresh submit, or once resolved.
   const [duplicateWarning, setDuplicateWarning] = useState<{ message: string; formData: FormData } | null>(null);
+  // scom205 growth warning — MTD totals dipped below the last upload on file,
+  // usually a genuine cancellation posted between two KPI pulls (2026-10-12).
+  const [growthWarning, setGrowthWarning] = useState<{ message: string; formData: FormData } | null>(null);
 
   async function submit(formData: FormData, fileName: string) {
     setPending(true);
@@ -165,8 +168,14 @@ function ReportUploadForm({
       if (!res.ok) {
         setError(data.error ?? "Upload failed.");
         setDuplicateWarning(null);
+        setGrowthWarning(null);
         return;
       }
+      if (data.growthWarning) {
+        setGrowthWarning({ message: data.message ?? "This file's totals are lower than the last upload on file.", formData });
+        return;
+      }
+      setGrowthWarning(null);
       if (data.duplicate) {
         setDuplicateWarning({ message: data.message ?? "This looks like a duplicate upload.", formData });
         return;
@@ -189,12 +198,23 @@ function ReportUploadForm({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setGrowthWarning(null);
+    setDuplicateWarning(null);
     const formData = new FormData(e.currentTarget);
     const file = formData.get("file");
     const fileName = file instanceof File ? file.name : "uploaded file";
     // Branch panel: the date comes from the shared picker above. BA Tool:
     // the in-form field below already put it in the FormData.
     if (reportDate) formData.set("date", reportDate);
+    submit(formData, fileName);
+  }
+
+  function handleConfirmGrowth() {
+    if (!growthWarning) return;
+    const formData = growthWarning.formData;
+    formData.set("confirmGrowth", "true");
+    const file = formData.get("file");
+    const fileName = file instanceof File ? file.name : "uploaded file";
     submit(formData, fileName);
   }
 
@@ -258,7 +278,29 @@ function ReportUploadForm({
         </p>
       ) : null}
 
-      {duplicateWarning ? (
+      {growthWarning ? (
+        <div className="space-y-2 rounded-md border border-warn/30 bg-warn-soft p-3" role="alert" aria-live="assertive">
+          <p className="text-sm text-warn">{growthWarning.message}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleConfirmGrowth}
+              disabled={pending}
+              className="h-8 rounded-md border border-warn/40 bg-surface px-3 text-xs font-medium text-warn hover:bg-warn-soft disabled:opacity-60"
+            >
+              {pending ? "Uploading…" : "Yes, this is genuine — upload anyway"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setGrowthWarning(null)}
+              disabled={pending}
+              className="h-8 rounded-md px-3 text-xs font-medium text-fg-subtle hover:text-fg"
+            >
+              Cancel — let me check
+            </button>
+          </div>
+        </div>
+      ) : duplicateWarning ? (
         <div className="space-y-2 rounded-md border border-warn/30 bg-warn-soft p-3" role="alert" aria-live="assertive">
           <p className="text-sm text-warn">{duplicateWarning.message}</p>
           <div className="flex gap-2">

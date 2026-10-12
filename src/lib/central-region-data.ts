@@ -125,9 +125,12 @@ export type CentralRegionView = {
   balanceToSlab4: number | null;
   /** Sum of each branch's slab1..4 — a region-wide combined slab (sums of
    * ascending thresholds are themselves ascending, so this is a valid set of
-   * thresholds, not just slab4Total in isolation). Undefined unless every
-   * displayed branch has a slab target this month, same "no partial
-   * thresholds" rule as a single branch missing its own slab row. */
+   * thresholds, not just slab4Total in isolation). Sums whichever branches
+   * have a slab target this month, same "no ratio, drops out" rule as every
+   * other total on this page (slab4Total, gsTotals, ...) — a branch missing
+   * its own slab row (e.g. CO01E before its first upload) no longer blanks
+   * out the whole region's indicator. Undefined only when no branch has a
+   * slab target at all. */
   regionSlab: IncentiveSlabTargets | undefined;
   workingDays: { elapsed: number; total: number; remaining: number };
   /** HQ-flagged report_holidays, as an array — the Slab indicator's own
@@ -197,11 +200,13 @@ function addAchieved(a: BranchAchieved, b: BranchAchieved): BranchAchieved {
   };
 }
 
-/** GS+BP+Ext only (excludes scrapAndUsedOil) — the basis Slab achievement
- * has always used. Kept separate from totalRevenue so adding Scrap & Used
- * Oil to the page doesn't change what Slab compares against. */
-function totalGsBpExt(a: BranchAchieved): number | null {
-  return sumOrNull([a.gs, a.bp, a.ext]);
+/** GS+BP+Ext+Scrap&Oil — mirrors report.ts's totalRevenueStreamMtd, the same
+ * basis the HQ/admin views (hero-kpi-strip, branch-page, branch-daily-report)
+ * already compare Slab achievement against. Central's Slab used to compare
+ * GS+BP+Ext only; changed 2026-10-10 at the user's request to match HQ. */
+function totalRevenueStream(a: BranchAchieved): number | null {
+  const gsBpExt = sumOrNull([a.gs, a.bp, a.ext]);
+  return gsBpExt !== null ? gsBpExt + a.scrapAndUsedOil : null;
 }
 
 export async function loadCentralRegionView(date: string, report: Report): Promise<CentralRegionView> {
@@ -234,13 +239,14 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
     const ext: CentralExtSalesBlock = { ...extBase, sprExternalReference: achieved.sprExternal };
 
     const totalAchieved = sumOrNull([gs.achieved, bp.achieved, ext.achieved]);
+    const totalRevenue = totalAchieved !== null ? totalAchieved + achieved.scrapAndUsedOil : null;
 
     // CO01B's Slab target still lumps in CO01E's share even after the Oct
-    // revenue split (see slabActual's own comment) — fold CO01E's GS+BP+Ext
-    // achieved back in for the comparison, on top of whatever's already
-    // folded in by the pre-split includesCo01e branch above.
+    // revenue split (see slabActual's own comment) — fold CO01E's full
+    // revenue stream back in for the comparison, on top of whatever's
+    // already folded in by the pre-split includesCo01e branch above.
     const slabActual =
-      branch === "CO01B" && co01eIsSplit ? sumOrNull([totalAchieved, totalGsBpExt(branchAchieved(byBranch.get("CO01E")))]) : totalAchieved;
+      branch === "CO01B" && co01eIsSplit ? sumOrNull([totalRevenue, totalRevenueStream(branchAchieved(byBranch.get("CO01E")))]) : totalRevenue;
 
     return {
       branch,
@@ -251,7 +257,7 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
       totalMonthlyTarget: sumOrNull([gs.target, bp.target, ext.target]),
       totalAchieved,
       scrapAndUsedOil: achieved.scrapAndUsedOil,
-      totalRevenue: totalAchieved !== null ? totalAchieved + achieved.scrapAndUsedOil : null,
+      totalRevenue,
       includesCo01e,
       slab: slabs.get(branch),
       slabActual,
@@ -270,15 +276,16 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
   const totalRevenue = totalAchieved !== null ? totalAchieved + scrapAndUsedOilTotal : null;
   const slab4Total = sumOrNull(branches.map((r) => r.slab?.slab4 ?? null));
 
-  const allSlabsPresent = branches.every((r) => r.slab !== undefined);
-  const regionSlab: IncentiveSlabTargets | undefined = allSlabsPresent
-    ? {
-        slab1: branches.reduce((sum, r) => sum + r.slab!.slab1, 0),
-        slab2: branches.reduce((sum, r) => sum + r.slab!.slab2, 0),
-        slab3: branches.reduce((sum, r) => sum + r.slab!.slab3, 0),
-        slab4: branches.reduce((sum, r) => sum + r.slab!.slab4, 0),
-      }
-    : undefined;
+  const branchesWithSlab = branches.filter((r) => r.slab !== undefined);
+  const regionSlab: IncentiveSlabTargets | undefined =
+    branchesWithSlab.length > 0
+      ? {
+          slab1: branchesWithSlab.reduce((sum, r) => sum + r.slab!.slab1, 0),
+          slab2: branchesWithSlab.reduce((sum, r) => sum + r.slab!.slab2, 0),
+          slab3: branchesWithSlab.reduce((sum, r) => sum + r.slab!.slab3, 0),
+          slab4: branchesWithSlab.reduce((sum, r) => sum + r.slab!.slab4, 0),
+        }
+      : undefined;
 
   // bpuPartsMtd is gated purely on today's scom205 upload (unlike gusPartsMtd,
   // which is additionally netted against SSRV089 and would read null for a
