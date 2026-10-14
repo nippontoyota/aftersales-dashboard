@@ -4,7 +4,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { hashBuffer } from "@/lib/duplicate-detection";
 import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
-import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
+import { isBpFlavoredServiceInfo, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
 
@@ -24,8 +24,13 @@ import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
  * with no error and no warning at all — same root failure mode, worse,
  * since nothing was even surfaced). A BP job order rarely carries GS-style
  * job codes, so a *correctly-shaped* file with zero matches is still fine
- * (Wheel Balancing/Alignment/Brake Skimming/VAS Revenue all come back 0) —
- * only a file that isn't Service-Info-shaped at all is rejected. */
+ * (Wheel Balancing/Alignment/Brake Skimming/VAS Revenue all come back 0).
+ *
+ * That incident's mirror image slipped through uncaught until KY01A's
+ * 2026-10-13 one: a GS file structurally passes here too (same required
+ * columns), so a *correctly-shaped but wrong-variant* file wasn't rejected
+ * either. See isBpFlavoredServiceInfo's doc comment (2026-10-14) for the
+ * GR_BP_FLG-column check added below to close that gap. */
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) {
@@ -69,6 +74,15 @@ export async function POST(request: Request) {
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
+      { status: 422 }
+    );
+  }
+
+  // GS-vs-BP content check (2026-10-14, after KY01A's 2026-10-13 incident —
+  // see isBpFlavoredServiceInfo's doc comment above and in parse.ts).
+  if (!isBpFlavoredServiceInfo(bpRawRows)) {
+    return NextResponse.json(
+      { error: "This looks like a General Service Service Info Report, not Body & Paint — upload it as Service Info (GS) instead." },
       { status: 422 }
     );
   }

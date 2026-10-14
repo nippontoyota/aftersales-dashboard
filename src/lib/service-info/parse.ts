@@ -50,6 +50,25 @@ const JOB_ORDER_NO_COLUMN = "Job Order No";
 // correctly (per its own logic) finding nothing every time.
 const CLOSE_SA_NAME_COLUMN = "Close Service Advisor Name";
 
+/** GS and BP Service Info Report exports share the exact same required
+ * columns (see REQUIRED_COLUMNS below), so the structural check alone can't
+ * tell a GS file from a BP file — a BP export is still "Service-Info-shaped".
+ * "GR_BP_FLG" is present (as a header, regardless of its per-row value) only
+ * in the BP-flavored export; a genuine GS export never has this column at
+ * all. Confirmed 2026-10-14 against KY01A's 2026-10-13 incident (its GS slot
+ * got a Body & Paint file instead of real GS data, uploaded uncaught because
+ * the 2026-10-05 hardening — see upload routes' own doc comments — only
+ * checked for wrong-report-type/empty/duplicate, never GS-vs-BP content) and
+ * cross-checked against several other branches' genuine GS and BP uploads so
+ * this isn't a KY01A-only quirk. sheet_to_json's `defval: ""` means every row
+ * gets every header column as a key, so checking just the first row is
+ * enough — a column either exists on the sheet or it doesn't. */
+const GR_BP_FLG_COLUMN = "GR_BP_FLG";
+
+export function isBpFlavoredServiceInfo(rows: Record<string, unknown>[]): boolean {
+  return rows.length > 0 && Object.prototype.hasOwnProperty.call(rows[0], GR_BP_FLG_COLUMN);
+}
+
 const WHEEL_BALANCING_DESC = "WB (OFF-VEHICLE, TWO WHEELS) - ADJST";
 const WHEEL_ALIGNMENT_DESC = "WHEEL ALIGNMENT - INSP";
 /** Brake Skimming = any brake-disc resurfacing job: front OR rear axle, done

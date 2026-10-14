@@ -4,7 +4,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
-import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
+import { isBpFlavoredServiceInfo, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-info/store";
 import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
 import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
@@ -54,6 +54,18 @@ export async function POST(request: Request) {
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
+      { status: 422 }
+    );
+  }
+
+  // GS-vs-BP content check (2026-10-14, after KY01A's 2026-10-13 incident —
+  // see isBpFlavoredServiceInfo's doc comment). The structural check above
+  // can't catch this: a BP export is still "Service-Info-shaped". Hard
+  // block, same as every other check here — this is never a legitimate GS
+  // upload.
+  if (isBpFlavoredServiceInfo(rawRows)) {
+    return NextResponse.json(
+      { error: "This looks like a Body & Paint Service Info Report, not General Service — upload it as Service Info (BP) instead." },
       { status: 422 }
     );
   }
