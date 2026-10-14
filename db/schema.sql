@@ -472,7 +472,7 @@ create index if not exists raw_upload_rows_data_gin_idx on raw_upload_rows using
 -- keyed by invoice_number; duplicate detection is by that unique constraint.
 create table if not exists bill_uploads (
   id              bigserial    primary key,
-  invoice_number  text         not null unique,
+  invoice_number  text         not null,
   branch          text         not null,
   taxable_value   numeric      not null,
   file_data       bytea        not null,
@@ -481,6 +481,8 @@ create table if not exists bill_uploads (
   uploaded_by     text         not null,
   extraction_method text       not null check (extraction_method in ('auto', 'manual'))
 );
+create unique index if not exists uq_bill_uploads_branch_invoice
+  on bill_uploads (branch, invoice_number);
 create index if not exists idx_bill_uploads_branch_uploaded
   on bill_uploads (branch, uploaded_at);
 -- Migrate from storage_path to file_data if upgrading an existing database:
@@ -951,3 +953,133 @@ create table if not exists vas_revenue_real (
 -- its BP revenue (no rows to join against) was just silently dropped — see
 -- vas-revenue-real/compute.ts's usedDayAggregateFallback doc comment.
 alter table vas_revenue_real add column if not exists used_day_aggregate_fallback boolean not null default false;
+
+-- 2026-10-14: BP (Body & Paint) Referrals — leads submitted by employees via
+-- WhatsApp (parsed by an external bot, not this app) for a vehicle they
+-- spotted that could use BP work. This table already exists in production,
+-- created out-of-band by whoever set up the WhatsApp integration; the
+-- `create table if not exists` below just documents its real shape so a
+-- fresh database ends up with the same table. See src/app/bp-referrals/.
+create table if not exists bp_referrals (
+  id                       serial       primary key,
+  referring_employee_id    varchar,
+  referring_employee_name  varchar,
+  referring_employee_branch varchar,
+  vehicle_image_url        text,
+  customer_phone           varchar,
+  submitted_at             timestamp,
+  vehicle_reg_no           varchar,
+  location                 varchar,
+  description              text
+);
+
+-- BP Manager call/validation workflow (Phase 2, 2026-10-14). A BP Manager
+-- (role 'bp_manager' below) works a branch's queue: call the customer, mark
+-- connected/not-connected, and — once connected — record genuine/estimate/
+-- interested/CP-IP together in one go (see src/app/bp-referrals/ BPM view).
+--
+-- assigned_branch is deliberately separate from referring_employee_branch:
+-- the employee's branch never changes (it's who gets paid — see the ₹50/₹200
+-- payout logic, derived from validated_at/ro_matched_at rather than stored),
+-- but assigned_branch is which BPM queue currently owns the referral, and
+-- can move via the transfer workflow below (e.g. a Kalamassery employee
+-- refers a vehicle whose owner actually wants Kollam to do the work — the
+-- referral transfers to Kollam's BPM, but the Kalamassery employee still
+-- gets paid). Backfilled to referring_employee_branch for existing rows so
+-- every referral always has an owning queue.
+alter table bp_referrals add column if not exists assigned_branch varchar;
+update bp_referrals set assigned_branch = referring_employee_branch where assigned_branch is null;
+
+alter table bp_referrals add column if not exists call_status text not null default 'pending';
+alter table bp_referrals drop constraint if exists bp_referrals_call_status_check;
+alter table bp_referrals add constraint bp_referrals_call_status_check
+  check (call_status in ('pending', 'not_connected', 'connected'));
+
+-- genuine/estimate_amount/customer_interested/payment_type are filled in
+-- together once the BPM has a connected call (see the "one form" decision in
+-- the build plan) — all nullable until that happens. A "not genuine" or
+-- "not interested" outcome closes the referral out (closed_at/closed_reason)
+-- with no follow-up, no payout, no employee message.
+alter table bp_referrals add column if not exists genuine boolean;
+alter table bp_referrals add column if not exists estimate_amount numeric;
+alter table bp_referrals add column if not exists customer_interested boolean;
+alter table bp_referrals add column if not exists payment_type text;
+alter table bp_referrals drop constraint if exists bp_referrals_payment_type_check;
+alter table bp_referrals add constraint bp_referrals_payment_type_check
+  check (payment_type is null or payment_type in ('CP', 'IP'));
+
+alter table bp_referrals add column if not exists closed_at timestamptz;
+alter table bp_referrals add column if not exists closed_reason text;
+alter table bp_referrals drop constraint if exists bp_referrals_closed_reason_check;
+alter table bp_referrals add constraint bp_referrals_closed_reason_check
+  check (closed_reason is null or closed_reason in ('not_genuine', 'not_interested'));
+
+-- validated_at is set the moment a BPM marks a case genuine — the ₹50 payout
+-- trigger point, and the moment the referring employee becomes eligible for
+-- the "you're eligible" WhatsApp message. handled_by records which BPM
+-- worked the call. last_contacted_at drives the 3-day follow-up popup (next
+-- due = last_contacted_at + 3 days) for genuine+interested referrals with no
+-- RO match yet.
+alter table bp_referrals add column if not exists validated_at timestamptz;
+alter table bp_referrals add column if not exists handled_by text references admins(username);
+alter table bp_referrals add column if not exists last_contacted_at timestamptz;
+
+-- matched_ro_no/ro_matched_at are set by the RO matcher (hooked into the BP
+-- Cost & Sales Report upload path) once a BPJ-prefixed RO shows up with a
+-- matching vehicle_reg_no — company-wide, not scoped to assigned_branch, so
+-- a transferred referral still matches correctly wherever the car actually
+-- gets serviced. This is the ₹200 payout trigger point and the "referral
+-- completed" employee message trigger.
+--
+-- eligibility_triggered_at / completion_triggered_at are deliberately bare
+-- timestamps, not a messaging queue — the actual WhatsApp send (via company
+-- Doubletick) is the user's own integration to build, not this app's; these
+-- just mark the exact moment each trigger fired so that integration has a
+-- clean, queryable hook.
+alter table bp_referrals add column if not exists matched_ro_no text;
+alter table bp_referrals add column if not exists ro_matched_at timestamptz;
+alter table bp_referrals add column if not exists eligibility_triggered_at timestamptz;
+alter table bp_referrals add column if not exists completion_triggered_at timestamptz;
+
+create index if not exists bp_referrals_assigned_branch_idx on bp_referrals (assigned_branch);
+create index if not exists bp_referrals_vehicle_reg_no_idx on bp_referrals (vehicle_reg_no);
+
+-- Branch transfer audit trail — every hop a referral takes between branches
+-- (e.g. Kalamassery → Kollam because the customer wants Kollam to do the
+-- work), who did it and when. assigned_branch above always reflects the
+-- latest hop; this table is the full history, visible to BP HO. No FK on
+-- referral_id's target columns beyond the id itself — a referral can be
+-- transferred any number of times.
+create table if not exists bp_referral_transfers (
+  id              bigserial    primary key,
+  referral_id     integer      not null references bp_referrals(id),
+  from_branch     text         not null,
+  to_branch       text         not null,
+  transferred_by  text         not null references admins(username),
+  transferred_at  timestamptz  not null default now()
+);
+create index if not exists bp_referral_transfers_referral_idx on bp_referral_transfers (referral_id);
+
+-- New admin roles for the BP Referrals workflow (2026-10-14):
+-- 'bp_manager' — scoped to one branch (like 'branch'), works that branch's
+-- referral queue. The three branches with no separate BP regional manager
+-- (CO01A/Central, KL01B/South, TI01A/North) additionally get a read-only
+-- region-wide rollup — computed in code from REGIONS (see regions.ts), not
+-- stored here, so no region column needed for this role.
+-- 'bp_ho' — read-only, company-wide analytical view across all branches,
+-- same shape as vp_service/ceo/accounts (no branch/region/publish gate).
+alter table admins drop constraint if exists admins_role_check;
+alter table admins add constraint admins_role_check
+  check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho'));
+alter table admins drop constraint if exists admins_role_scope_consistency;
+alter table admins add constraint admins_role_scope_consistency check (
+  (role = 'branch'      and branch is not null and region is null) or
+  (role = 'hq'          and branch is null     and region is null) or
+  (role = 'regional'    and branch is null     and region in ('North', 'Central', 'South')) or
+  (role = 'vp_service'  and branch is null     and region is null) or
+  (role = 'ceo'         and branch is null     and region is null) or
+  (role = 'accounts'    and branch is null     and region is null) or
+  (role = 'hq_viewer'   and branch is null     and region is null) or
+  (role = 'bp_manager'  and branch is not null and region is null) or
+  (role = 'bp_ho'       and branch is null     and region is null)
+);

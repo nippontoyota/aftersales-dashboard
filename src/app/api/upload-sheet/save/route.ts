@@ -27,6 +27,7 @@ import { saveSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { checkInvoiceDocDateSanity, checkInvoiceOverlap } from "@/lib/ssrv089/upload-validation";
 import { parseSsrv089BpGreyTotals } from "@/lib/ssrv089-bp/parse";
 import { saveSsrv089BpGreySnapshot } from "@/lib/ssrv089-bp/store";
+import { matchBpReferralsFromCostSalesBpRows } from "@/lib/bp-referrals/ro-matcher";
 
 /**
  * The confirm/save half of Upload Sheet (HQ-only, /upload-sheet). Report
@@ -352,6 +353,16 @@ export async function POST(request: Request) {
 
         await saveRawReportUpload({ date, branch, reportType: "ssrv089_bp", uploadedAt, sourceFileName: file.name, fileData: buffer, uploadedBy: admin.username });
         await saveSsrv089BpGreySnapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals: parsed.totals });
+
+        // BP Referrals' RO matcher (2026-10-14) — same hook as the branch's
+        // own upload route (ssrv089-bp/route.ts); see ro-matcher.ts. Wrapped
+        // so a matcher bug can never break an otherwise-successful upload.
+        try {
+          await matchBpReferralsFromCostSalesBpRows(parsed.rawRows);
+        } catch (err) {
+          console.error("BP referral RO matcher failed:", err);
+        }
+
         return NextResponse.json({
           success: true,
           type,

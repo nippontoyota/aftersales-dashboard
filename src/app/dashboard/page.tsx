@@ -52,6 +52,7 @@ export default async function DashboardPage({
   if (admin?.role === "vp_service") redirect("/vp");
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
+  if (admin?.role === "bp_manager" || admin?.role === "bp_ho") redirect("/bp-referrals");
   if (!admin?.canViewDashboard) {
     redirect("/upload");
   }

@@ -40,13 +40,23 @@ export type AdminAccount =
   // Read-only HQ viewer — sees every HQ dashboard page (Dashboard, TKM Targets,
   // Queries, Branch Performance, Reports, Cancellations) but has no upload
   // surface, no publish control, and no write actions on any page.
-  | { username: string; passwordHash: string; salt: string; role: "hq_viewer"; canViewDashboard: true };
+  | { username: string; passwordHash: string; salt: string; role: "hq_viewer"; canViewDashboard: true }
+  // BP (Body & Paint) Manager — scoped to one branch, works that branch's
+  // referral call/validation queue at /bp-referrals. No uploads, no company
+  // dashboard. CO01A/KL01B/TI01A additionally get a read-only region-wide
+  // rollup, computed in code from REGIONS (see regions.ts) — not stored
+  // here, so this shape is identical for every bp_manager account.
+  | { username: string; passwordHash: string; salt: string; role: "bp_manager"; branch: string; canViewDashboard: true }
+  // BP HO — read-only, company-wide analytical view across all branches'
+  // referrals, same shape as vp_service/ceo/accounts (no branch/region/
+  // publish gate, no uploads).
+  | { username: string; passwordHash: string; salt: string; role: "bp_ho"; canViewDashboard: true };
 
 type AdminRow = {
   username: string;
   password_hash: string;
   salt: string;
-  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer";
+  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer" | "bp_manager" | "bp_ho";
   branch: string | null;
   region: string | null;
 };
@@ -59,6 +69,8 @@ function toAccount(row: AdminRow): AdminAccount {
   if (row.role === "ceo") return { ...base, role: "ceo" };
   if (row.role === "accounts") return { ...base, role: "accounts" };
   if (row.role === "hq_viewer") return { ...base, role: "hq_viewer" };
+  if (row.role === "bp_manager") return { ...base, role: "bp_manager", branch: row.branch! };
+  if (row.role === "bp_ho") return { ...base, role: "bp_ho" };
   return { ...base, role: "hq" };
 }
 
@@ -71,6 +83,8 @@ export function adminIdentityLabel(admin: AdminAccount): string {
   if (admin.role === "vp_service") return "VP Service";
   if (admin.role === "ceo") return "CEO";
   if (admin.role === "accounts") return "Accounts";
+  if (admin.role === "bp_ho") return "BP HO";
+  if (admin.role === "bp_manager") return `${admin.branch} BP Manager`;
   return `${admin.branch} branch`;
 }
 

@@ -10,6 +10,8 @@
 //   node scripts/add-admin.mjs --username vp-service --vp --password "Something@2026"
 //   node scripts/add-admin.mjs --username ceo --ceo --password "Something@2026"
 //   node scripts/add-admin.mjs --username accounts --accounts --password "Something@2026"
+//   node scripts/add-admin.mjs --username bpmco01a --bp-manager --branch CO01A --password "Something@2026"
+//   node scripts/add-admin.mjs --username bpho --bp-ho --password "Something@2026"
 import { randomBytes, scryptSync } from "node:crypto";
 import { Client } from "pg";
 import "./load-env.mjs";
@@ -29,13 +31,23 @@ const isVp = args.includes("--vp");
 const isCeo = args.includes("--ceo");
 const isAccounts = args.includes("--accounts");
 const isHqViewer = args.includes("--hq-viewer");
+const isBpManager = args.includes("--bp-manager");
+const isBpHo = args.includes("--bp-ho");
 
 const VALID_REGIONS = ["North", "Central", "South"];
 
-if (!username || !password || (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts && !isHqViewer)) {
+if (
+  !username ||
+  !password ||
+  (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts && !isHqViewer && !isBpManager && !isBpHo)
+) {
   console.error(
-    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --hq-viewer | --region <North|Central|South> | --vp | --ceo | --accounts)",
+    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --hq-viewer | --region <North|Central|South> | --vp | --ceo | --accounts | --bp-manager --branch <BRANCH> | --bp-ho)",
   );
+  process.exit(1);
+}
+if (isBpManager && !branch) {
+  console.error("--bp-manager requires --branch <BRANCH>");
   process.exit(1);
 }
 if (region && !VALID_REGIONS.includes(region)) {
@@ -49,7 +61,23 @@ function hash(pw, salt) {
 
 const salt = randomBytes(16).toString("hex");
 const passwordHash = hash(password, salt);
-const role = isHqViewer ? "hq_viewer" : isHq ? "hq" : isVp ? "vp_service" : isCeo ? "ceo" : isAccounts ? "accounts" : region ? "regional" : "branch";
+const role = isHqViewer
+  ? "hq_viewer"
+  : isHq
+  ? "hq"
+  : isVp
+  ? "vp_service"
+  : isCeo
+  ? "ceo"
+  : isAccounts
+  ? "accounts"
+  : isBpHo
+  ? "bp_ho"
+  : isBpManager
+  ? "bp_manager"
+  : region
+  ? "regional"
+  : "branch";
 
 const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await client.connect();
@@ -63,9 +91,16 @@ try {
        role = excluded.role,
        branch = excluded.branch,
        region = excluded.region`,
-    [username, passwordHash, salt, role, role === "branch" ? branch : null, role === "regional" ? region : null],
+    [
+      username,
+      passwordHash,
+      salt,
+      role,
+      role === "branch" || role === "bp_manager" ? branch : null,
+      role === "regional" ? region : null,
+    ],
   );
-  const scope = role === "branch" ? `, ${branch}` : role === "regional" ? `, ${region}` : "";
+  const scope = role === "branch" || role === "bp_manager" ? `, ${branch}` : role === "regional" ? `, ${region}` : "";
   console.log(`Account ready: ${username}  (${role}${scope})  password: ${password}`);
 } finally {
   await client.end();
