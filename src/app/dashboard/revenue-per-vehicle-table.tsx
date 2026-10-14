@@ -22,7 +22,10 @@ import { SectionTable, type SectionColumn } from "./section-table";
  * Body & Paint-only branches (CO01E/KL01B/TR01B) are shown in their own
  * small table below — their BPU RO counts aren't comparable to a mixed
  * branch's (confirmed 2026-09-11), so they're never mixed into the main
- * rows or its "All branches" total.
+ * rows. Their BPU Parts/Labour revenue and RO count ARE folded into the
+ * "All branches" row's BPU Parts/Labour figures though (2026-10-14, at the
+ * user's request) — that row is meant to be the company-wide BPU total,
+ * every other field on it stays scoped to the mixed branches only.
  */
 function perVehicleCell(revenue: number | null, roCount: number | null) {
   const value = achievementRatio(revenue, roCount);
@@ -205,7 +208,8 @@ function sumField(branches: BranchReport[], key: SummableKey): number | null {
   return found ? total : null;
 }
 
-function buildAllBranchesRow(branches: BranchReport[]): BranchReport {
+function buildAllBranchesRow(branches: BranchReport[], bpOnlyBranches: BranchReport[]): BranchReport {
+  const allForBpu = [...branches, ...bpOnlyBranches];
   return {
     ...branches[0],
     branch: "All branches",
@@ -213,9 +217,9 @@ function buildAllBranchesRow(branches: BranchReport[]): BranchReport {
     gusPartsMtd: sumField(branches, "gusPartsMtd"),
     gusLabourMtd: sumField(branches, "gusLabourMtd"),
     vasAchievementForTheMonth: sumField(branches, "vasAchievementForTheMonth"),
-    bpuPartsMtd: sumField(branches, "bpuPartsMtd"),
-    bpuLabourMtd: sumField(branches, "bpuLabourMtd"),
-    bpuRoMtd: sumField(branches, "bpuRoMtd"),
+    bpuPartsMtd: sumField(allForBpu, "bpuPartsMtd"),
+    bpuLabourMtd: sumField(allForBpu, "bpuLabourMtd"),
+    bpuRoMtd: sumField(allForBpu, "bpuRoMtd"),
     partsRetailAchievementForTheMonth: sumField(branches, "partsRetailAchievementForTheMonth"),
     offtakeAchievementForTheMonth: sumField(branches, "offtakeAchievementForTheMonth"),
   };
@@ -260,7 +264,7 @@ export function RevenuePerVehicleTable({
   const bpOnlyBranches = branches.filter((b) => isBodyPaintOnly(b.branch));
 
   const rows = [...generalBranches].sort(regionSort);
-  const withTotal = rows.length > 0 ? [buildAllBranchesRow(generalBranches), ...rows] : rows;
+  const withTotal = rows.length > 0 ? [buildAllBranchesRow(generalBranches, bpOnlyBranches), ...rows] : rows;
   // "compact" is the VP's own variant — its tables scroll with the page
   // (not in their own capped-height box) and get a bit more breathing room;
   // the main dashboard's "full" variant is unchanged. See section-table.tsx.
