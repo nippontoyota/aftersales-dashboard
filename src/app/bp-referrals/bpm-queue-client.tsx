@@ -311,7 +311,11 @@ function DetailModal({
 
         {r.vehicle_image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={r.vehicle_image_url} alt="Vehicle" className="mt-3 max-h-56 w-full rounded-md border border-border object-contain" />
+          <img
+            src={`/api/bp-referrals/photo/${r.id}`}
+            alt="Vehicle"
+            className="mt-3 max-h-56 w-full rounded-md border border-border object-contain"
+          />
         ) : null}
 
         {tab !== "active" ? (

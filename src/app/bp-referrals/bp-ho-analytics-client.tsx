@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
 import type { BpmQueueReferral } from "./bpm-queue-client";
-import type { PayoutLedgerRow, BranchRollupRow } from "@/lib/bp-referrals/store";
+import type { PayoutLedgerRow, BranchRollupRow, StaleReferralRow } from "@/lib/bp-referrals/store";
+import { assignBranchAction, rescanUnmatchedReferralsAction, type BpHoActionState, type RescanState } from "./bp-ho-actions";
 
 function fmt(ts: Date | string | null): string {
   if (!ts) return "—";
@@ -76,21 +77,89 @@ function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
+const ASSIGN_INIT: BpHoActionState = { error: null, ok: false };
+
+function AssignBranchForm({ referralId, branchCodes }: { referralId: number; branchCodes: string[] }) {
+  const [state, action, pending] = useActionState(assignBranchAction, ASSIGN_INIT);
+  return (
+    <form action={action} className="flex items-center gap-1.5">
+      <input type="hidden" name="id" value={referralId} />
+      <select name="branch" required defaultValue="" className={`${control} h-7 px-1.5 text-xs`}>
+        <option value="" disabled>
+          Assign branch…
+        </option>
+        {branchCodes.map((b) => (
+          <option key={b} value={b}>
+            {branchName(b)} ({b})
+          </option>
+        ))}
+      </select>
+      <button
+        type="submit"
+        disabled={pending}
+        className="h-7 rounded-md bg-accent px-2 text-xs font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+      >
+        {pending ? "…" : "Set"}
+      </button>
+      {state.error ? <span className="text-xs text-bad">{state.error}</span> : null}
+    </form>
+  );
+}
+
+const RESCAN_INIT: RescanState = { error: null, matchedCount: null };
+
+function RescanButton() {
+  const [state, action, pending] = useActionState(rescanUnmatchedReferralsAction, RESCAN_INIT);
+  return (
+    <div className="flex items-center gap-2">
+      <form action={action}>
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-md border border-border-strong px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 disabled:opacity-60"
+        >
+          {pending ? "Re-scanning…" : "Re-scan for RO matches"}
+        </button>
+      </form>
+      {state.matchedCount !== null ? (
+        <span className="text-xs text-fg-muted">
+          {state.matchedCount === 0 ? "No new matches found." : `Matched ${state.matchedCount} referral${state.matchedCount === 1 ? "" : "s"}.`}
+        </span>
+      ) : null}
+      {state.error ? <span className="text-xs text-bad">{state.error}</span> : null}
+    </div>
+  );
+}
+
+function daysAgo(ts: Date | string | null): number {
+  if (!ts) return 0;
+  const then = new Date(ts as string).getTime();
+  if (isNaN(then)) return 0;
+  return Math.floor((Date.now() - then) / (1000 * 60 * 60 * 24));
+}
+
 export function BpHoAnalyticsClient({
   referrals,
   payoutLedger,
   branchRollup,
+  staleReferrals,
+  branchCodes: allBranchCodes,
 }: {
   referrals: BpmQueueReferral[];
   payoutLedger: PayoutLedgerRow[];
   branchRollup: BranchRollupRow[];
+  staleReferrals: StaleReferralRow[];
+  branchCodes: string[];
 }) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
-  const branchCodes = useMemo(() => [...new Set(referrals.map((r) => r.assigned_branch).filter((b): b is string => !!b))].sort(), [referrals]);
+  const filterBranchCodes = useMemo(
+    () => [...new Set(referrals.map((r) => r.assigned_branch).filter((b): b is string => !!b))].sort(),
+    [referrals],
+  );
 
   const kpis = useMemo(() => {
     const counts: Record<Status, number> = { pending: 0, not_connected: 0, followup: 0, completed: 0, not_genuine: 0, not_interested: 0 };
@@ -134,6 +203,54 @@ export function BpHoAnalyticsClient({
         <StatTile label="Follow-up" value={String(kpis.counts.followup)} sub={`${kpis.validated} validated`} />
         <StatTile label="Completed" value={String(kpis.counts.completed)} />
         <StatTile label="Not genuine / interested" value={String(kpis.counts.not_genuine + kpis.counts.not_interested)} />
+      </div>
+
+      {/* Needs attention — stale referrals (no contact 3+ days after submission) and the RO re-scan backstop */}
+      <div className="mb-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-fg">Needs attention</h2>
+          <RescanButton />
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-surface-2">
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Employee</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Status</th>
+                <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Days waiting</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {staleReferrals.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-fg-muted">
+                    Nothing stuck — every referral has had at least a first call attempt within 3 days.
+                  </td>
+                </tr>
+              ) : (
+                staleReferrals.map((r) => (
+                  <tr key={r.id}>
+                    <td className="px-3 py-2 font-medium text-fg">{r.referringEmployeeName ?? "—"}</td>
+                    <td className="px-3 py-2 text-fg-muted">
+                      {r.assignedBranch ? `${branchName(r.assignedBranch)} (${r.assignedBranch})` : "Unassigned"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="inline-block rounded-full bg-bad-soft px-2 py-0.5 text-[11px] font-medium text-bad-text">
+                        {r.callStatus === "not_connected" ? "Not connected" : "Never attempted"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-bad">{r.daysSinceSubmitted}</td>
+                    <td className="px-3 py-2">
+                      {!r.assignedBranch ? <AssignBranchForm referralId={r.id} branchCodes={allBranchCodes} /> : null}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Payout ledger */}
@@ -247,7 +364,7 @@ export function BpHoAnalyticsClient({
             <span className={eyebrow}>Branch</span>
             <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)} className={`${control} px-2`}>
               <option value="">All branches</option>
-              {branchCodes.map((b) => (
+              {filterBranchCodes.map((b) => (
                 <option key={b} value={b}>
                   {branchName(b)} ({b})
                 </option>
@@ -309,8 +426,14 @@ export function BpHoAnalyticsClient({
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
-                        {r.assigned_branch ? `${branchName(r.assigned_branch)} (${r.assigned_branch})` : "Unassigned"}
-                        {r.transferred_from ? <div className="text-xs text-fg-faint">from {branchName(r.transferred_from)}</div> : null}
+                        {r.assigned_branch ? (
+                          <>
+                            {branchName(r.assigned_branch)} ({r.assigned_branch})
+                            {r.transferred_from ? <div className="text-xs text-fg-faint">from {branchName(r.transferred_from)}</div> : null}
+                          </>
+                        ) : (
+                          <AssignBranchForm referralId={r.id} branchCodes={allBranchCodes} />
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</td>
                       <td className="whitespace-nowrap px-3 py-2.5">
@@ -329,13 +452,13 @@ export function BpHoAnalyticsClient({
                         {r.vehicle_image_url ? (
                           <button
                             type="button"
-                            onClick={() => setLightboxUrl(r.vehicle_image_url!)}
+                            onClick={() => setLightboxUrl(`/api/bp-referrals/photo/${r.id}`)}
                             className="group relative h-12 w-16 overflow-hidden rounded border border-border hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                             aria-label="View vehicle photo"
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={r.vehicle_image_url}
+                              src={`/api/bp-referrals/photo/${r.id}`}
                               alt="Vehicle"
                               className="h-full w-full object-cover transition-opacity group-hover:opacity-80"
                             />

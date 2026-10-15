@@ -313,3 +313,55 @@ export async function loadBranchRollup(): Promise<BranchRollupRow[]> {
     pending: Number(r.pending),
   }));
 }
+
+/** BP HO manually assigning a branch to a referral whose free-text location
+ * didn't resolve to anything (resolveBranchCode() came back null) — the
+ * only way such a referral ever becomes visible to a BPM's queue. No
+ * ownership check (there's no current owner to check against), just that
+ * the target is a real branch. */
+export async function assignBranch(id: number, branch: string): Promise<void> {
+  await pool.query(`update bp_referrals set assigned_branch = $2 where id = $1`, [id, branch]);
+}
+
+export type StaleReferralRow = {
+  id: number;
+  referringEmployeeName: string | null;
+  assignedBranch: string | null;
+  submittedAt: Date | string | null;
+  callStatus: "pending" | "not_connected";
+  daysSinceSubmitted: number;
+};
+
+const STALE_AFTER_DAYS = 3;
+
+/** Referrals still in "to call"/"not connected" — no contact ever
+ * recorded, let alone resolved — 3+ days after being submitted. Unlike the
+ * 3-day follow-up popup (which only watches validated+interested referrals
+ * already being worked), this is BP HO's own oversight signal for leads
+ * nobody has touched at all yet; no popup, just visible on the dashboard. */
+export async function loadStaleReferrals(): Promise<StaleReferralRow[]> {
+  const { rows } = await pool.query<{
+    id: number;
+    referring_employee_name: string | null;
+    assigned_branch: string | null;
+    submitted_at: Date | string | null;
+    call_status: "pending" | "not_connected";
+    days_since: string;
+  }>(
+    `select id, referring_employee_name, assigned_branch, submitted_at, call_status,
+            extract(day from now() - submitted_at)::int as days_since
+     from bp_referrals
+     where call_status in ('pending', 'not_connected')
+       and closed_at is null and validated_at is null
+       and submitted_at <= now() - interval '${STALE_AFTER_DAYS} days'
+     order by submitted_at asc`,
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    referringEmployeeName: r.referring_employee_name,
+    assignedBranch: r.assigned_branch,
+    submittedAt: r.submitted_at,
+    callStatus: r.call_status,
+    daysSinceSubmitted: Number(r.days_since),
+  }));
+}

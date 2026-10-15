@@ -58,3 +58,39 @@ export async function matchBpReferralsFromCostSalesBpRows(rows: Record<string, u
   }
   return matched;
 }
+
+/**
+ * Backstop for the upload-triggered matcher above — BP HO's own "re-scan"
+ * button (2026-10-15), for the case where a BPJ RO never got picked up
+ * (an upload landed before a referral was validated, a matcher run failed
+ * silently, etc.). Does the same reg-no match, but sourced from every
+ * Cost & Sales Report - BP row ever saved (raw_upload_rows, report_type
+ * 'ssrv089_bp') instead of one upload's in-memory rows — a single set-based
+ * UPDATE rather than looping in Node, so scanning the whole history stays
+ * cheap even as that table grows. Manually triggered only, never scheduled.
+ */
+export async function rescanUnmatchedReferrals(): Promise<MatchedBpReferral[]> {
+  const { rows } = await pool.query<{ id: number; vehicle_reg_no: string | null; ro_no: string }>(
+    `update bp_referrals r
+     set matched_ro_no = sub.ro_no, ro_matched_at = now(), completion_triggered_at = now()
+     from (
+       select distinct on (normalized_reg) normalized_reg, ro_no
+       from (
+         select
+           upper(regexp_replace(row_data->>'VehRegNo', '[\\s-]', '', 'g')) as normalized_reg,
+           row_data->>'JobOrder No' as ro_no
+         from raw_upload_rows
+         where report_type = 'ssrv089_bp'
+           and upper(coalesce(row_data->>'JobOrder No', '')) like 'BPJ%'
+           and coalesce(row_data->>'VehRegNo', '') <> ''
+       ) x
+       order by normalized_reg
+     ) sub
+     where r.genuine = true and r.customer_interested = true
+       and r.closed_at is null and r.ro_matched_at is null
+       and r.vehicle_reg_no is not null and r.vehicle_reg_no <> ''
+       and upper(regexp_replace(r.vehicle_reg_no, '[\\s-]', '', 'g')) = sub.normalized_reg
+     returning r.id, r.vehicle_reg_no, sub.ro_no`,
+  );
+  return rows.map((r) => ({ id: r.id, vehicleRegNo: r.vehicle_reg_no ?? "", roNo: r.ro_no }));
+}
