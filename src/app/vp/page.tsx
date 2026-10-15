@@ -203,7 +203,7 @@ async function Overview({
           }}
         />
         <div className="mt-3">
-          <VpBranchSlabTable branches={data.report.branches} group={data.scopes[0]} incentiveSlabTargets={data.incentiveSlabTargetsByBranch} />
+          <VpBranchSlabTable branches={data.report.branches} group={data.scopes[0]} incentiveSlabTargets={data.incentiveSlabTargetsByBranch} date={data.date} holidays={data.holidays} />
         </div>
         <div className="mt-3">
           <VpTkmMonthlyTable branches={data.report.branches} />
