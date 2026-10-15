@@ -230,11 +230,17 @@ export type CallOutcome =
 
 /** The one-form submission once a BPM actually connects with the customer —
  * genuine/estimate/interested/CP-IP all recorded together, plus a mandatory
- * remark explaining the outcome. Not genuine, or genuine-but-not-interested,
- * closes the referral out immediately (no follow-up, no payout, no employee
- * message). Genuine + interested stamps validated_at/eligibility_triggered_at
- * — the ₹50 payout point and the hook for the user's own external
- * WhatsApp-eligibility automation. */
+ * remark explaining the outcome.
+ *
+ * Not genuine closes the referral out with zero payout — the lead itself
+ * was never real, so nothing is owed. Genuine-but-not-interested ALSO
+ * closes it out (no follow-up — they're not bringing the car in), but the
+ * referring employee still earns the ₹50 validation payout, since the lead
+ * itself was genuine regardless of what the customer decided (2026-10-15,
+ * the user's explicit clarification — validated_at/eligibility_triggered_at
+ * fire on genuine alone, not genuine+interested as this read before the
+ * fix). Only genuine+interested additionally stays open for the ₹200
+ * completion payout once an RO is matched. */
 export async function submitCallOutcome(
   id: number,
   branch: string,
@@ -254,7 +260,8 @@ export async function submitCallOutcome(
     await pool.query(
       `update bp_referrals set call_status = 'connected', genuine = true, estimate_amount = $3,
          customer_interested = false, handled_by = $2,
-         last_contacted_at = now(), closed_at = now(), closed_reason = 'not_interested'
+         last_contacted_at = now(), closed_at = now(), closed_reason = 'not_interested',
+         validated_at = now(), eligibility_triggered_at = now()
        where id = $1`,
       [id, handledBy, outcome.estimateAmount],
     );

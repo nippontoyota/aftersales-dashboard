@@ -447,7 +447,7 @@ export function BpHoAnalyticsClient({
       </div>
 
       {/* KPI strip — click a card to see the matching cases */}
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
         <KpiCard icon={<TotalIcon />} color="neutral" label="Total" value={kpis.total} onClick={() => openKpi("All referrals", () => true)} />
         <KpiCard
           icon={<PhoneIcon />}
@@ -487,10 +487,19 @@ export function BpHoAnalyticsClient({
         />
         <KpiCard
           icon={<DashCircleIcon />}
+          color="bad"
+          label="Not genuine"
+          sub="₹0 payout"
+          value={kpis.counts.not_genuine}
+          onClick={() => openKpi("Not genuine", (r) => classify(r) === "not_genuine")}
+        />
+        <KpiCard
+          icon={<DashCircleIcon />}
           color="neutral"
-          label="Not genuine / interested"
-          value={kpis.counts.not_genuine + kpis.counts.not_interested}
-          onClick={() => openKpi("Not genuine / Not interested", (r) => { const s = classify(r); return s === "not_genuine" || s === "not_interested"; })}
+          label="Not interested"
+          sub="still ₹50"
+          value={kpis.counts.not_interested}
+          onClick={() => openKpi("Not interested", (r) => classify(r) === "not_interested")}
         />
       </div>
 
