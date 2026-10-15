@@ -1,15 +1,17 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
 import {
+  getReferralActivityAction,
   logFollowUpContactAction,
   markNotConnectedAction,
   submitCallOutcomeAction,
   transferReferralAction,
   type BpmActionState,
 } from "./bpm-actions";
+import type { ActivityRow } from "@/lib/bp-referrals/store";
 
 export type BpmQueueReferral = {
   id: number;
@@ -38,7 +40,13 @@ export type BpmQueueReferral = {
   transferred_from: string | null;
 };
 
-type Tab = "active" | "followup" | "completed" | "closed";
+type Tab = "active" | "followup" | "completed" | "closed" | "dropped";
+
+/** Mirrors the thresholds in lib/bp-referrals/store.ts — can't import them
+ * directly (that module pulls in the server-only pg pool), so these are
+ * kept in sync by hand. Change both sides together. */
+const UNCONNECTED_DROP_DAYS = 3;
+const FOLLOW_UP_OVERDUE_HOURS = 24;
 
 function fmt(ts: Date | string | null): string {
   if (!ts) return "—";
@@ -47,48 +55,170 @@ function fmt(ts: Date | string | null): string {
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function hoursSince(ts: Date | string | null): number {
+  if (!ts) return Infinity;
+  const t = new Date(ts as string).getTime();
+  if (isNaN(t)) return Infinity;
+  return (Date.now() - t) / (1000 * 60 * 60);
+}
+
+function isFollowUpOverdue(r: BpmQueueReferral): boolean {
+  return hoursSince(r.last_contacted_at) >= FOLLOW_UP_OVERDUE_HOURS;
+}
+
 function classify(r: BpmQueueReferral): Tab {
   if (r.ro_matched_at) return "completed";
   if (r.closed_at) return "closed";
   if (r.validated_at) return "followup";
+  const elapsedHours = hoursSince(r.last_contacted_at ?? r.submitted_at);
+  if (elapsedHours >= UNCONNECTED_DROP_DAYS * 24) return "dropped";
   return "active";
+}
+
+/** Small colored dot ahead of every status label — color is never the only
+ * signal (dataviz skill: status colors ship with an icon/label, not color
+ * alone). */
+function Dot({ className }: { className: string }) {
+  return <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${className}`} aria-hidden="true" />;
 }
 
 function StatusBadge({ r }: { r: BpmQueueReferral }) {
   const tab = classify(r);
-  const map: Record<Tab, { label: string; cls: string }> = {
-    active: {
-      label: r.call_status === "not_connected" ? "Not connected — retry" : "To call",
-      cls: "bg-accent-soft text-accent-text",
-    },
-    followup: { label: "Validated — follow up", cls: "bg-warn-soft text-warn-text" },
-    completed: { label: "Completed", cls: "bg-good-soft text-good-text" },
-    closed: { label: r.closed_reason === "not_genuine" ? "Not genuine" : "Not interested", cls: "bg-surface-2 text-fg-faint" },
-  };
-  const { label, cls } = map[tab];
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{label}</span>;
+  if (tab === "completed") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-good-soft px-2 py-0.5 text-[11px] font-medium text-good-text">
+        <Dot className="bg-good-solid" />
+        Completed
+      </span>
+    );
+  }
+  if (tab === "closed") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-fg-faint">
+        <Dot className="bg-fg-faint" />
+        {r.closed_reason === "not_genuine" ? "Not genuine" : "Not interested"}
+      </span>
+    );
+  }
+  if (tab === "dropped") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-bad-soft px-2 py-0.5 text-[11px] font-medium text-bad">
+        <Dot className="bg-bad-solid" />
+        Dropped
+      </span>
+    );
+  }
+  if (tab === "followup") {
+    const overdue = isFollowUpOverdue(r);
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+          overdue ? "bg-bad-soft text-bad" : "bg-warn-soft text-warn-text"
+        }`}
+      >
+        <Dot className={overdue ? "bg-bad-solid" : "bg-warn-solid"} />
+        {overdue ? "Follow-up overdue" : "Validated — follow up"}
+      </span>
+    );
+  }
+  // active
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent-text">
+      <Dot className="bg-accent" />
+      {r.call_status === "not_connected" ? "Not connected — retry" : "To call"}
+    </span>
+  );
+}
+
+const ACTIVITY_LABEL: Record<ActivityRow["activityType"], string> = {
+  not_connected: "Not connected",
+  call_outcome: "Call outcome",
+  follow_up: "Follow-up",
+};
+
+function ActivityHistory({ referralId }: { referralId: number }) {
+  const [rows, setRows] = useState<ActivityRow[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getReferralActivityAction(referralId).then((r) => {
+      if (!cancelled) setRows(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [referralId]);
+
+  if (rows === null) return <p className="text-xs text-fg-faint">Loading history…</p>;
+  if (rows.length === 0) return <p className="text-xs text-fg-faint">No actions logged yet.</p>;
+
+  return (
+    <ul className="space-y-2.5">
+      {rows.map((a) => (
+        <li key={a.id} className="rounded-md border border-border-subtle bg-surface-2/50 p-2.5 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold text-fg">{ACTIVITY_LABEL[a.activityType]}</span>
+            <span className="text-fg-faint">{fmt(a.performedAt)}</span>
+          </div>
+          <p className="mt-1 whitespace-pre-wrap text-fg-muted">{a.remark}</p>
+          <p className="mt-1 text-[10px] text-fg-faint">by {a.performedBy}</p>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 const INIT: BpmActionState = { error: null, ok: false };
 
+const remarkField =
+  "mt-1 w-full rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+
 function NotConnectedButton({ id, onDone }: { id: number; onDone: () => void }) {
   const [state, action, pending] = useActionState(markNotConnectedAction, INIT);
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="h-8 rounded-md border border-border-strong px-3 text-sm font-medium text-fg-muted hover:bg-surface-2"
+      >
+        Not connected
+      </button>
+    );
+  }
+
   return (
     <form
       action={async (fd) => {
         await action(fd);
         onDone();
       }}
+      className="rounded-md border border-border-strong bg-surface-2/50 p-3"
     >
       <input type="hidden" name="id" value={id} />
-      <button
-        type="submit"
-        disabled={pending}
-        className="h-8 rounded-md border border-border-strong px-3 text-sm font-medium text-fg-muted hover:bg-surface-2 disabled:opacity-60"
-      >
-        {pending ? "Saving…" : "Not connected"}
-      </button>
-      {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
+      <span className={eyebrow}>Reason (required)</span>
+      <textarea
+        name="remark"
+        required
+        rows={2}
+        placeholder="e.g. phone switched off, no answer, wrong number…"
+        className={remarkField}
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="h-8 rounded-md border border-border-strong px-3 text-sm font-medium text-fg-muted hover:bg-surface-2 disabled:opacity-60"
+        >
+          {pending ? "Saving…" : "Save"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-fg-muted hover:underline">
+          Cancel
+        </button>
+        {state.error ? <span className="text-xs text-bad">{state.error}</span> : null}
+      </div>
     </form>
   );
 }
@@ -101,12 +231,15 @@ function LogFollowUpButton({ id, onDone }: { id: number; onDone: () => void }) {
         await action(fd);
         onDone();
       }}
+      className="rounded-md border border-border-strong bg-surface-2/50 p-3"
     >
       <input type="hidden" name="id" value={id} />
+      <span className={eyebrow}>Follow-up remark (required)</span>
+      <textarea name="remark" required rows={2} placeholder="What did the customer say?" className={remarkField} />
       <button
         type="submit"
         disabled={pending}
-        className="h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+        className="mt-2 h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
       >
         {pending ? "Saving…" : "Log follow-up — spoke to customer"}
       </button>
@@ -141,6 +274,13 @@ function CallOutcomeForm({ id, onDone }: { id: number; onDone: () => void }) {
           ))}
         </div>
       </div>
+
+      {genuine ? (
+        <div>
+          <span className={eyebrow}>Remark (required)</span>
+          <textarea name="remark" required rows={2} placeholder="What happened on the call?" className={remarkField} />
+        </div>
+      ) : null}
 
       {genuine === "yes" ? (
         <>
@@ -260,11 +400,12 @@ function DetailModal({
   const tab = classify(r);
   const canAct = !readOnly && r.assigned_branch === ownBranch;
   const canTransfer = canAct && !r.closed_at && !r.ro_matched_at;
+  const showCallActions = canAct && (tab === "active" || tab === "dropped");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-5 shadow-xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
@@ -285,6 +426,13 @@ function DetailModal({
         <div className="mt-3">
           <StatusBadge r={r} />
         </div>
+
+        {tab === "dropped" ? (
+          <div className="mt-3 rounded-md border border-bad/30 bg-bad-soft/60 px-3 py-2 text-xs text-bad">
+            No contact in {UNCONNECTED_DROP_DAYS}+ days — considered dropped. Information is kept; taking action below
+            moves it back to active.
+          </div>
+        ) : null}
 
         <dl className="mt-4 space-y-2 text-sm">
           <div className="flex justify-between gap-3">
@@ -318,7 +466,7 @@ function DetailModal({
           />
         ) : null}
 
-        {tab !== "active" ? (
+        {tab !== "active" && tab !== "dropped" ? (
           <div className="mt-4 space-y-1.5 border-t border-border-subtle pt-3 text-sm">
             <div className="flex justify-between">
               <span className="text-fg-faint">Genuine</span>
@@ -363,7 +511,14 @@ function DetailModal({
           </div>
         ) : null}
 
-        {canAct && tab === "active" ? (
+        <div className="mt-4 border-t border-border-subtle pt-3">
+          <span className={eyebrow}>History</span>
+          <div className="mt-2">
+            <ActivityHistory referralId={r.id} />
+          </div>
+        </div>
+
+        {showCallActions ? (
           <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
             <NotConnectedButton id={r.id} onDone={onClose} />
             <CallOutcomeForm id={r.id} onDone={onClose} />
@@ -386,7 +541,13 @@ function DetailModal({
   );
 }
 
-const TAB_LABEL: Record<Tab, string> = { active: "To call", followup: "Follow-up", completed: "Completed", closed: "Closed" };
+const TAB_LABEL: Record<Tab, string> = {
+  active: "To call",
+  followup: "Follow-up",
+  completed: "Completed",
+  closed: "Closed",
+  dropped: "Dropped",
+};
 
 function QueueList({
   referrals,
@@ -405,7 +566,7 @@ function QueueList({
   const [selected, setSelected] = useState<BpmQueueReferral | null>(null);
 
   const counts = useMemo(() => {
-    const c: Record<Tab, number> = { active: 0, followup: 0, completed: 0, closed: 0 };
+    const c: Record<Tab, number> = { active: 0, followup: 0, completed: 0, closed: 0, dropped: 0 };
     for (const r of referrals) c[classify(r)]++;
     return c;
   }, [referrals]);
@@ -418,20 +579,26 @@ function QueueList({
         <DetailModal referral={selected} ownBranch={ownBranch} branchCodes={branchCodes} readOnly={readOnly} onClose={() => setSelected(null)} />
       ) : null}
 
-      <div className="mb-3 flex gap-1.5">
+      <div className="mb-3 flex flex-wrap gap-1.5">
         {(Object.keys(TAB_LABEL) as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${tab === t ? "bg-accent-soft text-accent-text" : "text-fg-muted hover:bg-surface-2"}`}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              tab === t
+                ? t === "dropped"
+                  ? "bg-bad-soft text-bad"
+                  : "bg-accent-soft text-accent-text"
+                : "text-fg-muted hover:bg-surface-2"
+            }`}
           >
             {TAB_LABEL[t]} ({counts[t]})
           </button>
         ))}
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-2">
@@ -451,7 +618,7 @@ function QueueList({
               </tr>
             ) : (
               filtered.map((r) => (
-                <tr key={r.id} className="cursor-pointer hover:bg-surface-2/50" onClick={() => setSelected(r)}>
+                <tr key={r.id} className="cursor-pointer transition-colors hover:bg-surface-2/50" onClick={() => setSelected(r)}>
                   <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{fmt(r.submitted_at)}</td>
                   <td className="px-3 py-2.5 font-medium text-fg">
                     {r.referring_employee_name ?? "—"}
@@ -491,22 +658,22 @@ export function BpmQueueClient({
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-fg">BP Referrals — {branchName(ownBranch)}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-fg">BP Referrals — {branchName(ownBranch)}</h1>
           <p className="mt-1 text-sm text-fg-muted">{queue.length} total referral{queue.length === 1 ? "" : "s"} assigned to your branch.</p>
         </div>
         {regionName && regionRollup ? (
-          <div className="flex gap-1.5 rounded-md border border-border p-1">
+          <div className="flex gap-1.5 rounded-lg border border-border bg-surface p-1 shadow-sm">
             <button
               type="button"
               onClick={() => setView("own")}
-              className={`rounded px-2.5 py-1 text-xs font-medium ${view === "own" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "own" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
             >
               My branch
             </button>
             <button
               type="button"
               onClick={() => setView("region")}
-              className={`rounded px-2.5 py-1 text-xs font-medium ${view === "region" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "region" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
             >
               {regionName} region
             </button>

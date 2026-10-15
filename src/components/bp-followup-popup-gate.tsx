@@ -26,18 +26,18 @@ function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-function daysSince(ts: Date | string | null): number {
+function hoursSince(ts: Date | string | null): number {
   if (!ts) return 0;
   const then = new Date(ts as string).getTime();
   if (isNaN(then)) return 0;
-  return Math.floor((Date.now() - then) / (1000 * 60 * 60 * 24));
+  return Math.floor((Date.now() - then) / (1000 * 60 * 60));
 }
 
 /**
  * Login pop-up for a BP Manager with validated (genuine + interested)
- * referrals that haven't had a follow-up call in 3+ days and whose car
- * still hasn't come in — 2026-10-14, at the user's explicit request: these
- * need chasing every 3 days, not left to be noticed on the queue page.
+ * referrals that haven't had a follow-up call in 24+ hours (2026-10-15,
+ * tightened from 3 days at the user's request) and whose car still hasn't
+ * come in.
  *
  * Mounted unconditionally in BpShell for every BP role — harmless for BP
  * HO, since getMyOverdueFollowUpsAction returns [] for anyone but
@@ -96,7 +96,7 @@ export function BpFollowUpPopupGate() {
           <span className="rounded-full border border-warn/30 bg-warn-soft px-2 py-0.5 text-[11px] font-semibold text-warn">
             {items.length > 1 ? `Follow-up ${index + 1} of ${items.length}` : "Follow-up due"}
           </span>
-          <span className="text-[11px] text-fg-faint">{daysSince(item.last_contacted_at)} days since last contact</span>
+          <span className="text-[11px] text-fg-faint">{hoursSince(item.last_contacted_at)}h since last contact</span>
         </div>
 
         <h3 className="mt-3 text-base font-bold text-fg">{item.referring_employee_name ? `Referral — ${item.referring_employee_name}` : "Referral"}</h3>
@@ -120,22 +120,31 @@ export function BpFollowUpPopupGate() {
         </dl>
 
         <p className="mt-4 rounded-md border border-info/30 bg-info-soft/50 px-3 py-2 text-[12px] text-info">
-          Call to check in — still planning to bring the car in? Mark it below once you've spoken to them again.
+          Call to check in — still planning to bring the car in?
         </p>
 
-        {logState.error ? <p className="mt-2 text-xs text-bad">{logState.error}</p> : null}
+        <form
+          action={async (fd) => {
+            await logAction(fd);
+            advance();
+          }}
+          className="mt-3"
+        >
+          <input type="hidden" name="id" value={item.id} />
+          <label className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Remark (required)</label>
+          <textarea
+            name="remark"
+            required
+            rows={2}
+            placeholder="What did the customer say?"
+            className="mt-1 w-full rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          />
+          {logState.error ? <p className="mt-1 text-xs text-bad">{logState.error}</p> : null}
 
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={advance} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2">
-            {isLast ? "Remind me later" : "Next"}
-          </button>
-          <form
-            action={async (fd) => {
-              await logAction(fd);
-              advance();
-            }}
-          >
-            <input type="hidden" name="id" value={item.id} />
+          <div className="mt-3 flex justify-end gap-2">
+            <button type="button" onClick={advance} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2">
+              {isLast ? "Remind me later" : "Next"}
+            </button>
             <button
               type="submit"
               disabled={logPending}
@@ -143,8 +152,8 @@ export function BpFollowUpPopupGate() {
             >
               {logPending ? "Saving…" : "Spoke to them — reset reminder"}
             </button>
-          </form>
-        </div>
+          </div>
+        </form>
       </div>
     </div>
   );

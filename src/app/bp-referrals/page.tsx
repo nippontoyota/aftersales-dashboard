@@ -11,7 +11,6 @@ import {
   loadPayoutLedger,
   loadQueueForBranch,
   loadRegionRollup,
-  loadStaleReferrals,
   regionalLeadFor,
 } from "@/lib/bp-referrals/store";
 import { BpHoAnalyticsClient } from "./bp-ho-analytics-client";
@@ -42,24 +41,17 @@ export default async function BpReferralsPage() {
   // a BPM's own queue.
   if (admin.role === "bp_ho" || admin.role === "hq") {
     await ensureAssignedBranches();
-    const [referrals, payoutLedger, branchRollup, staleReferrals, branchCodes] = await Promise.all([
+    const [referrals, payoutLedger, branchRollup, branchCodes] = await Promise.all([
       loadAllReferrals(),
       loadPayoutLedger(),
       loadBranchRollup(),
-      loadStaleReferrals(),
       listBranchCodes(),
     ]);
 
     if (admin.role === "bp_ho") {
       return (
         <BpShell identity={adminIdentityLabel(admin)}>
-          <BpHoAnalyticsClient
-            referrals={referrals}
-            payoutLedger={payoutLedger}
-            branchRollup={branchRollup}
-            staleReferrals={staleReferrals}
-            branchCodes={branchCodes}
-          />
+          <BpHoAnalyticsClient referrals={referrals} payoutLedger={payoutLedger} branchRollup={branchRollup} branchCodes={branchCodes} />
         </BpShell>
       );
     }
@@ -74,13 +66,7 @@ export default async function BpReferralsPage() {
         queriesBadge={navState.queriesBadge}
         identity={adminIdentityLabel(admin)}
       >
-        <BpHoAnalyticsClient
-          referrals={referrals}
-          payoutLedger={payoutLedger}
-          branchRollup={branchRollup}
-          staleReferrals={staleReferrals}
-          branchCodes={branchCodes}
-        />
+        <BpHoAnalyticsClient referrals={referrals} payoutLedger={payoutLedger} branchRollup={branchRollup} branchCodes={branchCodes} />
       </AppShell>
     );
   }

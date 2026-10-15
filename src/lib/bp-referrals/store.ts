@@ -110,34 +110,117 @@ async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
   }
 }
 
-export async function markNotConnected(id: number, branch: string): Promise<void> {
-  await assertOwnedByBranch(id, branch);
-  await pool.query(`update bp_referrals set call_status = 'not_connected' where id = $1`, [id]);
+async function logActivity(
+  referralId: number,
+  activityType: "not_connected" | "call_outcome" | "follow_up",
+  remark: string,
+  performedBy: string,
+): Promise<void> {
+  await pool.query(
+    `insert into bp_referral_activity (referral_id, activity_type, remark, performed_by) values ($1, $2, $3, $4)`,
+    [referralId, activityType, remark, performedBy],
+  );
 }
 
+/** Every BP referral action requires a reason/remark (2026-10-15, the
+ * user's explicit call for accountability) — see bp_referral_activity in
+ * schema.sql for the full history this builds up. */
+export async function markNotConnected(id: number, branch: string, performedBy: string, remark: string): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  await pool.query(`update bp_referrals set call_status = 'not_connected', last_contacted_at = now() where id = $1`, [id]);
+  await logActivity(id, "not_connected", remark, performedBy);
+}
+
+/** Hours after which a validated (genuine + interested) referral with no
+ * contact needs a follow-up — 2026-10-15, down from 3 days at the user's
+ * request, since the car hasn't come in yet and the lead can go cold fast. */
+export const FOLLOW_UP_OVERDUE_HOURS = 24;
+
+/** Hours after which an unconnected referral (never reached, or reached but
+ * not yet resolved) needs its first nudge — 2026-10-15. Paired with
+ * UNCONNECTED_DROP_DAYS below: past that many days with still no contact,
+ * it's no longer "overdue", it's dropped (see classify() in
+ * bpm-queue-client.tsx and bp-ho-analytics-client.tsx, which apply this
+ * same window client-side from data already on the page). */
+export const UNCONNECTED_REMINDER_HOURS = 2;
+export const UNCONNECTED_DROP_DAYS = 3;
+
 /** Validated (genuine + interested) referrals the BPM hasn't checked in on
- * for 3+ days and the car still hasn't come in — the follow-up popup's data
- * source (see bp-followup-popup-gate.tsx). last_contacted_at is the clock:
- * set when the call outcome is first recorded, and bumped again by
- * logFollowUpContact below every time the BPM re-contacts the customer. */
+ * for FOLLOW_UP_OVERDUE_HOURS+ and the car still hasn't come in — the
+ * follow-up popup's data source (see bp-followup-popup-gate.tsx).
+ * last_contacted_at is the clock: set when the call outcome is first
+ * recorded, and bumped again by logFollowUpContact below every time the
+ * BPM re-contacts the customer. */
 export async function loadOverdueFollowUps(branch: string): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
     `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
      where r.assigned_branch = $1 and r.genuine = true and r.customer_interested = true
        and r.closed_at is null and r.ro_matched_at is null
-       and r.last_contacted_at <= now() - interval '3 days'
+       and r.last_contacted_at <= now() - interval '${FOLLOW_UP_OVERDUE_HOURS} hours'
      order by r.last_contacted_at asc`,
     [branch],
   );
   return rows;
 }
 
+/** A referral never yet connected (still "to call" or "not connected"),
+ * UNCONNECTED_REMINDER_HOURS+ since it last had any attempt (or since
+ * submission if never attempted), and not yet past the drop window — the
+ * urgent-contact popup's data source (see bp-urgent-contact-popup-gate.tsx).
+ * Once past UNCONNECTED_DROP_DAYS it's dropped instead (classify() in the
+ * UI treats that as its own bucket, no longer "needs a reminder"). */
+export async function loadUrgentUnconnected(branch: string): Promise<BpReferralRow[]> {
+  const { rows } = await pool.query<BpReferralRow>(
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+     where r.assigned_branch = $1 and r.call_status in ('pending', 'not_connected')
+       and r.closed_at is null and r.validated_at is null
+       and coalesce(r.last_contacted_at, r.submitted_at) <= now() - interval '${UNCONNECTED_REMINDER_HOURS} hours'
+       and coalesce(r.last_contacted_at, r.submitted_at) > now() - interval '${UNCONNECTED_DROP_DAYS} days'
+     order by coalesce(r.last_contacted_at, r.submitted_at) asc`,
+    [branch],
+  );
+  return rows;
+}
+
 /** BPM re-contacted the customer on an already-validated referral — resets
- * the 3-day follow-up clock without touching anything else recorded about
- * the call. */
-export async function logFollowUpContact(id: number, branch: string): Promise<void> {
+ * the follow-up clock without touching anything else recorded about the
+ * call. */
+export async function logFollowUpContact(id: number, branch: string, performedBy: string, remark: string): Promise<void> {
   await assertOwnedByBranch(id, branch);
   await pool.query(`update bp_referrals set last_contacted_at = now() where id = $1`, [id]);
+  await logActivity(id, "follow_up", remark, performedBy);
+}
+
+export type ActivityRow = {
+  id: number;
+  activityType: "not_connected" | "call_outcome" | "follow_up";
+  remark: string;
+  performedBy: string;
+  performedAt: Date | string;
+};
+
+/** Full action history for one referral — every not-connected attempt,
+ * the call outcome, and every follow-up, each with its own remark — for
+ * the detail view's "History" section. */
+export async function loadActivityForReferral(referralId: number): Promise<ActivityRow[]> {
+  const { rows } = await pool.query<{
+    id: number;
+    activity_type: "not_connected" | "call_outcome" | "follow_up";
+    remark: string;
+    performed_by: string;
+    performed_at: Date | string;
+  }>(
+    `select id, activity_type, remark, performed_by, performed_at from bp_referral_activity
+     where referral_id = $1 order by performed_at desc`,
+    [referralId],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    activityType: r.activity_type,
+    remark: r.remark,
+    performedBy: r.performed_by,
+    performedAt: r.performed_at,
+  }));
 }
 
 export type CallOutcome =
@@ -146,12 +229,19 @@ export type CallOutcome =
   | { genuine: true; estimateAmount: number; customerInterested: true; paymentType: "CP" | "IP" };
 
 /** The one-form submission once a BPM actually connects with the customer —
- * genuine/estimate/interested/CP-IP all recorded together. Not genuine, or
- * genuine-but-not-interested, closes the referral out immediately (no
- * follow-up, no payout, no employee message). Genuine + interested stamps
- * validated_at/eligibility_triggered_at — the ₹50 payout point and the hook
- * for the user's own external WhatsApp-eligibility automation. */
-export async function submitCallOutcome(id: number, branch: string, handledBy: string, outcome: CallOutcome): Promise<void> {
+ * genuine/estimate/interested/CP-IP all recorded together, plus a mandatory
+ * remark explaining the outcome. Not genuine, or genuine-but-not-interested,
+ * closes the referral out immediately (no follow-up, no payout, no employee
+ * message). Genuine + interested stamps validated_at/eligibility_triggered_at
+ * — the ₹50 payout point and the hook for the user's own external
+ * WhatsApp-eligibility automation. */
+export async function submitCallOutcome(
+  id: number,
+  branch: string,
+  handledBy: string,
+  outcome: CallOutcome,
+  remark: string,
+): Promise<void> {
   await assertOwnedByBranch(id, branch);
   if (!outcome.genuine) {
     await pool.query(
@@ -160,9 +250,7 @@ export async function submitCallOutcome(id: number, branch: string, handledBy: s
        where id = $1`,
       [id, handledBy],
     );
-    return;
-  }
-  if (!outcome.customerInterested) {
+  } else if (!outcome.customerInterested) {
     await pool.query(
       `update bp_referrals set call_status = 'connected', genuine = true, estimate_amount = $3,
          customer_interested = false, handled_by = $2,
@@ -170,15 +258,16 @@ export async function submitCallOutcome(id: number, branch: string, handledBy: s
        where id = $1`,
       [id, handledBy, outcome.estimateAmount],
     );
-    return;
+  } else {
+    await pool.query(
+      `update bp_referrals set call_status = 'connected', genuine = true, estimate_amount = $3,
+         customer_interested = true, payment_type = $4, handled_by = $2,
+         last_contacted_at = now(), validated_at = now(), eligibility_triggered_at = now()
+       where id = $1`,
+      [id, handledBy, outcome.estimateAmount, outcome.paymentType],
+    );
   }
-  await pool.query(
-    `update bp_referrals set call_status = 'connected', genuine = true, estimate_amount = $3,
-       customer_interested = true, payment_type = $4, handled_by = $2,
-       last_contacted_at = now(), validated_at = now(), eligibility_triggered_at = now()
-     where id = $1`,
-    [id, handledBy, outcome.estimateAmount, outcome.paymentType],
-  );
+  await logActivity(id, "call_outcome", remark, handledBy);
 }
 
 /** Branch transfer — e.g. a Kalamassery employee's referral whose customer
@@ -323,45 +412,3 @@ export async function assignBranch(id: number, branch: string): Promise<void> {
   await pool.query(`update bp_referrals set assigned_branch = $2 where id = $1`, [id, branch]);
 }
 
-export type StaleReferralRow = {
-  id: number;
-  referringEmployeeName: string | null;
-  assignedBranch: string | null;
-  submittedAt: Date | string | null;
-  callStatus: "pending" | "not_connected";
-  daysSinceSubmitted: number;
-};
-
-const STALE_AFTER_DAYS = 3;
-
-/** Referrals still in "to call"/"not connected" — no contact ever
- * recorded, let alone resolved — 3+ days after being submitted. Unlike the
- * 3-day follow-up popup (which only watches validated+interested referrals
- * already being worked), this is BP HO's own oversight signal for leads
- * nobody has touched at all yet; no popup, just visible on the dashboard. */
-export async function loadStaleReferrals(): Promise<StaleReferralRow[]> {
-  const { rows } = await pool.query<{
-    id: number;
-    referring_employee_name: string | null;
-    assigned_branch: string | null;
-    submitted_at: Date | string | null;
-    call_status: "pending" | "not_connected";
-    days_since: string;
-  }>(
-    `select id, referring_employee_name, assigned_branch, submitted_at, call_status,
-            extract(day from now() - submitted_at)::int as days_since
-     from bp_referrals
-     where call_status in ('pending', 'not_connected')
-       and closed_at is null and validated_at is null
-       and submitted_at <= now() - interval '${STALE_AFTER_DAYS} days'
-     order by submitted_at asc`,
-  );
-  return rows.map((r) => ({
-    id: r.id,
-    referringEmployeeName: r.referring_employee_name,
-    assignedBranch: r.assigned_branch,
-    submittedAt: r.submitted_at,
-    callStatus: r.call_status,
-    daysSinceSubmitted: Number(r.days_since),
-  }));
-}

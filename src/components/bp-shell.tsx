@@ -1,6 +1,7 @@
 import { logoutAction } from "@/lib/actions";
 import { AutoRefresh } from "./auto-refresh";
 import { BpFollowUpPopupGate } from "./bp-followup-popup-gate";
+import { BpUrgentContactPopupGate } from "./bp-urgent-contact-popup-gate";
 import { ThemeToggle } from "./theme-toggle";
 
 /**
@@ -14,6 +15,7 @@ export function BpShell({ identity, children }: { identity: string; children: Re
   return (
     <div className="min-h-screen bg-canvas text-fg">
       <AutoRefresh />
+      <BpUrgentContactPopupGate />
       <BpFollowUpPopupGate />
       <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4 print:hidden">
         <div className="flex items-center gap-2.5">

@@ -4,11 +4,14 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
 import { listBranchCodes } from "@/lib/admin-store";
 import {
+  loadActivityForReferral,
   loadOverdueFollowUps,
+  loadUrgentUnconnected,
   logFollowUpContact,
   markNotConnected,
   submitCallOutcome,
   transferReferral,
+  type ActivityRow,
   type BpReferralRow,
   type CallOutcome,
 } from "@/lib/bp-referrals/store";
@@ -20,15 +23,22 @@ function requireBpManager(admin: Awaited<ReturnType<typeof getCurrentAdmin>>) {
   return admin;
 }
 
+function requiredRemark(formData: FormData): string | null {
+  const remark = String(formData.get("remark") ?? "").trim();
+  return remark ? remark : null;
+}
+
 export async function markNotConnectedAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
   const admin = requireBpManager(await getCurrentAdmin());
   if (!admin) return { error: "Not allowed.", ok: false };
 
   const id = Number(formData.get("id"));
   if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const remark = requiredRemark(formData);
+  if (!remark) return { error: "A reason is required.", ok: false };
 
   try {
-    await markNotConnected(id, admin.branch);
+    await markNotConnected(id, admin.branch, admin.username, remark);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't update that referral.", ok: false };
   }
@@ -36,14 +46,17 @@ export async function markNotConnectedAction(_prev: BpmActionState, formData: Fo
   return { error: null, ok: true };
 }
 
-/** The one-form call outcome — genuine, estimate, interested, CP/IP all
- * submitted together once the BPM actually connects with the customer. */
+/** The one-form call outcome — genuine, estimate, interested, CP/IP, and a
+ * mandatory remark, all submitted together once the BPM actually connects
+ * with the customer. */
 export async function submitCallOutcomeAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
   const admin = requireBpManager(await getCurrentAdmin());
   if (!admin) return { error: "Not allowed.", ok: false };
 
   const id = Number(formData.get("id"));
   if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const remark = requiredRemark(formData);
+  if (!remark) return { error: "A remark is required.", ok: false };
 
   const genuine = formData.get("genuine") === "yes";
   let outcome: CallOutcome;
@@ -69,7 +82,7 @@ export async function submitCallOutcomeAction(_prev: BpmActionState, formData: F
   }
 
   try {
-    await submitCallOutcome(id, admin.branch, admin.username, outcome);
+    await submitCallOutcome(id, admin.branch, admin.username, outcome, remark);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't save the call outcome.", ok: false };
   }
@@ -109,20 +122,43 @@ export async function getMyOverdueFollowUpsAction(): Promise<BpReferralRow[]> {
   return loadOverdueFollowUps(admin.branch);
 }
 
-/** Inline "I just spoke to them again" action from the popup — resets the
- * 3-day clock without opening the full queue page. */
+/** The urgent-contact popup's data source (see
+ * bp-urgent-contact-popup-gate.tsx) — referrals never yet connected that
+ * are overdue their first/next attempt, same "decide for itself" shape. */
+export async function getMyUrgentUnconnectedAction(): Promise<BpReferralRow[]> {
+  const admin = await getCurrentAdmin();
+  if (!admin || admin.role !== "bp_manager") return [];
+  return loadUrgentUnconnected(admin.branch);
+}
+
+/** Inline "I just spoke to them again" action from the popup or the queue
+ * page — resets the follow-up clock, remark required same as every other
+ * action. */
 export async function logFollowUpContactAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
   const admin = requireBpManager(await getCurrentAdmin());
   if (!admin) return { error: "Not allowed.", ok: false };
 
   const id = Number(formData.get("id"));
   if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const remark = requiredRemark(formData);
+  if (!remark) return { error: "A remark is required.", ok: false };
 
   try {
-    await logFollowUpContact(id, admin.branch);
+    await logFollowUpContact(id, admin.branch, admin.username, remark);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't update that referral.", ok: false };
   }
   revalidatePath("/bp-referrals");
   return { error: null, ok: true };
+}
+
+/** The detail modal's "History" section — every bp_manager/bp_ho/hq viewer
+ * can read it (it's just the audit trail of what's already shown on the
+ * referral), no branch-ownership check needed beyond being signed in as a
+ * BP role at all. */
+export async function getReferralActivityAction(referralId: number): Promise<ActivityRow[]> {
+  const admin = await getCurrentAdmin();
+  if (!admin || (admin.role !== "bp_manager" && admin.role !== "bp_ho" && admin.role !== "hq")) return [];
+  if (!Number.isFinite(referralId) || referralId <= 0) return [];
+  return loadActivityForReferral(referralId);
 }

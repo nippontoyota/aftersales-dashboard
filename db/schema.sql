@@ -1083,3 +1083,22 @@ alter table admins add constraint admins_role_scope_consistency check (
   (role = 'bp_manager'  and branch is not null and region is null) or
   (role = 'bp_ho'       and branch is null     and region is null)
 );
+
+-- 2026-10-15: every BP referral action — a not-connected attempt, the
+-- connected-call outcome, or a later follow-up — now requires the BPM to
+-- give a reason/remark (the user's explicit call, for accountability).
+-- Rather than overwrite a single "last remark" column and lose the history
+-- of what was tried, this is an append-only log: one row per action, so the
+-- full back-and-forth on a referral (multiple not-connected attempts,
+-- each with its own reason) stays visible in the detail view. bp_referrals
+-- itself still carries the latest status/timestamps for fast filtering —
+-- this table is for the human-readable trail behind them.
+create table if not exists bp_referral_activity (
+  id             bigserial    primary key,
+  referral_id    integer      not null references bp_referrals(id),
+  activity_type  text         not null check (activity_type in ('not_connected', 'call_outcome', 'follow_up')),
+  remark         text         not null,
+  performed_by   text         not null references admins(username),
+  performed_at   timestamptz  not null default now()
+);
+create index if not exists bp_referral_activity_referral_idx on bp_referral_activity (referral_id, performed_at);
