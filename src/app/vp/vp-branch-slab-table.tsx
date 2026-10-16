@@ -2,10 +2,12 @@ import { CO01B_SLAB_COMBINED_BRANCHES } from "@/lib/body-paint-only";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { aggregateIncentiveSlabTargets } from "@/lib/incentive-slabs/aggregate";
 import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
+import { computePace } from "@/lib/pace";
 import { REGIONS, regionForBranch, type RegionName } from "@/lib/regions";
 import type { BranchReport } from "@/lib/report";
 import type { VpScopeMetrics } from "@/lib/vp-data";
 import { SectionTable, type SectionColumn } from "../dashboard/section-table";
+import { SLAB_GREEN_CLASS, slabBandClassName } from "./vp-band-colors";
 import { VpBranchLabel, VpMetricButton } from "./vp-compare";
 import type { MetricKey } from "./vp-metrics";
 
@@ -32,24 +34,50 @@ import type { MetricKey } from "./vp-metrics";
  * Tinted, not solid, fills (2026-09-28, at the VP's request — a whole table
  * of solid-fill badges read as visually "loud"/congested; a soft tint still
  * reads the colour at a glance without the same weight).
+ *
+ * Colour reflects month-end PACE, not today's raw ratio (2026-10-15, at the
+ * VP's request — graded against the full-month target, almost every cell
+ * reads red until late in the month by construction, which told him nothing
+ * useful mid-month). Three states, same distinction the hero-card slab rings
+ * already draw (incentive-slab-indicator.tsx, fixed there 2026-09-19 after a
+ * reported bug where a forecast rendered as if already achieved):
+ *   - already achieved (today's actual ≥ this slab's target) → solid green,
+ *     unchanged from before.
+ *   - not yet achieved, but projected (computePace's working-day-aware run
+ *     rate, same methodology as the rings/TGLOSS pace) to clear it by
+ *     month-end → the same green tint, but with a dashed border, so it never
+ *     reads as already banked.
+ *   - not on pace → graded on the *projected* ratio with the same 100/90/75%
+ *     cutoffs the plain ratio used before, so "how far off pace" still reads
+ *     at a glance instead of everything just being red.
+ * The displayed percentage itself is always today's actual ÷ target —
+ * unchanged by any of this, only the colour moves.
  */
-const SLAB_BANDS: { min: number; className: string }[] = [
-  { min: 1.0, className: "bg-emerald-500/15 text-emerald-400" },
-  { min: 0.9, className: "bg-yellow-400/15 text-yellow-300" },
-  { min: 0.75, className: "bg-orange-500/15 text-orange-400" },
-];
-
-export function slabBandClassName(ratio: number | null): string {
-  if (ratio === null) return "bg-surface-2 text-fg-faint";
-  return SLAB_BANDS.find((b) => ratio >= b.min)?.className ?? "bg-red-500/15 text-red-400";
-}
-
-function SlabCell({ target, actual, metric, branch }: { target: number | undefined; actual: number | null; metric: MetricKey; branch: string }) {
+function SlabCell({
+  target,
+  actual,
+  metric,
+  branch,
+  date,
+  holidays,
+}: {
+  target: number | undefined;
+  actual: number | null;
+  metric: MetricKey;
+  branch: string;
+  date: string;
+  holidays: ReadonlySet<string>;
+}) {
   if (target === undefined) {
     return <div className="w-16 text-right text-sm text-fg-faint">—</div>;
   }
   const ratio = actual === null || target === 0 ? null : actual / target;
-  const badgeClass = `flex h-6 w-full items-center justify-center rounded text-[11px] font-semibold tabular-nums ${slabBandClassName(ratio)}`;
+  const achieved = ratio !== null && ratio >= 1;
+  const projectedRatio = ratio === null || achieved ? null : computePace(date, actual, target, holidays).projectedAchievementRatio;
+  const onPace = projectedRatio !== null && projectedRatio >= 1;
+  const toneClassName =
+    ratio === null ? "bg-surface-2 text-fg-faint" : achieved ? slabBandClassName(ratio) : onPace ? `${SLAB_GREEN_CLASS} border border-dashed border-emerald-400/50` : slabBandClassName(projectedRatio);
+  const badgeClass = `flex h-6 w-full items-center justify-center rounded text-[11px] font-semibold tabular-nums ${toneClassName}`;
   const label = ratio === null ? "—" : formatPercent(ratio);
   const isTotal = branch === ALL_BRANCHES_LABEL;
   return (
@@ -99,12 +127,19 @@ function combinedActual(branches: BranchReport[], codes: readonly string[]): num
 const ALL_BRANCHES_LABEL = "All branches";
 const CO01B_COMBINED_LABEL = "CO01B + CO01E";
 
-function slabColumn(slabKey: keyof IncentiveSlabTargets, label: string, targetsByBranch: Record<string, IncentiveSlabTargets>, group: VpScopeMetrics): SectionColumn {
+function slabColumn(
+  slabKey: keyof IncentiveSlabTargets,
+  label: string,
+  targetsByBranch: Record<string, IncentiveSlabTargets>,
+  group: VpScopeMetrics,
+  date: string,
+  holidays: ReadonlySet<string>
+): SectionColumn {
   return {
     label,
     render: (row) => {
       const targets = row.branch === ALL_BRANCHES_LABEL ? group.incentiveSlabs : targetsByBranch[row.branch];
-      return <SlabCell target={targets?.[slabKey]} actual={row.totalRevenueStreamMtd} metric={slabKey} branch={row.branch} />;
+      return <SlabCell target={targets?.[slabKey]} actual={row.totalRevenueStreamMtd} metric={slabKey} branch={row.branch} date={date} holidays={holidays} />;
     },
   };
 }
@@ -113,20 +148,26 @@ export function VpBranchSlabTable({
   branches,
   group,
   incentiveSlabTargets,
+  date,
+  holidays,
 }: {
   branches: BranchReport[];
   group: VpScopeMetrics;
   incentiveSlabTargets: Record<string, IncentiveSlabTargets>;
+  date: string;
+  /** HQ-flagged report_holidays, as plain strings — same convention as IncentiveSlabIndicator's `holidays` prop. */
+  holidays: string[];
 }) {
   const targetsByBranch: Record<string, IncentiveSlabTargets> = { ...incentiveSlabTargets };
   const combinedTargets = aggregateIncentiveSlabTargets(incentiveSlabTargets, CO01B_SLAB_COMBINED_BRANCHES);
   if (combinedTargets) targetsByBranch[CO01B_COMBINED_LABEL] = combinedTargets;
+  const holidaySet = new Set(holidays);
 
   const columns: SectionColumn[] = [
-    slabColumn("slab1", "Slab 1", targetsByBranch, group),
-    slabColumn("slab2", "Slab 2", targetsByBranch, group),
-    slabColumn("slab3", "Slab 3", targetsByBranch, group),
-    slabColumn("slab4", "Slab 4", targetsByBranch, group),
+    slabColumn("slab1", "Slab 1", targetsByBranch, group, date, holidaySet),
+    slabColumn("slab2", "Slab 2", targetsByBranch, group, date, holidaySet),
+    slabColumn("slab3", "Slab 3", targetsByBranch, group, date, holidaySet),
+    slabColumn("slab4", "Slab 4", targetsByBranch, group, date, holidaySet),
   ];
 
   const rows = branches
@@ -139,7 +180,7 @@ export function VpBranchSlabTable({
   return (
     <SectionTable
       title="Incentive Slab Targets — per branch"
-      subtitle="Target and % achievement for each slab, graded against Total Revenue Stream"
+      subtitle="Target and % achievement for each slab, graded against Total Revenue Stream — colour reflects month-end pace, solid green once actually achieved, dashed green while on pace"
       branches={withTotal}
       columns={columns}
       scroll={false}

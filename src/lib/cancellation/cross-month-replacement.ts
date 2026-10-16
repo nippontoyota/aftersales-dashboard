@@ -294,6 +294,21 @@ export async function computeCrossMonthReplacementsFresh(branches?: string[]): P
               and c.cancel_moment <= greatest(lk.last_uploaded, lk.last_date::timestamptz)) as skip_adjustment
     from canc c
     join ssrv_dedup s on s.branch = c.branch and s.ro = c.ref_doc_no and s.inv <> c.doc_key and s.inv <> ''
+    -- A candidate replacement that was itself later cancelled never actually
+    -- stuck — it's an intermediate invoice in a cancel→reissue→cancel chain,
+    -- not where the job's revenue landed. Matching it anyway double-subtracts
+    -- the same original job once per dead intermediate invoice (2026-10-15,
+    -- IR01A/GSJ2607168: EWL2600064 cancelled Sept, reissued as TXL2605253
+    -- which was ALSO cancelled, then reissued again as TXL2605490 — the old
+    -- query matched both TXL2605253 and TXL2605490 as "the replacement" and
+    -- subtracted the original twice). Excluding any s.inv that appears as a
+    -- cancelled doc_no anywhere in invoice_cancellations for this branch
+    -- leaves only the live, never-cancelled invoice(s) under the RO as match
+    -- candidates.
+    and not exists (
+      select 1 from invoice_cancellations ic
+      where ic.branch = s.branch and replace(ic.doc_no, '-', '') = s.inv
+    )
     -- The cancelled invoice's own row, wherever it is — normally still
     -- sitting under its own invoice number since branches never remove a
     -- dead row (see this file's doc comment). earliest asc picks the oldest

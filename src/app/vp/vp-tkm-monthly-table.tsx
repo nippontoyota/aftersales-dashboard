@@ -4,7 +4,7 @@ import { regionForBranch, REGIONS, type RegionName } from "@/lib/regions";
 import { isBodyPaintOnly, type BranchReport } from "@/lib/report";
 import { SectionTable, type SectionColumn } from "../dashboard/section-table";
 import { VpBranchLabel, VpMetricButton } from "./vp-compare";
-import { slabBandClassName } from "./vp-branch-slab-table";
+import { slabBandClassName } from "./vp-band-colors";
 import { PENETRATION_TARGET, type MetricKey } from "./vp-metrics";
 
 /**

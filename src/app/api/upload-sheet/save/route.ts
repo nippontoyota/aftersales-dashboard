@@ -17,7 +17,7 @@ import { saveLabourSalesSnapshot } from "@/lib/labour-sales/store";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
 import { loadAllScom205SnapshotsBefore, saveScom205Snapshot } from "@/lib/scom205/store";
 import { checkGrowth, checkPeriodHeaderSanity } from "@/lib/scom205/upload-validation";
-import { parseServiceInfoWorkbook } from "@/lib/service-info/parse";
+import { isBpFlavoredServiceInfo, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoSnapshot } from "@/lib/service-info/store";
 import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
@@ -27,6 +27,7 @@ import { saveSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { checkInvoiceDocDateSanity, checkInvoiceOverlap } from "@/lib/ssrv089/upload-validation";
 import { parseSsrv089BpGreyTotals } from "@/lib/ssrv089-bp/parse";
 import { saveSsrv089BpGreySnapshot } from "@/lib/ssrv089-bp/store";
+import { matchBpReferralsFromCostSalesBpRows } from "@/lib/bp-referrals/ro-matcher";
 
 /**
  * The confirm/save half of Upload Sheet (HQ-only, /upload-sheet). Report
@@ -123,6 +124,18 @@ export async function POST(request: Request) {
         const bpStaffNames = await listAccessoriesStaffNamesForBranch(branch);
         const { counts: bpCounts, rawRows: bpRawRows } = parseServiceInfoWorkbook(buffer, branch, bpStaffNames);
 
+        // GS-vs-BP content check (2026-10-14, after KY01A's 2026-10-13
+        // incident — see isBpFlavoredServiceInfo's doc comment in parse.ts).
+        // Hard block even here, unlike the duplicate check below: HQ already
+        // explicitly chose "BP" for this upload, so a file that isn't
+        // BP-flavored is never a legitimate match for that choice.
+        if (!isBpFlavoredServiceInfo(bpRawRows)) {
+          return NextResponse.json(
+            { error: "This looks like a General Service Service Info Report, not Body & Paint — choose GS instead, or check the file." },
+            { status: 422 }
+          );
+        }
+
         // Soft, click-through duplicate check (added 2026-10-05 — this
         // branch previously had none at all). Stays soft here, unlike the
         // branch's own route's hard reject, since Upload Sheet is HQ's
@@ -158,6 +171,16 @@ export async function POST(request: Request) {
       }
       const svcInfoStaffNames = await listAccessoriesStaffNamesForBranch(branch);
       const { counts, rawRows } = parseServiceInfoWorkbook(buffer, branch, svcInfoStaffNames);
+
+      // GS-vs-BP content check (2026-10-14, after KY01A's 2026-10-13
+      // incident — see isBpFlavoredServiceInfo's doc comment in parse.ts).
+      // Hard block, same reasoning as the BP branch above.
+      if (isBpFlavoredServiceInfo(rawRows)) {
+        return NextResponse.json(
+          { error: "This looks like a Body & Paint Service Info Report, not General Service — choose BP instead, or check the file." },
+          { status: 422 }
+        );
+      }
 
       // Same two checks as the branch's own upload route (2026-09-19, after
       // the CO01A/KL01A incidents — both went through this exact tool,
@@ -330,6 +353,16 @@ export async function POST(request: Request) {
 
         await saveRawReportUpload({ date, branch, reportType: "ssrv089_bp", uploadedAt, sourceFileName: file.name, fileData: buffer, uploadedBy: admin.username });
         await saveSsrv089BpGreySnapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals: parsed.totals });
+
+        // BP Referrals' RO matcher (2026-10-14) — same hook as the branch's
+        // own upload route (ssrv089-bp/route.ts); see ro-matcher.ts. Wrapped
+        // so a matcher bug can never break an otherwise-successful upload.
+        try {
+          await matchBpReferralsFromCostSalesBpRows(parsed.rawRows);
+        } catch (err) {
+          console.error("BP referral RO matcher failed:", err);
+        }
+
         return NextResponse.json({
           success: true,
           type,

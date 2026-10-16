@@ -94,14 +94,40 @@ export async function loadAllLabourSalesSnapshotsForDate(date: string): Promise<
   return rows.map(rowToSnapshot);
 }
 
-/** Most recent Labour Sales snapshot for a branch, across any date — used by
- * the upload page's "already uploaded" check. Unlike the other 6 report types
- * whose date comes from the picker, Labour Sales dates come from the file's
- * own Doc. Date rows, so a file uploaded for a Saturday reporting window will
- * have a doc date one day before the picked reportDate — an exact-date match
- * would always show it as not uploaded after reload. */
-export async function loadMostRecentLabourSalesSnapshot(branch: string): Promise<LabourSalesSnapshot | null> {
-  const { rows } = await pool.query(`select ${SELECT_COLUMNS} from labour_sales_snapshots where branch = $1 order by date desc limit 1`, [branch]);
-  const r = rows[0];
-  return r ? rowToSnapshot(r) : null;
+/** Whether date (YYYY-MM-DD) falls on a Sunday (UTC). */
+function isSunday(date: string): boolean {
+  return new Date(`${date}T00:00:00Z`).getUTCDay() === 0;
+}
+
+/** The Saturday before a Sunday date, as YYYY-MM-DD. */
+function previousSaturday(sundayDate: string): string {
+  return new Date(new Date(`${sundayDate}T00:00:00Z`).getTime() - 86400000).toISOString().slice(0, 10);
+}
+
+/** "Uploaded for this reporting window" check for one branch. Labour Sales doc
+ * dates come from the file itself, so a branch that only worked Saturday files
+ * under Saturday — not Sunday — even though Sunday is the canonical report
+ * date for that round. This treats a Saturday snapshot as equivalent to the
+ * Sunday that follows it, matching the same window logic used in
+ * loadAllLabourSalesSnapshotsForWindow for the HQ pending panel. */
+export async function loadLabourSalesSnapshotForWindow(date: string, branch: string): Promise<LabourSalesSnapshot | null> {
+  const exact = await loadLabourSalesSnapshot(date, branch);
+  if (exact) return exact;
+  if (!isSunday(date)) return null;
+  return loadLabourSalesSnapshot(previousSaturday(date), branch);
+}
+
+/** All branches for a reporting window — same Saturday-fold as
+ * loadLabourSalesSnapshotForWindow. On a Sunday, unions both the Sunday and
+ * the Saturday before it; Sunday snapshot wins when a branch has both. */
+export async function loadAllLabourSalesSnapshotsForWindow(date: string): Promise<LabourSalesSnapshot[]> {
+  if (!isSunday(date)) return loadAllLabourSalesSnapshotsForDate(date);
+  const [sunday, saturday] = await Promise.all([
+    loadAllLabourSalesSnapshotsForDate(date),
+    loadAllLabourSalesSnapshotsForDate(previousSaturday(date)),
+  ]);
+  const byBranch = new Map<string, LabourSalesSnapshot>();
+  for (const s of saturday) byBranch.set(s.branch, s);
+  for (const s of sunday) byBranch.set(s.branch, s); // Sunday overwrites
+  return [...byBranch.values()];
 }

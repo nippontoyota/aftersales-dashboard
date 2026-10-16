@@ -26,3 +26,15 @@ export function softBandClassName(value: number | null, bands: readonly Pick<Ban
   }
   return SOFT_RED;
 }
+
+/** Same 100/90/75% cutoffs as the per-vehicle bands above, but standalone (not keyed off a Band[]) —
+ * used for any ratio-vs-target cell that isn't one of the PARTS/LABOUR/TGLOSS per-RO metrics, e.g. the
+ * VP's Slab and TKM tables. */
+const SLAB_BANDS: { min: number }[] = [{ min: 1.0 }, { min: 0.9 }, { min: 0.75 }];
+
+export function slabBandClassName(ratio: number | null): string {
+  return softBandClassName(ratio, SLAB_BANDS);
+}
+
+/** The emerald tier's own class string, for a caller that needs to apply it without a ratio to grade (e.g. an "on pace" cell being forced green regardless of its exact projected ratio). */
+export const SLAB_GREEN_CLASS = SOFT_TIER_COLORS[0];

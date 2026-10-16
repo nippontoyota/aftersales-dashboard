@@ -30,9 +30,10 @@ const NAV_ITEMS = [
   // alwaysVisible: true — branch admins see their own bills and cancellations
   // regardless of whether the latest date is published (these pages are about
   // their own uploads, not the company-wide dashboard state).
-  { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true },
-  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true },
-  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false },
+  { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true, hqOnly: false },
+  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true, hqOnly: false },
+  { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: true },
+  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false, hqOnly: false },
 ];
 
 /** The Accounts view (role `accounts`) gets its own single-item nav —
@@ -79,7 +80,8 @@ type NavKey =
   | (typeof UTILITY_NAV_ITEMS)[number]["key"]
   | (typeof ACCOUNTS_NAV_ITEMS)[number]["key"]
   | (typeof CENTRAL_NAV_ITEMS)[number]["key"]
-  | "bills";
+  | "bills"
+  | "bp-referrals";
 
 function DashboardIcon() {
   return (
@@ -157,6 +159,17 @@ function CancellationsIcon() {
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
       <circle cx="10" cy="10" r="7" />
       <path d="M5.5 5.5l9 9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function BpReferralsIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <path d="M3.5 12h13M4.5 12 7 7.5h6l2.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 12h16v2.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V12z" strokeLinejoin="round" />
+      <circle cx="6.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="13.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -266,6 +279,7 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   reports: ReportsIcon,
   bills: BillsIcon,
   cancellations: CancellationsIcon,
+  "bp-referrals": BpReferralsIcon,
   upload: UploadIcon,
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,
@@ -348,7 +362,8 @@ export function AppShell({
         (item) =>
           (!item.requiresDashboard || showDashboardLink) &&
           (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
-          (!item.uploadOnly || canUpload),
+          (!item.uploadOnly || canUpload) &&
+          (!item.hqOnly || isHq),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq && !accountsNav && !centralNav ? UTILITY_NAV_ITEMS : [];
 

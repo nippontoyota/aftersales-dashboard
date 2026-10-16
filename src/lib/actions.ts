@@ -31,12 +31,14 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   await resetAccountLimit(username);
   await createSession(admin.username);
   // HQ admins land on the Executive Overview (2026-09-24, at the user's
-  // request — the upload page isn't what they want to see first). Every
-  // other role keeps landing on /upload, unchanged; /dashboard itself
-  // already redirects vp_service/ceo/accounts to their own page and anyone
-  // without canViewDashboard back to /upload, so this only actually changes
-  // behavior for the "hq" role.
-  redirect(admin.role === "hq" ? "/dashboard" : "/upload");
+  // request — the upload page isn't what they want to see first). BP
+  // Manager/BP HO (2026-10-14) land on their own referrals view — they
+  // never upload. Every other role keeps landing on /upload, unchanged;
+  // /dashboard itself already redirects vp_service/ceo/accounts to their
+  // own page and anyone without canViewDashboard back to /upload.
+  redirect(
+    admin.role === "hq" ? "/dashboard" : admin.role === "bp_manager" || admin.role === "bp_ho" ? "/bp-referrals" : "/upload",
+  );
 }
 
 export async function logoutAction() {

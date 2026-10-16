@@ -4,7 +4,7 @@ import { loadAllPartSaleSnapshotsForDate } from "./part-sale/store";
 import { loadAllSsrv089SnapshotsForDate } from "./ssrv089/store";
 import { loadAllScom205SnapshotsForDate } from "./scom205/store";
 import { loadAllRawReportUploadsForDate } from "./raw-report-uploads/store";
-import { loadAllLabourSalesSnapshotsForDate } from "./labour-sales/store";
+import { loadAllLabourSalesSnapshotsForWindow } from "./labour-sales/store";
 import { isBodyPaintOnly, onlineStoreCodeFor } from "./report";
 
 /** The 7 report types every branch uploads daily, in the same order they
@@ -78,7 +78,7 @@ export async function loadPendingUploadsSummary(date: string): Promise<PendingUp
     loadAllRawReportUploadsForDate(date, "ssrv089_bp"),
     loadAllPartSaleSnapshotsForDate(date),
     loadAllScom205SnapshotsForDate(date),
-    loadAllLabourSalesSnapshotsForDate(date),
+    loadAllLabourSalesSnapshotsForWindow(date),
   ]);
 
   const done: Record<ReportTypeKey, Set<string>> = {

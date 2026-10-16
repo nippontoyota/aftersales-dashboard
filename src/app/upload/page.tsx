@@ -11,7 +11,7 @@ import { loadPartSaleSnapshot } from "@/lib/part-sale/store";
 import { loadSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { loadScom205Snapshot } from "@/lib/scom205/store";
 import { loadRawReportUpload } from "@/lib/raw-report-uploads/store";
-import { loadMostRecentLabourSalesSnapshot } from "@/lib/labour-sales/store";
+import { loadLabourSalesSnapshotForWindow } from "@/lib/labour-sales/store";
 import { isBodyPaintOnly, onlineStoreCodeFor } from "@/lib/report";
 import { BaToolUploadForm } from "./ba-tool-upload-form";
 import { BillUploadForm } from "./bill-upload-form";
@@ -37,6 +37,7 @@ export default async function UploadPage({
   if (admin?.role === "accounts") redirect("/accounts");
   if (admin?.role === "hq_viewer") redirect("/dashboard");
   if (admin?.role === "regional") redirect("/dashboard");
+  if (admin?.role === "bp_manager" || admin?.role === "bp_ho") redirect("/bp-referrals");
   const identity = admin ? adminIdentityLabel(admin) : "";
   const nav = admin
     ? await loadNavState(admin)
@@ -78,7 +79,7 @@ export default async function UploadPage({
             loadPartSaleSnapshot(reportDate, admin.branch),
             loadScom205Snapshot(reportDate, admin.branch),
             onlineStoreCode ? loadPartSaleSnapshot(reportDate, onlineStoreCode) : Promise.resolve(null),
-            loadMostRecentLabourSalesSnapshot(admin.branch),
+            loadLabourSalesSnapshotForWindow(reportDate, admin.branch),
           ]);
           const pick = (s: { sourceFileName: string; uploadedAt: string } | null) =>
             s ? { sourceFileName: s.sourceFileName, uploadedAt: s.uploadedAt } : null;

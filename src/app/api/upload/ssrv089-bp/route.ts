@@ -5,6 +5,7 @@ import { hashBuffer } from "@/lib/duplicate-detection";
 import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { detectReportType, type DetectedReportType } from "@/lib/report-sniffer";
+import { matchBpReferralsFromCostSalesBpRows } from "@/lib/bp-referrals/ro-matcher";
 import { parseSsrv089BpGreyTotals } from "@/lib/ssrv089-bp/parse";
 import { saveSsrv089BpGreySnapshot } from "@/lib/ssrv089-bp/store";
 
@@ -143,6 +144,16 @@ export async function POST(request: Request) {
   // Outside the save above — a recompute failure shouldn't block an
   // otherwise-successful upload (see adjustment-recompute.ts).
   await recomputeAfterSsrv089BpUpload(admin.branch);
+
+  // BP Referrals' RO matcher (2026-10-14) — scans this file's BPJ-prefixed
+  // ROs for a vehicle reg no match against validated referrals, company-wide
+  // (see ro-matcher.ts). Wrapped so a matcher bug can never break an
+  // otherwise-successful daily upload.
+  try {
+    await matchBpReferralsFromCostSalesBpRows(parsed.rawRows);
+  } catch (err) {
+    console.error("BP referral RO matcher failed:", err);
+  }
 
   return NextResponse.json({
     success: true,
