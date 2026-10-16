@@ -12,6 +12,11 @@ export type BpReferralRow = {
   customer_phone: string | null;
   submitted_at: Date | string | null;
   vehicle_reg_no: string | null;
+  /** Captured by the WhatsApp webhook from 2026-10-15 onward (Shiva's
+   * commit) — null on anything submitted before that. The BPM needs this to
+   * give an estimate, so it's surfaced right next to the reg no everywhere
+   * a referral is shown. */
+  vehicle_model: string | null;
   location: string | null;
   description: string | null;
   assigned_branch: string | null;
@@ -34,7 +39,7 @@ export type BpReferralRow = {
 
 const SELECT_COLUMNS = `
   r.id, r.referring_employee_id, r.referring_employee_name, r.referring_employee_branch,
-  r.vehicle_image_url, r.customer_phone, r.submitted_at, r.vehicle_reg_no, r.location, r.description,
+  r.vehicle_image_url, r.customer_phone, r.submitted_at, r.vehicle_reg_no, r.vehicle_model, r.location, r.description,
   r.assigned_branch, r.call_status, r.genuine, r.estimate_amount, r.customer_interested, r.payment_type,
   r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.closed_at, r.closed_reason, r.last_contacted_at,
   lt.from_branch as transferred_from

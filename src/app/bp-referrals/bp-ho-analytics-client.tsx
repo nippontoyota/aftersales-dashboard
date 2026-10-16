@@ -210,7 +210,10 @@ function ReferralTable({
                       <AssignBranchForm referralId={r.id} branchCodes={allBranchCodes} />
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5">
+                    <div className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</div>
+                    {r.vehicle_model ? <div className="text-xs text-fg-faint">{r.vehicle_model}</div> : null}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2.5">
                     <StatusBadge status={status} />
                   </td>

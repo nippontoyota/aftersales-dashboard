@@ -22,6 +22,7 @@ export type BpmQueueReferral = {
   customer_phone: string | null;
   submitted_at: Date | string | null;
   vehicle_reg_no: string | null;
+  vehicle_model: string | null;
   location: string | null;
   description: string | null;
   assigned_branch: string | null;
@@ -444,6 +445,10 @@ function DetailModal({
             <dd className="font-mono text-fg">{r.vehicle_reg_no ?? "—"}</dd>
           </div>
           <div className="flex justify-between gap-3">
+            <dt className="text-fg-faint">Vehicle model</dt>
+            <dd className="font-semibold text-fg">{r.vehicle_model ?? "—"}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
             <dt className="text-fg-faint">Submitted</dt>
             <dd className="text-fg-muted">{fmt(r.submitted_at)}</dd>
           </div>
@@ -625,7 +630,10 @@ function QueueList({
                     {r.transferred_from ? <span className="ml-1.5 text-xs text-fg-faint">(from {branchName(r.transferred_from)})</span> : null}
                   </td>
                   {showBranchColumn ? <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{branchName(r.assigned_branch ?? "")}</td> : null}
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5">
+                    <div className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</div>
+                    {r.vehicle_model ? <div className="text-xs text-fg-faint">{r.vehicle_model}</div> : null}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2.5">
                     <StatusBadge r={r} />
                   </td>
