@@ -296,7 +296,12 @@ function SlideOverFilters({
   );
 }
 
-function KpiSlideOver({
+/** Centered pop-up for a clicked KPI card (2026-10-16, replacing an
+ * edge-anchored slide-over the user found uncomfortable) — same visual
+ * language as the referral detail modal in bpm-queue-client.tsx (fixed
+ * backdrop, centered rounded-xl box, own close button), just sized wider to
+ * hold a full table. */
+function KpiModal({
   title,
   rows,
   branchCodes,
@@ -329,12 +334,12 @@ function KpiSlideOver({
   }, [rows, fromDate, toDate, branchFilter]);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-3xl flex-col bg-canvas shadow-2xl"
+        className="flex max-h-[85vh] w-full max-w-5xl flex-col rounded-xl border border-border bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-border bg-surface px-5 py-4">
+        <div className="flex items-center justify-between border-b border-border-subtle px-5 py-4">
           <div>
             <h2 className="text-lg font-bold text-fg">{title}</h2>
             <p className="text-xs text-fg-muted">
@@ -432,7 +437,7 @@ export function BpHoAnalyticsClient({
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       {lightboxUrl ? <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} /> : null}
       {activeSlideOver ? (
-        <KpiSlideOver
+        <KpiModal
           title={activeSlideOver.title}
           rows={referrals.filter(activeSlideOver.predicate)}
           branchCodes={allBranchCodes}
