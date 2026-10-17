@@ -46,9 +46,8 @@ export default async function DataPage() {
         <h1 className="text-xl font-semibold tracking-tight text-fg">Report Holidays</h1>
         <p className="mt-1 text-sm text-fg-subtle">
           Flag a date as a non-working day. The branch upload date defaults to <strong>one</strong> computed date for
-          everyone — the most recent day that isn&apos;t a Saturday (its data reaches us Monday, filed under the Sunday)
-          or a holiday flagged here — and a branch can&apos;t pick a Saturday or a holiday even when catching up an
-          earlier day.
+          everyone — the most recent day that isn&apos;t a holiday flagged here — and a branch can&apos;t pick a
+          holiday even when catching up an earlier day.
         </p>
 
         <div className="mt-4 rounded-lg border border-border bg-surface p-4 shadow-card">

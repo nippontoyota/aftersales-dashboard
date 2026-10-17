@@ -45,9 +45,8 @@ export default async function UploadPage({
 
   // The date picker defaults to the computed report date — one date for every
   // branch each round (see src/lib/reporting-date.ts) — but a branch can pick
-  // an earlier day to catch up. It can't pick a Saturday or an HQ-flagged
-  // holiday: those would split one upload round across two dates. The `?date=`
-  // is re-validated here so a hand-typed URL can't get past the picker.
+  // an earlier day to catch up. It can't pick an HQ-flagged holiday. The
+  // `?date=` is re-validated here so a hand-typed URL can't get past the picker.
   const isBranch = admin?.role === "branch";
   const holidaySet = isBranch ? await loadReportHolidaySet() : new Set<string>();
   const canonicalDate = isBranch ? reportingDate(holidaySet) : "";
@@ -167,8 +166,8 @@ export default async function UploadPage({
                       month: "long",
                       timeZone: "UTC",
                     })}{" "}
-                    — the same date for every branch this round. Pick an earlier day to catch one up; Saturdays and
-                    holidays can&apos;t be picked (their data reaches us folded into the following Sunday).
+                    — the same date for every branch this round. Pick an earlier day to catch one up; holidays
+                    can&apos;t be picked.
                     {reportDate !== canonicalDate ? (
                       <>
                         {" "}

@@ -1,28 +1,31 @@
 /**
  * The one report date every branch uploads for *right now* — computed, never
- * chosen. Before this, each branch picked the date on the upload form, and
- * around a weekend or holiday they'd diverge: the branch that only worked
- * Saturday filed under Sat, the one that also worked Sunday filed under Sun,
- * so a single upload round ended up split across two dates.
+ * chosen. Before 2026-10-17, each branch picked the date on the upload form,
+ * and around a weekend they'd diverge: the branch that only worked Saturday
+ * filed under Sat, the one that also worked Sunday filed under Sun, so a
+ * single upload round ended up split across two dates — Saturday was
+ * rejected as a report date and its data folded into the following Sunday.
  *
- * The rule: walk back from yesterday and return the first date that is
- * neither
- *   - a **Saturday** — a working day, but its data only reaches us on Monday,
- *     folded in with Sunday's; the canonical date for that round is the
- *     Sunday, not the Saturday; nor
- *   - an **HQ-flagged holiday** (`report_holidays`, edited at /data).
+ * That's gone now that the CTDMS extraction runs automatically every day
+ * (Sat/Sun included), each run fetching the day before's data: Saturday's
+ * run uploads Saturday's own data on Sunday, Sunday's run uploads Sunday's
+ * own data on Monday, each filed under its own real date. The only thing
+ * still walked back past is an **HQ-flagged holiday** (`report_holidays`,
+ * edited at /data) — no branch files anything for those at all, so there's
+ * nothing to date a report under.
  *
- * Sundays count as normal report dates — some branches work them, and
- * Monday's upload is filed under the Sunday (covering Sat + Sun). Uniformity
- * across branches matters more than each calendar day being exactly right;
- * MTD totals are unaffected either way.
+ * The BA Tool file is the one holdout: still a single HQ-uploaded,
+ * company-wide file on Monday covering the whole weekend (see report.ts's
+ * `computeBranchReport` — it's an MTD-cumulative snapshot, and
+ * `loadPreviousSnapshot` already diffs against the most recent *prior*
+ * snapshot in the month rather than strict yesterday, so the Sat+Sun BA Tool
+ * movement lands on Sunday's date same as before; Saturday just has no
+ * BA-Tool-sourced figures of its own).
  *
  * All arithmetic is UTC, matching yesterdayIso() in utils.ts (the codebase
  * has always treated the report date as a plain UTC `toISOString()` slice,
  * not IST-corrected — both sides of the upload lock must agree).
  */
-
-const SATURDAY = 6;
 
 function isoOf(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -33,21 +36,10 @@ export function reportingDate(holidays: ReadonlySet<string>, now: Date = new Dat
   // Safety cap — HQ would have to flag ~3 weeks straight as holidays to hit it.
   for (let i = 0; i < 60; i++) {
     d.setUTCDate(d.getUTCDate() - 1);
-    if (d.getUTCDay() !== SATURDAY && !holidays.has(isoOf(d))) return isoOf(d);
+    if (!holidays.has(isoOf(d))) return isoOf(d);
   }
   throw new Error("reportingDate: no valid date within 60 days — too many holidays flagged?");
 }
-
-/**
- * Jan/Feb 2026 month-end cumulative uploads landed on these Saturdays before
- * this file's Saturday-block existed. TL01A uploaded before the block went
- * in and correctly filed under these dates; two branches uploading after got
- * blocked and filed under the Friday before instead (30 Jan, 27 Feb),
- * splitting the same month-end round across two dates. Named exceptions so
- * every branch can (re-)file under the correct historical date — not a
- * general Jan/Feb carve-out, and every other Saturday still rejects normally.
- */
-const HISTORICAL_MONTH_END_EXCEPTIONS = new Set(["2026-01-31", "2026-02-28"]);
 
 /** Why a given date isn't a valid report date, or null if it is one. */
 export function invalidReportDateReason(iso: string, holidays: ReadonlySet<string>): string | null {
@@ -62,9 +54,7 @@ export function invalidReportDateReason(iso: string, holidays: ReadonlySet<strin
     return null;
   }
 
-  if (HISTORICAL_MONTH_END_EXCEPTIONS.has(iso)) return null;
   if (holidays.has(iso)) return "flagged as a holiday";
-  if (new Date(`${iso}T00:00:00Z`).getUTCDay() === SATURDAY) return "a Saturday — its data reaches us Monday, filed under the Sunday";
   return null;
 }
 
@@ -74,11 +64,12 @@ function isReportDate(iso: string, holidays: ReadonlySet<string>): boolean {
 
 /**
  * Pace-adjusted target math — "how far into the month are we" counted the
- * same way the reporting cadence counts it (every calendar day is a working
- * day except Saturdays, which fold into Sunday, and HQ-flagged holidays),
- * not a flat day-of-month fraction. Used to grade MTD against a target
- * scaled to what should have landed by now, rather than the full monthly
- * figure.
+ * same way the reporting cadence counts it (every calendar day is a report
+ * date except HQ-flagged holidays), not a flat day-of-month fraction. Used
+ * to grade MTD against a target scaled to what should have landed by now,
+ * rather than the full monthly figure. Currently unused — superseded by
+ * sundayOffWorkingDaysElapsedInMonth/sundayOffWorkingDaysInMonth below
+ * wherever this kind of pacing is actually wired up.
  */
 export function workingDaysElapsedInMonth(dateIso: string, holidays: ReadonlySet<string>): number {
   const d = new Date(`${dateIso}T00:00:00Z`);
@@ -105,15 +96,11 @@ export function workingDaysInMonth(dateIso: string, holidays: ReadonlySet<string
 }
 
 /**
- * A *separate* working-day count from workingDaysElapsedInMonth/
- * workingDaysInMonth above — those exclude Saturday because Saturday's data
- * only reaches HQ on Monday (an upload-timing workaround, not a claim that
- * branches don't work Saturdays). Branches actually work Monday–Saturday,
- * Sunday off; this pair counts that real working-day calendar (minus the
- * same shared report_holidays) for MTD target pacing that wants to reflect
- * true elapsed working days rather than upload cadence. Added 2026-09-24 for
- * the Central regional dashboard only — every other page's pacing keeps
- * using the Saturday-excluded pair above unchanged.
+ * Branches work Monday–Saturday, Sunday off; this pair counts that real
+ * working-day calendar (minus the shared report_holidays) for MTD target
+ * pacing that wants to reflect true elapsed working days. Added 2026-09-24
+ * for the Central regional dashboard, now the one actually-used pacing pair
+ * (see workingDaysElapsedInMonth/workingDaysInMonth above).
  */
 const SUNDAY = 0;
 
