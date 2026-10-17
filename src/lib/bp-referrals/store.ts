@@ -31,6 +31,10 @@ export type BpReferralRow = {
   ro_matched_at: Date | string | null;
   closed_at: Date | string | null;
   closed_reason: "not_genuine" | "not_interested" | null;
+  /** Why the customer declined, once genuine + not interested — a distinct
+   * structured field from the call-outcome remark/damage description,
+   * which stays in bp_referral_activity (2026-10-17, the user's call). */
+  not_interested_reason: string | null;
   last_contacted_at: Date | string | null;
   /** Most recent transfer's origin branch, if this referral has ever been
    * transferred — null otherwise. Joined in, not a real column. */
@@ -41,8 +45,8 @@ const SELECT_COLUMNS = `
   r.id, r.referring_employee_id, r.referring_employee_name, r.referring_employee_branch,
   r.vehicle_image_url, r.customer_phone, r.submitted_at, r.vehicle_reg_no, r.vehicle_model, r.location, r.description,
   r.assigned_branch, r.call_status, r.genuine, r.estimate_amount, r.customer_interested, r.payment_type,
-  r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.closed_at, r.closed_reason, r.last_contacted_at,
-  lt.from_branch as transferred_from
+  r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.closed_at, r.closed_reason, r.not_interested_reason,
+  r.last_contacted_at, lt.from_branch as transferred_from
 `;
 
 const LATEST_TRANSFER_JOIN = `
@@ -230,12 +234,16 @@ export async function loadActivityForReferral(referralId: number): Promise<Activ
 
 export type CallOutcome =
   | { genuine: false }
-  | { genuine: true; estimateAmount: number; customerInterested: false }
+  | { genuine: true; estimateAmount: number; customerInterested: false; notInterestedReason: string }
   | { genuine: true; estimateAmount: number; customerInterested: true; paymentType: "CP" | "IP" };
 
 /** The one-form submission once a BPM actually connects with the customer —
  * genuine/estimate/interested/CP-IP all recorded together, plus a mandatory
- * remark explaining the outcome.
+ * remark explaining the outcome (the damage description when genuine, the
+ * reason when not). Genuine-but-not-interested additionally requires its
+ * own structured not_interested_reason (2026-10-17, the user's call) —
+ * distinct from the remark, so BP HO can see at a glance why a customer
+ * declined.
  *
  * Not genuine closes the referral out with zero payout — the lead itself
  * was never real, so nothing is owed. Genuine-but-not-interested ALSO
@@ -264,11 +272,11 @@ export async function submitCallOutcome(
   } else if (!outcome.customerInterested) {
     await pool.query(
       `update bp_referrals set call_status = 'connected', genuine = true, estimate_amount = $3,
-         customer_interested = false, handled_by = $2,
+         customer_interested = false, not_interested_reason = $4, handled_by = $2,
          last_contacted_at = now(), closed_at = now(), closed_reason = 'not_interested',
          validated_at = now(), eligibility_triggered_at = now()
        where id = $1`,
-      [id, handledBy, outcome.estimateAmount],
+      [id, handledBy, outcome.estimateAmount, outcome.notInterestedReason],
     );
   } else {
     await pool.query(
@@ -304,6 +312,29 @@ export async function transferReferral(id: number, fromBranch: string, toBranch:
   } finally {
     client.release();
   }
+}
+
+/** Read-only, for a BPM whose own employee's referral got transferred
+ * elsewhere (2026-10-17, the user's call) — the employee still belongs to
+ * this branch, so the branch keeps visibility into how it turns out even
+ * though another branch now owns the actual work. "Origin branch" is the
+ * from_branch of the EARLIEST transfer a referral ever had (correctly
+ * handles a referral transferred more than once — it's always the first
+ * hop's origin that matters here, not any intermediate stop), excluding
+ * anything that's since made its way back to this same branch. */
+export async function loadTransferredOutFromBranch(branch: string): Promise<BpReferralRow[]> {
+  const { rows } = await pool.query<BpReferralRow>(
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+     join (
+       select distinct on (referral_id) referral_id, from_branch
+       from bp_referral_transfers
+       order by referral_id, transferred_at asc
+     ) origin on origin.referral_id = r.id
+     where origin.from_branch = $1 and r.assigned_branch <> $1
+     order by r.submitted_at desc`,
+    [branch],
+  );
+  return rows;
 }
 
 /** BP HO's company-wide view — every referral, newest first. Unlike a

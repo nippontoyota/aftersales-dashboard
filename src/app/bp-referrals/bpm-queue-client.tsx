@@ -37,6 +37,7 @@ export type BpmQueueReferral = {
   ro_matched_at: Date | string | null;
   closed_at: Date | string | null;
   closed_reason: "not_genuine" | "not_interested" | null;
+  not_interested_reason: string | null;
   last_contacted_at: Date | string | null;
   transferred_from: string | null;
 };
@@ -276,7 +277,12 @@ function CallOutcomeForm({ id, onDone }: { id: number; onDone: () => void }) {
         </div>
       </div>
 
-      {genuine ? (
+      {genuine === "yes" ? (
+        <div>
+          <span className={eyebrow}>Damage description (required)</span>
+          <textarea name="remark" required rows={2} placeholder="Describe the vehicle damage in detail…" className={remarkField} />
+        </div>
+      ) : genuine === "no" ? (
         <div>
           <span className={eyebrow}>Remark (required)</span>
           <textarea name="remark" required rows={2} placeholder="What happened on the call?" className={remarkField} />
@@ -308,6 +314,19 @@ function CallOutcomeForm({ id, onDone }: { id: number; onDone: () => void }) {
               ))}
             </div>
           </div>
+
+          {interested === "no" ? (
+            <div>
+              <span className={eyebrow}>Reason customer isn&apos;t interested (required)</span>
+              <textarea
+                name="notInterestedReason"
+                required
+                rows={2}
+                placeholder="What did the customer say?"
+                className={remarkField}
+              />
+            </div>
+          ) : null}
 
           {interested === "yes" ? (
             <div>
@@ -489,6 +508,12 @@ function DetailModal({
                 <span className="text-fg">{r.customer_interested ? "Yes" : "No"}</span>
               </div>
             ) : null}
+            {r.not_interested_reason ? (
+              <div>
+                <span className="text-fg-faint">Reason not interested</span>
+                <p className="mt-0.5 text-fg">{r.not_interested_reason}</p>
+              </div>
+            ) : null}
             {r.payment_type ? (
               <div className="flex justify-between">
                 <span className="text-fg-faint">Payment type</span>
@@ -653,14 +678,16 @@ export function BpmQueueClient({
   branchCodes,
   regionName,
   regionRollup,
+  transferredOut,
 }: {
   ownBranch: string;
   queue: BpmQueueReferral[];
   branchCodes: string[];
   regionName: string | null;
   regionRollup: BpmQueueReferral[] | null;
+  transferredOut: BpmQueueReferral[];
 }) {
-  const [view, setView] = useState<"own" | "region">("own");
+  const [view, setView] = useState<"own" | "region" | "transferred_out">("own");
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -669,15 +696,15 @@ export function BpmQueueClient({
           <h1 className="text-2xl font-bold tracking-tight text-fg">BP Referrals — {branchName(ownBranch)}</h1>
           <p className="mt-1 text-sm text-fg-muted">{queue.length} total referral{queue.length === 1 ? "" : "s"} assigned to your branch.</p>
         </div>
-        {regionName && regionRollup ? (
-          <div className="flex gap-1.5 rounded-lg border border-border bg-surface p-1 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setView("own")}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "own" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
-            >
-              My branch
-            </button>
+        <div className="flex gap-1.5 rounded-lg border border-border bg-surface p-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setView("own")}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "own" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
+          >
+            My branch
+          </button>
+          {regionName && regionRollup ? (
             <button
               type="button"
               onClick={() => setView("region")}
@@ -685,14 +712,23 @@ export function BpmQueueClient({
             >
               {regionName} region
             </button>
-          </div>
-        ) : null}
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setView("transferred_out")}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "transferred_out" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
+          >
+            Transferred out{transferredOut.length ? ` (${transferredOut.length})` : ""}
+          </button>
+        </div>
       </div>
 
       {view === "own" ? (
         <QueueList referrals={queue} ownBranch={ownBranch} branchCodes={branchCodes} readOnly={false} showBranchColumn={false} />
-      ) : (
+      ) : view === "region" ? (
         <QueueList referrals={regionRollup ?? []} ownBranch={ownBranch} branchCodes={branchCodes} readOnly={true} showBranchColumn={true} />
+      ) : (
+        <QueueList referrals={transferredOut} ownBranch={ownBranch} branchCodes={branchCodes} readOnly={true} showBranchColumn={true} />
       )}
     </div>
   );

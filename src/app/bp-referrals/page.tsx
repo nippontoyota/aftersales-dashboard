@@ -11,6 +11,7 @@ import {
   loadPayoutLedger,
   loadQueueForBranch,
   loadRegionRollup,
+  loadTransferredOutFromBranch,
   regionalLeadFor,
 } from "@/lib/bp-referrals/store";
 import { BpHoAnalyticsClient } from "./bp-ho-analytics-client";
@@ -23,14 +24,22 @@ export default async function BpReferralsPage() {
   if (admin.role === "bp_manager") {
     await ensureAssignedBranches();
     const region = regionalLeadFor(admin.branch);
-    const [queue, branchCodes, regionRollup] = await Promise.all([
+    const [queue, branchCodes, regionRollup, transferredOut] = await Promise.all([
       loadQueueForBranch(admin.branch),
       listBranchCodes(),
       region ? loadRegionRollup(region) : Promise.resolve(null),
+      loadTransferredOutFromBranch(admin.branch),
     ]);
     return (
       <BpShell identity={adminIdentityLabel(admin)}>
-        <BpmQueueClient ownBranch={admin.branch} queue={queue} branchCodes={branchCodes} regionName={region} regionRollup={regionRollup} />
+        <BpmQueueClient
+          ownBranch={admin.branch}
+          queue={queue}
+          branchCodes={branchCodes}
+          regionName={region}
+          regionRollup={regionRollup}
+          transferredOut={transferredOut}
+        />
       </BpShell>
     );
   }

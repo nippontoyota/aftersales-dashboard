@@ -1102,3 +1102,10 @@ create table if not exists bp_referral_activity (
   performed_at   timestamptz  not null default now()
 );
 create index if not exists bp_referral_activity_referral_idx on bp_referral_activity (referral_id, performed_at);
+
+-- 2026-10-17: a genuine-but-not-interested call outcome now needs its own
+-- structured reason (the user's explicit call — distinct from the general
+-- call-outcome remark/damage description, which stays in
+-- bp_referral_activity) so BP HO can see WHY a customer declined without
+-- digging through free-text history.
+alter table bp_referrals add column if not exists not_interested_reason text;
