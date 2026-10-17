@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# Annual CE customer workbook (contains personal data; import it through /data)
+/UIO.xlsx
+/DMS DATA CLEANED.xlsx
+
 # vercel
 .vercel
 

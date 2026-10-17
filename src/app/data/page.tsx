@@ -10,6 +10,8 @@ import { REGIONS, type RegionName } from "@/lib/regions";
 import { loadIncentiveSlabTargets, loadIncentiveSlabUploadInfo } from "@/lib/incentive-slabs/store";
 import { formatCompactCurrency } from "@/lib/format";
 import { IncentiveSlabsUploadForm } from "./incentive-slabs-upload-form";
+import { UioUploadForm } from "./uio-upload-form";
+import { loadLatestCeImport } from "@/lib/ce/store";
 
 const longDate = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
@@ -21,10 +23,11 @@ export default async function DataPage() {
     redirect("/upload");
   }
 
-  const [allStaff, holidays, holidaySet] = await Promise.all([
+  const [allStaff, holidays, holidaySet, latestCeImport] = await Promise.all([
     listAllAccessoriesStaff(),
     listReportHolidays(),
     loadReportHolidaySet(),
+    loadLatestCeImport(),
   ]);
   const currentReportDate = reportingDate(holidaySet);
   const currentMonth = currentReportDate.slice(0, 7);
@@ -43,7 +46,11 @@ export default async function DataPage() {
   return (
     <AppShell current="data" showDashboardLink={admin.canViewDashboard} isHq identity="HQ admin">
       <div className="mx-auto w-full max-w-3xl p-6">
-        <h1 className="text-xl font-semibold tracking-tight text-fg">Report Holidays</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-fg">Customer Engagement Leads</h1>
+        <p className="mt-1 text-sm text-fg-subtle">Upload the annual UIO workbook used by the CE team.</p>
+        <div className="mt-4"><UioUploadForm latest={latestCeImport} /></div>
+
+        <h1 className="mt-10 text-xl font-semibold tracking-tight text-fg">Report Holidays</h1>
         <p className="mt-1 text-sm text-fg-subtle">
           Flag a date as a non-working day. The branch upload date defaults to <strong>one</strong> computed date for
           everyone — the most recent day that isn&apos;t a Saturday (its data reaches us Monday, filed under the Sunday)

@@ -3,13 +3,16 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const envPath = path.join(process.cwd(), ".env.local");
 let raw;
-try {
-  raw = readFileSync(envPath, "utf-8");
-} catch {
-  raw = "";
+for (const name of [".env.local", ".env"]) {
+  try {
+    raw = readFileSync(path.join(process.cwd(), name), "utf-8");
+    break;
+  } catch {
+    // Try the next conventional Next.js environment file.
+  }
 }
+raw ??= "";
 
 // Values can span multiple lines when wrapped in double quotes (e.g.
 // DATABASE_CA_CERT's PEM block) — keep consuming lines until the closing
