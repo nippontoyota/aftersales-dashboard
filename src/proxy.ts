@@ -29,7 +29,19 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user) {
-    const admin = await findAdmin(user);
+    // findAdmin hits Postgres on every authenticated request here. A DB
+    // hiccup must not 500 every route for every user — on a query failure,
+    // skip the extra CE-role routing below and let the page's own
+    // getCurrentAdmin()/role check (which every page already has) enforce
+    // access for that one request instead, rather than failing the proxy
+    // for every route and every user at once.
+    let admin: Awaited<ReturnType<typeof findAdmin>>;
+    try {
+      admin = await findAdmin(user);
+    } catch (error) {
+      console.error("proxy: findAdmin failed", error);
+      return NextResponse.next();
+    }
     if (!admin) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
