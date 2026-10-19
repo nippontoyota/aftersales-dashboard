@@ -228,35 +228,37 @@ async function TkmTargetsContent({
           </dl>
         </div>
 
-        {/* Battery/Tyre actuals + their share of PM, pulled straight from the
-            BA Tool (2026-09-21, at the user's request) — plain figures, not
+        {/* Battery/Tyre actuals + each one's own share of PM, pulled straight
+            from the BA Tool (2026-09-21, at the user's request; split into
+            separate Battery/Tyre cards 2026-10-19) — plain figures, not
             target-graded, same treatment as Service Metrics MTD. */}
         <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
-          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Battery &amp; Tyre MTD</div>
+          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Battery MTD</div>
           <dl className="mt-2.5 space-y-2">
             <div className="flex items-center justify-between">
               <dt className="text-xs text-fg-faint">Battery Actuals</dt>
               <dd className="text-sm font-semibold tabular-nums text-fg">{formatNumber(kpis.batterySalesForTheMonth)}</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-xs text-fg-faint">Tyre Actual</dt>
-              <dd className="text-sm font-semibold tabular-nums text-fg">{formatNumber(kpis.tireSalesForTheMonth)}</dd>
+              <dt className="text-xs text-fg-faint">Battery of PM Actual</dt>
+              <dd className="text-sm font-semibold tabular-nums text-fg">
+                {formatPercent(achievementRatio(kpis.batterySalesForTheMonth, kpis.pmOcAchievementForTheMonth))}
+              </dd>
             </div>
           </dl>
         </div>
 
         <div className="rounded-lg border border-border bg-surface p-4 shadow-card">
-          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Battery+Tyre / PM %</div>
+          <div className="text-[11px] font-medium tracking-[0.01em] text-fg-subtle">Tyre MTD</div>
           <dl className="mt-2.5 space-y-2">
             <div className="flex items-center justify-between">
-              <dt className="text-xs text-fg-faint">(Battery + Tyre) of PM Actual</dt>
+              <dt className="text-xs text-fg-faint">Tyre Actual</dt>
+              <dd className="text-sm font-semibold tabular-nums text-fg">{formatNumber(kpis.tireSalesForTheMonth)}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-xs text-fg-faint">Tyre of PM Actual</dt>
               <dd className="text-sm font-semibold tabular-nums text-fg">
-                {formatPercent(
-                  achievementRatio(
-                    (kpis.batterySalesForTheMonth ?? 0) + (kpis.tireSalesForTheMonth ?? 0),
-                    kpis.pmOcAchievementForTheMonth
-                  )
-                )}
+                {formatPercent(achievementRatio(kpis.tireSalesForTheMonth, kpis.pmOcAchievementForTheMonth))}
               </dd>
             </div>
           </dl>
