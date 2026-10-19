@@ -143,6 +143,23 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+@keyframes ce-sheet-enter {
+  from { transform: translateY(100%); opacity: 0.75; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes ce-sheet-backdrop-enter {
+  from { background-color: rgb(0 0 0 / 0); }
+}
+
+.ce-call-sheet[open] {
+  animation: ce-sheet-enter 180ms ease-out;
+}
+
+.ce-call-sheet[open]::backdrop {
+  animation: ce-sheet-backdrop-enter 180ms ease-out;
+}
+
 /* Thin, theme-tinted scrollbars for the many scroll panels (sticky-header
    tables, the Alerts list, wide report tables). The transparent border +
    background-clip trick gives the thumb padding so it reads as a slim pill

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth";
+import { findAdmin } from "@/lib/admin-store";
 
 const PUBLIC_PATHS = ["/login", "/api/sso", "/api/webhooks"];
 
@@ -23,8 +24,32 @@ export async function proxy(request: NextRequest) {
 
   if (user && isPublicPath) {
     const homeUrl = request.nextUrl.clone();
-    homeUrl.pathname = "/upload";
+    homeUrl.pathname = "/";
     return NextResponse.redirect(homeUrl);
+  }
+
+  if (user) {
+    const admin = await findAdmin(user);
+    if (!admin) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      return NextResponse.redirect(loginUrl);
+    }
+    const path = request.nextUrl.pathname;
+    const isCePath = path === "/ce" || path.startsWith("/ce/");
+    if (admin.role === "ce" && path !== "/" && !isCePath) {
+      if (path.startsWith("/api/")) return NextResponse.json({ error: "Not allowed." }, { status: 403 });
+      const ceUrl = request.nextUrl.clone();
+      ceUrl.pathname = "/ce";
+      ceUrl.search = "";
+      return NextResponse.redirect(ceUrl);
+    }
+    if (admin.role !== "ce" && admin.role !== "hq" && isCePath) {
+      const homeUrl = request.nextUrl.clone();
+      homeUrl.pathname = "/";
+      homeUrl.search = "";
+      return NextResponse.redirect(homeUrl);
+    }
   }
 
   return NextResponse.next();

@@ -31,7 +31,7 @@ create table if not exists admins (
   -- finance-only executive view at /accounts. See src/app/accounts/*.
   -- 'hq_viewer' is read-only HQ — sees Dashboard, TKM Targets, Queries,
   -- Branch Performance, Reports, Cancellations; no upload/publish/write actions.
-  constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer')),
+  constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce')),
   constraint admins_role_scope_consistency check (
     (role = 'branch'     and branch is not null and region is null) or
     (role = 'hq'         and branch is null     and region is null) or
@@ -39,14 +39,17 @@ create table if not exists admins (
     (role = 'vp_service' and branch is null     and region is null) or
     (role = 'ceo'        and branch is null     and region is null) or
     (role = 'accounts'   and branch is null     and region is null) or
-    (role = 'hq_viewer'  and branch is null     and region is null)
+    (role = 'hq_viewer'  and branch is null     and region is null) or
+    (role = 'bp_manager' and branch is not null and region is null) or
+    (role = 'bp_ho'      and branch is null     and region is null) or
+    (role = 'ce'         and branch is null     and region is null)
   )
 );
 -- Upgrade an existing database:
 alter table admins add column if not exists region text;
 alter table admins drop constraint if exists branch_role_consistency;
 alter table admins drop constraint if exists admins_role_check;
-alter table admins add constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer'));
+alter table admins add constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce'));
 alter table admins drop constraint if exists admins_role_scope_consistency;
 alter table admins add constraint admins_role_scope_consistency check (
   (role = 'branch'     and branch is not null and region is null) or
@@ -55,7 +58,10 @@ alter table admins add constraint admins_role_scope_consistency check (
   (role = 'vp_service' and branch is null     and region is null) or
   (role = 'ceo'        and branch is null     and region is null) or
   (role = 'accounts'   and branch is null     and region is null) or
-  (role = 'hq_viewer'  and branch is null     and region is null)
+  (role = 'hq_viewer'  and branch is null     and region is null) or
+  (role = 'bp_manager' and branch is not null and region is null) or
+  (role = 'bp_ho'      and branch is null     and region is null) or
+  (role = 'ce'         and branch is null     and region is null)
 );
 
 -- VP Service → HQ query/flag threads. The VP pins a flag to whatever they
@@ -1078,7 +1084,7 @@ create index if not exists bp_referral_transfers_referral_idx on bp_referral_tra
 -- same shape as vp_service/ceo/accounts (no branch/region/publish gate).
 alter table admins drop constraint if exists admins_role_check;
 alter table admins add constraint admins_role_check
-  check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho'));
+  check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce'));
 alter table admins drop constraint if exists admins_role_scope_consistency;
 alter table admins add constraint admins_role_scope_consistency check (
   (role = 'branch'      and branch is not null and region is null) or
@@ -1089,8 +1095,99 @@ alter table admins add constraint admins_role_scope_consistency check (
   (role = 'accounts'    and branch is null     and region is null) or
   (role = 'hq_viewer'   and branch is null     and region is null) or
   (role = 'bp_manager'  and branch is not null and region is null) or
-  (role = 'bp_ho'       and branch is null     and region is null)
+  (role = 'bp_ho'       and branch is null     and region is null) or
+  (role = 'ce'          and branch is null     and region is null)
 );
+
+-- Customer Engagement annual UIO dataset and append-only workflow history.
+create table if not exists ce_lead_imports (
+  id bigint generated always as identity primary key,
+  source_file_name text not null,
+  import_kind text not null default 'uio' check (import_kind in ('uio', 'dms')),
+  file_sha256 text,
+  uploaded_by text not null references admins(username),
+  uploaded_at timestamptz not null default now(),
+  row_count integer not null,
+  min_report_date date not null,
+  max_report_date date not null
+);
+alter table ce_lead_imports add column if not exists import_kind text not null default 'uio';
+alter table ce_lead_imports add column if not exists file_sha256 text;
+alter table ce_lead_imports drop constraint if exists ce_lead_imports_import_kind_check;
+alter table ce_lead_imports add constraint ce_lead_imports_import_kind_check check (import_kind in ('uio', 'dms'));
+create unique index if not exists ce_lead_imports_file_sha256_idx on ce_lead_imports (file_sha256) where file_sha256 is not null;
+
+create table if not exists ce_leads (
+  vin text primary key,
+  allocated_dealer text,
+  dealer_zone text,
+  sale_dealer_code text,
+  sales_date date not null,
+  uio_year integer not null,
+  sale_branch_code text,
+  n_dealer_code text,
+  avf numeric not null,
+  n_report_date date not null,
+  n_mileage numeric not null,
+  n1_dealer_code text,
+  n1_report_date date not null,
+  n1_mileage numeric not null,
+  n2_dealer_code text,
+  n2_mileage numeric not null,
+  n2_report_date date not null,
+  customer_first_name text,
+  customer_family_name text,
+  contact_number text,
+  vehicle_model text,
+  active boolean not null default true,
+  source_import_id bigint not null references ce_lead_imports(id),
+  dms_import_id bigint references ce_lead_imports(id),
+  imported_at timestamptz not null default now()
+);
+alter table ce_leads add column if not exists contact_number text;
+alter table ce_leads add column if not exists vehicle_model text;
+alter table ce_leads add column if not exists dms_import_id bigint references ce_lead_imports(id);
+alter table ce_leads alter column avf drop not null;
+alter table ce_leads alter column n1_report_date drop not null;
+alter table ce_leads alter column n1_mileage drop not null;
+alter table ce_leads alter column n2_mileage drop not null;
+alter table ce_leads alter column n2_report_date drop not null;
+create index if not exists ce_leads_active_report_idx on ce_leads (active, n_report_date desc, vin);
+create index if not exists ce_leads_customer_search_idx on ce_leads (lower(customer_first_name), lower(customer_family_name));
+
+create table if not exists ce_lead_workflow (
+  vin text primary key references ce_leads(vin),
+  status text not null default 'New',
+  next_follow_up_date date,
+  attempt_count smallint not null default 0 check (attempt_count between 0 and 5),
+  latest_call_status text check (latest_call_status in ('connected', 'not_connected')),
+  latest_outcome text,
+  last_editor text references admins(username),
+  updated_at timestamptz not null default now(),
+  constraint ce_lead_workflow_status_check check (status in ('New', 'Attempted', 'Connected', 'Follow-up', 'Appointment booked', 'Converted', 'Not interested', 'Unreachable'))
+);
+alter table ce_lead_workflow add column if not exists attempt_count smallint not null default 0 check (attempt_count between 0 and 5);
+alter table ce_lead_workflow add column if not exists latest_call_status text check (latest_call_status in ('connected', 'not_connected'));
+alter table ce_lead_workflow add column if not exists latest_outcome text;
+create index if not exists ce_lead_workflow_followup_idx on ce_lead_workflow (next_follow_up_date) where next_follow_up_date is not null;
+
+create table if not exists ce_lead_activity (
+  id bigint generated always as identity primary key,
+  vin text not null references ce_leads(vin),
+  previous_status text not null,
+  status text not null,
+  next_follow_up_date date,
+  note text not null,
+  attempt_number smallint check (attempt_number between 1 and 5),
+  call_status text check (call_status in ('connected', 'not_connected')),
+  outcome text,
+  author text not null references admins(username),
+  created_at timestamptz not null default now()
+);
+alter table ce_lead_activity add column if not exists attempt_number smallint check (attempt_number between 1 and 5);
+alter table ce_lead_activity add column if not exists call_status text check (call_status in ('connected', 'not_connected'));
+alter table ce_lead_activity add column if not exists outcome text;
+create index if not exists ce_lead_activity_vin_idx on ce_lead_activity (vin, created_at desc, id desc);
 
 -- 2026-10-15: every BP referral action — a not-connected attempt, the
 -- connected-call outcome, or a later follow-up — now requires the BPM to

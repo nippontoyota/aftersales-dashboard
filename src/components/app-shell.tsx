@@ -65,6 +65,7 @@ const CENTRAL_NAV_ITEMS = [
  * rather than something anyone checks routinely, so they sit as a small
  * link list near the account area at the bottom instead of the main list. */
 const UTILITY_NAV_ITEMS = [
+  { href: "/ce", label: "CE Leads", key: "ce" as const },
   // HQ-managed reference data (Accessories staff today, more datasets to
   // come) — an HQ admin edits these directly, no code change/redeploy
   // needed when e.g. staff turns over.
@@ -286,6 +287,7 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   accounts: DashboardIcon,
   "central-tkm-targets": TkmTargetsIcon,
   "central-set-targets": SetTargetsIcon,
+  ce: ChatIcon,
 };
 
 export function AppShell({

@@ -50,13 +50,16 @@ export type AdminAccount =
   // BP HO — read-only, company-wide analytical view across all branches'
   // referrals, same shape as vp_service/ceo/accounts (no branch/region/
   // publish gate, no uploads).
-  | { username: string; passwordHash: string; salt: string; role: "bp_ho"; canViewDashboard: true };
+  | { username: string; passwordHash: string; salt: string; role: "bp_ho"; canViewDashboard: true }
+  // Company-wide Customer Engagement workspace. It has no access to the
+  // operational dashboards and no branch/region scope.
+  | { username: string; passwordHash: string; salt: string; role: "ce"; canViewDashboard: false };
 
 type AdminRow = {
   username: string;
   password_hash: string;
   salt: string;
-  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer" | "bp_manager" | "bp_ho";
+  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer" | "bp_manager" | "bp_ho" | "ce";
   branch: string | null;
   region: string | null;
 };
@@ -71,7 +74,9 @@ function toAccount(row: AdminRow): AdminAccount {
   if (row.role === "hq_viewer") return { ...base, role: "hq_viewer" };
   if (row.role === "bp_manager") return { ...base, role: "bp_manager", branch: row.branch! };
   if (row.role === "bp_ho") return { ...base, role: "bp_ho" };
-  return { ...base, role: "hq" };
+  if (row.role === "ce") return { ...base, role: "ce", canViewDashboard: false };
+  if (row.role === "hq") return { ...base, role: "hq" };
+  throw new Error(`Unsupported admin role: ${String(row.role)}`);
 }
 
 /** Human label for the sidebar's account area, e.g. "HQ admin", "CO01B
@@ -84,6 +89,7 @@ export function adminIdentityLabel(admin: AdminAccount): string {
   if (admin.role === "ceo") return "CEO";
   if (admin.role === "accounts") return "Accounts";
   if (admin.role === "bp_ho") return "BP HO";
+  if (admin.role === "ce") return "Customer Engagement";
   if (admin.role === "bp_manager") return `${admin.branch} BP Manager`;
   return `${admin.branch} branch`;
 }

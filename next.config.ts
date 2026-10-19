@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   experimental: {
+    // The CLI checker spawns a detached process, which is unavailable in some
+    // production builders; the documented compiler-API path uses the same
+    // project TypeScript without that extra process boundary.
+    useTypeScriptCli: false,
     // proxy.ts runs on every request and Next.js buffers the whole body in
     // memory so both proxy and the route handler can read it — capped at
     // 10MB by default. A real Service Info Report export can run to several

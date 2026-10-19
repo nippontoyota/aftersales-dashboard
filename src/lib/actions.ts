@@ -37,7 +37,7 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   // /dashboard itself already redirects vp_service/ceo/accounts to their
   // own page and anyone without canViewDashboard back to /upload.
   redirect(
-    admin.role === "hq" ? "/dashboard" : admin.role === "bp_manager" || admin.role === "bp_ho" ? "/bp-referrals" : "/upload",
+    admin.role === "ce" ? "/ce" : admin.role === "hq" ? "/dashboard" : admin.role === "bp_manager" || admin.role === "bp_ho" ? "/bp-referrals" : "/upload",
   );
 }
 
