@@ -145,6 +145,44 @@ export async function loadAllScom205SnapshotsForDate(date: string): Promise<Scom
   }));
 }
 
+/** Every branch's most recent scom205 row at or before `date`, within the
+ * same calendar month (same boundary loadPreviousSnapshot uses, so a new
+ * month starts clean rather than carrying over the prior month's closing
+ * total). Use this instead of loadAllScom205SnapshotsForDate wherever a
+ * missing exact-date row shouldn't blank out a branch's MTD Parts/Labour
+ * revenue — these totals are already MTD-cumulative (see the Scom205Snapshot
+ * doc comment above), so a branch's last successful upload this month *is*
+ * its correct figure as of `date`, not a guess. Added 2026-10-19: CTDMS's
+ * automation is unreliable on Saturday/Sunday (login failures, empty
+ * exports — see the 2026-10-18 run, 0/18 branches fully clean) now that
+ * those days are real, standalone report dates (see reporting-date.ts);
+ * without this, a branch whose weekend scom205 extraction failed dropped out
+ * of GUS/BPU Parts+Labour MTD entirely for that date instead of keeping
+ * Friday's/Saturday's figure. */
+export async function loadAllScom205SnapshotsLatestUpTo(date: string): Promise<Scom205Snapshot[]> {
+  const monthStart = `${date.slice(0, 7)}-01`;
+  const { rows } = await pool.query(
+    `select distinct on (branch) branch, date::text as date, uploaded_at, source_file_name,
+            gus_sp_rev_mtd, gus_lab_rev_mtd, bpu_sp_rev_mtd, bpu_lab_rev_mtd, stock_month_tgp, sr_lines_total_pct
+     from scom205_snapshots where date <= $1 and date >= $2
+     order by branch, date desc`,
+    [date, monthStart]
+  );
+  return rows.map((r) => ({
+    date: r.date as string,
+    branch: r.branch as string,
+    uploadedAt: (r.uploaded_at as Date).toISOString(),
+    sourceFileName: r.source_file_name as string,
+    totals: {
+      gusSpRevMtd: Number(r.gus_sp_rev_mtd),
+      gusLabRevMtd: Number(r.gus_lab_rev_mtd),
+      bpuSpRevMtd: Number(r.bpu_sp_rev_mtd),
+      bpuLabRevMtd: Number(r.bpu_lab_rev_mtd),
+    },
+    stockAndServiceRate: rowToStockAndServiceRate(r),
+  }));
+}
+
 /** How many distinct branches have uploaded their scom205 for `date` — the
  * real "uploaded branch count" for the DraftWarning banner. Unlike
  * report.branches.length (which counts BA Tool rows, always all 18/19 since

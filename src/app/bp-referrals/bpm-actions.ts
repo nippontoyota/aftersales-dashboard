@@ -71,7 +71,9 @@ export async function submitCallOutcomeAction(_prev: BpmActionState, formData: F
     }
     const interested = formData.get("customerInterested") === "yes";
     if (!interested) {
-      outcome = { genuine: true, estimateAmount, customerInterested: false };
+      const notInterestedReason = String(formData.get("notInterestedReason") ?? "").trim();
+      if (!notInterestedReason) return { error: "Enter the reason the customer isn't interested.", ok: false };
+      outcome = { genuine: true, estimateAmount, customerInterested: false, notInterestedReason };
     } else {
       const paymentType = String(formData.get("paymentType") ?? "");
       if (paymentType !== "CP" && paymentType !== "IP") {

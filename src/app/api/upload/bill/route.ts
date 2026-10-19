@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       continue;
     }
 
-    const existing = await loadBillByInvoiceNumber(invoiceNumber);
+    const existing = await loadBillByInvoiceNumber(invoiceNumber, branch);
     if (existing) {
       results.push({
         fileName,

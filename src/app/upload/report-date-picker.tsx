@@ -7,10 +7,9 @@ import { invalidReportDateReason } from "@/lib/reporting-date";
 /**
  * Branch Daily Reports date picker. Defaults to the computed report date
  * (`reportingDate()` — the same for every branch this round) but a branch
- * can pick an earlier day to catch one up. Saturdays and HQ-flagged
- * holidays are rejected on pick, with the reason shown — those dates would
- * split one upload round across two dates (see src/lib/reporting-date.ts).
- * `?date=` is re-validated server-side too.
+ * can pick an earlier day to catch one up. HQ-flagged holidays are rejected
+ * on pick, with the reason shown (see src/lib/reporting-date.ts). `?date=`
+ * is re-validated server-side too.
  */
 export function ReportDatePicker({ selected, holidays }: { selected: string; holidays: string[] }) {
   const router = useRouter();

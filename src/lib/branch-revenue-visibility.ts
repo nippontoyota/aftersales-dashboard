@@ -3,15 +3,17 @@ import type { BranchReport } from "./report";
 /**
  * Branches have been backfilling historical BA Tool / Part Sale / bill data
  * well before this date, but a branch admin's own view of their revenue is
- * restricted to this date onward (2026-09-26, at HQ's explicit request) —
+ * restricted to this date onward (originally 2026-08-01, at HQ's explicit
+ * request on 2026-09-26; moved back to 2026-07-01 on 2026-10-19, also at
+ * HQ's request, once July's own figures were ready to show branches) —
  * HQ/regional/VP/CEO/Accounts still see the real figures for any date,
  * backfilled or not; only a branch account's own dashboard and Bills page
  * mask Total Revenue Stream (and every field that composes it) for a date
  * earlier than this. The date/month itself stays pickable — only the
  * revenue figure comes back hidden.
  */
-export const BRANCH_REVENUE_VISIBLE_FROM = "2026-08-01";
-export const BRANCH_REVENUE_VISIBLE_FROM_MONTH = "2026-08";
+export const BRANCH_REVENUE_VISIBLE_FROM = "2026-07-01";
+export const BRANCH_REVENUE_VISIBLE_FROM_MONTH = "2026-07";
 
 /** Fields that are null unless every BA-Tool input is present — same
  * null-guard convention as the rest of report.ts, so "hidden" reads exactly

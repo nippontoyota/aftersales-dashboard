@@ -1,8 +1,8 @@
 import { listAccessoriesStaffNamesForBranch } from "../accessories-staff-store";
 import { loadServiceInfoSnapshot } from "../service-info/store";
 import { loadServiceInfoBpSnapshot } from "../service-info-bp/store";
-import { computeVasRevenueReal, VAS_REAL_CUTOVER_DATE } from "./compute";
-import { saveVasRevenueReal } from "./store";
+import { computeVasRevenueReal, loadCancelledInvoiceDocNosForBranch, VAS_REAL_CUTOVER_DATE } from "./compute";
+import { listVasRevenueRealDatesForBranch, saveVasRevenueReal } from "./store";
 
 /**
  * Keeps vas_revenue_real fresh after any upload that can change it for one
@@ -21,10 +21,11 @@ import { saveVasRevenueReal } from "./store";
 export async function recomputeVasRevenueReal(branch: string, date: string): Promise<void> {
   if (date < VAS_REAL_CUTOVER_DATE) return;
   try {
-    const [staffNames, gsSnapshot, bpSnapshot] = await Promise.all([
+    const [staffNames, gsSnapshot, bpSnapshot, cancelledInvoiceDocNos] = await Promise.all([
       listAccessoriesStaffNamesForBranch(branch),
       loadServiceInfoSnapshot(date, branch),
       loadServiceInfoBpSnapshot(date, branch),
+      loadCancelledInvoiceDocNosForBranch(branch),
     ]);
     // Old price-list totals for this one day, GS and BP separately — the
     // fallback compute.ts uses for whichever side has nothing at all in
@@ -32,9 +33,24 @@ export async function recomputeVasRevenueReal(branch: string, date: string): Pro
     // doc comment for why this has to stay split instead of combined).
     const gsAggregateVasRevenue = gsSnapshot?.counts.vasRevenue ?? 0;
     const bpAggregateVasRevenue = bpSnapshot?.counts.vasRevenue ?? 0;
-    const result = await computeVasRevenueReal(branch, date, staffNames, gsAggregateVasRevenue, bpAggregateVasRevenue);
+    const result = await computeVasRevenueReal(branch, date, staffNames, gsAggregateVasRevenue, bpAggregateVasRevenue, cancelledInvoiceDocNos);
     await saveVasRevenueReal({ date, branch, ...result });
   } catch (err) {
     console.error(`recomputeVasRevenueReal failed for ${branch}/${date}:`, err);
+  }
+}
+
+/** After a cancellation report upload touches one or more branches: a newly
+ * (or re-)recorded cancellation can only affect a day this branch already
+ * has a vas_revenue_real row for, so every such day is recomputed — mirrors
+ * cancellation/adjustment-recompute.ts's recomputeAfterCancellationUpload,
+ * the equivalent fix for GUS Parts/Labour (see ssrv089/cancellation-
+ * adjustment.ts), which this is meant to be called alongside. */
+export async function recomputeVasRevenueRealAfterCancellationUpload(branches: string[]): Promise<void> {
+  for (const branch of [...new Set(branches)]) {
+    const dates = await listVasRevenueRealDatesForBranch(branch);
+    for (const date of dates) {
+      await recomputeVasRevenueReal(branch, date);
+    }
   }
 }

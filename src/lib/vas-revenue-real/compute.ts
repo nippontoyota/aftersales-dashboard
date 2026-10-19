@@ -24,6 +24,27 @@ function parseAmount(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Every cancelled invoice doc_no on file for this branch, normalized for
+ * lookup against a row's own "Tax Invoice No." (see normalizeInvoiceNo and
+ * computeVasRevenueReal's cancelledInvoiceDocNos param). Not scoped by month
+ * — invoice_cancellations is small per branch and a job can be invoiced in
+ * one month and cancelled in the next, so the full set is both cheap and
+ * correct, unlike ssrv089/cancellation-adjustment.ts's per-month query
+ * (that one re-scans raw_upload_rows, which is the expensive side there). */
+export async function loadCancelledInvoiceDocNosForBranch(branch: string): Promise<Set<string>> {
+  const { rows } = await pool.query<{ doc_no: string }>(`select doc_no from invoice_cancellations where branch = $1`, [branch]);
+  return new Set(rows.map((r) => normalizeInvoiceNo(r.doc_no)));
+}
+
+/** Same normalization invoice_cancellations' doc_no is matched with
+ * elsewhere (ssrv089/cancellation-adjustment.ts, cancellation/reconcile.ts):
+ * strip hyphens so "TXE-2600459"-style formatting differences don't break
+ * the match. Uppercased too, since Service Info's "Tax Invoice No." and
+ * Labour Sales's "Doc. No." are free-text columns, not a constrained field. */
+function normalizeInvoiceNo(value: unknown): string {
+  return normalize(value).replace(/-/g, "").toUpperCase();
+}
+
 /** Same price-list lookup as service-info/parse.ts's vasRevenueForRow — kept
  * as its own copy here (not imported) since that one is tangled up with
  * that parser's own per-row loop and accessories-exclusion timing; this one
@@ -49,6 +70,11 @@ export type VasRevenueRealResult = {
   fallbackRows: number;
   /** Closed by an Accessories-department staff member — contributes nothing, same exclusion as the old price-list-only calculation. */
   excludedRows: number;
+  /** The row's own Tax Invoice No. matches a cancelled invoice for this
+   * branch (invoice_cancellations) — contributes nothing, same idea as the
+   * Accessories exclusion but checked separately so the two don't get
+   * conflated in the stored counts (see this module's top comment). */
+  cancelledRows: number;
   /** True when GS and/or BP had zero raw Service Info rows on file for this
    * day — not zero VAS-coded rows, zero rows, period — so that side's
    * contribution is its old aggregate figure instead of a row-by-row
@@ -89,14 +115,25 @@ export type VasRevenueRealResult = {
  * that side's fallback independently whenever THAT side has literally zero
  * raw rows on file for this branch/date — never blended with a row-by-row
  * result for the side that does have rows (see usedDayAggregateFallback's
- * doc comment for why this has to be checked per-side, not combined).
+ * doc comment for why this has to be checked per-side, not combined). That
+ * aggregate fallback predates cancellation-awareness and stays as-is here —
+ * it's the same figure the old price-list calculation always produced, which
+ * never checked invoice_cancellations either.
+ *
+ * `cancelledInvoiceDocNos` (normalizeInvoiceNo'd) is this branch's full set
+ * from invoice_cancellations — a row whose "Tax Invoice No." lands in this
+ * set is excluded before matching/fallback, same as an Accessories-staff
+ * row, so a cancelled invoice's VAS lines stop counting here the same way
+ * they already stop counting in GUS Parts/Labour (see
+ * ssrv089/cancellation-adjustment.ts, the equivalent fix for that figure).
  */
 export async function computeVasRevenueReal(
   branch: string,
   date: string,
   staffNames: string[],
   gsAggregateVasRevenue: number,
-  bpAggregateVasRevenue: number
+  bpAggregateVasRevenue: number,
+  cancelledInvoiceDocNos: Set<string>
 ): Promise<VasRevenueRealResult> {
   const rowCounts = await pool.query<{ report_type: string; count: string }>(
     `select report_type, count(*) as count from raw_upload_rows
@@ -113,6 +150,7 @@ export async function computeVasRevenueReal(
       matchedRows: 0,
       fallbackRows: 0,
       excludedRows: 0,
+      cancelledRows: 0,
       usedDayAggregateFallback: true,
     };
   }
@@ -137,9 +175,16 @@ export async function computeVasRevenueReal(
     presentReportTypes.push("service_info_bp");
   }
 
-  const svcInfoRes = await pool.query<{ job_order_no: string | null; job_code: string | null; series: string | null; sa_name: string | null }>(
+  const svcInfoRes = await pool.query<{
+    job_order_no: string | null;
+    job_code: string | null;
+    series: string | null;
+    sa_name: string | null;
+    tax_invoice_no: string | null;
+  }>(
     `select row_data->>'Job Order No' as job_order_no, row_data->>'Job Code' as job_code,
-            row_data->>'Series' as series, row_data->>'Close Service Advisor Name' as sa_name
+            row_data->>'Series' as series, row_data->>'Close Service Advisor Name' as sa_name,
+            row_data->>'Tax Invoice No.' as tax_invoice_no
      from raw_upload_rows
      where report_type = any($3) and branch = $1 and date = $2
        and row_data->>'Job Code' ilike '99TG%'`,
@@ -161,6 +206,7 @@ export async function computeVasRevenueReal(
   let matchedRows = 0;
   let fallbackRows = 0;
   let excludedRows = 0;
+  let cancelledRows = 0;
 
   for (const r of svcInfoRes.rows) {
     const jobCode = normalize(r.job_code);
@@ -168,6 +214,11 @@ export async function computeVasRevenueReal(
     const saName = normalize(r.sa_name);
     if (isAccessoriesStaff(staffNames, saName)) {
       excludedRows++;
+      continue;
+    }
+    const invoiceNo = normalizeInvoiceNo(r.tax_invoice_no);
+    if (invoiceNo !== "" && cancelledInvoiceDocNos.has(invoiceNo)) {
+      cancelledRows++;
       continue;
     }
     const key = normalize(r.job_order_no) + "|" + jobCode;
@@ -180,5 +231,5 @@ export async function computeVasRevenueReal(
     }
   }
 
-  return { vasRevenue, matchedRows, fallbackRows, excludedRows, usedDayAggregateFallback };
+  return { vasRevenue, matchedRows, fallbackRows, excludedRows, cancelledRows, usedDayAggregateFallback };
 }

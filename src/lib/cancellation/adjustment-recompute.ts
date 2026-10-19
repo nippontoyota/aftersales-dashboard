@@ -2,6 +2,7 @@ import {
   listCancellationRevenueMonthsForBranch,
   recomputeCancelledAccessoriesAdjustmentForBranchMonth,
 } from "../ssrv089/cancellation-adjustment";
+import { recomputeVasRevenueRealAfterCancellationUpload } from "../vas-revenue-real/recompute";
 import { recomputeCrossMonthReplacements } from "./cross-month-replacement";
 
 /**
@@ -53,4 +54,7 @@ export async function recomputeAfterCancellationUpload(branches: string[]): Prom
   if (uniqueBranches.length > 0) {
     await recomputeCrossMonthReplacements(uniqueBranches);
   }
+  // TGLOSS/VAS revenue has its own cancellation-netting fix (2026-10-19,
+  // the TR01B ₹4,351 discrepancy) — same trigger, separate pipeline.
+  await recomputeVasRevenueRealAfterCancellationUpload(uniqueBranches);
 }
