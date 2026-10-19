@@ -9,18 +9,18 @@ export function UploadTabs({
   bills,
   cancellations,
 }: {
-  dailyReports: ReactNode;
+  /** Omitted for branch accounts — the Daily Reports tab is CTDMS-automation-only now. */
+  dailyReports?: ReactNode;
   bills: ReactNode;
   /** HQ-only — omitted for branch accounts. */
   cancellations?: ReactNode;
 }) {
-  const [tab, setTab] = useState<TabKey>("reports");
-
   const tabs: { key: TabKey; label: string; show: boolean }[] = [
-    { key: "reports", label: "Daily Reports", show: true },
+    { key: "reports", label: "Daily Reports", show: dailyReports != null },
     { key: "bills", label: "Scrap and Used Oil", show: true },
     { key: "cancellations", label: "Cancellations", show: cancellations != null },
   ];
+  const [tab, setTab] = useState<TabKey>(tabs.find((t) => t.show)?.key ?? "bills");
 
   return (
     <>
