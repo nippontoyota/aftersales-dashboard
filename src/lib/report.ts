@@ -13,7 +13,7 @@ import type { CancelledAccessoriesAdjustment } from "./ssrv089/cancellation-adju
 import { loadCrossMonthReplacementAdjustmentForMonth } from "./cancellation/cross-month-replacement";
 import type { CrossMonthReplacementAdjustment } from "./cancellation/cross-month-replacement";
 import { targetOverrideFor } from "./target-overrides";
-import { loadAllScom205SnapshotsForDate } from "./scom205/store";
+import { loadAllScom205SnapshotsLatestUpTo } from "./scom205/store";
 import type { Scom205Snapshot } from "./scom205/store";
 import { loadBillRevenueByBranchForMonth, loadBillRevenueByBranchForDate } from "./bill/store";
 import { BODY_PAINT_ONLY_BRANCHES, isBodyPaintOnly } from "./body-paint-only";
@@ -440,7 +440,7 @@ function computeBranchReport(
   partSaleMonth: PartSaleSnapshot[],
   ssrv089GeneralMonth: Ssrv089Snapshot[],
   ssrv089BpGreyMonth: Ssrv089BpGreySnapshot[],
-  scom205Today: Scom205Snapshot | undefined,
+  scom205Effective: Scom205Snapshot | undefined,
   billRevenue: { scrapRevenue: number; usedOilRevenue: number },
   billRevenueForTheDay: { scrapRevenue: number; usedOilRevenue: number },
   cancelledAccessoriesAdjustment: CancelledAccessoriesAdjustment | undefined,
@@ -501,16 +501,16 @@ function computeBranchReport(
   // frozen in its original (earlier) month's figures.
   const gusPartsMtd = bodyPaintOnly
     ? 0
-    : scom205Today && accessoriesPartSaleMtd !== null
-      ? scom205Today.totals.gusSpRevMtd - accessoriesPartSaleMtd - (crossMonthReplacementAdjustment?.partSale ?? 0) + greyGsPartSaleMtd
+    : scom205Effective && accessoriesPartSaleMtd !== null
+      ? scom205Effective.totals.gusSpRevMtd - accessoriesPartSaleMtd - (crossMonthReplacementAdjustment?.partSale ?? 0) + greyGsPartSaleMtd
       : null;
   const gusLabourMtd = bodyPaintOnly
     ? 0
-    : scom205Today && accessoriesLabourSaleMtd !== null
-      ? scom205Today.totals.gusLabRevMtd - accessoriesLabourSaleMtd - (crossMonthReplacementAdjustment?.labourSale ?? 0) + greyGsLabourSaleMtd
+    : scom205Effective && accessoriesLabourSaleMtd !== null
+      ? scom205Effective.totals.gusLabRevMtd - accessoriesLabourSaleMtd - (crossMonthReplacementAdjustment?.labourSale ?? 0) + greyGsLabourSaleMtd
       : null;
-  const bpuPartsMtd = scom205Today ? scom205Today.totals.bpuSpRevMtd + greyBpPartsSaleMtd : null;
-  const bpuLabourMtd = scom205Today ? scom205Today.totals.bpuLabRevMtd + greyBpLabourSaleMtd : null;
+  const bpuPartsMtd = scom205Effective ? scom205Effective.totals.bpuSpRevMtd + greyBpPartsSaleMtd : null;
+  const bpuLabourMtd = scom205Effective ? scom205Effective.totals.bpuLabRevMtd + greyBpLabourSaleMtd : null;
   const externalSalesMtd = externalSalesFromPartsMtd ?? (bodyPaintOnly ? 0 : null);
   const sprExternalMtd = t("sprExternal");
 
@@ -598,8 +598,8 @@ function computeBranchReport(
     bpuPartsMtd,
     bpuLabourMtd,
 
-    stockMonthTgp: scom205Today?.stockAndServiceRate?.stockMonthTgp ?? null,
-    srLinesTotalPct: scom205Today?.stockAndServiceRate?.srLinesTotalPct ?? null,
+    stockMonthTgp: scom205Effective?.stockAndServiceRate?.stockMonthTgp ?? null,
+    srLinesTotalPct: scom205Effective?.stockAndServiceRate?.srLinesTotalPct ?? null,
 
     externalSalesMtd,
     sprExternalMtd,
@@ -695,7 +695,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     partSaleMonthList,
     ssrv089GeneralMonthList,
     ssrv089BpGreyMonthList,
-    scom205TodayList,
+    scom205EffectiveList,
     billRevenueList,
     billRevenueDayList,
     cancelledAccessoriesAdjustment,
@@ -709,7 +709,7 @@ export async function buildReport(date: string): Promise<Report | null> {
     loadAllPartSaleSnapshotsForMonthUpTo(date),
     loadAllSsrv089SnapshotsForMonthUpTo(date, "general"),
     loadAllSsrv089BpGreySnapshotsForMonthUpTo(date),
-    loadAllScom205SnapshotsForDate(date),
+    loadAllScom205SnapshotsLatestUpTo(date),
     loadBillRevenueByBranchForMonth(date.slice(0, 7)),
     loadBillRevenueByBranchForDate(date),
     loadCancelledAccessoriesAdjustmentForMonth(date),
@@ -744,23 +744,30 @@ export async function buildReport(date: string): Promise<Report | null> {
 
   const ssrv089GeneralMonth = groupByBranch(ssrv089GeneralMonthList);
   const ssrv089BpGreyMonth = groupByBranch(ssrv089BpGreyMonthList);
-  const scom205Today = byBranch(scom205TodayList);
+  const scom205Effective = byBranch(scom205EffectiveList);
   const billRevenue = new Map(billRevenueList.map((r) => [r.branch, r]));
   const billRevenueDay = new Map(billRevenueDayList.map((r) => [r.branch, r]));
   const NO_BILL_REVENUE = { scrapRevenue: 0, usedOilRevenue: 0 };
 
   if (!today) {
     // No BA Tool file at all for this date — a historical day not backfilled
-    // yet, or HQ simply hasn't uploaded it. Still show whatever the branches'
-    // own reports (Service Info / Part Sale / SSRV089 / scom205) have on
-    // file for this exact date, rather than blanking the whole report; every
-    // BA-Tool-only field (GUS/BPU RO, Tyre/Battery, targets, SPO, Parts
-    // Retail) comes back null for these branches (see computeBranchReport).
+    // yet, or HQ simply hasn't uploaded it (most often now: a Saturday or
+    // Sunday — see reporting-date.ts, BA Tool stays a single Monday-combined
+    // file). Still show whatever the branches' own reports (Service Info /
+    // Part Sale / SSRV089 / scom205) have on file, rather than blanking the
+    // whole report; every BA-Tool-only field (GUS/BPU RO, Tyre/Battery,
+    // targets, SPO, Parts Retail) comes back null for these branches (see
+    // computeBranchReport). scom205 is the one exception included here by
+    // *date*, not exact date — scom205Effective carries forward each
+    // branch's most recent scom205 row this month (see
+    // loadAllScom205SnapshotsLatestUpTo), so a branch whose weekend CTDMS
+    // automation failed to re-extract it still keeps its real GUS/BPU
+    // Parts+Labour MTD instead of dropping to null.
     const branchesWithData = new Set<string>([
       ...serviceInfoTodayList.map((s) => s.branch),
       ...partSaleTodayList.map((s) => s.branch),
       ...ssrv089GeneralTodayList.map((s) => s.branch),
-      ...scom205TodayList.map((s) => s.branch),
+      ...scom205EffectiveList.map((s) => s.branch),
     ]);
     for (const deactivated of DEACTIVATED_BRANCHES) branchesWithData.delete(deactivated);
     // An online store's data is already merged into its parent's
@@ -786,7 +793,7 @@ export async function buildReport(date: string): Promise<Report | null> {
         partSaleMonth.get(branch) ?? [],
         ssrv089GeneralMonth.get(branch) ?? [],
         ssrv089BpGreyMonth.get(branch) ?? [],
-        scom205Today.get(branch),
+        scom205Effective.get(branch),
         billRevenue.get(branch) ?? NO_BILL_REVENUE,
         billRevenueDay.get(branch) ?? NO_BILL_REVENUE,
         cancelledAccessoriesAdjustment.get(branch),
@@ -800,7 +807,7 @@ export async function buildReport(date: string): Promise<Report | null> {
       ...serviceInfoTodayList.map((s) => s.uploadedAt),
       ...partSaleTodayList.map((s) => s.uploadedAt),
       ...ssrv089GeneralTodayList.map((s) => s.uploadedAt),
-      ...scom205TodayList.map((s) => s.uploadedAt),
+      ...scom205EffectiveList.map((s) => s.uploadedAt),
     ].sort();
     const uploadedAt = candidateTimestamps.at(-1) ?? new Date().toISOString();
 
@@ -851,7 +858,7 @@ export async function buildReport(date: string): Promise<Report | null> {
       partSaleMonth.get(branchRow.branch) ?? [],
       ssrv089GeneralMonth.get(branchRow.branch) ?? [],
       ssrv089BpGreyMonth.get(branchRow.branch) ?? [],
-      scom205Today.get(branchRow.branch),
+      scom205Effective.get(branchRow.branch),
       billRevenue.get(branchRow.branch) ?? NO_BILL_REVENUE,
       billRevenueDay.get(branchRow.branch) ?? NO_BILL_REVENUE,
       cancelledAccessoriesAdjustment.get(branchRow.branch),
