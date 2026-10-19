@@ -13,17 +13,37 @@ export async function saveVasRevenueReal(
   client?: PoolClient
 ): Promise<void> {
   await (client ?? pool).query(
-    `insert into vas_revenue_real (date, branch, vas_revenue, matched_rows, fallback_rows, excluded_rows, used_day_aggregate_fallback, computed_at)
-     values ($1, $2, $3, $4, $5, $6, $7, now())
+    `insert into vas_revenue_real (date, branch, vas_revenue, matched_rows, fallback_rows, excluded_rows, cancelled_rows, used_day_aggregate_fallback, computed_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, now())
      on conflict (date, branch) do update set
        vas_revenue = excluded.vas_revenue,
        matched_rows = excluded.matched_rows,
        fallback_rows = excluded.fallback_rows,
        excluded_rows = excluded.excluded_rows,
+       cancelled_rows = excluded.cancelled_rows,
        used_day_aggregate_fallback = excluded.used_day_aggregate_fallback,
        computed_at = excluded.computed_at`,
-    [params.date, params.branch, params.vasRevenue, params.matchedRows, params.fallbackRows, params.excludedRows, params.usedDayAggregateFallback]
+    [
+      params.date,
+      params.branch,
+      params.vasRevenue,
+      params.matchedRows,
+      params.fallbackRows,
+      params.excludedRows,
+      params.cancelledRows,
+      params.usedDayAggregateFallback,
+    ]
   );
+}
+
+/** Every date this branch already has a vas_revenue_real row for — used to
+ * know which days to recompute after a cancellation upload touches this
+ * branch (see recompute.ts's recomputeVasRevenueRealAfterCancellationUpload):
+ * a cancelled invoice can only matter on a day we've already computed real
+ * VAS revenue for, so there's no need to scan raw_upload_rows itself here. */
+export async function listVasRevenueRealDatesForBranch(branch: string): Promise<string[]> {
+  const { rows } = await pool.query<{ date: string }>(`select date::text as date from vas_revenue_real where branch = $1`, [branch]);
+  return rows.map((r) => r.date);
 }
 
 /** Every branch's rows in the same calendar month as `date`, up to and

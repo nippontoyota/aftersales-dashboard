@@ -954,6 +954,14 @@ create table if not exists vas_revenue_real (
 -- vas-revenue-real/compute.ts's usedDayAggregateFallback doc comment.
 alter table vas_revenue_real add column if not exists used_day_aggregate_fallback boolean not null default false;
 
+-- 2026-10-19: found via TR01B calling in a ₹4,351 TGLOSS discrepancy (RO
+-- BPJ2601342 / invoice TXE2600459) — this module matched Service Info rows
+-- to real Labour Sales Report amounts but never checked invoice_cancellations,
+-- so a cancelled invoice's VAS-coded lines kept counting here even though
+-- GUS Parts/Labour (ssrv089/cancellation-adjustment.ts) already nets them
+-- out. See compute.ts's cancelledInvoiceDocNos param.
+alter table vas_revenue_real add column if not exists cancelled_rows integer not null default 0;
+
 -- 2026-10-14: BP (Body & Paint) Referrals — leads submitted by employees via
 -- WhatsApp (parsed by an external bot, not this app) for a vehicle they
 -- spotted that could use BP work. This table already exists in production,
