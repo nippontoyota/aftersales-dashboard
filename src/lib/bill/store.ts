@@ -117,8 +117,11 @@ export async function saveBillUpload(params: {
   return toBillUpload(rows[0]);
 }
 
-export async function loadBillByInvoiceNumber(invoiceNumber: string): Promise<BillUpload | null> {
-  const { rows } = await pool.query<BillRow>(`select ${BILL_COLUMNS} from bill_uploads where invoice_number = $1`, [invoiceNumber]);
+export async function loadBillByInvoiceNumber(invoiceNumber: string, branch: string): Promise<BillUpload | null> {
+  const { rows } = await pool.query<BillRow>(
+    `select ${BILL_COLUMNS} from bill_uploads where branch = $1 and invoice_number = $2`,
+    [branch, invoiceNumber],
+  );
   return rows[0] ? toBillUpload(rows[0]) : null;
 }
 
