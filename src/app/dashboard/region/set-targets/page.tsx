@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { branchName } from "@/lib/branch-names";
+import { loadBaToolMetricTargets } from "@/lib/central-metric-targets/ba-tool-targets";
 import { loadCentralMetricTargets } from "@/lib/central-metric-targets/store";
 import { CENTRAL_METRICS, type CentralMetricKey } from "@/lib/central-metric-targets/metrics";
 import { targetFor } from "@/lib/central-metric-targets/view-data";
@@ -55,13 +56,25 @@ async function SetTargetsContent({ region, searchParams }: { region: RegionName;
     loadCentralMetricTargets(month, tkmBranches),
   ]);
 
+  // A branch with no manually-saved row at all falls back to BA Tool's own
+  // live target field (2026-10-20) — South/North RMs don't hand-maintain
+  // central_metric_targets the way Central's does, so this pre-fills the
+  // form with whatever BA Tool already has instead of leaving it blank.
+  // SPR External has no BA Tool target field, so it stays blank either way.
+  // Once a branch's row is saved here, this fallback never applies to it
+  // again (the saved row always wins).
   const tkmCurrentTargets: Record<string, Record<CentralMetricKey, number | null>> = {};
-  for (const branch of tkmBranches) {
-    const targets = {} as Record<CentralMetricKey, number | null>;
-    const stored = tkmTargets.get(branch);
-    for (const metric of CENTRAL_METRICS) targets[metric.key] = targetFor(stored, metric.key);
-    tkmCurrentTargets[branch] = targets;
-  }
+  await Promise.all(
+    tkmBranches.map(async (branch) => {
+      const stored = tkmTargets.get(branch);
+      const baToolTargets = stored ? undefined : await loadBaToolMetricTargets(branch, date);
+      const targets = {} as Record<CentralMetricKey, number | null>;
+      for (const metric of CENTRAL_METRICS) {
+        targets[metric.key] = stored ? targetFor(stored, metric.key) : baToolTargets![metric.key];
+      }
+      tkmCurrentTargets[branch] = targets;
+    })
+  );
 
   return (
     <div className="mx-auto max-w-[1400px] p-6">

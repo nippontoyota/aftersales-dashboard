@@ -71,7 +71,12 @@ async function TkmTargetsContent({ region, searchParams }: { region: RegionName;
   const branches = metricBranches
     .map((code) => report.branches.find((b) => b.branch === code))
     .filter((b): b is BranchReport => b !== undefined);
-  const metrics = await loadCentralMetricTargetsView(branches, date, holidays);
+  // baToolFallback: true (2026-10-20) — unlike Central, South/North RMs don't
+  // hand-maintain central_metric_targets, so any branch with nothing manually
+  // set this month falls back to BA Tool's own live target field for whichever
+  // of the 6 metrics has one; SPR External always stays blank, since BA Tool
+  // has no target field for it at all. See view-data.ts's own comment.
+  const metrics = await loadCentralMetricTargetsView(branches, date, holidays, undefined, { baToolFallback: true });
   const branchLabels = Object.fromEntries(metricBranches.map((code) => [code, branchName(code)]));
 
   return (

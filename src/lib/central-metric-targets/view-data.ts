@@ -23,6 +23,26 @@ export function targetFor(t: CentralMetricTargets | undefined, key: CentralMetri
   }
 }
 
+/** BA Tool's own live target field for one metric, read straight off the
+ * already-built BranchReport (bpuTarget etc. — see report.ts, which already
+ * resolves these from the day's BA Tool snapshot, with target-overrides.ts's
+ * overrides applied where relevant). sprExternal has no BA Tool target field
+ * at all, so it's always null here. Used only as a fallback for South/North
+ * (2026-10-20) — see loadCentralMetricTargetsView's `baToolFallback` param;
+ * Central always hand-maintains central_metric_targets instead and never
+ * reaches this. */
+function baToolTargetFromReport(r: BranchReport, key: CentralMetricKey): number | null {
+  switch (key) {
+    case "bpu": return r.bpuTarget;
+    case "offtake": return r.offtakeTarget;
+    case "sprInternal": return r.partsRetailTarget;
+    case "sprExternal": return null;
+    case "pmOc": return r.pmOcTarget;
+    case "battery": return r.batteryTarget;
+    case "tyre": return r.tireTarget;
+  }
+}
+
 function achievedFromReport(r: BranchReport, key: CentralMetricKey): number | null {
   switch (key) {
     case "bpu": return r.bpuAchievementForTheMonth;
@@ -92,20 +112,31 @@ export type CentralMetricView = {
 };
 
 /**
- * Full TKM Targets view for the Central region's 7 tracked metrics
- * (2026-09-26) — one row per branch per metric, MTD pace, full-year pace,
- * and a rank among the 4 Central branches for each metric. `branches` must
- * already be this date's BranchReport rows for CO01A/CO01B/MV01A/KY01A
- * (reused from whatever the page already loaded via buildReport — this
- * function does no report-building of its own, only the extra target/
- * historical-actuals queries this feature needs on top of that).
+ * Full TKM Targets view for a region's 7 tracked metrics (2026-09-26,
+ * originally Central-only) — one row per branch per metric, MTD pace,
+ * full-year pace, and a rank among the given branches for each metric.
+ * `branches` must already be this date's BranchReport rows (reused from
+ * whatever the page already loaded via buildReport — this function does no
+ * report-building of its own, only the extra target/historical-actuals
+ * queries this feature needs on top of that).
+ *
+ * `baToolFallback` (2026-10-20): South/North RMs don't hand-maintain
+ * central_metric_targets the way Central's RM does, so for them, a branch
+ * with no manually-set row for the current month falls back to BA Tool's
+ * own live target field for whichever of the 6 metrics has one (sprExternal
+ * never does — see baToolTargetFromReport). Central always passes this as
+ * false (the default) and never reaches this path. Only the CURRENT month's
+ * target gets this fallback — closed months' historical/annual figures are
+ * unaffected, same "no target set → drops out" convention as always.
  */
 export async function loadCentralMetricTargetsView(
   branches: BranchReport[],
   date: string,
   holidays: ReadonlySet<string>,
-  co01eReport?: BranchReport
+  co01eReport?: BranchReport,
+  options?: { baToolFallback?: boolean }
 ): Promise<CentralMetricView[]> {
+  const baToolFallback = options?.baToolFallback ?? false;
   const branchCodes = branches.map((b) => b.branch);
   const month = date.slice(0, 7);
   const year = date.slice(0, 4);
@@ -126,7 +157,8 @@ export async function loadCentralMetricTargetsView(
 
   return CENTRAL_METRICS.map(({ key, label, isCurrency }) => {
     const rows: CentralMetricBranchRow[] = perBranchYearData.map(({ branch, report, yearTargets, closedMonths, closedActuals }) => {
-      const target = targetFor(currentTargets.get(branch), key);
+      const manualTarget = targetFor(currentTargets.get(branch), key);
+      const target = manualTarget !== null ? manualTarget : baToolFallback ? baToolTargetFromReport(report, key) : null;
       const achieved = liveAchieved(branch, report, key, date, co01eReport);
       const pace = computePace(date, achieved, target, holidays);
       const tone = paceTone(date, achieved, target, holidays);
