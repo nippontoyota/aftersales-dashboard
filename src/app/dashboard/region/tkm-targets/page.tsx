@@ -5,7 +5,7 @@ import { adminIdentityLabel } from "@/lib/admin-store";
 import { branchName } from "@/lib/branch-names";
 import { loadCentralMetricTargetsView } from "@/lib/central-metric-targets/view-data";
 import { loadNavState } from "@/lib/dashboard-data";
-import { BODY_PAINT_ONLY_BRANCHES, buildReport, type BranchReport } from "@/lib/report";
+import { buildReport, type BranchReport } from "@/lib/report";
 import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { REGIONS, type RegionName } from "@/lib/regions";
 import { listSnapshotDates } from "@/lib/snapshot-store";
@@ -64,10 +64,12 @@ async function TkmTargetsContent({ region, searchParams }: { region: RegionName;
     );
   }
 
-  // Same exclusion Central applies to CO01E — a Body & Paint-only branch has
-  // no general-service business, so none of these 7 metrics mean anything
-  // for it (it never gets its own TKM target row).
-  const metricBranches = REGIONS[region].filter((b) => !BODY_PAINT_ONLY_BRANCHES.has(b));
+  // Unlike Central (which excludes CO01E), South/North's Body & Paint-only
+  // branches (TR01B, KL01B) get a row here too (2026-10-20, at the RM's
+  // request) — BPU itself is exactly their core business, even though
+  // offtake/SPR Internal/PM+OC/Battery/Tyre naturally read 0 or null for
+  // them (no general service).
+  const metricBranches = REGIONS[region];
   const branches = metricBranches
     .map((code) => report.branches.find((b) => b.branch === code))
     .filter((b): b is BranchReport => b !== undefined);

@@ -8,7 +8,6 @@ import { loadCentralMetricTargets } from "@/lib/central-metric-targets/store";
 import { CENTRAL_METRICS, type CentralMetricKey } from "@/lib/central-metric-targets/metrics";
 import { targetFor } from "@/lib/central-metric-targets/view-data";
 import { loadNavState } from "@/lib/dashboard-data";
-import { BODY_PAINT_ONLY_BRANCHES } from "@/lib/report";
 import { loadRegionRevenueTargets } from "@/lib/region-targets/store";
 import { REGIONS, type RegionName } from "@/lib/regions";
 import { listSnapshotDates } from "@/lib/snapshot-store";
@@ -46,10 +45,10 @@ async function SetTargetsContent({ region, searchParams }: { region: RegionName;
   const month = date.slice(0, 7);
 
   const branches: readonly string[] = REGIONS[region];
-  // TKM Targets excludes Body & Paint-only branches — same as Central
-  // excludes CO01E — since none of those 7 metrics mean anything for a
-  // branch with no general-service business.
-  const tkmBranches = branches.filter((b) => !BODY_PAINT_ONLY_BRANCHES.has(b));
+  // Unlike Central (which excludes CO01E), South/North's Body & Paint-only
+  // branches get a TKM target row too (2026-10-20, at the RM's request) —
+  // BPU itself is exactly their core business.
+  const tkmBranches: string[] = [...branches];
 
   const [regionTargets, tkmTargets] = await Promise.all([
     loadRegionRevenueTargets(month, branches),
