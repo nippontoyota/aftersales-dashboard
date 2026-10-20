@@ -15,6 +15,7 @@ import {
   type BpReferralRow,
   type CallOutcome,
 } from "@/lib/bp-referrals/store";
+import { NOT_CONNECTED_REASONS, notConnectedReasonLabel } from "@/lib/bp-referrals/not-connected-reasons";
 
 export type BpmActionState = { error: string | null; ok: boolean };
 
@@ -34,11 +35,21 @@ export async function markNotConnectedAction(_prev: BpmActionState, formData: Fo
 
   const id = Number(formData.get("id"));
   if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
-  const remark = requiredRemark(formData);
-  if (!remark) return { error: "A reason is required.", ok: false };
+
+  const reason = String(formData.get("reason") ?? "");
+  if (!NOT_CONNECTED_REASONS.some((r) => r.value === reason)) return { error: "Choose a reason.", ok: false };
+
+  let remark: string;
+  if (reason === "other") {
+    const customRemark = requiredRemark(formData);
+    if (!customRemark) return { error: "A reason is required.", ok: false };
+    remark = customRemark;
+  } else {
+    remark = notConnectedReasonLabel(reason)!;
+  }
 
   try {
-    await markNotConnected(id, admin.branch, admin.username, remark);
+    await markNotConnected(id, admin.branch, admin.username, reason, remark);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't update that referral.", ok: false };
   }

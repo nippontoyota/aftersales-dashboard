@@ -7,6 +7,7 @@ import {
   type BpmActionState,
 } from "@/app/bp-referrals/bpm-actions";
 import { branchName } from "@/lib/branch-names";
+import { NotConnectedReasonFields } from "@/app/bp-referrals/not-connected-reason-fields";
 
 type UrgentReferral = {
   id: number;
@@ -158,14 +159,7 @@ export function BpUrgentContactPopupGate() {
             className="mt-3"
           >
             <input type="hidden" name="id" value={item.id} />
-            <label className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Reason (required)</label>
-            <textarea
-              name="remark"
-              required
-              rows={2}
-              placeholder="e.g. phone switched off, no answer…"
-              className="mt-1 w-full rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            />
+            <NotConnectedReasonFields textareaClassName="mt-1 w-full rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" />
             {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
             <div className="mt-3 flex justify-end gap-2">
               <button type="button" onClick={() => setShowRemark(false)} className="text-xs text-fg-muted hover:underline">

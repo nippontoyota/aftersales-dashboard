@@ -124,20 +124,31 @@ async function logActivity(
   activityType: "not_connected" | "call_outcome" | "follow_up",
   remark: string,
   performedBy: string,
+  notConnectedReason?: string,
 ): Promise<void> {
   await pool.query(
-    `insert into bp_referral_activity (referral_id, activity_type, remark, performed_by) values ($1, $2, $3, $4)`,
-    [referralId, activityType, remark, performedBy],
+    `insert into bp_referral_activity (referral_id, activity_type, remark, performed_by, not_connected_reason) values ($1, $2, $3, $4, $5)`,
+    [referralId, activityType, remark, performedBy, notConnectedReason ?? null],
   );
 }
 
 /** Every BP referral action requires a reason/remark (2026-10-15, the
  * user's explicit call for accountability) — see bp_referral_activity in
- * schema.sql for the full history this builds up. */
-export async function markNotConnected(id: number, branch: string, performedBy: string, remark: string): Promise<void> {
+ * schema.sql for the full history this builds up. `reason` is the
+ * structured code (see not-connected-reasons.ts); `remark` is the display
+ * text — the matching preset label, or the BPM's own text for "other"
+ * (2026-10-20, so the common cases are countable without parsing free
+ * text). */
+export async function markNotConnected(
+  id: number,
+  branch: string,
+  performedBy: string,
+  reason: string,
+  remark: string,
+): Promise<void> {
   await assertOwnedByBranch(id, branch);
   await pool.query(`update bp_referrals set call_status = 'not_connected', last_contacted_at = now() where id = $1`, [id]);
-  await logActivity(id, "not_connected", remark, performedBy);
+  await logActivity(id, "not_connected", remark, performedBy, reason);
 }
 
 /** Hours after which a validated (genuine + interested) referral with no
@@ -204,6 +215,7 @@ export type ActivityRow = {
   id: number;
   activityType: "not_connected" | "call_outcome" | "follow_up";
   remark: string;
+  notConnectedReason: string | null;
   performedBy: string;
   performedAt: Date | string;
 };
@@ -216,10 +228,11 @@ export async function loadActivityForReferral(referralId: number): Promise<Activ
     id: number;
     activity_type: "not_connected" | "call_outcome" | "follow_up";
     remark: string;
+    not_connected_reason: string | null;
     performed_by: string;
     performed_at: Date | string;
   }>(
-    `select id, activity_type, remark, performed_by, performed_at from bp_referral_activity
+    `select id, activity_type, remark, not_connected_reason, performed_by, performed_at from bp_referral_activity
      where referral_id = $1 order by performed_at desc`,
     [referralId],
   );
@@ -227,6 +240,7 @@ export async function loadActivityForReferral(referralId: number): Promise<Activ
     id: r.id,
     activityType: r.activity_type,
     remark: r.remark,
+    notConnectedReason: r.not_connected_reason,
     performedBy: r.performed_by,
     performedAt: r.performed_at,
   }));

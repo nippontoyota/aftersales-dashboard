@@ -1214,3 +1214,10 @@ create index if not exists bp_referral_activity_referral_idx on bp_referral_acti
 -- bp_referral_activity) so BP HO can see WHY a customer declined without
 -- digging through free-text history.
 alter table bp_referrals add column if not exists not_interested_reason text;
+
+-- 2026-10-20: same idea for "not connected" attempts — a structured reason
+-- code (rnr/switched_off/invalid_number/busy/not_reachable/other) alongside
+-- the existing free-text remark (which for the five presets just holds the
+-- matching label, and for 'other' is the BPM's own mandatory text), so the
+-- common cases are countable without parsing free text.
+alter table bp_referral_activity add column if not exists not_connected_reason text;

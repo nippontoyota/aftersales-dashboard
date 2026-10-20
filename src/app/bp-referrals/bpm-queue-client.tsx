@@ -12,6 +12,7 @@ import {
   type BpmActionState,
 } from "./bpm-actions";
 import type { ActivityRow } from "@/lib/bp-referrals/store";
+import { NotConnectedReasonFields } from "./not-connected-reason-fields";
 
 export type BpmQueueReferral = {
   id: number;
@@ -200,14 +201,7 @@ function NotConnectedButton({ id, onDone }: { id: number; onDone: () => void }) 
       className="rounded-md border border-border-strong bg-surface-2/50 p-3"
     >
       <input type="hidden" name="id" value={id} />
-      <span className={eyebrow}>Reason (required)</span>
-      <textarea
-        name="remark"
-        required
-        rows={2}
-        placeholder="e.g. phone switched off, no answer, wrong number…"
-        className={remarkField}
-      />
+      <NotConnectedReasonFields textareaClassName={remarkField} />
       <div className="mt-2 flex items-center gap-2">
         <button
           type="submit"
