@@ -4,9 +4,10 @@ import type { BranchReport } from "@/lib/report";
 
 /**
  * The single source of truth for the pre-publish raw-report row set — used by
- * both the branch admin's single-branch Daily Report (branch-daily-report.tsx)
- * and the regional manager's wide region table (region-daily-report.tsx), so
- * the two can't drift on which metrics are shown or in what order.
+ * the branch admin's single-branch Daily Report (branch-daily-report.tsx) and
+ * by other condensed/branch-cell views (condensed-metrics.tsx, Accounts'
+ * financial-rows.ts, VP's branches page) so they can't drift on which metrics
+ * are shown or in what order.
  *
  * Order matches the branch's own "Revenue Stream" reference sheet
  * (2026-09-02); everything else in the data model is appended under

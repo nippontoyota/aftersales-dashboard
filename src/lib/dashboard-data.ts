@@ -90,11 +90,6 @@ export type DashboardData = {
    * they get the raw single-branch "Daily Report" instead of the company
    * dashboard. Always false for HQ. */
   showBranchDailyReport: boolean;
-  /** For a regional manager, true when the current `date` is not published
-   * yet — they get the raw region-wide comparison table (their branches +
-   * a region total) instead of the company dashboard. Always false for HQ
-   * and branch admins. */
-  showRegionDailyReport: boolean;
   /** Whether the company-wide tabs (Reports, TKM Targets, Alerts, Branches)
    * are available. HQ: always. Branch/regional admin: only once the latest
    * uploaded date has been published. */
@@ -146,7 +141,6 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   const isLatestPublished = latestPublished ?? isPublished;
   const isCompanyScope = isHq || isPublished;
   const showBranchDailyReport = admin.role === "branch" && !isPublished;
-  const showRegionDailyReport = admin.role === "regional" && !isPublished;
   const showCompanyTabs = isHq || isLatestPublished;
 
   // Region: a regional manager is locked to their own region until the date
@@ -195,7 +189,6 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
     canPublish: isHq,
     billTotals,
     showBranchDailyReport,
-    showRegionDailyReport,
     showCompanyTabs,
   };
 }

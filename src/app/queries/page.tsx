@@ -43,6 +43,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
       isRegional={admin.role === "regional"}
       isBranch={admin.role === "branch"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
+      regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       slimNav={nav.slimNav}
       dashboardLabel={nav.dashboardLabel}
       queriesBadge={nav.queriesBadge}

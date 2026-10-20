@@ -15,16 +15,16 @@ import { loadIncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
-import { loadBranchView, loadRegionView } from "@/lib/branch-view-data";
+import { loadBranchView } from "@/lib/branch-view-data";
 import { CO01B_SLAB_COMBINED_BRANCHES } from "@/lib/body-paint-only";
 import { aggregateIncentiveSlabTargets } from "@/lib/incentive-slabs/aggregate";
 import { loadCentralRegionView } from "@/lib/central-region-data";
-import { BranchAccountPage, RegionAccountPage } from "./branch/branch-page";
-import { CentralRegionDashboard } from "./central/central-region-dashboard";
+import { loadRegionRevenueView } from "@/lib/region-revenue-data";
+import { BranchAccountPage } from "./branch/branch-page";
+import { RegionRevenueDashboard } from "./region-revenue-dashboard";
 import { BillDrilldown } from "./bill-drilldown";
 import { BranchDailyReport } from "./branch-daily-report";
 import { DashboardTabs } from "./dashboard-tabs";
-import { RegionDailyReport } from "./region-daily-report";
 import { HeroKpi } from "./hero-kpi";
 import { HeroKpiStrip } from "./hero-kpi-strip";
 import { InsightsPanel } from "./insights-panel";
@@ -70,6 +70,7 @@ export default async function DashboardPage({
       isRegional={admin.role === "regional"}
       isBranch={admin.role === "branch"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
+      regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       queriesBadge={nav.queriesBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
@@ -168,48 +169,6 @@ async function DashboardContent({
     );
   }
 
-  // Regional manager, date not published yet → wide region comparison table
-  // (their branches + a region total) instead of the company dashboard.
-  // Central is excluded here — his dashboard below (loadCentralRegionView)
-  // reads the same buildReport() output regardless of publish state, so he
-  // gets his own layout either way, with a DraftWarning banner standing in
-  // for this detour instead of a different page entirely (2026-09-24, at
-  // his request).
-  if (data.showRegionDailyReport && admin.role === "regional" && admin.region !== "Central") {
-    if (!data.report || data.filteredBranches.length === 0) {
-      return (
-        <NoDataForDate
-          title={`Regional Report — ${admin.region}`}
-          date={data.date}
-          dates={data.dates}
-          basePath="/dashboard"
-          message={
-            data.date === data.dates.at(-1)
-              ? "This report fills in once HQ has uploaded the day's BA Tool file."
-              : `No BA Tool report on file for ${data.date}.`
-          }
-        />
-      );
-    }
-    const uploadedAtLabel = new Date(data.report.uploadedAt).toLocaleString("en-IN", {
-      day: "numeric",
-      month: "short",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "Asia/Kolkata",
-    });
-    return (
-      <RegionDailyReport
-        region={admin.region}
-        branches={data.filteredBranches}
-        date={data.date}
-        dates={data.dates}
-        uploadedAtLabel={uploadedAtLabel}
-        daysSincePrevious={data.report.daysSincePrevious}
-      />
-    );
-  }
-
   const { date, region, dates, report, filteredBranches, kpis, hasPreviousUpload, monthSnapshots, serviceInfoMonthSnapshots, isPublished, canPublish, billTotals, isCompanyScope } =
     data;
 
@@ -217,9 +176,14 @@ async function DashboardContent({
     return <NoDataForDate title="Executive Overview" date={date} dates={dates} basePath="/dashboard" />;
   }
 
-  // Branch / regional accounts on a published date get the branch-first view;
-  // HQ keeps the company Executive Overview below. (Pre-publish is already
-  // handled by showBranchDailyReport / showRegionDailyReport above.)
+  // Branch accounts on a published date get the branch-first view; HQ keeps
+  // the company Executive Overview below. (Pre-publish is already handled by
+  // showBranchDailyReport above.) A regional manager's own dashboard
+  // (loadCentralRegionView / loadRegionRevenueView) reads the same
+  // buildReport() output regardless of publish state, so every region gets
+  // its own layout either way, with a DraftWarning banner standing in for a
+  // separate pre-publish page (2026-09-24, at Central's request; extended to
+  // South/North 2026-10-20 for the same layout everywhere).
   if (admin.role === "branch") {
     const [view, branchSlabTargets] = await Promise.all([
       loadBranchView(admin.branch, date, report, monthSnapshots, serviceInfoMonthSnapshots),
@@ -231,11 +195,11 @@ async function DashboardContent({
   }
   if (admin.role === "regional" && admin.region === "Central") {
     const view = await loadCentralRegionView(date, report);
-    return <CentralRegionDashboard view={view} dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} />;
+    return <RegionRevenueDashboard view={view} regionName="Central" dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} />;
   }
   if (admin.role === "regional") {
-    const { rollup, branches } = await loadRegionView(admin.region, date, report, monthSnapshots, serviceInfoMonthSnapshots);
-    return <RegionAccountPage rollup={rollup} branches={branches} date={date} dates={dates} uploadedAt={report.uploadedAt} />;
+    const view = await loadRegionRevenueView(admin.region, date, report);
+    return <RegionRevenueDashboard view={view} regionName={admin.region} dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} />;
   }
 
   const allKpis = computeKpiSummary(report.branches);

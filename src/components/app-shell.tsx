@@ -61,6 +61,17 @@ const CENTRAL_NAV_ITEMS = [
   { href: "/dashboard/central/set-targets", label: "Set Targets", key: "central-set-targets" as const },
 ];
 
+/** South/North regional managers' own nav (2026-10-20, same shape as
+ * Central's — see CENTRAL_NAV_ITEMS — minus Central's extra TKM Targets
+ * page, which is its own separate feature North/South don't have. */
+const REGIONAL_RM_NAV_ITEMS = [
+  { href: "/dashboard", label: "My Region", key: "dashboard" as const },
+  { href: "/queries", label: "Queries", key: "queries" as const },
+  { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
+  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
+  { href: "/dashboard/region/set-targets", label: "Set Targets", key: "region-set-targets" as const },
+];
+
 /** HQ-only tools, kept apart from the day-to-day nav above — administrative
  * rather than something anyone checks routinely, so they sit as a small
  * link list near the account area at the bottom instead of the main list. */
@@ -81,6 +92,7 @@ type NavKey =
   | (typeof UTILITY_NAV_ITEMS)[number]["key"]
   | (typeof ACCOUNTS_NAV_ITEMS)[number]["key"]
   | (typeof CENTRAL_NAV_ITEMS)[number]["key"]
+  | (typeof REGIONAL_RM_NAV_ITEMS)[number]["key"]
   | "bills"
   | "bp-referrals";
 
@@ -287,6 +299,7 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   accounts: DashboardIcon,
   "central-tkm-targets": TkmTargetsIcon,
   "central-set-targets": SetTargetsIcon,
+  "region-set-targets": SetTargetsIcon,
   ce: ChatIcon,
 };
 
@@ -298,6 +311,7 @@ export function AppShell({
   canUpload = true,
   accountsNav = false,
   centralNav = false,
+  regionalRmNav = false,
   slimNav = false,
   isRegional = false,
   isBranch = false,
@@ -324,10 +338,13 @@ export function AppShell({
    * upload, no company tabs, no HQ utilities). Defaults to false. */
   accountsNav?: boolean;
   /** Central regional manager: replace the whole nav with CENTRAL_NAV_ITEMS
-   * (My Region, TKM Targets, Queries, Bills, Cancellations, Set Targets) —
-   * North/South keep the generic regional nav below unchanged. Defaults to
-   * false. */
+   * (My Region, TKM Targets, Queries, Bills, Cancellations, Set Targets).
+   * Defaults to false. */
   centralNav?: boolean;
+  /** South/North regional manager: replace the whole nav with
+   * REGIONAL_RM_NAV_ITEMS — same shape as centralNav, minus Central's own
+   * extra TKM Targets page. Defaults to false. */
+  regionalRmNav?: boolean;
   /** Branch / regional accounts: drop the company-wide pages (TKM Targets,
    * Alerts, Branch Performance, Reports) from the sidebar entirely — their
    * content now lives on the branch-first dashboard. Leaves My Branch /
@@ -360,6 +377,8 @@ export function AppShell({
     ? ACCOUNTS_NAV_ITEMS
     : centralNav
     ? CENTRAL_NAV_ITEMS.map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item))
+    : regionalRmNav
+    ? REGIONAL_RM_NAV_ITEMS.map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item))
     : NAV_ITEMS.filter(
         (item) =>
           (!item.requiresDashboard || showDashboardLink) &&
@@ -367,7 +386,7 @@ export function AppShell({
           (!item.uploadOnly || canUpload) &&
           (!item.hqOnly || isHq),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
-  const utilityItems = isHq && !accountsNav && !centralNav ? UTILITY_NAV_ITEMS : [];
+  const utilityItems = isHq && !accountsNav && !centralNav && !regionalRmNav ? UTILITY_NAV_ITEMS : [];
 
   const navLink = (item: { href: string; label: string; key: NavKey }, compact: boolean) => {
     const Icon = ICONS[item.key];

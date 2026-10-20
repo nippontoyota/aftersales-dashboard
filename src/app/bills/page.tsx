@@ -60,6 +60,7 @@ export default async function BillsPage({
       isRegional={admin.role === "regional"}
       isBranch={admin.role === "branch"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
+      regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       queriesBadge={nav.queriesBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
