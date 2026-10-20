@@ -3,7 +3,6 @@ import { rankValues } from "../gus-per-car-trend";
 import { computeAnnualPace, computePace, paceTone, type AnnualPace, type Pace } from "../pace";
 import type { AchievementTone } from "../aggregate";
 import type { BranchReport } from "../report";
-import { TARGET_OVERRIDE_START_DATE } from "../target-overrides";
 import { loadCentralMetricTargets, loadCentralMetricTargetsForYear, type CentralMetricTargets } from "./store";
 import { loadCentralMonthlyActuals } from "./monthly-actuals";
 import { CENTRAL_METRICS, type CentralMetricKey } from "./metrics";
@@ -60,14 +59,14 @@ function sumOrNull(values: (number | null)[]): number | null {
   return present.length ? present.reduce((a, b) => a + b, 0) : null;
 }
 
-/** CO01B/CO01E fold-in for the LIVE current month (2026-09-26) — same
- * reasoning as loadCentralMonthlyActuals' fold-in for closed months: before
- * TARGET_OVERRIDE_START_DATE, CO01B's target already lumps in CO01E's share,
- * so its achieved must too. `co01eReport` is only passed when the selected
- * date is before that cutover. */
-function liveAchieved(branch: string, report: BranchReport, key: CentralMetricKey, date: string, co01eReport: BranchReport | undefined): number | null {
+/** CO01B/CO01E fold-in for the LIVE current month (2026-09-26, made
+ * unconditional 2026-10-20 at the RM's request — CO01E is a small satellite
+ * run out of CO01B/Tower, and he wants it folded into CO01B's TKM Targets
+ * row permanently, regardless of the general BA Tool target-split cutover
+ * that governs the Revenue Dashboard's own separate CO01E column). */
+function liveAchieved(branch: string, report: BranchReport, key: CentralMetricKey, co01eReport: BranchReport | undefined): number | null {
   const own = achievedFromReport(report, key);
-  if (branch !== "CO01B" || date >= TARGET_OVERRIDE_START_DATE || !co01eReport) return own;
+  if (branch !== "CO01B" || !co01eReport) return own;
   return sumOrNull([own, achievedFromReport(co01eReport, key)]);
 }
 
@@ -159,7 +158,7 @@ export async function loadCentralMetricTargetsView(
     const rows: CentralMetricBranchRow[] = perBranchYearData.map(({ branch, report, yearTargets, closedMonths, closedActuals }) => {
       const manualTarget = targetFor(currentTargets.get(branch), key);
       const target = manualTarget !== null ? manualTarget : baToolFallback ? baToolTargetFromReport(report, key) : null;
-      const achieved = liveAchieved(branch, report, key, date, co01eReport);
+      const achieved = liveAchieved(branch, report, key, co01eReport);
       const pace = computePace(date, achieved, target, holidays);
       const tone = paceTone(date, achieved, target, holidays);
 

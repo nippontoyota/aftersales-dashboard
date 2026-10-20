@@ -1,5 +1,4 @@
 import { pool } from "../db";
-import { TARGET_OVERRIDE_START_DATE } from "../target-overrides";
 
 /** One past month's FINAL achieved figure for all 7 metrics, for one branch
  * — "final" meaning the last BA Tool / Part Sale Report snapshot dated
@@ -71,14 +70,13 @@ async function loadOneBranchMonthlyActuals(branch: string, month: string): Promi
   };
 }
 
-/** CO01B/CO01E fold-in (2026-09-26, at the RM's request) — before
- * TARGET_OVERRIDE_START_DATE, CO01B's TKM target already lumps in CO01E's
- * whole share (see target-overrides.ts), but its achieved figures never did.
- * Folding CO01E's achieved into CO01B's for those months keeps the two
- * sides of the comparison scoped the same way, for all 7 metrics. */
+/** CO01B/CO01E fold-in (2026-09-26, made unconditional 2026-10-20 at the
+ * RM's request — CO01E is a small satellite run out of CO01B/Tower, and he
+ * wants it folded into CO01B's TKM Targets row permanently, for every month,
+ * not just while BA Tool's own target export lumped the two together). */
 export async function loadCentralMonthlyActuals(branch: string, month: string): Promise<CentralMetricActuals> {
   const own = await loadOneBranchMonthlyActuals(branch, month);
-  if (branch !== "CO01B" || month >= TARGET_OVERRIDE_START_DATE.slice(0, 7)) return own;
+  if (branch !== "CO01B") return own;
   const co01e = await loadOneBranchMonthlyActuals("CO01E", month);
   return addActuals(own, co01e);
 }
