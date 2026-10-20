@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { loadCentralMetricTargetsView } from "@/lib/central-metric-targets/view-data";
+import { CENTRAL_BRANCH_LABELS } from "@/lib/central-region-data";
 import { loadNavState } from "@/lib/dashboard-data";
 import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { buildReport, type BranchReport } from "@/lib/report";
@@ -87,7 +88,7 @@ async function TkmTargetsContent({ searchParams }: { searchParams: Promise<{ dat
       </div>
 
       <div className="mt-4">
-        <TkmTargetsSection metrics={metrics} />
+        <TkmTargetsSection metrics={metrics} branchLabels={CENTRAL_BRANCH_LABELS} />
       </div>
     </div>
   );

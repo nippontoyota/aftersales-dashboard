@@ -114,6 +114,7 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
       totalAchieved,
       scrapAndUsedOil: achieved.scrapAndUsedOil,
       totalRevenue,
+      tgloss: achieved.tgloss,
       badge: includesCo01e ? "Includes CO01E" : undefined,
       slab: slabs.get(branch),
       slabActual,

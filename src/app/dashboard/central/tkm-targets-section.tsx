@@ -1,5 +1,4 @@
 import type { CentralMetricView } from "@/lib/central-metric-targets/view-data";
-import { CENTRAL_BRANCH_LABELS } from "@/lib/central-region-data";
 import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { MonthlyBreakdownTable } from "./monthly-breakdown-table";
@@ -14,10 +13,12 @@ const TONE_CHIP = {
 
 function BranchMetricCard({
   branch,
+  branchLabels,
   isCurrency,
   row,
 }: {
   branch: string;
+  branchLabels: Record<string, string>;
   isCurrency: boolean;
   row: CentralMetricView["rows"][number];
 }) {
@@ -28,7 +29,7 @@ function BranchMetricCard({
   return (
     <div className="min-w-[190px] flex-1 space-y-1.5 rounded-lg border border-border-subtle bg-surface-2/30 p-2.5">
       <div className="flex items-center justify-between gap-1">
-        <span className="text-[11px] font-semibold text-fg">{CENTRAL_BRANCH_LABELS[branch as keyof typeof CENTRAL_BRANCH_LABELS] ?? branch}</span>
+        <span className="text-[11px] font-semibold text-fg">{branchLabels[branch] ?? branch}</span>
       </div>
 
       <div className="flex items-baseline justify-between gap-1 text-[12px]">
@@ -77,38 +78,40 @@ function BranchMetricCard({
   );
 }
 
-function MetricCard({ metric }: { metric: CentralMetricView }) {
+function MetricCard({ metric, branchLabels }: { metric: CentralMetricView; branchLabels: Record<string, string> }) {
   return (
     <div className="flex flex-wrap gap-2">
       {metric.rows.map((row) => (
-        <BranchMetricCard key={row.branch} branch={row.branch} isCurrency={metric.isCurrency} row={row} />
+        <BranchMetricCard key={row.branch} branch={row.branch} branchLabels={branchLabels} isCurrency={metric.isCurrency} row={row} />
       ))}
     </div>
   );
 }
 
 /**
- * TKM Targets — Central region's own page (2026-09-26, replacing the RM's
- * separate BusinessTracker Excel for these 7 metrics), on its own nav item
- * below My Region — additive, not a replacement for the GS/BP/Ext Sales +
- * slab view there (see central_metric_targets in db/schema.sql for how the
- * two relate). Read-only: editing targets happens on the separate Set
- * Targets page (2026-09-26, moved there at the RM's request so this page
- * stays a clean view, not a form). BPU/Offtake/SPR Internal/PM+OC/Battery/
- * Tyre targets come from BA Tool's own target fields for closed months,
- * hardcoded by the RM (seeded from his 2026 Excel) for months BA Tool
- * hasn't reached yet; SPR External has no BA Tool target field at all and
- * is always hardcoded, though its *achieved* figure is live from the Part
- * Sale Report, same as the rest of the app.
+ * TKM Targets — originally Central region's own page (2026-09-26, replacing
+ * the RM's separate BusinessTracker Excel for these 7 metrics), generalized
+ * 2026-10-20 so South and North get the identical view on their own
+ * branches (see their own tkm-targets/page.tsx) — nothing here is
+ * Central-specific any more, hence the caller-supplied `branchLabels`.
+ * Additive, not a replacement for the GS/BP/Ext Sales + slab view (see
+ * central_metric_targets in db/schema.sql for how the two relate).
+ * Read-only: editing targets happens on the separate Set Targets page
+ * (2026-09-26, moved there at the RM's request so this page stays a clean
+ * view, not a form). BPU/Offtake/SPR Internal/PM+OC/Battery/Tyre targets
+ * come from BA Tool's own target fields for closed months, hardcoded by the
+ * region's RM for months BA Tool hasn't reached yet; SPR External has no BA
+ * Tool target field at all and is always hardcoded, though its *achieved*
+ * figure is live from the Part Sale Report, same as the rest of the app.
  */
-export function TkmTargetsSection({ metrics }: { metrics: CentralMetricView[] }) {
+export function TkmTargetsSection({ metrics, branchLabels }: { metrics: CentralMetricView[]; branchLabels: Record<string, string> }) {
   return (
     <div className="space-y-3">
       {metrics.map((metric) => (
         <CollapsibleCard key={metric.key} title={metric.label} subtitle="Target / Achieved · MTD pace · Year pace · Rank" defaultOpen>
           <div className="p-3">
-            <MetricCard metric={metric} />
-            <MonthlyBreakdownTable metric={metric} branchLabels={CENTRAL_BRANCH_LABELS} />
+            <MetricCard metric={metric} branchLabels={branchLabels} />
+            <MonthlyBreakdownTable metric={metric} branchLabels={branchLabels} />
           </div>
         </CollapsibleCard>
       ))}

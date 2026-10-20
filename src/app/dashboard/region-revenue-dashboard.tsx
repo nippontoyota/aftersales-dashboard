@@ -69,11 +69,14 @@ function Row({ label, cells, remaining }: { label: string; cells: { key: string;
 }
 
 /** A regional manager's own dashboard — GS/BP/Ext Sales pace against this
- * month's target, Scrap & Used Oil, Total Revenue, and Slab, one column per
- * branch plus a region total. Originally built for Central only (2026-09-24);
- * generalized 2026-10-20 so South and North get the identical layout —
- * `regionName` is the only thing that varies the copy (title, the summary
- * column's label). */
+ * month's target, Scrap & Used Oil, Total Revenue, TGLOSS, and Slab, one
+ * column per branch plus a region total. Originally built for Central only
+ * (2026-09-24); generalized 2026-10-20 so South and North get the identical
+ * layout — `regionName` is the only thing that varies the copy (title, the
+ * summary column's label). TGLOSS (added the same day, at all three RMs'
+ * request) is shown separately from Total Revenue, never folded into it —
+ * same convention as everywhere else in the app (see report.ts's
+ * totalRevenueStreamMtd comment). */
 export function RegionRevenueDashboard({
   view,
   dates,
@@ -98,6 +101,7 @@ export function RegionRevenueDashboard({
     totalAchieved: view.totals.totalAchieved,
     scrapAndUsedOil: view.totals.scrapAndUsedOil,
     totalRevenue: view.totals.totalRevenue,
+    tgloss: view.totals.tgloss,
     slab: undefined,
     slabActual: view.totals.totalRevenue,
   };
@@ -189,6 +193,14 @@ export function RegionRevenueDashboard({
               {columns.map((c) => (
                 <td key={c.branch} className="py-2 pr-4 text-[12px] font-semibold tabular-nums text-fg">
                   {formatCompactCurrency(c.totalRevenue)}
+                </td>
+              ))}
+            </tr>
+            <tr className="border-t border-border-subtle">
+              <td className="py-2 pr-3 text-[12px] font-semibold text-fg">{tglossText("TGLOSS")}</td>
+              {columns.map((c) => (
+                <td key={c.branch} className="py-2 pr-4 text-[12px] font-semibold tabular-nums text-fg">
+                  {formatCompactCurrency(c.tgloss)}
                 </td>
               ))}
             </tr>

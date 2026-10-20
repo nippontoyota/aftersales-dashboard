@@ -62,10 +62,11 @@ const CENTRAL_NAV_ITEMS = [
 ];
 
 /** South/North regional managers' own nav (2026-10-20, same shape as
- * Central's — see CENTRAL_NAV_ITEMS — minus Central's extra TKM Targets
- * page, which is its own separate feature North/South don't have. */
+ * Central's — see CENTRAL_NAV_ITEMS, including TKM Targets, generalized the
+ * same day to cover any region, not just Central). */
 const REGIONAL_RM_NAV_ITEMS = [
   { href: "/dashboard", label: "My Region", key: "dashboard" as const },
+  { href: "/dashboard/region/tkm-targets", label: "TKM Targets", key: "region-tkm-targets" as const },
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
@@ -299,6 +300,7 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   accounts: DashboardIcon,
   "central-tkm-targets": TkmTargetsIcon,
   "central-set-targets": SetTargetsIcon,
+  "region-tkm-targets": TkmTargetsIcon,
   "region-set-targets": SetTargetsIcon,
   ce: ChatIcon,
 };

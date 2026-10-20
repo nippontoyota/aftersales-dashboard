@@ -60,6 +60,12 @@ export type RegionBranchRow = {
    * totalRevenueStreamMtd formula. Null exactly when totalAchieved is null —
    * scrap/used-oil never resurrects a null total on its own. */
   totalRevenue: number | null;
+  /** TGLOSS revenue, MTD (BranchReport's vasAchievementForTheMonth) —
+   * shown alongside Scrap & Used Oil (2026-10-20, at the regional managers'
+   * request) but, like everywhere else in the app, never folded into
+   * totalRevenue/totalRevenueStream — TGLOSS has never been part of that
+   * total. Null whenever the branch's own figure is null. */
+  tgloss: number | null;
   /** Small note shown under the branch's column header — e.g. "Body & Paint
    * only" for a satellite branch with no general service. Undefined when
    * there's nothing to flag. */
@@ -82,6 +88,7 @@ export type RegionRevenueView = {
     totalAchieved: number | null;
     scrapAndUsedOil: number;
     totalRevenue: number | null;
+    tgloss: number | null;
   };
   /** Sum of each branch's Slab 4 threshold — the region's "everyone at the
    * top slab" target. */
@@ -134,6 +141,9 @@ export type BranchAchieved = {
   sprExternal: number | null;
   /** Scrap + used-oil bill revenue, MTD — always a number, never null. */
   scrapAndUsedOil: number;
+  /** TGLOSS revenue, MTD (BranchReport's vasAchievementForTheMonth) — null
+   * whenever the branch's own figure is null, same as gs/bp/ext above. */
+  tgloss: number | null;
 };
 
 /** GS/BP/Ext-Sales achieved for one branch's report row, same formula used
@@ -146,7 +156,8 @@ export function branchAchieved(b: BranchReport | undefined): BranchAchieved {
   const ext = b?.externalSalesMtd ?? null;
   const sprExternal = b?.sprExternalMtd ?? null;
   const scrapAndUsedOil = (b?.scrapRevenueMtd ?? 0) + (b?.usedOilRevenueMtd ?? 0);
-  return { gs, bp, ext, sprExternal, scrapAndUsedOil };
+  const tgloss = b?.vasAchievementForTheMonth ?? null;
+  return { gs, bp, ext, sprExternal, scrapAndUsedOil, tgloss };
 }
 
 export function addAchieved(a: BranchAchieved, b: BranchAchieved): BranchAchieved {
@@ -156,6 +167,7 @@ export function addAchieved(a: BranchAchieved, b: BranchAchieved): BranchAchieve
     ext: sumOrNull([a.ext, b.ext]),
     sprExternal: sumOrNull([a.sprExternal, b.sprExternal]),
     scrapAndUsedOil: a.scrapAndUsedOil + b.scrapAndUsedOil,
+    tgloss: sumOrNull([a.tgloss, b.tgloss]),
   };
 }
 
@@ -188,6 +200,7 @@ export function buildRegionTotals(
   const totalAchieved = sumOrNull([gsTotals.achieved, bpTotals.achieved, extTotals.achieved]);
   const scrapAndUsedOilTotal = branches.reduce((sum, r) => sum + r.scrapAndUsedOil, 0);
   const totalRevenue = totalAchieved !== null ? totalAchieved + scrapAndUsedOilTotal : null;
+  const tglossTotal = sumOrNull(branches.map((r) => r.tgloss));
   const slab4Total = sumOrNull(branches.map((r) => r.slab?.slab4 ?? null));
 
   const branchesWithSlab = branches.filter((r) => r.slab !== undefined);
@@ -216,6 +229,7 @@ export function buildRegionTotals(
       totalAchieved,
       scrapAndUsedOil: scrapAndUsedOilTotal,
       totalRevenue,
+      tgloss: tglossTotal,
     },
     slab4Total,
     balanceToSlab4: slab4Total !== null && totalAchieved !== null ? slab4Total - totalAchieved : null,
@@ -269,6 +283,7 @@ export async function loadRegionRevenueView(region: RegionName, date: string, re
       totalAchieved,
       scrapAndUsedOil: achieved.scrapAndUsedOil,
       totalRevenue,
+      tgloss: achieved.tgloss,
       badge: BODY_PAINT_ONLY_BRANCHES.has(branch) ? "Body & Paint only" : undefined,
       slab: slabs.get(branch),
       slabActual: totalRevenue,
