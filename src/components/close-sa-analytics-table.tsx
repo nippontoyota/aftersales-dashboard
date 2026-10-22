@@ -68,16 +68,10 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
         <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
           {cell(formatNumber(totals.batteryCount))}
         </td>
-        <td className="px-3 py-2 align-top">{cell(formatNumber(totals.soldHours))}</td>
-        <td className="px-3 py-2 align-top" title="Once per RO, not summed per labour line — see data-sourcing notes">
-          {cell(formatNumber(totals.overTargetTotal))}
-        </td>
-        <td className="px-3 py-2 align-top">{cell(`${totals.appointmentCount} / ${totals.walkinCount}`)}</td>
-        <td className="px-3 py-2 align-top">{cell(formatNumber(totals.bpPotentialCount))}</td>
       </tr>
       {expanded ? (
         <tr className="border-t border-border-subtle bg-surface-2/40">
-          <td colSpan={12} className="px-3 py-3">
+          <td colSpan={8} className="px-3 py-3">
             <div className="grid grid-cols-1 gap-3 text-xs text-fg-subtle sm:grid-cols-3">
               <div>
                 <div className="mb-1 font-semibold text-fg-subtle">Job mix</div>
@@ -169,10 +163,6 @@ export function CloseSaAnalyticsTable({
               <th className="whitespace-nowrap px-3 py-2">{tglossText("TGLOSS ₹")}</th>
               <th className="whitespace-nowrap px-3 py-2">Tyre</th>
               <th className="whitespace-nowrap px-3 py-2">Battery</th>
-              <th className="whitespace-nowrap px-3 py-2">Sold Hrs</th>
-              <th className="whitespace-nowrap px-3 py-2">Over Target</th>
-              <th className="whitespace-nowrap px-3 py-2">Appt / Walk-in</th>
-              <th className="whitespace-nowrap px-3 py-2">BP Potential</th>
             </tr>
           </thead>
           <tbody>
