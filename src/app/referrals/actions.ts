@@ -52,10 +52,11 @@ export async function markConnectedAction(_prev: ReferralActionState, formData: 
   return { error: null, ok: true };
 }
 
-/** The detail view's call-history list — branch-only, same as the page itself. */
+/** The detail view's call-history list — any viewer who can reach the page
+ * (branch acting on its own queue, HQ reading the company-wide overview). */
 export async function getCallHistoryAction(referralId: number): Promise<InactiveReferralCallRow[]> {
   const admin = await getCurrentAdmin();
-  if (!admin || admin.role !== "branch") return [];
+  if (!admin || (admin.role !== "branch" && admin.role !== "hq")) return [];
   if (!Number.isFinite(referralId) || referralId <= 0) return [];
   return loadCallHistory(referralId);
 }

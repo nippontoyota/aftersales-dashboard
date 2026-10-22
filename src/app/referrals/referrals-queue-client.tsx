@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { getCallHistoryAction, markConnectedAction, markNotConnectedAction, type ReferralActionState } from "./actions";
 import type { InactiveReferralCallRow, InactiveReferralRow } from "@/lib/inactive-referrals/store";
+import { branchName } from "@/lib/branch-names";
 
 const INIT: ReferralActionState = { error: null, ok: false };
 
@@ -135,16 +136,29 @@ function CallActions({ referral }: { referral: InactiveReferralRow }) {
   );
 }
 
-export function ReferralsQueueClient({ queue }: { queue: InactiveReferralRow[] }) {
+export function ReferralsQueueClient({
+  queue,
+  readOnly = false,
+  showBranch = false,
+}: {
+  queue: InactiveReferralRow[];
+  /** HQ's company-wide view — no call/update actions, just visibility. */
+  readOnly?: boolean;
+  /** Shows which branch each referral is assigned to — only meaningful
+   * once the list spans more than one branch (HQ's view). */
+  showBranch?: boolean;
+}) {
   return (
     <div>
       <h1 className="text-lg font-semibold text-fg">Referrals</h1>
       <p className="mt-1 text-sm text-fg-muted">
-        Inactive customers referred by employees for re-engagement. Call each one and record what happened.
+        {readOnly
+          ? "Inactive customers referred by employees for re-engagement, across every branch."
+          : "Inactive customers referred by employees for re-engagement. Call each one and record what happened."}
       </p>
 
       {queue.length === 0 ? (
-        <p className="mt-6 text-sm text-fg-faint">No referrals for your branch yet.</p>
+        <p className="mt-6 text-sm text-fg-faint">{readOnly ? "No referrals yet." : "No referrals for your branch yet."}</p>
       ) : (
         <ul className="mt-6 space-y-3">
           {queue.map((r) => (
@@ -165,8 +179,10 @@ export function ReferralsQueueClient({ queue }: { queue: InactiveReferralRow[] }
               </div>
               <div className="mt-2 text-[11px] text-fg-faint">
                 Referred by {r.referringEmployeeName ?? r.referringEmployeeId} · {r.referralDate ?? fmt(r.submittedAt)}
+                {showBranch ? ` · ${r.assignedBranch ? branchName(r.assignedBranch) : "Unassigned"}` : ""}
+                {r.handledBy ? ` · Handled by ${r.handledBy}` : ""}
               </div>
-              <CallActions referral={r} />
+              {readOnly ? null : <CallActions referral={r} />}
               <CallHistory referralId={r.id} />
             </li>
           ))}

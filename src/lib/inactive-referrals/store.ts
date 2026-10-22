@@ -81,6 +81,15 @@ export async function loadQueueForBranch(branch: string): Promise<InactiveReferr
   return rows.map(toRow);
 }
 
+/** HQ's read-only company-wide view — every referral, newest first. Unlike
+ * a branch's own queue this isn't scoped to one branch; ensureAssignedBranches()
+ * is still the caller's job to run first (see page.tsx) so assigned_branch
+ * is resolved before this reads it. */
+export async function loadAllReferrals(): Promise<InactiveReferralRow[]> {
+  const { rows } = await pool.query(`select ${SELECT_COLUMNS} from inactive_customer_referrals order by submitted_at desc`);
+  return rows.map(toRow);
+}
+
 async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
   const { rows } = await pool.query<{ assigned_branch: string | null }>(
     `select assigned_branch from inactive_customer_referrals where id = $1`,

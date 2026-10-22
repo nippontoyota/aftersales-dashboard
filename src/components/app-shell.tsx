@@ -33,10 +33,12 @@ const NAV_ITEMS = [
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true, hqOnly: false },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true, hqOnly: false },
   { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: true, branchOnly: false },
-  // Inactive Customer Referrals — branch-only (2026-10-22), separate from BP
+  // Inactive Customer Referrals — branch + HQ (2026-10-22), separate from BP
   // Referrals above: a branch calls its own inactive customers to
-  // re-engage them, no BPM/payout workflow involved. See src/app/referrals/.
-  { href: "/referrals", label: "Referrals", key: "referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: false, branchOnly: true },
+  // re-engage them, no BPM/payout workflow involved; HQ gets a read-only
+  // company-wide view of the same list (see branchOrHqOnly below).
+  // See src/app/referrals/.
+  { href: "/referrals", label: "Referrals", key: "referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: false, branchOnly: false, branchOrHqOnly: true },
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false, hqOnly: false, branchOnly: false },
 ];
 
@@ -402,7 +404,8 @@ export function AppShell({
           (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload) &&
           (!item.hqOnly || isHq) &&
-          (!item.branchOnly || isBranch),
+          (!item.branchOnly || isBranch) &&
+          (!item.branchOrHqOnly || isBranch || isHq),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq && !accountsNav && !centralNav && !regionalRmNav ? UTILITY_NAV_ITEMS : [];
 
