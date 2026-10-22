@@ -6,7 +6,7 @@ import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { TargetIcon, WrenchIcon, StorefrontIcon } from "@/components/dashboard-icons";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { tglossText } from "@/components/tgloss-text";
-import { achievementRatio, computeKpiSummary, TKM_TRACKED_KPIS } from "@/lib/aggregate";
+import { achievementRatio } from "@/lib/aggregate";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
@@ -16,7 +16,6 @@ import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format
 import { computePace, paceTone } from "@/lib/pace";
 import { computeTrendSeries } from "@/lib/trend";
 import { BranchPerformanceHeatmap, type HeatmapMetricConfig } from "../dashboard/branch-performance-heatmap";
-import { InsightsPanel } from "../dashboard/insights-panel";
 import { MetricSyncProvider } from "../dashboard/metric-sync";
 import { RegionScorecard, type RegionMetricConfig } from "../dashboard/region-scorecard";
 import { TkmReportTable } from "../dashboard/tkm-report-table";
@@ -48,15 +47,6 @@ const HEATMAP_METRICS: HeatmapMetricConfig[] = [
   { label: "Offtake", actual: "offtakeAchievementForTheMonth", target: "offtakeTarget", syncKey: "offtake", baToolActual: "spoDealer", baToolTarget: "spoDealerTarget" },
   { label: "PM+OC", actual: "pmOcAchievementForTheMonth", target: "pmOcTarget", syncKey: "pmOc", baToolActual: "pm", baToolTarget: "pmTarget" },
 ];
-
-const PER_BRANCH_METRICS = [
-  { actual: "bpuAchievementForTheMonth" as const, target: "bpuTarget" as const },
-  { actual: "offtakeAchievementForTheMonth" as const, target: "offtakeTarget" as const },
-  { actual: "partsRetailAchievementForTheMonth" as const, target: "partsRetailTarget" as const },
-  { actual: "pmOcAchievementForTheMonth" as const, target: "pmOcTarget" as const },
-];
-
-const REGION_GAP_METRIC = { actual: "partsRetailAchievementForTheMonth" as const, target: "partsRetailTarget" as const, label: "Parts Retail" };
 
 export default async function TkmTargetsPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
   const admin = await getCurrentAdmin();
@@ -108,7 +98,6 @@ async function TkmTargetsContent({
   }
 
   const { date, region, dates, report, filteredBranches, kpis, hasPreviousUpload, monthSnapshots, isPublished, canPublish, isCompanyScope } = data;
-  const allKpis = computeKpiSummary(report.branches);
 
   const trendSeriesByMetric = {
     bpu: computeTrendSeries(monthSnapshots, region, "bpus", "bpusTarget"),
@@ -281,19 +270,6 @@ async function TkmTargetsContent({
           <BranchPerformanceHeatmap branches={filteredBranches} metrics={HEATMAP_METRICS} date={date} monthSnapshots={monthSnapshots} holidays={holidays} />
         </div>
       </MetricSyncProvider>
-
-      <div className="mt-4">
-        <InsightsPanel
-          kpis={allKpis}
-          branches={report.branches}
-          date={date}
-          trackedKpis={TKM_TRACKED_KPIS}
-          perBranchMetrics={PER_BRANCH_METRICS}
-          regionGapMetric={REGION_GAP_METRIC}
-          maxVisible={3}
-          holidays={holidays}
-        />
-      </div>
 
       <div className="mt-4">
         <TkmReportTable branches={filteredBranches} daysSincePrevious={report.daysSincePrevious} />

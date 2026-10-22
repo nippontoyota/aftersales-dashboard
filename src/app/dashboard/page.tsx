@@ -7,7 +7,7 @@ import { CollapsibleCard } from "@/components/collapsible-card";
 import { TargetIcon, PercentIcon } from "@/components/dashboard-icons";
 import { RichKpiCard } from "@/components/rich-kpi-card";
 import { tglossText } from "@/components/tgloss-text";
-import { achievementRatio, computeKpiSummary } from "@/lib/aggregate";
+import { achievementRatio } from "@/lib/aggregate";
 import { getCurrentAdmin } from "@/lib/auth";
 import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
@@ -27,7 +27,6 @@ import { BranchDailyReport } from "./branch-daily-report";
 import { DashboardTabs } from "./dashboard-tabs";
 import { HeroKpi } from "./hero-kpi";
 import { HeroKpiStrip } from "./hero-kpi-strip";
-import { InsightsPanel } from "./insights-panel";
 import { RegionScorecard } from "./region-scorecard";
 import { ScopedRevenuePerCar, ScopedVasTrend } from "./scoped-overview";
 import { ScopeSyncProvider } from "./scope-sync";
@@ -202,8 +201,6 @@ async function DashboardContent({
     return <RegionRevenueDashboard view={view} regionName={admin.region} dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} />;
   }
 
-  const allKpis = computeKpiSummary(report.branches);
-
   // Plain object, not the Map loadIncentiveSlabTargets returns — a Map
   // doesn't survive the server-component -> client-component prop boundary
   // as reliably as a plain object does, and HeroKpiStrip is "use client".
@@ -289,7 +286,6 @@ async function DashboardContent({
                 serviceInfoMonthSnapshots={serviceInfoMonthSnapshots}
               />
             }
-            insights={<InsightsPanel kpis={allKpis} branches={report.branches} date={date} holidays={holidays} />}
             more={
               <>
                 <CollapsibleCard title="Other KPIs" defaultOpen>

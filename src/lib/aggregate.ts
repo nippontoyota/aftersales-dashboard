@@ -238,28 +238,3 @@ export function hasActualWithoutTarget(actual: number | null, target: number | n
   return actual !== null && (target === null || target === 0);
 }
 
-const FIXED_TGLOSS_TARGET = 0.38;
-
-export type TrackedKpi = { key: string; label: string; actual: keyof KpiSummary; target: number | keyof KpiSummary };
-
-/** BPU/Offtake/Parts Retail/PM+OC moved to their own "TKM Targets" page
- * (2026-08-31, at the user's request — these are TKM's own official target
- * categories, tracked separately from the rest of the dashboard). Kept in
- * one place so "which KPIs count" for the TKM Targets page can't drift
- * between the views that need this list (Achievement Donut, Trend Chart,
- * Region Scorecard, heatmap, bars, Alerts, Insights all take this as a
- * `metrics`/`trackedKpis` prop rather than hardcoding it). */
-export const TKM_TRACKED_KPIS: TrackedKpi[] = [
-  { key: "bpu", label: "BPU Achievement", actual: "bpuAchievementForTheMonth", target: "bpuTarget" },
-  { key: "offtake", label: "Offtake Achievement", actual: "offtakeAchievementForTheMonth", target: "offtakeTarget" },
-  { key: "partsRetail", label: "Parts Retail Achievement", actual: "partsRetailAchievementForTheMonth", target: "partsRetailTarget" },
-  { key: "pmOc", label: "PM+OC Achievement", actual: "pmOcAchievementForTheMonth", target: "pmOcTarget" },
-];
-
-/** The KPIs with a real, confirmed target that stay on the main dashboard
- * (everything else moved to TKM_TRACKED_KPIS above, 2026-08-31) — used by
- * the Insights panel to know which KPIs to reason about. */
-export const TRACKED_KPIS: TrackedKpi[] = [
-  { key: "vas", label: "TGLOSS Achievement", actual: "vasAchievementForTheMonth", target: "vasBillTarget" },
-  { key: "tGloss", label: "TGLOSS Penetration", actual: "penetrationTGlossService", target: FIXED_TGLOSS_TARGET },
-];
