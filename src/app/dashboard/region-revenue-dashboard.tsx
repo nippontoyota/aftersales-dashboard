@@ -1,8 +1,10 @@
 import type { RegionRevenueView, RegionMetricBlock, RegionBranchRow, RegionMetricStatus } from "@/lib/region-revenue-data";
+import type { BranchReport } from "@/lib/report";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { eyebrow } from "@/lib/ui";
 import { tglossText } from "@/components/tgloss-text";
 import { DraftWarning } from "@/components/draft-warning";
+import { BranchDetailModal } from "./branch-detail-modal";
 import { DateSelect } from "./date-select";
 import { IncentiveSlabIndicator } from "./incentive-slab-indicator";
 
@@ -83,13 +85,20 @@ export function RegionRevenueDashboard({
   uploadedAt,
   isPublished,
   regionName,
+  branchReports,
 }: {
   view: RegionRevenueView;
   dates: string[];
   uploadedAt: string;
   isPublished: boolean;
   regionName: string;
+  /** Every branch's full BranchReport, for the click-to-expand "all metrics"
+   * popup on each branch's column header (2026-10-22, at the regional
+   * managers' request). Looked up by code — not scoped to this region's own
+   * branches, so the caller can just pass report.branches straight through. */
+  branchReports: BranchReport[];
 }) {
+  const branchReportByCode = new Map(branchReports.map((b) => [b.branch, b]));
   const regionTotalLabel = `${regionName} Rgn`;
   const totalColumn: RegionBranchRow = {
     branch: regionTotalLabel,
@@ -151,13 +160,27 @@ export function RegionRevenueDashboard({
           <thead>
             <tr>
               <th className="pb-2 text-left text-[10px] font-medium uppercase tracking-wide text-fg-faint"></th>
-              {columns.map((c) => (
-                <th key={c.branch} className="pb-2 pr-4 text-left">
-                  <div className="text-[12px] font-semibold text-fg">{c.branch === regionTotalLabel ? tglossText(regionTotalLabel) : c.label}</div>
-                  {c.branch !== regionTotalLabel ? <div className="text-[10px] text-fg-faint">{c.branch}</div> : null}
-                  {c.badge ? <div className="text-[9px] font-medium text-accent-text">{c.badge}</div> : null}
-                </th>
-              ))}
+              {columns.map((c) => {
+                const branchReport = c.branch !== regionTotalLabel ? branchReportByCode.get(c.branch) : undefined;
+                const header = (
+                  <>
+                    <div className="text-[12px] font-semibold text-fg">{c.branch === regionTotalLabel ? tglossText(regionTotalLabel) : c.label}</div>
+                    {c.branch !== regionTotalLabel ? <div className="text-[10px] text-fg-faint">{c.branch}</div> : null}
+                    {c.badge ? <div className="text-[9px] font-medium text-accent-text">{c.badge}</div> : null}
+                  </>
+                );
+                return (
+                  <th key={c.branch} className="pb-2 pr-4 text-left">
+                    {branchReport ? (
+                      <BranchDetailModal report={branchReport} label={c.label} code={c.branch}>
+                        {header}
+                      </BranchDetailModal>
+                    ) : (
+                      header
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>

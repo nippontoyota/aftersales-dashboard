@@ -194,11 +194,15 @@ async function DashboardContent({
   }
   if (admin.role === "regional" && admin.region === "Central") {
     const view = await loadCentralRegionView(date, report);
-    return <RegionRevenueDashboard view={view} regionName="Central" dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} />;
+    return (
+      <RegionRevenueDashboard view={view} regionName="Central" dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} branchReports={report.branches} />
+    );
   }
   if (admin.role === "regional") {
     const view = await loadRegionRevenueView(admin.region, date, report);
-    return <RegionRevenueDashboard view={view} regionName={admin.region} dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} />;
+    return (
+      <RegionRevenueDashboard view={view} regionName={admin.region} dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} branchReports={report.branches} />
+    );
   }
 
   // Plain object, not the Map loadIncentiveSlabTargets returns — a Map
