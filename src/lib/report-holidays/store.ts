@@ -20,6 +20,15 @@ export async function loadReportHolidaySet(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.date));
 }
 
+/** One date's holiday record, if flagged — just what DraftWarning needs to
+ * explain a partial/empty report as "this was a holiday" instead of a false
+ * "still syncing" warning, since no further branches are expected to file
+ * for it. */
+export async function loadReportHoliday(date: string): Promise<{ note: string | null } | null> {
+  const { rows } = await pool.query<{ note: string | null }>("select note from report_holidays where date = $1", [date]);
+  return rows[0] ?? null;
+}
+
 export async function addReportHoliday(date: string, note: string, createdBy: string): Promise<void> {
   await pool.query(
     "insert into report_holidays (date, note, created_by) values ($1, $2, $3) on conflict (date) do update set note = excluded.note",

@@ -15,7 +15,7 @@ import { buildReport, isBodyPaintOnly, type BranchReport, type Report } from "./
 import { listSnapshotDates } from "./snapshot-store";
 import { isDatePublished } from "./publish-store";
 import { loadScom205BranchesForDate } from "./scom205/store";
-import { loadReportHolidaySet } from "./report-holidays/store";
+import { loadReportHoliday, loadReportHolidaySet } from "./report-holidays/store";
 import { latestNonHolidayDate } from "./reporting-date";
 
 /**
@@ -149,6 +149,10 @@ export type VpData = {
   /** HQ-flagged report_holidays, as an array — every pace/forecast call on
    * this page reuses this same set (2026-09-29). */
   holidays: string[];
+  /** Set when `date` itself is flagged in report_holidays — lets the page
+   * explain a partial/empty report as "this was a holiday" instead of a
+   * false "still syncing" warning (2026-10-22). */
+  holiday: { note: string | null } | null;
 };
 
 function perCar(amount: number | null, ro: number | null): number | null {
@@ -294,14 +298,17 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
   if (dates.length === 0) return null;
 
   const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : latestNonHolidayDate(dates, holidaySet)!;
-  const [report, published, uploadedBranches, incentiveSlabTargetsMap] = await Promise.all([
+  const isHolidayDate = holidaySet.has(date);
+  const [report, published, uploadedBranches, incentiveSlabTargetsMap, holidayRecord] = await Promise.all([
     buildReport(date),
     isDatePublished(date),
     loadScom205BranchesForDate(date),
     loadIncentiveSlabTargets(date.slice(0, 7)),
+    isHolidayDate ? loadReportHoliday(date) : Promise.resolve(null),
   ]);
   const incentiveSlabTargets = Object.fromEntries(incentiveSlabTargetsMap);
   const holidays = [...holidaySet];
+  const holiday = holidayRecord ? { note: holidayRecord.note } : null;
 
   if (!report)
     return {
@@ -320,6 +327,7 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
       lastMonthScope: null,
       incentiveSlabTargetsByBranch: {},
       holidays,
+      holiday,
     };
 
   const regions: VpRegionRollup[] = (Object.keys(REGIONS) as RegionName[]).map((region) => {
@@ -369,6 +377,7 @@ export async function loadVpData(requestedDate?: string): Promise<VpData | null>
     lastMonthScope,
     incentiveSlabTargetsByBranch: incentiveSlabTargets,
     holidays,
+    holiday,
   };
 }
 
