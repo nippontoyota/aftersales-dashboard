@@ -32,8 +32,12 @@ const NAV_ITEMS = [
   // their own uploads, not the company-wide dashboard state).
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true, hqOnly: false },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true, hqOnly: false },
-  { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: true },
-  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false, hqOnly: false },
+  { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: true, branchOnly: false },
+  // Inactive Customer Referrals — branch-only (2026-10-22), separate from BP
+  // Referrals above: a branch calls its own inactive customers to
+  // re-engage them, no BPM/payout workflow involved. See src/app/referrals/.
+  { href: "/referrals", label: "Referrals", key: "referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: false, branchOnly: true },
+  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false, hqOnly: false, branchOnly: false },
 ];
 
 /** The Accounts view (role `accounts`) gets its own single-item nav —
@@ -188,6 +192,16 @@ function BpReferralsIcon() {
   );
 }
 
+function ReferralsIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <circle cx="7" cy="6.5" r="2.5" />
+      <path d="M2.5 16v-1a4.5 4.5 0 0 1 4.5-4.5h0a4.5 4.5 0 0 1 4.5 4.5v1" strokeLinecap="round" />
+      <path d="M13 4.2a2.8 2.8 0 0 1 0 5.1M16 16v-.9a4 4 0 0 0-2.7-3.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function DataIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
@@ -294,6 +308,7 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   bills: BillsIcon,
   cancellations: CancellationsIcon,
   "bp-referrals": BpReferralsIcon,
+  referrals: ReferralsIcon,
   upload: UploadIcon,
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,
@@ -386,7 +401,8 @@ export function AppShell({
           (!item.requiresDashboard || showDashboardLink) &&
           (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload) &&
-          (!item.hqOnly || isHq),
+          (!item.hqOnly || isHq) &&
+          (!item.branchOnly || isBranch),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq && !accountsNav && !centralNav && !regionalRmNav ? UTILITY_NAV_ITEMS : [];
 

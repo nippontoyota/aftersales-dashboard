@@ -1221,3 +1221,54 @@ alter table bp_referrals add column if not exists not_interested_reason text;
 -- matching label, and for 'other' is the BPM's own mandatory text), so the
 -- common cases are countable without parsing free text.
 alter table bp_referral_activity add column if not exists not_connected_reason text;
+
+-- 2026-10-22: Inactive Customer Referrals — leads submitted by employees
+-- (via the same kind of external form/bot as BP referrals) naming an
+-- inactive customer worth re-engaging. This table already exists in
+-- production, created out-of-band alongside the webhook receiver
+-- (src/app/api/webhooks/inactive-referral/route.ts); the `create table if
+-- not exists` below documents its real shape. See src/lib/inactive-referrals/.
+create table if not exists inactive_customer_referrals (
+  id                         serial       primary key,
+  referral_date              varchar,
+  vehicle_reg_no             varchar      not null,
+  vehicle_model              varchar      not null,
+  customer_name              varchar      not null,
+  customer_phone_1           varchar      not null,
+  customer_phone_2           varchar,
+  customer_address           text,
+  referring_employee_id      varchar      not null,
+  referring_employee_name    varchar,
+  referring_employee_branch  varchar,
+  dealer_code                varchar,
+  submitted_at               timestamptz  default now()
+);
+
+-- Branch call/update workflow — a branch admin (role 'branch') works the
+-- referrals resolved to their own branch: call the customer, mark
+-- connected/not-connected. assigned_branch resolves referring_employee_branch
+-- (falling back to dealer_code) through the same free-text-to-branch-code
+-- matching already used for BP referrals (see bp-referrals/branch-match.ts)
+-- — rows that don't resolve to a known branch stay unassigned and invisible
+-- to any branch's queue, same convention as bp_referrals.assigned_branch.
+alter table inactive_customer_referrals add column if not exists assigned_branch varchar;
+alter table inactive_customer_referrals add column if not exists call_status text not null default 'pending';
+alter table inactive_customer_referrals drop constraint if exists inactive_customer_referrals_call_status_check;
+alter table inactive_customer_referrals add constraint inactive_customer_referrals_call_status_check
+  check (call_status in ('pending', 'not_connected', 'connected'));
+alter table inactive_customer_referrals add column if not exists handled_by text references admins(username);
+alter table inactive_customer_referrals add column if not exists last_contacted_at timestamptz;
+create index if not exists inactive_customer_referrals_assigned_branch_idx on inactive_customer_referrals (assigned_branch);
+
+-- Append-only call log (same reasoning as bp_referral_activity — a branch
+-- may try more than once before connecting, and each attempt's own remark
+-- stays visible rather than being overwritten).
+create table if not exists inactive_referral_calls (
+  id             bigserial    primary key,
+  referral_id    integer      not null references inactive_customer_referrals(id),
+  call_status    text         not null check (call_status in ('not_connected', 'connected')),
+  remark         text         not null,
+  performed_by   text         not null references admins(username),
+  performed_at   timestamptz  not null default now()
+);
+create index if not exists inactive_referral_calls_referral_idx on inactive_referral_calls (referral_id, performed_at);
