@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CollapsibleCard } from "./collapsible-card";
 import { tglossText } from "./tgloss-text";
 import { formatCompact, formatNumber } from "@/lib/format";
 import { partsMatchCoveragePct, type CloseSaPeriodTotals } from "@/lib/close-sa-analytics/aggregate";
+import { REGIONS, regionForBranch } from "@/lib/regions";
 
 /**
  * Close SA Analytics — per Service Advisor totals for a period, built from
@@ -14,6 +15,53 @@ import { partsMatchCoveragePct, type CloseSaPeriodTotals } from "@/lib/close-sa-
  * (HQ, every SA company-wide, `showBranch`) and /dashboard (a branch's own
  * SAs only).
  */
+
+type SortKey = "closeSaName" | "roCount" | "distinctVehicleCount" | "labourRevenueAfter" | "partsRevenue" | "vasBillRevenue" | "tyreCount" | "batteryCount";
+type SortState = { key: SortKey; dir: "asc" | "desc" } | null;
+
+function getSortValue(t: CloseSaPeriodTotals, key: SortKey): string | number {
+  switch (key) {
+    case "closeSaName":
+      return t.closeSaName;
+    case "roCount":
+      return t.roCount;
+    case "distinctVehicleCount":
+      return t.distinctVehicleCount;
+    case "labourRevenueAfter":
+      return t.labourRevenueAfter;
+    case "partsRevenue":
+      return t.partsRevenue;
+    case "vasBillRevenue":
+      return t.vasBillRevenue;
+    case "tyreCount":
+      return t.tyreCount;
+    case "batteryCount":
+      return t.batteryCount;
+  }
+}
+
+/** Same Central→South→North, alphabetical-within-region branch order the
+ * rest of the dashboard uses (see dashboard/revenue-per-vehicle-table.tsx's
+ * regionSort) — the default "dealer wise" view (2026-10-22, at the user's
+ * request), CO01A first because it's Central's first branch. Within one
+ * branch, highest ROs first (unchanged from the previous default). A branch
+ * with no region (shouldn't happen with real data) sorts after every real
+ * region. On /dashboard (one branch only) every row shares the same branch,
+ * so this reduces to the plain ROs-descending order it always was. */
+const REGION_ORDER = Object.keys(REGIONS) as (keyof typeof REGIONS)[];
+
+function defaultCompare(a: CloseSaPeriodTotals, b: CloseSaPeriodTotals): number {
+  const branchA = a.branches[0] ?? "";
+  const branchB = b.branches[0] ?? "";
+  const regionA = regionForBranch(branchA);
+  const regionB = regionForBranch(branchB);
+  const ia = regionA ? REGION_ORDER.indexOf(regionA) : REGION_ORDER.length;
+  const ib = regionB ? REGION_ORDER.indexOf(regionB) : REGION_ORDER.length;
+  if (ia !== ib) return ia - ib;
+  const branchCmp = branchA.localeCompare(branchB);
+  if (branchCmp !== 0) return branchCmp;
+  return b.roCount - a.roCount;
+}
 
 function cell(value: string) {
   return <div className="whitespace-nowrap text-right text-sm tabular-nums text-fg">{value}</div>;
@@ -124,6 +172,24 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
   );
 }
 
+/** A clickable column header — 1st click sorts the whole table (breaking out
+ * of the default per-branch grouping) descending by this column, 2nd click
+ * ascending, 3rd click back to the default dealer-wise view (2026-10-22, at
+ * the user's request: "so if I click on Labour, I can see who has the
+ * highest across all branches"). */
+function SortableHeader({ label, sortKey, sort, onClick, sticky }: { label: React.ReactNode; sortKey: SortKey; sort: SortState; onClick: (key: SortKey) => void; sticky?: boolean }) {
+  const active = sort?.key === sortKey;
+  return (
+    <th
+      className={`${sticky ? "sticky left-0" : ""} cursor-pointer select-none whitespace-nowrap bg-surface-2 px-3 py-2 hover:text-fg`}
+      onClick={() => onClick(sortKey)}
+    >
+      {label}
+      <span className="ml-1 inline-block w-2.5 text-[10px] text-fg-faint">{active ? (sort!.dir === "desc" ? "▼" : "▲") : ""}</span>
+    </th>
+  );
+}
+
 export function CloseSaAnalyticsTable({
   totals,
   showBranch = false,
@@ -136,6 +202,26 @@ export function CloseSaAnalyticsTable({
   defaultOpen?: boolean;
   subtitle?: string;
 }) {
+  const [sort, setSort] = useState<SortState>(null);
+
+  const handleHeaderClick = (key: SortKey) => {
+    setSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: "desc" };
+      if (prev.dir === "desc") return { key, dir: "asc" };
+      return null;
+    });
+  };
+
+  const sortedTotals = useMemo(() => {
+    if (!sort) return [...totals].sort(defaultCompare);
+    return [...totals].sort((a, b) => {
+      const va = getSortValue(a, sort.key);
+      const vb = getSortValue(b, sort.key);
+      const cmp = typeof va === "string" || typeof vb === "string" ? String(va).localeCompare(String(vb)) : (va as number) - (vb as number);
+      return sort.dir === "desc" ? -cmp : cmp;
+    });
+  }, [totals, sort]);
+
   if (totals.length === 0) {
     return (
       <CollapsibleCard title="Close SA Analytics" subtitle={subtitle ?? "no Service Info / Labour Sales / Part Sale data for this period"} defaultOpen={defaultOpen}>
@@ -147,7 +233,7 @@ export function CloseSaAnalyticsTable({
   return (
     <CollapsibleCard
       title="Close SA Analytics"
-      subtitle={subtitle ?? "Service Info + Labour Sales + Part Sale, per Close SA — click a row for detail"}
+      subtitle={subtitle ?? "Service Info + Labour Sales + Part Sale, per Close SA — click a row for detail, click a header to sort"}
       defaultOpen={defaultOpen}
       clip
     >
@@ -155,18 +241,18 @@ export function CloseSaAnalyticsTable({
         <table className="min-w-full text-xs">
           <thead className="text-left text-fg-subtle [&>tr>th]:sticky [&>tr>th]:top-0 [&>tr>th]:z-10 [&>tr>th]:bg-surface-2 [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border)]">
             <tr>
-              <th className="sticky left-0 whitespace-nowrap bg-surface-2 px-3 py-2">Close SA</th>
-              <th className="whitespace-nowrap px-3 py-2">ROs</th>
-              <th className="whitespace-nowrap px-3 py-2">Vehicles</th>
-              <th className="whitespace-nowrap px-3 py-2">Labour ₹</th>
-              <th className="whitespace-nowrap px-3 py-2">Parts ₹ (matched)</th>
-              <th className="whitespace-nowrap px-3 py-2">{tglossText("TGLOSS ₹")}</th>
-              <th className="whitespace-nowrap px-3 py-2">Tyre</th>
-              <th className="whitespace-nowrap px-3 py-2">Battery</th>
+              <SortableHeader label="Close SA" sortKey="closeSaName" sort={sort} onClick={handleHeaderClick} sticky />
+              <SortableHeader label="ROs" sortKey="roCount" sort={sort} onClick={handleHeaderClick} />
+              <SortableHeader label="Vehicles" sortKey="distinctVehicleCount" sort={sort} onClick={handleHeaderClick} />
+              <SortableHeader label="Labour ₹" sortKey="labourRevenueAfter" sort={sort} onClick={handleHeaderClick} />
+              <SortableHeader label="Parts ₹ (matched)" sortKey="partsRevenue" sort={sort} onClick={handleHeaderClick} />
+              <SortableHeader label={tglossText("TGLOSS ₹")} sortKey="vasBillRevenue" sort={sort} onClick={handleHeaderClick} />
+              <SortableHeader label="Tyre" sortKey="tyreCount" sort={sort} onClick={handleHeaderClick} />
+              <SortableHeader label="Battery" sortKey="batteryCount" sort={sort} onClick={handleHeaderClick} />
             </tr>
           </thead>
           <tbody>
-            {totals.map((t) => (
+            {sortedTotals.map((t) => (
               <SaRow key={`${t.branches.join(",")}|${t.closeSaName}`} totals={t} showBranch={showBranch} />
             ))}
           </tbody>
