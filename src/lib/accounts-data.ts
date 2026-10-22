@@ -6,6 +6,8 @@ import { buildReport, type BranchReport, type Report } from "./report";
 import { listSnapshotDates } from "./snapshot-store";
 import { isDatePublished } from "./publish-store";
 import { countScom205BranchesForDate } from "./scom205/store";
+import { loadReportHolidaySet } from "./report-holidays/store";
+import { latestNonHolidayDate } from "./reporting-date";
 
 /**
  * The data foundation for the Accounts (finance) executive view (/accounts).
@@ -50,10 +52,10 @@ function sumCancellations(rows: CancellationMonthSummary[]): { count: number; be
 }
 
 export async function loadAccountsData(requestedDate?: string): Promise<AccountsData | null> {
-  const dates = await listSnapshotDates();
+  const [dates, holidays] = await Promise.all([listSnapshotDates(), loadReportHolidaySet()]);
   if (dates.length === 0) return null;
 
-  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
+  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : latestNonHolidayDate(dates, holidays)!;
   const month = date.slice(0, 7);
 
   const [reportRaw, allCancellationSummaries, published, scom205Count] = await Promise.all([buildReport(date), loadCancellationMonthSummaries(), isDatePublished(date), countScom205BranchesForDate(date)]);

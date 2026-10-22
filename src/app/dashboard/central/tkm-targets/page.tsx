@@ -6,6 +6,7 @@ import { loadCentralMetricTargetsView } from "@/lib/central-metric-targets/view-
 import { CENTRAL_BRANCH_LABELS } from "@/lib/central-region-data";
 import { loadNavState } from "@/lib/dashboard-data";
 import { loadReportHolidaySet } from "@/lib/report-holidays/store";
+import { latestNonHolidayDate } from "@/lib/reporting-date";
 import { buildReport, type BranchReport } from "@/lib/report";
 import { listSnapshotDates } from "@/lib/snapshot-store";
 import { requireCentralRmAccess } from "../central-guard";
@@ -37,7 +38,7 @@ export default async function CentralTkmTargetsPage({ searchParams }: { searchPa
 
 async function TkmTargetsContent({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const params = await searchParams;
-  const dates = await listSnapshotDates();
+  const [dates, holidaySet] = await Promise.all([listSnapshotDates(), loadReportHolidaySet()]);
 
   if (dates.length === 0) {
     return (
@@ -50,8 +51,9 @@ async function TkmTargetsContent({ searchParams }: { searchParams: Promise<{ dat
     );
   }
 
-  const date = params.date && dates.includes(params.date) ? params.date : dates.at(-1)!;
-  const [report, holidays] = await Promise.all([buildReport(date), loadReportHolidaySet()]);
+  const date = params.date && dates.includes(params.date) ? params.date : latestNonHolidayDate(dates, holidaySet)!;
+  const report = await buildReport(date);
+  const holidays = holidaySet;
 
   if (!report) {
     return (

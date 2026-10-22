@@ -4,6 +4,8 @@ import { loadBillTotalsByMonth, type BillMonthTotal } from "./bill/store";
 import { buildReport, type Report } from "./report";
 import { REGIONS, type RegionName } from "./regions";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
+import { loadReportHolidaySet } from "./report-holidays/store";
+import { latestNonHolidayDate } from "./reporting-date";
 import { loadCombinedServiceInfoSnapshotsForMonthUpTo, type ServiceInfoSnapshot } from "./service-info/store";
 import { loadAllVasRevenueRealForMonthUpTo, applyVasRevenueRealOverride } from "./vas-revenue-real/store";
 import { isDatePublished } from "./publish-store";
@@ -100,7 +102,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function loadDashboardData(searchParams: { date?: string; region?: string }, admin: AdminAccount): Promise<DashboardData | null> {
   const isHq = admin.role === "hq";
-  const allDates = await listSnapshotDates();
+  const [allDates, holidays] = await Promise.all([listSnapshotDates(), loadReportHolidaySet()]);
   if (allDates.length === 0) return null;
 
   // Everyone sees all dates — HQ to review/publish, branch admins to view their
@@ -109,7 +111,7 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   // file (branches are backfilling from January onward) — buildReport simply
   // returns null for a date with nothing uploaded yet, same as it always has.
   const dates = allDates;
-  const date = searchParams.date && DATE_RE.test(searchParams.date) ? searchParams.date : dates.at(-1)!;
+  const date = searchParams.date && DATE_RE.test(searchParams.date) ? searchParams.date : latestNonHolidayDate(dates, holidays)!;
 
   const latestDate = allDates.at(-1)!;
   const billBranch = admin.role === "branch" ? admin.branch : undefined;

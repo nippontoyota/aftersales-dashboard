@@ -2,7 +2,7 @@ import { BP_BAYS, bpBayUtilization, gsBayUtilization, GS_BAYS, sumBayUtilization
 import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, grossProfitPerRo, revenuePerRo, type HeroSummary, type KpiSummary } from "./aggregate";
 import { REGIONS, type RegionName } from "./regions";
 import { loadReportHolidaySet } from "./report-holidays/store";
-import { sundayOffWorkingDaysElapsedInMonth, sundayOffWorkingDaysInMonth } from "./reporting-date";
+import { latestNonHolidayDate, sundayOffWorkingDaysElapsedInMonth, sundayOffWorkingDaysInMonth } from "./reporting-date";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { computeTrendSeries } from "./trend";
 import { isDatePublished } from "./publish-store";
@@ -235,16 +235,15 @@ function buildCallout(regions: CeoRegionRollup[]): CeoCallout | null {
 }
 
 export async function loadCeoData(requestedDate?: string): Promise<CeoData | null> {
-  const dates = await listSnapshotDates();
+  const [dates, holidays] = await Promise.all([listSnapshotDates(), loadReportHolidaySet()]);
   if (dates.length === 0) return null;
 
-  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
+  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : latestNonHolidayDate(dates, holidays)!;
 
   const month = date.substring(0, 7);
 
-  const [report, holidays, monthSnapshots, slabTargets, published, scom205Count, gusSplitByBranch] = await Promise.all([
+  const [report, monthSnapshots, slabTargets, published, scom205Count, gusSplitByBranch] = await Promise.all([
     buildReport(date),
-    loadReportHolidaySet(),
     loadSnapshotsForMonthUpTo(date),
     loadIncentiveSlabTargets(month),
     isDatePublished(date),

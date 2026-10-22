@@ -41,6 +41,22 @@ export function reportingDate(holidays: ReadonlySet<string>, now: Date = new Dat
   throw new Error("reportingDate: no valid date within 60 days — too many holidays flagged?");
 }
 
+/**
+ * Default date for the *viewing* pages (CEO, dashboard, VP, accounts,
+ * branch view, targets pages) — the most recent uploaded date that isn't
+ * flagged as a holiday. `dates` must be ascending (as listSnapshotDates()
+ * returns them). A holiday flagged after a few branches already filed under
+ * it (see reportingDate()'s doc comment above) shouldn't keep surfacing as
+ * everyone's default view just because its partial data exists — falls back
+ * to the plain latest date if every uploaded date happens to be flagged.
+ */
+export function latestNonHolidayDate(dates: readonly string[], holidays: ReadonlySet<string>): string | undefined {
+  for (let i = dates.length - 1; i >= 0; i--) {
+    if (!holidays.has(dates[i])) return dates[i];
+  }
+  return dates.at(-1);
+}
+
 /** Why a given date isn't a valid report date, or null if it is one. */
 export function invalidReportDateReason(iso: string, holidays: ReadonlySet<string>): string | null {
   if (iso.startsWith("2025-")) {

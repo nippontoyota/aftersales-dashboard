@@ -8,6 +8,8 @@ import { CENTRAL_METRICS, type CentralMetricKey } from "@/lib/central-metric-tar
 import { targetFor } from "@/lib/central-metric-targets/view-data";
 import { loadNavState } from "@/lib/dashboard-data";
 import { loadRegionRevenueTargets } from "@/lib/region-targets/store";
+import { loadReportHolidaySet } from "@/lib/report-holidays/store";
+import { latestNonHolidayDate } from "@/lib/reporting-date";
 import { listSnapshotDates } from "@/lib/snapshot-store";
 import { requireCentralRmAccess } from "../central-guard";
 import { DateSelect } from "../../date-select";
@@ -39,8 +41,8 @@ export default async function CentralSetTargetsPage({ searchParams }: { searchPa
 
 async function SetTargetsContent({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const params = await searchParams;
-  const dates = await listSnapshotDates();
-  const date = params.date && dates.includes(params.date) ? params.date : dates.at(-1) ?? new Date().toISOString().slice(0, 10);
+  const [dates, holidaySet] = await Promise.all([listSnapshotDates(), loadReportHolidaySet()]);
+  const date = params.date && dates.includes(params.date) ? params.date : latestNonHolidayDate(dates, holidaySet) ?? new Date().toISOString().slice(0, 10);
   const month = date.slice(0, 7);
 
   const gsBranches = centralBranchesForMonth(month);

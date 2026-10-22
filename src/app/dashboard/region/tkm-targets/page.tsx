@@ -7,6 +7,7 @@ import { loadCentralMetricTargetsView } from "@/lib/central-metric-targets/view-
 import { loadNavState } from "@/lib/dashboard-data";
 import { buildReport, type BranchReport } from "@/lib/report";
 import { loadReportHolidaySet } from "@/lib/report-holidays/store";
+import { latestNonHolidayDate } from "@/lib/reporting-date";
 import { REGIONS, type RegionName } from "@/lib/regions";
 import { listSnapshotDates } from "@/lib/snapshot-store";
 import { requireRegionalRmAccess } from "../region-guard";
@@ -37,7 +38,7 @@ export default async function RegionTkmTargetsPage({ searchParams }: { searchPar
 
 async function TkmTargetsContent({ region, searchParams }: { region: RegionName; searchParams: Promise<{ date?: string }> }) {
   const params = await searchParams;
-  const dates = await listSnapshotDates();
+  const [dates, holidaySet] = await Promise.all([listSnapshotDates(), loadReportHolidaySet()]);
 
   if (dates.length === 0) {
     return (
@@ -50,8 +51,9 @@ async function TkmTargetsContent({ region, searchParams }: { region: RegionName;
     );
   }
 
-  const date = params.date && dates.includes(params.date) ? params.date : dates.at(-1)!;
-  const [report, holidays] = await Promise.all([buildReport(date), loadReportHolidaySet()]);
+  const date = params.date && dates.includes(params.date) ? params.date : latestNonHolidayDate(dates, holidaySet)!;
+  const report = await buildReport(date);
+  const holidays = holidaySet;
 
   if (!report) {
     return (

@@ -16,6 +16,7 @@ import { listSnapshotDates } from "./snapshot-store";
 import { isDatePublished } from "./publish-store";
 import { loadScom205BranchesForDate } from "./scom205/store";
 import { loadReportHolidaySet } from "./report-holidays/store";
+import { latestNonHolidayDate } from "./reporting-date";
 
 /**
  * The data foundation for the VP Service view (/vp). Deliberately separate
@@ -289,16 +290,15 @@ async function loadGroupScope(date: string, holidays: ReadonlySet<string>): Prom
 }
 
 export async function loadVpData(requestedDate?: string): Promise<VpData | null> {
-  const dates = await listSnapshotDates();
+  const [dates, holidaySet] = await Promise.all([listSnapshotDates(), loadReportHolidaySet()]);
   if (dates.length === 0) return null;
 
-  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
-  const [report, published, uploadedBranches, incentiveSlabTargetsMap, holidaySet] = await Promise.all([
+  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : latestNonHolidayDate(dates, holidaySet)!;
+  const [report, published, uploadedBranches, incentiveSlabTargetsMap] = await Promise.all([
     buildReport(date),
     isDatePublished(date),
     loadScom205BranchesForDate(date),
     loadIncentiveSlabTargets(date.slice(0, 7)),
-    loadReportHolidaySet(),
   ]);
   const incentiveSlabTargets = Object.fromEntries(incentiveSlabTargetsMap);
   const holidays = [...holidaySet];
