@@ -103,20 +103,21 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
                 {formatCompact(totals.bpFinalInvoiceAmount)}
               </div>
             ) : null}
-            <div className="mt-3">
+            <div className="mt-3 max-w-xl">
               <div className="mb-1 text-xs font-semibold text-fg-subtle">Job Desc breakdown ({topJobDescs.length} distinct)</div>
               {topJobDescs.length > 0 ? (
+                // A plain table here stretches to this row's full width — the
+                // same width as the wide, horizontally-scrolled outer table —
+                // pushing the count off past whatever's currently in view
+                // (found 2026-10-22). max-w-xl above + a flex row per item
+                // keeps every count right next to its description instead.
                 <div className="max-h-48 overflow-y-auto rounded border border-border-subtle bg-surface">
-                  <table className="w-full text-xs">
-                    <tbody>
-                      {topJobDescs.map(([desc, count], i) => (
-                        <tr key={desc} className={i % 2 === 1 ? "bg-surface-2/40" : undefined}>
-                          <td className="px-2 py-1 text-fg-subtle">{desc}</td>
-                          <td className="w-12 px-2 py-1 text-right font-medium tabular-nums text-fg">{count}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  {topJobDescs.map(([desc, count], i) => (
+                    <div key={desc} className={`flex items-baseline justify-between gap-3 px-2 py-1 text-xs ${i % 2 === 1 ? "bg-surface-2/40" : ""}`}>
+                      <span className="text-fg-subtle">{desc}</span>
+                      <span className="shrink-0 font-medium tabular-nums text-fg">{count}</span>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="text-xs text-fg-faint">—</div>
