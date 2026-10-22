@@ -9,12 +9,15 @@ import * as XLSX from "xlsx";
  * same as Service Info Report. Negative Sale Qty rows are returns/credit
  * notes and are confirmed to net against the day's total, not be excluded.
  */
-const PART_NO_COLUMN = "PartNo";
-const SALE_QTY_COLUMN = "Sale Qty";
-const BILL_NO_COLUMN = "BillNo";
-const NET_AMNT_COLUMN = "NetAmnt";
-const REF_DOC_NO_COLUMN = "RefDocNo";
-const CUSTOMER_NAME_COLUMN = "CustomerName";
+// Column name constants exported (2026-10-22) for close-sa-analytics/
+// compute.ts's RefDocNo join — see that module for why RefDocNo needs
+// dash-stripping before it lines up with an RO from another report.
+export const PART_NO_COLUMN = "PartNo";
+export const SALE_QTY_COLUMN = "Sale Qty";
+export const BILL_NO_COLUMN = "BillNo";
+export const NET_AMNT_COLUMN = "NetAmnt";
+export const REF_DOC_NO_COLUMN = "RefDocNo";
+export const CUSTOMER_NAME_COLUMN = "CustomerName";
 /** Matches SALE_DATE_COLUMN in part-sale/upload-validation.ts — that check
  * reads this same post-alias column name, never the file's original header. */
 const SALE_DATE_COLUMN = "SaleDate";
@@ -54,9 +57,12 @@ function applyColumnAliases(row: Record<string, unknown>): Record<string, unknow
   return renamed;
 }
 
-const ENGINE_FLUSH_PARTS = ["A-08814-80061", "A-08814-80090"];
-const INJECTOR_CLEANER_PARTS = ["A-08813-80100", "A-08813-80019"];
-const SYNTHETIC_OIL_PARTS = [
+// Exported (2026-10-22) so close-sa-analytics/compute.ts can classify a
+// matched row the exact same way, instead of a second copy drifting out of
+// sync with this one.
+export const ENGINE_FLUSH_PARTS = ["A-08814-80061", "A-08814-80090"];
+export const INJECTOR_CLEANER_PARTS = ["A-08813-80100", "A-08813-80019"];
+export const SYNTHETIC_OIL_PARTS = [
   "L-0888-080073",
   "L-0888-080072",
   "L-0888-080071",
@@ -65,7 +71,7 @@ const SYNTHETIC_OIL_PARTS = [
   "L-0888-084744",
   "L-0888-084746",
 ];
-const BRAKE_CLEANING_SPRAY_PARTS = ["Z-9BCHP-00001"];
+export const BRAKE_CLEANING_SPRAY_PARTS = ["Z-9BCHP-00001"];
 
 /** External Sales (2026-09-15 rule, replaces the old PartNo-prefix filter):
  *
@@ -105,7 +111,7 @@ export const alwaysEligible: FTypeEligibility = () => true;
  * future one) instead of needing to be re-applied by hand. */
 const EXCLUDED_CUSTOMER_SUBSTRINGS = ["opulent"];
 
-function isExcludedCustomer(customerName: string): boolean {
+export function isExcludedCustomer(customerName: string): boolean {
   const normalized = customerName.toLowerCase();
   return EXCLUDED_CUSTOMER_SUBSTRINGS.some((needle) => normalized.includes(needle));
 }
@@ -119,7 +125,7 @@ function isExcludedCustomer(customerName: string): boolean {
  * 2026-09-15, External Sales no longer filters by PartNo at all — every row
  * on an `A`-type bill counts, DIY included), just broken out separately
  * alongside it. */
-const DIY_PART_PREFIX = "D-DIY";
+export const DIY_PART_PREFIX = "D-DIY";
 
 export type PartSaleCounts = {
   engineFlush: number;
@@ -137,16 +143,16 @@ export type PartSaleCounts = {
   diyRevenue: number;
 };
 
-function normalizePart(value: unknown): string {
+export function normalizePart(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function toQty(value: unknown): number {
+export function toQty(value: unknown): number {
   const n = Number(String(value ?? "").replace(/,/g, "").trim());
   return Number.isFinite(n) ? n : 0;
 }
 
-function isExternalSalesRow(billNo: string, refDocNo: string, isFTypeEligible: FTypeEligibility): boolean {
+export function isExternalSalesRow(billNo: string, refDocNo: string, isFTypeEligible: FTypeEligibility): boolean {
   const billType = billNo.charAt(0).toUpperCase();
   if (billType === EXTERNAL_SALES_BILL_TYPE) return true;
   if (billType === EXTERNAL_SALES_RETURN_BILL_TYPE) {

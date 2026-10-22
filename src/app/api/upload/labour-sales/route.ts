@@ -4,6 +4,7 @@ import { pool } from "@/lib/db";
 import { parseLabourSalesWorkbook } from "@/lib/labour-sales/parse";
 import { saveLabourSalesSnapshot } from "@/lib/labour-sales/store";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
 import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
 
 /**
@@ -89,6 +90,7 @@ export async function POST(request: Request) {
   // (vas-revenue-real/recompute.ts is a no-op before 2026-10-01).
   for (const day of parsed.days) {
     await recomputeVasRevenueReal(admin.branch, day.date);
+    await recomputeCloseSaAnalytics(admin.branch, day.date);
   }
 
   const totals = parsed.days.reduce(

@@ -1,5 +1,7 @@
 import type { BranchView } from "@/lib/branch-view-data";
+import type { CloseSaPeriodTotals } from "@/lib/close-sa-analytics/aggregate";
 import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
+import { CloseSaAnalyticsTable } from "@/components/close-sa-analytics-table";
 import { DateSelect } from "../date-select";
 import { IncentiveSlabIndicator } from "../incentive-slab-indicator";
 import { BranchOverviewBody } from "./branch-overview-body";
@@ -34,6 +36,7 @@ export function BranchAccountPage({
   uploadedAt,
   incentiveSlabs,
   holidays,
+  closeSaTotals,
 }: {
   view: BranchView | null;
   branch: string;
@@ -47,6 +50,9 @@ export function BranchAccountPage({
   incentiveSlabs?: IncentiveSlabTargets;
   /** HQ-flagged report_holidays, for the Incentive Slab forecast (2026-09-29). */
   holidays?: string[];
+  /** Month-to-date, this branch's own Close SAs only (2026-10-22) — see
+   * close-sa-analytics/. */
+  closeSaTotals: CloseSaPeriodTotals[];
 }) {
   return (
     <div className="mx-auto max-w-[1400px] p-6">
@@ -67,6 +73,9 @@ export function BranchAccountPage({
             No data for {branch} on {date} yet.
           </div>
         )}
+      </div>
+      <div className="mt-4">
+        <CloseSaAnalyticsTable totals={closeSaTotals} subtitle={`Month-to-date for ${date} — Service Info + Labour Sales + Part Sale, per Close SA`} />
       </div>
     </div>
   );

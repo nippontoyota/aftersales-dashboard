@@ -6,6 +6,7 @@ import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { isBpFlavoredServiceInfo, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
+import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
 import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
 
 /** Service Information Report - BP — required daily like every other
@@ -135,6 +136,7 @@ export async function POST(request: Request) {
   // otherwise-successful upload (see vas-revenue-real/recompute.ts, which
   // already swallows its own errors; this is a no-op before 2026-10-01).
   await recomputeVasRevenueReal(admin.branch, date);
+  await recomputeCloseSaAnalytics(admin.branch, date);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name, bpCounts });
 }

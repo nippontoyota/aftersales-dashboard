@@ -16,6 +16,8 @@ import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { loadBranchView } from "@/lib/branch-view-data";
+import { aggregateCloseSaRows } from "@/lib/close-sa-analytics/aggregate";
+import { loadCloseSaAnalyticsForBranch } from "@/lib/close-sa-analytics/store";
 import { CO01B_SLAB_COMBINED_BRANCHES } from "@/lib/body-paint-only";
 import { aggregateIncentiveSlabTargets } from "@/lib/incentive-slabs/aggregate";
 import { loadCentralRegionView } from "@/lib/central-region-data";
@@ -184,12 +186,23 @@ async function DashboardContent({
   // separate pre-publish page (2026-09-24, at Central's request; extended to
   // South/North 2026-10-20 for the same layout everywhere).
   if (admin.role === "branch") {
-    const [view, branchSlabTargets] = await Promise.all([
+    const monthStart = `${date.slice(0, 7)}-01`;
+    const [view, branchSlabTargets, closeSaRows] = await Promise.all([
       loadBranchView(admin.branch, date, report, monthSnapshots, serviceInfoMonthSnapshots),
       loadIncentiveSlabTargets(date.slice(0, 7)).then((m) => m.get(admin.branch)),
+      loadCloseSaAnalyticsForBranch(admin.branch, monthStart, date),
     ]);
     return (
-      <BranchAccountPage view={view} branch={admin.branch} date={date} dates={dates} uploadedAt={report.uploadedAt} incentiveSlabs={branchSlabTargets} holidays={holidays} />
+      <BranchAccountPage
+        view={view}
+        branch={admin.branch}
+        date={date}
+        dates={dates}
+        uploadedAt={report.uploadedAt}
+        incentiveSlabs={branchSlabTargets}
+        holidays={holidays}
+        closeSaTotals={aggregateCloseSaRows(closeSaRows)}
+      />
     );
   }
   if (admin.role === "regional" && admin.region === "Central") {

@@ -1272,3 +1272,126 @@ create table if not exists inactive_referral_calls (
   performed_at   timestamptz  not null default now()
 );
 create index if not exists inactive_referral_calls_referral_idx on inactive_referral_calls (referral_id, performed_at);
+
+-- 2026-10-22: Close SA Analytics — everything Service Info / Labour Sales /
+-- Part Sale can attribute to whichever Service Advisor closed an RO. Cost &
+-- Sales (SSRV089) deliberately left out for now (set aside by the user).
+-- Precomputed at upload time (same reasoning as vas_revenue_real /
+-- cancelled_accessories_adjustments above: the underlying join reads
+-- raw_upload_rows across three report types and must never run live on
+-- every /branches or /dashboard page load), one row per (branch, date,
+-- close_sa_name) — close_sa_name is whitespace/case-normalized the same way
+-- accessories-staff.ts matches names, never the raw DMS string. MTD = sum of
+-- every day's row this month, same accumulation pattern as the rest of the
+-- dashboard. See src/lib/close-sa-analytics/compute.ts for the join logic
+-- and exactly which report contributes which column.
+create table if not exists close_sa_analytics_daily (
+  date date not null,
+  branch text not null,
+  close_sa_name text not null,
+  ro_count integer not null default 0,
+  -- Every distinct Vin no this SA closed an RO for that day, as a jsonb
+  -- array — not just a count, so a period rollup (aggregate.ts) can union
+  -- several days' arrays into a true distinct-vehicles-this-month count
+  -- instead of summing daily counts, which would double-count a vehicle
+  -- that came back on more than one day in the period.
+  vehicle_vins jsonb not null default '[]'::jsonb,
+  -- {"job desc": count} — every distinct Job Desc this SA closed that day,
+  -- not just the 4 VAS-tagged ones. jsonb rather than fixed columns since
+  -- the real set of descriptions is large and open-ended.
+  job_desc_counts jsonb not null default '{}'::jsonb,
+  wheel_balancing_count integer not null default 0,
+  wheel_alignment_count integer not null default 0,
+  brake_skimming_count integer not null default 0,
+  evaporator_cleaning_count integer not null default 0,
+  vas_bill_revenue numeric not null default 0,
+  -- {"Customer": n, "Warranty": n, ...} / {"CASH": n, "CREDIT": n, ...} —
+  -- same reasoning as job_desc_counts: the full value set for Job Type/Pay
+  -- Type was never fully confirmed against real data, so this stays open
+  -- rather than guessing at fixed columns.
+  job_type_counts jsonb not null default '{}'::jsonb,
+  pay_type_counts jsonb not null default '{}'::jsonb,
+  amc_count integer not null default 0,
+  fmsc_count integer not null default 0,
+  em_count integer not null default 0,
+  appointment_count integer not null default 0,
+  walkin_count integer not null default 0,
+  bp_potential_count integer not null default 0,
+  -- Labour Sales Report, joined to Service Info's Close SA by RO (Job No. /
+  -- Job Order No, same undashed format — confirmed 100% match across 5
+  -- branches, unlike Part Sale's RefDocNo join below).
+  labour_revenue_before numeric not null default 0,
+  labour_revenue_after numeric not null default 0,
+  sold_hours numeric not null default 0,
+  -- One value per RO, repeated on every one of its labour lines (confirmed
+  -- against 626 real multi-line ROs) — counted once per RO here, never
+  -- summed per line, or it would multiply by that RO's line count.
+  over_target_total numeric not null default 0,
+  -- Part Sale Report, joined by RefDocNo (dash-stripped) to the RO. Real
+  -- coverage confirmed ~65-68% across 3 branches/same day — never 100%, so
+  -- parts_matched_ro_count is stored alongside the revenue to show how much
+  -- of this SA's parts activity is actually represented here.
+  parts_revenue numeric not null default 0,
+  parts_matched_ro_count integer not null default 0,
+  engine_flush_count numeric not null default 0,
+  injector_cleaner_count numeric not null default 0,
+  synthetic_oil_ltrs numeric not null default 0,
+  brake_cleaning_count numeric not null default 0,
+  diy_count numeric not null default 0,
+  diy_revenue numeric not null default 0,
+  external_sales numeric not null default 0,
+  -- Body & Paint only (Service Info - BP's own FINAL_INV_AMT/EST_AMT, one
+  -- value per RO repeated on every line, same pattern as Over Target above).
+  bp_final_invoice_amount numeric not null default 0,
+  bp_estimate_amount numeric not null default 0,
+  bp_ro_count integer not null default 0,
+  computed_at timestamptz not null default now(),
+  primary key (date, branch, close_sa_name)
+);
+create index if not exists close_sa_analytics_daily_branch_date_idx on close_sa_analytics_daily (branch, date);
+
+-- MRS N-9 list: TKM's own i-CROP export of vehicles due ~9 days out, sent
+-- the day the Direct Mailer goes out (DM Planned Date) and the CAC team
+-- calls ~2 days later (1st CALL Planned Date). We import this daily and
+-- match it against ce_leads by VIN so our own MRS calling only catches
+-- leads due around the same date that this list missed, rather than
+-- duplicating TKM's own DM+call pipeline. See scripts/import-n9-list.mjs
+-- and src/lib/ce/n9.mjs. Never hand-edited.
+create table if not exists n9_imports (
+  id bigint generated always as identity primary key,
+  source_file_name text not null,
+  file_sha256 text,
+  uploaded_by text not null references admins(username),
+  uploaded_at timestamptz not null default now(),
+  row_count integer not null,
+  extract_date date not null
+);
+create unique index if not exists n9_imports_file_sha256_idx on n9_imports (file_sha256) where file_sha256 is not null;
+
+create table if not exists n9_leads (
+  id bigint generated always as identity primary key,
+  vin text not null,
+  extract_date date not null,
+  customer_name text,
+  mobile_number text,
+  registration_no text,
+  vehicle_model text,
+  vehicle_sales_type text,
+  dm_planned_date date,
+  first_call_planned_date date,
+  -- The actual TKM-computed due date ("N") and which rule produced it —
+  -- a "... Months )" name is time-triggered, a "...km service )" name is
+  -- distance-triggered; null when TKM hasn't computed one yet (new
+  -- deliveries not yet due for anything beyond their first checkup).
+  icrop_recommended_name text,
+  icrop_recommended_date date,
+  -- "2" + a reason (e.g. bad phone number) means TKM flagged this row as
+  -- unreachable from its own data — still worth checking against ours.
+  activity_category text,
+  activity_cat2_reason text,
+  source_import_id bigint not null references n9_imports(id),
+  imported_at timestamptz not null default now(),
+  unique (vin, extract_date)
+);
+create index if not exists n9_leads_vin_idx on n9_leads (vin);
+create index if not exists n9_leads_icrop_date_idx on n9_leads (icrop_recommended_date);

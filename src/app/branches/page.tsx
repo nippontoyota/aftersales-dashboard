@@ -7,6 +7,9 @@ import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
+import { CloseSaAnalyticsTable } from "@/components/close-sa-analytics-table";
+import { aggregateCloseSaRows } from "@/lib/close-sa-analytics/aggregate";
+import { loadCloseSaAnalyticsForAllBranches } from "@/lib/close-sa-analytics/store";
 import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatmap";
 import { RevenuePerVehicleTable } from "../dashboard/revenue-per-vehicle-table";
 import { StockServiceRateTable } from "../dashboard/stock-service-rate-table";
@@ -59,6 +62,10 @@ async function BranchesContent({
     return <NoDataForDate title="Branch Performance" date={data.date} dates={data.dates} basePath="/branches" />;
   }
 
+  const monthStart = `${data.date.slice(0, 7)}-01`;
+  const closeSaRows = await loadCloseSaAnalyticsForAllBranches(monthStart, data.date);
+  const closeSaTotals = aggregateCloseSaRows(closeSaRows);
+
   return (
     <div className="mx-auto max-w-[1600px] p-6">
       <DashboardPageHeader
@@ -79,6 +86,11 @@ async function BranchesContent({
         <RevenuePerVehicleTable branches={data.filteredBranches} />
         <StockServiceRateTable branches={data.filteredBranches} />
         <BranchPerformanceHeatmap branches={data.filteredBranches} />
+        <CloseSaAnalyticsTable
+          totals={closeSaTotals}
+          showBranch
+          subtitle={`Month-to-date for ${data.date}, company-wide — Service Info + Labour Sales + Part Sale, per Close SA`}
+        />
       </div>
     </div>
   );
