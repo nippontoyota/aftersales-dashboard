@@ -195,13 +195,29 @@ async function DashboardContent({
   if (admin.role === "regional" && admin.region === "Central") {
     const view = await loadCentralRegionView(date, report);
     return (
-      <RegionRevenueDashboard view={view} regionName="Central" dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} branchReports={report.branches} />
+      <RegionRevenueDashboard
+        view={view}
+        regionName="Central"
+        dates={dates}
+        uploadedAt={report.uploadedAt}
+        isPublished={isPublished}
+        branchReports={report.branches}
+        daysSincePrevious={report.daysSincePrevious}
+      />
     );
   }
   if (admin.role === "regional") {
     const view = await loadRegionRevenueView(admin.region, date, report);
     return (
-      <RegionRevenueDashboard view={view} regionName={admin.region} dates={dates} uploadedAt={report.uploadedAt} isPublished={isPublished} branchReports={report.branches} />
+      <RegionRevenueDashboard
+        view={view}
+        regionName={admin.region}
+        dates={dates}
+        uploadedAt={report.uploadedAt}
+        isPublished={isPublished}
+        branchReports={report.branches}
+        daysSincePrevious={report.daysSincePrevious}
+      />
     );
   }
 

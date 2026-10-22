@@ -42,24 +42,33 @@ export function CondensedMetrics({
   report,
   allBranches,
   todayHeader,
+  /** When true, always renders every row with no toggle — for the regional
+   * managers' branch-detail popup (2026-10-22), which should just show
+   * everything rather than default-collapse like the branch's own Overview
+   * page does. */
+  alwaysShowAll = false,
 }: {
   report: BranchReport;
   allBranches: BranchReport[];
   todayHeader: string;
+  alwaysShowAll?: boolean;
 }) {
-  const [showAll, setShowAll] = useState(false);
+  const [showAllState, setShowAll] = useState(false);
+  const showAll = alwaysShowAll || showAllState;
 
   return (
     <div className="rounded-lg border border-border bg-surface shadow-card">
       <div className="flex items-center justify-between px-4 py-3">
         <h2 className={eyebrow}>Metrics</h2>
-        <button
-          type="button"
-          onClick={() => setShowAll((v) => !v)}
-          className="rounded-md border border-border-strong px-2 py-1 text-[11px] font-medium text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          {showAll ? "Show key metrics" : "Show all metrics"}
-        </button>
+        {alwaysShowAll ? null : (
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="rounded-md border border-border-strong px-2 py-1 text-[11px] font-medium text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {showAll ? "Show key metrics" : "Show all metrics"}
+          </button>
+        )}
       </div>
 
       <div className="overflow-x-auto">

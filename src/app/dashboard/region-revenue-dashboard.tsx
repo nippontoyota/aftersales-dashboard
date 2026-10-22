@@ -86,19 +86,26 @@ export function RegionRevenueDashboard({
   isPublished,
   regionName,
   branchReports,
+  daysSincePrevious,
 }: {
   view: RegionRevenueView;
   dates: string[];
   uploadedAt: string;
   isPublished: boolean;
   regionName: string;
-  /** Every branch's full BranchReport, for the click-to-expand "all metrics"
-   * popup on each branch's column header (2026-10-22, at the regional
-   * managers' request). Looked up by code — not scoped to this region's own
-   * branches, so the caller can just pass report.branches straight through. */
+  /** Every branch's full BranchReport, for the click-to-expand metrics popup
+   * on each branch's column header (2026-10-22, at the regional managers'
+   * request — reuses CondensedMetrics, the same curated view a branch
+   * account sees on its own dashboard). Looked up by code — not scoped to
+   * this region's own branches, so the caller can just pass report.branches
+   * straight through. */
   branchReports: BranchReport[];
+  /** Report-level — same "Today" / "Last Nd" column header CondensedMetrics
+   * uses on the branch's own Overview page. */
+  daysSincePrevious: number | null;
 }) {
   const branchReportByCode = new Map(branchReports.map((b) => [b.branch, b]));
+  const todayHeader = daysSincePrevious === null || daysSincePrevious === 1 ? "Today" : `Last ${daysSincePrevious}d`;
   const regionTotalLabel = `${regionName} Rgn`;
   const totalColumn: RegionBranchRow = {
     branch: regionTotalLabel,
@@ -172,7 +179,7 @@ export function RegionRevenueDashboard({
                 return (
                   <th key={c.branch} className="pb-2 pr-4 text-left">
                     {branchReport ? (
-                      <BranchDetailModal report={branchReport} label={c.label} code={c.branch}>
+                      <BranchDetailModal report={branchReport} label={c.label} code={c.branch} allBranches={branchReports} todayHeader={todayHeader}>
                         {header}
                       </BranchDetailModal>
                     ) : (
