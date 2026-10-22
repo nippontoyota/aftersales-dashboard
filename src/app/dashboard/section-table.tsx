@@ -35,6 +35,7 @@ export function SectionTable({
   scroll = true,
   roomy = false,
   renderBranchCell,
+  actions,
 }: {
   title: string;
   subtitle?: string;
@@ -55,6 +56,8 @@ export function SectionTable({
   /** Replaces the plain branch-name text in each row's first cell — the VP's
    * compare feature uses it to add a pin button next to the name. */
   renderBranchCell?: (row: BranchReport) => ReactNode;
+  /** Extra controls beside the card's title (e.g. a download link) — passed straight through to CollapsibleCard. */
+  actions?: ReactNode;
 }) {
   const cellPad = roomy ? "px-3 py-3" : "px-3 py-2";
   const table = (
@@ -87,7 +90,7 @@ export function SectionTable({
   );
 
   return (
-    <CollapsibleCard title={title} subtitle={subtitle} defaultOpen={defaultOpen} clip={!scroll}>
+    <CollapsibleCard title={title} subtitle={subtitle} defaultOpen={defaultOpen} clip={!scroll} actions={actions}>
       {scroll ? <div className="max-h-[calc(100dvh-15rem)] overflow-auto">{table}</div> : table}
     </CollapsibleCard>
   );
