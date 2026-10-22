@@ -31,7 +31,12 @@ export function BranchDetailModal({
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="text-left hover:underline" title="Click to view this branch's metrics">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded-sm text-left decoration-dashed underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        title="Click to view this branch's metrics"
+      >
         {children}
       </button>
       {open ? (

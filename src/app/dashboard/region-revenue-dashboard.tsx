@@ -169,9 +169,15 @@ export function RegionRevenueDashboard({
               <th className="pb-2 text-left text-[10px] font-medium uppercase tracking-wide text-fg-faint"></th>
               {columns.map((c) => {
                 const branchReport = c.branch !== regionTotalLabel ? branchReportByCode.get(c.branch) : undefined;
+                // Clickable branch names get the accent color at rest (not just on
+                // hover) so regional managers notice they can click them
+                // (2026-10-22, at their request) — the region-total column never
+                // has a popup, so it keeps the plain heading color.
                 const header = (
                   <>
-                    <div className="text-[12px] font-semibold text-fg">{c.branch === regionTotalLabel ? tglossText(regionTotalLabel) : c.label}</div>
+                    <div className={`text-[12px] font-semibold ${branchReport ? "text-accent-text" : "text-fg"}`}>
+                      {c.branch === regionTotalLabel ? tglossText(regionTotalLabel) : c.label}
+                    </div>
                     {c.branch !== regionTotalLabel ? <div className="text-[10px] text-fg-faint">{c.branch}</div> : null}
                     {c.badge ? <div className="text-[9px] font-medium text-accent-text">{c.badge}</div> : null}
                   </>
