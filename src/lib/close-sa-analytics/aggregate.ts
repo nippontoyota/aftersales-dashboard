@@ -65,6 +65,8 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
         diyCount: 0,
         diyRevenue: 0,
         externalSales: 0,
+        tyreCount: 0,
+        batteryCount: 0,
         bpFinalInvoiceAmount: 0,
         bpEstimateAmount: 0,
         bpRoCount: 0,
@@ -105,6 +107,8 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
     acc.diyCount += r.diyCount;
     acc.diyRevenue += r.diyRevenue;
     acc.externalSales += r.externalSales;
+    acc.tyreCount += r.tyreCount;
+    acc.batteryCount += r.batteryCount;
     acc.bpFinalInvoiceAmount += r.bpFinalInvoiceAmount;
     acc.bpEstimateAmount += r.bpEstimateAmount;
     acc.bpRoCount += r.bpRoCount;

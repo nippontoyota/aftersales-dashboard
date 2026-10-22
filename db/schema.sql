@@ -1340,6 +1340,11 @@ create table if not exists close_sa_analytics_daily (
   diy_count numeric not null default 0,
   diy_revenue numeric not null default 0,
   external_sales numeric not null default 0,
+  -- 2026-10-22: PartNo prefix "T-"/"B-" in Part Sale Report, confirmed
+  -- against real data as genuine tyre/battery SKUs (see compute.ts) — same
+  -- RefDocNo→RO join and matched-coverage caveat as the rest of this block.
+  tyre_count numeric not null default 0,
+  battery_count numeric not null default 0,
   -- Body & Paint only (Service Info - BP's own FINAL_INV_AMT/EST_AMT, one
   -- value per RO repeated on every line, same pattern as Over Target above).
   bp_final_invoice_amount numeric not null default 0,
@@ -1349,6 +1354,14 @@ create table if not exists close_sa_analytics_daily (
   primary key (date, branch, close_sa_name)
 );
 create index if not exists close_sa_analytics_daily_branch_date_idx on close_sa_analytics_daily (branch, date);
+
+-- 2026-10-22: Tyre/Battery counts, added after the table above was already
+-- live — create table if not exists is a no-op on an existing table, so
+-- these need their own alter (the create table above already lists them
+-- inline too, for a fresh database). PartNo prefix "T-"/"B-" in Part Sale
+-- Report, confirmed against real data as genuine tyre/battery SKUs.
+alter table close_sa_analytics_daily add column if not exists tyre_count numeric not null default 0;
+alter table close_sa_analytics_daily add column if not exists battery_count numeric not null default 0;
 
 -- MRS N-9 list: TKM's own i-CROP export of vehicles due ~9 days out, sent
 -- the day the Direct Mailer goes out (DM Planned Date) and the CAC team

@@ -75,6 +75,16 @@ const LS_OVER_TARGET_COLUMN = "Over Target";
 const BP_EST_AMT_COLUMN = "EST_AMT";
 const BP_FINAL_INV_AMT_COLUMN = "FINAL_INV_AMT";
 
+/** Part Sale Report PartNo prefixes for Tyre / Battery sales — confirmed
+ * against real data (2026-10-22, at the user's request): "T-" rows are
+ * genuine tyre SKUs (brand + size, e.g. "T-TY01A-17104" / "215/60 R17 96H
+ * Apterra cross"), "B-" rows are genuine battery SKUs (e.g. "B-BA01A-60P10"
+ * / "AMARON FLO-60 Ah-DIN66") — not to be confused with the ILIKE '%tyre%'/
+ * '%battery%' false positives elsewhere in this report (tyre dresser spray,
+ * key-fob "battery transmitter", neither an actual tyre/battery sale). */
+const TYRE_PART_PREFIX = "T-";
+const BATTERY_PART_PREFIX = "B-";
+
 export function normalizeCloseSaName(name: unknown): string {
   return String(name ?? "").replace(/\s+/g, " ").trim();
 }
@@ -128,6 +138,8 @@ export type CloseSaDailyMetrics = {
   diyCount: number;
   diyRevenue: number;
   externalSales: number;
+  tyreCount: number;
+  batteryCount: number;
   bpFinalInvoiceAmount: number;
   bpEstimateAmount: number;
   bpRoCount: number;
@@ -164,6 +176,8 @@ function emptyMetrics(): CloseSaDailyMetrics {
     diyCount: 0,
     diyRevenue: 0,
     externalSales: 0,
+    tyreCount: 0,
+    batteryCount: 0,
     bpFinalInvoiceAmount: 0,
     bpEstimateAmount: 0,
     bpRoCount: 0,
@@ -398,6 +412,8 @@ export function computeCloseSaAnalytics(
       m.diyCount += qty;
       m.diyRevenue += toQty(row[PS_NET_AMNT_COLUMN]);
     }
+    if (part.toUpperCase().startsWith(TYRE_PART_PREFIX)) m.tyreCount += qty;
+    if (part.toUpperCase().startsWith(BATTERY_PART_PREFIX)) m.batteryCount += qty;
 
     const billNo = normalizePart(row[PS_BILL_NO_COLUMN]);
     const customerName = normalizePart(row[PS_CUSTOMER_NAME_COLUMN]);

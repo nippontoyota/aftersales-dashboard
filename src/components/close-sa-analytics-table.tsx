@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CollapsibleCard } from "./collapsible-card";
+import { tglossText } from "./tgloss-text";
 import { formatCompact, formatNumber } from "@/lib/format";
 import { partsMatchCoveragePct, type CloseSaPeriodTotals } from "@/lib/close-sa-analytics/aggregate";
 
@@ -61,6 +62,12 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
         <td className="px-3 py-2 align-top">{moneyCell(totals.labourRevenueAfter)}</td>
         <td className="px-3 py-2 align-top">{partsCell(totals)}</td>
         <td className="px-3 py-2 align-top">{moneyCell(totals.vasBillRevenue)}</td>
+        <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
+          {cell(formatNumber(totals.tyreCount))}
+        </td>
+        <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
+          {cell(formatNumber(totals.batteryCount))}
+        </td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.soldHours))}</td>
         <td className="px-3 py-2 align-top" title="Once per RO, not summed per labour line — see data-sourcing notes">
           {cell(formatNumber(totals.overTargetTotal))}
@@ -70,7 +77,7 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
       </tr>
       {expanded ? (
         <tr className="border-t border-border-subtle bg-surface-2/40">
-          <td colSpan={10} className="px-3 py-3">
+          <td colSpan={12} className="px-3 py-3">
             <div className="grid grid-cols-1 gap-3 text-xs text-fg-subtle sm:grid-cols-3">
               <div>
                 <div className="mb-1 font-semibold text-fg-subtle">Job mix</div>
@@ -79,7 +86,7 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
                 <div>Pay Type — {countsSummary(totals.payTypeCounts) || "—"}</div>
               </div>
               <div>
-                <div className="mb-1 font-semibold text-fg-subtle">VAS detail</div>
+                <div className="mb-1 font-semibold text-fg-subtle">{tglossText("TGLOSS detail")}</div>
                 <div>Wheel Balancing: {totals.wheelBalancingCount}, Wheel Alignment: {totals.wheelAlignmentCount}</div>
                 <div>Brake Skimming: {totals.brakeSkimmingCount}, Evaporator Cleaning: {totals.evaporatorCleaningCount}</div>
               </div>
@@ -96,9 +103,24 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
                 {formatCompact(totals.bpFinalInvoiceAmount)}
               </div>
             ) : null}
-            <div className="mt-2 text-xs text-fg-subtle">
-              <span className="font-semibold">Job Desc breakdown</span> ({topJobDescs.length} distinct) —{" "}
-              {topJobDescs.length > 0 ? topJobDescs.map(([k, v]) => `${k}: ${v}`).join(", ") : "—"}
+            <div className="mt-3">
+              <div className="mb-1 text-xs font-semibold text-fg-subtle">Job Desc breakdown ({topJobDescs.length} distinct)</div>
+              {topJobDescs.length > 0 ? (
+                <div className="max-h-48 overflow-y-auto rounded border border-border-subtle bg-surface">
+                  <table className="w-full text-xs">
+                    <tbody>
+                      {topJobDescs.map(([desc, count], i) => (
+                        <tr key={desc} className={i % 2 === 1 ? "bg-surface-2/40" : undefined}>
+                          <td className="px-2 py-1 text-fg-subtle">{desc}</td>
+                          <td className="w-12 px-2 py-1 text-right font-medium tabular-nums text-fg">{count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-xs text-fg-faint">—</div>
+              )}
             </div>
           </td>
         </tr>
@@ -143,7 +165,9 @@ export function CloseSaAnalyticsTable({
               <th className="whitespace-nowrap px-3 py-2">Vehicles</th>
               <th className="whitespace-nowrap px-3 py-2">Labour ₹</th>
               <th className="whitespace-nowrap px-3 py-2">Parts ₹ (matched)</th>
-              <th className="whitespace-nowrap px-3 py-2">VAS ₹</th>
+              <th className="whitespace-nowrap px-3 py-2">{tglossText("TGLOSS ₹")}</th>
+              <th className="whitespace-nowrap px-3 py-2">Tyre</th>
+              <th className="whitespace-nowrap px-3 py-2">Battery</th>
               <th className="whitespace-nowrap px-3 py-2">Sold Hrs</th>
               <th className="whitespace-nowrap px-3 py-2">Over Target</th>
               <th className="whitespace-nowrap px-3 py-2">Appt / Walk-in</th>
