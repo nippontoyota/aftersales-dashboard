@@ -74,6 +74,11 @@ async function TkmTargetsContent({ searchParams }: { searchParams: Promise<{ dat
     (b): b is BranchReport => b !== undefined,
   );
   const co01eReport = report.branches.find((b) => b.branch === "CO01E");
+  // Falls back to BA Tool's own live target field for any of the 6 metrics
+  // (not SPR External, which BA Tool has no target field for) that nobody
+  // has manually overridden for the month via Set Targets (2026-10-22, at
+  // the RM's request — previously Central always hand-maintained
+  // central_metric_targets, with no BA Tool fallback at all).
   const metrics = await loadCentralMetricTargetsView(branches, date, holidays, co01eReport);
 
   return (

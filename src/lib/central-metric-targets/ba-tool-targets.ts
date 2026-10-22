@@ -4,11 +4,13 @@ import type { CentralMetricKey } from "./metrics";
 /** BA Tool's own target fields for one branch on one exact date, keyed the
  * same way as CentralMetricTargets — bpu/offtake/sprInternal/pmOc/battery/
  * tyre all have their own column in ba_tool_snapshots; sprExternal has none,
- * so it's always null. Used only to pre-fill the Set Targets form for
- * South/North (2026-10-20), whose RMs don't hand-maintain
- * central_metric_targets the way Central's does — see
- * view-data.ts's loadCentralMetricTargetsView `baToolFallback` param for the
- * read-only TKM Targets page's equivalent fallback. */
+ * so it's always null. Used only to pre-fill South/North's Set Targets form
+ * (2026-10-20) — safe there because target-overrides.ts's CO01B/CO01E split
+ * never applies outside Central, so the raw column already matches the
+ * resolved value. Central's own Set Targets page instead reads off the
+ * built BranchReport via view-data.ts's baToolTargetFromReport, which does
+ * go through that split — see loadCentralMetricTargetsView's doc comment
+ * for the read-only TKM Targets page's equivalent fallback. */
 export type BaToolMetricTargets = Record<CentralMetricKey, number | null>;
 
 function numOrNull(v: string | null | undefined): number | null {

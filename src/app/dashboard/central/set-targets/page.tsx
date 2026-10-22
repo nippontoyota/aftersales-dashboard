@@ -5,8 +5,9 @@ import { adminIdentityLabel } from "@/lib/admin-store";
 import { CENTRAL_BRANCH_LABELS, centralBranchesForMonth } from "@/lib/central-region-data";
 import { loadCentralMetricTargets } from "@/lib/central-metric-targets/store";
 import { CENTRAL_METRICS, type CentralMetricKey } from "@/lib/central-metric-targets/metrics";
-import { targetFor } from "@/lib/central-metric-targets/view-data";
+import { baToolTargetFromReport, targetFor } from "@/lib/central-metric-targets/view-data";
 import { loadNavState } from "@/lib/dashboard-data";
+import { buildReport } from "@/lib/report";
 import { loadRegionRevenueTargets } from "@/lib/region-targets/store";
 import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { latestNonHolidayDate } from "@/lib/reporting-date";
@@ -48,16 +49,29 @@ async function SetTargetsContent({ searchParams }: { searchParams: Promise<{ dat
   const gsBranches = centralBranchesForMonth(month);
   const tkmBranches = CENTRAL_METRIC_BRANCHES;
 
-  const [regionTargets, tkmTargets] = await Promise.all([
+  const [regionTargets, tkmTargets, report] = await Promise.all([
     loadRegionRevenueTargets(month, gsBranches),
     loadCentralMetricTargets(month, tkmBranches),
+    buildReport(date),
   ]);
 
+  // A branch with no manually-saved row at all falls back to BA Tool's own
+  // live target field (2026-10-22, at the RM's request — same behaviour
+  // South/North already had). Reading it off the built BranchReport, rather
+  // than BA Tool's raw column, matters for CO01B specifically: its
+  // BPU/Offtake/SPR Internal figures go through target-overrides.ts's
+  // CO01B/CO01E split first. SPR External has no BA Tool target field, so it
+  // stays blank either way. Once a branch's row is saved here, this fallback
+  // never applies to it again (the saved row always wins).
   const tkmCurrentTargets: Record<string, Record<CentralMetricKey, number | null>> = {};
   for (const branch of tkmBranches) {
     const targets = {} as Record<CentralMetricKey, number | null>;
     const stored = tkmTargets.get(branch);
-    for (const metric of CENTRAL_METRICS) targets[metric.key] = targetFor(stored, metric.key);
+    const branchReport = report?.branches.find((b) => b.branch === branch);
+    for (const metric of CENTRAL_METRICS) {
+      const manual = targetFor(stored, metric.key);
+      targets[metric.key] = manual !== null ? manual : branchReport ? baToolTargetFromReport(branchReport, metric.key) : null;
+    }
     tkmCurrentTargets[branch] = targets;
   }
 

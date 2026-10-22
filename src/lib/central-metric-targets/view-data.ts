@@ -25,12 +25,15 @@ export function targetFor(t: CentralMetricTargets | undefined, key: CentralMetri
 /** BA Tool's own live target field for one metric, read straight off the
  * already-built BranchReport (bpuTarget etc. — see report.ts, which already
  * resolves these from the day's BA Tool snapshot, with target-overrides.ts's
- * overrides applied where relevant). sprExternal has no BA Tool target field
- * at all, so it's always null here. Used only as a fallback for South/North
- * (2026-10-20) — see loadCentralMetricTargetsView's `baToolFallback` param;
- * Central always hand-maintains central_metric_targets instead and never
- * reaches this. */
-function baToolTargetFromReport(r: BranchReport, key: CentralMetricKey): number | null {
+ * overrides applied where relevant — this is what makes it safe to use for
+ * CO01B, whose BPU/Offtake/SPR Internal BA Tool figures are really CO01B+
+ * CO01E combined). sprExternal has no BA Tool target field at all, so it's
+ * always null here. Used as a fallback whenever a branch has no manually-set
+ * target for the month — originally South/North-only (2026-10-20), extended
+ * to Central (2026-10-22) once the RM asked for the same behaviour there;
+ * see loadCentralMetricTargetsView. Exported so the Set Targets forms
+ * (central + region) can prefill with the same value. */
+export function baToolTargetFromReport(r: BranchReport, key: CentralMetricKey): number | null {
   switch (key) {
     case "bpu": return r.bpuTarget;
     case "offtake": return r.offtakeTarget;
@@ -119,23 +122,21 @@ export type CentralMetricView = {
  * report-building of its own, only the extra target/historical-actuals
  * queries this feature needs on top of that).
  *
- * `baToolFallback` (2026-10-20): South/North RMs don't hand-maintain
- * central_metric_targets the way Central's RM does, so for them, a branch
- * with no manually-set row for the current month falls back to BA Tool's
- * own live target field for whichever of the 6 metrics has one (sprExternal
- * never does — see baToolTargetFromReport). Central always passes this as
- * false (the default) and never reaches this path. Only the CURRENT month's
- * target gets this fallback — closed months' historical/annual figures are
- * unaffected, same "no target set → drops out" convention as always.
+ * A branch with no manually-set row for the current month falls back to BA
+ * Tool's own live target field for whichever of the 6 metrics has one
+ * (sprExternal never does — see baToolTargetFromReport); a manually-saved
+ * target for the month always wins regardless. All three regions behave the
+ * same way here (2026-10-20, extended to Central 2026-10-22 at the RM's
+ * request). Only the CURRENT month's target gets this fallback — closed
+ * months' historical/annual figures are unaffected, same "no target set →
+ * drops out" convention as always.
  */
 export async function loadCentralMetricTargetsView(
   branches: BranchReport[],
   date: string,
   holidays: ReadonlySet<string>,
-  co01eReport?: BranchReport,
-  options?: { baToolFallback?: boolean }
+  co01eReport?: BranchReport
 ): Promise<CentralMetricView[]> {
-  const baToolFallback = options?.baToolFallback ?? false;
   const branchCodes = branches.map((b) => b.branch);
   const month = date.slice(0, 7);
   const year = date.slice(0, 4);
@@ -157,7 +158,7 @@ export async function loadCentralMetricTargetsView(
   return CENTRAL_METRICS.map(({ key, label, isCurrency }) => {
     const rows: CentralMetricBranchRow[] = perBranchYearData.map(({ branch, report, yearTargets, closedMonths, closedActuals }) => {
       const manualTarget = targetFor(currentTargets.get(branch), key);
-      const target = manualTarget !== null ? manualTarget : baToolFallback ? baToolTargetFromReport(report, key) : null;
+      const target = manualTarget !== null ? manualTarget : baToolTargetFromReport(report, key);
       const achieved = liveAchieved(branch, report, key, co01eReport);
       const pace = computePace(date, achieved, target, holidays);
       const tone = paceTone(date, achieved, target, holidays);
