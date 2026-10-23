@@ -295,6 +295,28 @@ function improvementRow(cols: Col[], label: string, thisReport: Report, baseRepo
   return row;
 }
 
+/** Always emits both the "same date ..." total row and its improvement-%
+ * row — even when there's no report at all for that comparison date (e.g.
+ * "last year" currently, since real data only goes back to around Aug/Sep
+ * 2026 — see vp-data.ts's own INCLUDE_LAST_MONTH_SCOPE comment). A missing
+ * report renders blank cells rather than dropping the section, so the
+ * layout stays stable and the row is there once a year of history exists. */
+function addComparisonBlock(ws: Worksheet, cols: Col[], label: string, thisReport: Report, otherReport: Report | null, otherDate: string, totalCols: number): void {
+  const totalDef = findMetric("Total MTD (Rs)");
+  const otherByBranch = otherReport ? byBranchMap(otherReport) : null;
+  styleDataRow(
+    ws.addRow([
+      `Same date ${label} (${otherDate}) — Total MTD (Rs)`,
+      ...cols.map((col) => (otherReport && otherByBranch ? cellFor(col, totalDef, otherByBranch, otherReport).mtd ?? "" : "")),
+    ]),
+    totalCols,
+    { isPercent: false, muted: true }
+  );
+  const improvementLabel = `Improvement over ${label} %`;
+  const row = otherReport ? improvementRow(cols, improvementLabel, thisReport, otherReport) : [improvementLabel, ...cols.map(() => "")];
+  styleDataRow(ws.addRow(row), totalCols, { isPercent: true });
+}
+
 function buildComparisonSection(ws: Worksheet, cols: Col[], report: Report, lastMonthReport: Report | null, lastYearReport: Report | null, totalCols: number): void {
   const totalDef = findMetric("Total MTD (Rs)");
   addGroupRow(ws, "Comparison — Total Revenue Stream MTD (Rs)", totalCols);
@@ -305,31 +327,8 @@ function buildComparisonSection(ws: Worksheet, cols: Col[], report: Report, last
     { isPercent: false }
   );
 
-  if (lastMonthReport) {
-    const lmByBranch = byBranchMap(lastMonthReport);
-    styleDataRow(
-      ws.addRow([
-        `Same date last month (${lastMonthReport.date}) — Total MTD (Rs)`,
-        ...cols.map((col) => cellFor(col, totalDef, lmByBranch, lastMonthReport).mtd ?? ""),
-      ]),
-      totalCols,
-      { isPercent: false, muted: true }
-    );
-    styleDataRow(ws.addRow(improvementRow(cols, "Improvement over last month %", report, lastMonthReport)), totalCols, { isPercent: true });
-  }
-
-  if (lastYearReport) {
-    const lyByBranch = byBranchMap(lastYearReport);
-    styleDataRow(
-      ws.addRow([
-        `Same date last year (${lastYearReport.date}) — Total MTD (Rs)`,
-        ...cols.map((col) => cellFor(col, totalDef, lyByBranch, lastYearReport).mtd ?? ""),
-      ]),
-      totalCols,
-      { isPercent: false, muted: true }
-    );
-    styleDataRow(ws.addRow(improvementRow(cols, "Improvement over last year %", report, lastYearReport)), totalCols, { isPercent: true });
-  }
+  addComparisonBlock(ws, cols, "last month", report, lastMonthReport, lastMonthReport?.date ?? sameDayLastMonth(report.date), totalCols);
+  addComparisonBlock(ws, cols, "last year", report, lastYearReport, lastYearReport?.date ?? sameDayLastYear(report.date), totalCols);
 }
 
 function setupSheet(ws: Worksheet, cols: Col[], report: Report, totalCols: number): void {
