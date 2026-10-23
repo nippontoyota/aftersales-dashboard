@@ -49,6 +49,8 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
         amcCount: 0,
         fmscCount: 0,
         emCount: 0,
+        em60Count: 0,
+        em60OnTimeCount: 0,
         appointmentCount: 0,
         walkinCount: 0,
         bpPotentialCount: 0,
@@ -91,6 +93,8 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
     acc.amcCount += r.amcCount;
     acc.fmscCount += r.fmscCount;
     acc.emCount += r.emCount;
+    acc.em60Count += r.em60Count;
+    acc.em60OnTimeCount += r.em60OnTimeCount;
     acc.appointmentCount += r.appointmentCount;
     acc.walkinCount += r.walkinCount;
     acc.bpPotentialCount += r.bpPotentialCount;
@@ -127,4 +131,12 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
 export function partsMatchCoveragePct(totals: CloseSaPeriodTotals): number | null {
   if (totals.roCount === 0) return null;
   return totals.partsMatchedRoCount / totals.roCount;
+}
+
+/** Of this SA's EM60 (Periodic Maintenance, 60-min target) ROs, what share
+ * were On-Time Delivery (Job Open → Invoice at or under 60 min). null when
+ * the SA had no EM60 ROs in the period at all. */
+export function em60OtdPct(totals: CloseSaPeriodTotals): number | null {
+  if (totals.em60Count === 0) return null;
+  return totals.em60OnTimeCount / totals.em60Count;
 }

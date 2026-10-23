@@ -75,6 +75,24 @@ const LS_OVER_TARGET_COLUMN = "Over Target";
 const BP_EST_AMT_COLUMN = "EST_AMT";
 const BP_FINAL_INV_AMT_COLUMN = "FINAL_INV_AMT";
 
+const JOB_OPEN_DATE_COLUMN = "Job Open Date";
+const JOB_OPEN_TIME_COLUMN = "Job Open Time";
+const INVOICE_DATE_COLUMN = "Invoice Date";
+const INVOICE_TIME_COLUMN = "Invoice Time";
+
+/** EM Flag's real values, confirmed against real data (2026-10-22): "NO",
+ * or "EM60"/"EM90"/"EM120" — never a plain "Y" (an earlier small sample had
+ * misleadingly suggested Y/N). Always RO-level, always paired with at least
+ * one Periodic Maintenance job line on that RO (verified against 5 real
+ * ROs) — this module only tracks EM60 specifically, at the user's request;
+ * EM90/EM120 are deliberately ignored here. */
+const EM60_VALUE = "EM60";
+/** On-Time Delivery target for an EM60 RO: Job Open to Invoice must be at
+ * or under this many minutes (confirmed with the user 2026-10-23 — "should
+ * be exactly 60 minutes" meant the target is 60, not a tolerance window;
+ * finishing early still counts as on-time). */
+const EM60_TARGET_MINUTES = 60;
+
 /** Part Sale Report PartNo prefixes for Tyre / Battery sales — confirmed
  * against real data (2026-10-22, at the user's request): "T-" rows are
  * genuine tyre SKUs (brand + size, e.g. "T-TY01A-17104" / "215/60 R17 96H
@@ -104,6 +122,30 @@ function parseAmount(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Service Info's date columns are month-first (MM/DD/YYYY — confirmed in
+ * docs/data-sourcing-reference.md, unlike SSRV089's day-first "Invoice Doc
+ * Date"), paired with an "HH:MM" time column. The year is sometimes 2
+ * digits instead of 4 (e.g. "1/10/26" — confirmed 2026-10-23: of 1,428 real
+ * October EM60 ROs, 409 used this exact shorter form, all otherwise
+ * well-formed — without handling it, OTD silently couldn't be computed for
+ * ~29% of them). A 2-digit year is assumed 20YY, same convention used
+ * elsewhere in this codebase (e.g. labour-sales/parse.ts's date parsing).
+ * Returns minutes-since-epoch (UTC, no timezone meaning of its own — only
+ * ever used to diff two values parsed the same way) or null if either half
+ * isn't readable. */
+function parseServiceInfoDateTime(dateStr: unknown, timeStr: unknown): number | null {
+  const dm = normalizeText(dateStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  const tm = normalizeText(timeStr).match(/^(\d{1,2}):(\d{2})$/);
+  if (!dm || !tm) return null;
+  const month = Number(dm[1]);
+  const day = Number(dm[2]);
+  const year = dm[3].length === 2 ? 2000 + Number(dm[3]) : Number(dm[3]);
+  const hour = Number(tm[1]);
+  const minute = Number(tm[2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) return null;
+  return Date.UTC(year, month - 1, day, hour, minute) / 60_000;
+}
+
 export type CloseSaDailyMetrics = {
   roCount: number;
   /** Every distinct Vin no for this SA's ROs that day — kept as the actual
@@ -122,6 +164,14 @@ export type CloseSaDailyMetrics = {
   amcCount: number;
   fmscCount: number;
   emCount: number;
+  /** Distinct ROs flagged EM60 specifically (EM90/EM120 excluded, at the
+   * user's request). Always paired with a Periodic Maintenance job line. */
+  em60Count: number;
+  /** Of those EM60 ROs, how many had Job Open→Invoice at or under 60
+   * minutes (EM60_TARGET_MINUTES) — On-Time Delivery. A duration that
+   * couldn't be computed (unreadable date/time) counts toward em60Count but
+   * not here, same "don't guess" convention as the rest of this module. */
+  em60OnTimeCount: number;
   appointmentCount: number;
   walkinCount: number;
   bpPotentialCount: number;
@@ -160,6 +210,8 @@ function emptyMetrics(): CloseSaDailyMetrics {
     amcCount: 0,
     fmscCount: 0,
     emCount: 0,
+    em60Count: 0,
+    em60OnTimeCount: 0,
     appointmentCount: 0,
     walkinCount: 0,
     bpPotentialCount: 0,
@@ -212,7 +264,11 @@ type RoInfo = {
   payType: string;
   amc: boolean;
   fmsc: boolean;
-  em: boolean;
+  /** Raw EM Flag value — "NO", "EM60", "EM90", or "EM120". */
+  emFlag: string;
+  /** Job Open→Invoice duration in minutes, for an EM60 RO only (null for
+   * every other RO, and for an EM60 RO whose date/time fields didn't parse). */
+  em60DurationMinutes: number | null;
   bpPotential: boolean;
   appointment: boolean | null; // null = neither flag present
   bpEstAmt: number;
@@ -222,6 +278,15 @@ type RoInfo = {
 
 function readRoInfo(row: Record<string, unknown>, isBp: boolean): RoInfo {
   const appointmentRaw = normalizeText(row[APPOINTMENT_WALKIN_COLUMN]).toUpperCase();
+  const emFlag = normalizeText(row[EM_FLAG_COLUMN]).toUpperCase();
+  const em60DurationMinutes =
+    emFlag === EM60_VALUE
+      ? (() => {
+          const open = parseServiceInfoDateTime(row[JOB_OPEN_DATE_COLUMN], row[JOB_OPEN_TIME_COLUMN]);
+          const invoice = parseServiceInfoDateTime(row[INVOICE_DATE_COLUMN], row[INVOICE_TIME_COLUMN]);
+          return open !== null && invoice !== null ? invoice - open : null;
+        })()
+      : null;
   return {
     closeSaName: normalizeCloseSaName(row[CLOSE_SA_NAME_COLUMN]),
     vin: normalizeText(row[VIN_COLUMN]),
@@ -229,7 +294,8 @@ function readRoInfo(row: Record<string, unknown>, isBp: boolean): RoInfo {
     payType: normalizeText(row[PAY_TYPE_COLUMN]),
     amc: normalizeText(row[AMC_FLAG_COLUMN]).toUpperCase() === "Y",
     fmsc: normalizeText(row[FMSC_FLAG_COLUMN]).toUpperCase() === "Y",
-    em: normalizeText(row[EM_FLAG_COLUMN]).toUpperCase() === "Y",
+    emFlag,
+    em60DurationMinutes,
     bpPotential: normalizeText(row[BP_POTENTIAL_COLUMN]).toUpperCase() === "Y",
     appointment: appointmentRaw ? appointmentRaw === APPOINTMENT_VALUE : null,
     bpEstAmt: parseAmount(row[BP_EST_AMT_COLUMN]),
@@ -298,7 +364,15 @@ export function computeCloseSaAnalytics(
     bump(m.payTypeCounts, info.payType);
     if (info.amc) m.amcCount++;
     if (info.fmsc) m.fmscCount++;
-    if (info.em) m.emCount++;
+    // Fixed 2026-10-23 — this previously checked EM_FLAG_COLUMN === "Y",
+    // which real data never contains (see EM60_VALUE's doc comment above),
+    // so emCount had silently been 0 for every SA since this feature
+    // shipped. Any non-"NO", non-blank value is a real EM tier (60/90/120).
+    if (info.emFlag && info.emFlag !== "NO") m.emCount++;
+    if (info.emFlag === EM60_VALUE) {
+      m.em60Count++;
+      if (info.em60DurationMinutes !== null && info.em60DurationMinutes <= EM60_TARGET_MINUTES) m.em60OnTimeCount++;
+    }
     if (info.bpPotential) m.bpPotentialCount++;
     if (info.appointment === true) m.appointmentCount++;
     else if (info.appointment === false) m.walkinCount++;

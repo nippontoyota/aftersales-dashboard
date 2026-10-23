@@ -26,7 +26,8 @@ export async function saveCloseSaAnalyticsForDate(
            parts_revenue, parts_matched_ro_count, engine_flush_count, injector_cleaner_count,
            synthetic_oil_ltrs, brake_cleaning_count, diy_count, diy_revenue, external_sales,
            tyre_count, battery_count,
-           bp_final_invoice_amount, bp_estimate_amount, bp_ro_count
+           bp_final_invoice_amount, bp_estimate_amount, bp_ro_count,
+           em60_count, em60_on_time_count
          ) values (
            $1, $2, $3, $4, $5::jsonb, $6::jsonb,
            $7, $8, $9, $10,
@@ -36,7 +37,8 @@ export async function saveCloseSaAnalyticsForDate(
            $24, $25, $26, $27,
            $28, $29, $30, $31, $32,
            $33, $34,
-           $35, $36, $37
+           $35, $36, $37,
+           $38, $39
          )`,
         [
           date,
@@ -76,6 +78,8 @@ export async function saveCloseSaAnalyticsForDate(
           m.bpFinalInvoiceAmount,
           m.bpEstimateAmount,
           m.bpRoCount,
+          m.em60Count,
+          m.em60OnTimeCount,
         ]
       );
     }
@@ -118,6 +122,8 @@ function rowFromDb(r: Record<string, unknown>): CloseSaAnalyticsRow {
     amcCount: Number(r.amc_count),
     fmscCount: Number(r.fmsc_count),
     emCount: Number(r.em_count),
+    em60Count: Number(r.em60_count),
+    em60OnTimeCount: Number(r.em60_on_time_count),
     appointmentCount: Number(r.appointment_count),
     walkinCount: Number(r.walkin_count),
     bpPotentialCount: Number(r.bp_potential_count),

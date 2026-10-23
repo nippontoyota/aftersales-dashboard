@@ -21,7 +21,7 @@ for (const r of rows) {
       `VAS(wb=${r.wheelBalancingCount},wa=${r.wheelAlignmentCount},bs=${r.brakeSkimmingCount},ev=${r.evaporatorCleaningCount}) ` +
       `vasRev=${r.vasBillRevenue.toFixed(0)} labourAfter=${r.labourRevenueAfter.toFixed(0)} soldHours=${r.soldHours.toFixed(2)} ` +
       `overTarget=${r.overTargetTotal.toFixed(2)} partsRev=${r.partsRevenue.toFixed(0)} partsMatchedRos=${r.partsMatchedRoCount} ` +
-      `amc=${r.amcCount} fmsc=${r.fmscCount} em=${r.emCount} bpPotential=${r.bpPotentialCount} appt=${r.appointmentCount} walkin=${r.walkinCount} ` +
+      `amc=${r.amcCount} fmsc=${r.fmscCount} em=${r.emCount} em60=${r.em60Count} em60OTD=${r.em60OnTimeCount} bpPotential=${r.bpPotentialCount} appt=${r.appointmentCount} walkin=${r.walkinCount} ` +
       `tyre=${r.tyreCount} battery=${r.batteryCount}`,
   );
   console.log(`   jobType=${JSON.stringify(r.jobTypeCounts)} payType=${JSON.stringify(r.payTypeCounts)}`);

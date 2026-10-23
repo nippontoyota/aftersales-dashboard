@@ -1313,7 +1313,15 @@ create table if not exists close_sa_analytics_daily (
   pay_type_counts jsonb not null default '{}'::jsonb,
   amc_count integer not null default 0,
   fmsc_count integer not null default 0,
+  -- em_count fixed 2026-10-23 — previously checked EM Flag = 'Y', which real
+  -- data never contains (its real values are "NO"/"EM60"/"EM90"/"EM120"), so
+  -- this had been silently 0 for every SA since the table was created.
   em_count integer not null default 0,
+  -- EM60 only (EM90/EM120 excluded, at the user's request) + On-Time
+  -- Delivery: Job Open Date/Time to Invoice Date/Time at or under 60
+  -- minutes. Both added 2026-10-23 — see close-sa-analytics/compute.ts.
+  em60_count integer not null default 0,
+  em60_on_time_count integer not null default 0,
   appointment_count integer not null default 0,
   walkin_count integer not null default 0,
   bp_potential_count integer not null default 0,
@@ -1408,3 +1416,10 @@ create table if not exists n9_leads (
 );
 create index if not exists n9_leads_vin_idx on n9_leads (vin);
 create index if not exists n9_leads_icrop_date_idx on n9_leads (icrop_recommended_date);
+
+-- 2026-10-23: close_sa_analytics_daily already existed live before this
+-- change, so (same reasoning as tyre_count/battery_count's own alter
+-- above) the create table's inline columns are a no-op there — these two
+-- explicit alters are what actually reaches the real database.
+alter table close_sa_analytics_daily add column if not exists em60_count integer not null default 0;
+alter table close_sa_analytics_daily add column if not exists em60_on_time_count integer not null default 0;
