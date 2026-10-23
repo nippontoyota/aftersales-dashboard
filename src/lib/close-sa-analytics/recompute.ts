@@ -18,7 +18,7 @@ export async function recomputeCloseSaAnalytics(branch: string, date: string): P
       loadRawUploadRows("service_info_bp", date, branch),
       loadRawUploadRows("labour_sales", date, branch),
       loadRawUploadRows("part_sale", date, branch),
-      loadRoCloseSaPairs(branch, date),
+      loadRoCloseSaPairs(branch),
     ]);
     const tier = tierForBranch(branch);
     const roCloseSaMap = new Map<string, string>();

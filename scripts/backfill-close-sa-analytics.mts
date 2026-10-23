@@ -7,7 +7,7 @@ import "./load-env.mjs";
 import { recomputeCloseSaAnalytics } from "../src/lib/close-sa-analytics/recompute";
 import { pool } from "../src/lib/db";
 
-const BACKFILL_FROM_DATE = "2026-07-01";
+const BACKFILL_FROM_DATE = process.argv[2] ?? "2026-07-01";
 
 const { rows } = await pool.query<{ branch: string; date: string }>(
   `select distinct branch, date::text as date from raw_upload_rows

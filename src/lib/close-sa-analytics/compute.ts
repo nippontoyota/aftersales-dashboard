@@ -58,15 +58,17 @@ import { seriesToSize } from "../vas-series-map";
  * belongs to) deliberately does NOT use `serviceInfoRows`/`serviceInfoBpRows`
  * above — those are this one day's Service Info only, but a labour/parts
  * line's own date (Doc. Date / RefDocNo's RO) routinely lands on a different
- * day than its RO's Service Info date (GS: a few days; BP, which can stay
- * open for weeks, much further) — confirmed 2026-10-22/23 against real TR01A
- * data: ~11% of a month's Labour Sales lines were silently un-attributed to
- * any SA by a same-day-only join. `roCloseSaMap` (recompute.ts, via
- * raw-upload-rows/store.ts's loadRoCloseSaPairs — a ±30-day window around
- * this date, not just this date) is the fix: it's used only for Labour
- * Sales/Part Sale's closeSaName lookup, never for RO count / vehicle count /
- * job-type counts etc., which stay correctly scoped to this day's own
- * Service Info (`roInfoByRo`).
+ * day than its RO's Service Info date: a Service Info (BP) upload is
+ * bucketed by Invoice Date/Job Close Date, not Job Open Date, so an
+ * insurance body-repair job that stays open 4-6+ weeks (confirmed 2026-10-23
+ * against real CO01E/KL01B data — up to 45 days) only ever has ONE date on
+ * file for it, and a fixed window around that date is just a smaller
+ * version of the same bug. `roCloseSaMap` (recompute.ts, via
+ * raw-upload-rows/store.ts's loadRoCloseSaPairs — the branch's whole
+ * history, not scoped to this date at all) is the fix: it's used only for
+ * Labour Sales/Part Sale's closeSaName lookup, never for RO count / vehicle
+ * count / job-type counts etc., which stay correctly scoped to this day's
+ * own Service Info (`roInfoByRo`).
  */
 
 const VIN_COLUMN = "Vin no";
