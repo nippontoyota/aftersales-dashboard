@@ -53,6 +53,20 @@ import { seriesToSize } from "../vas-series-map";
  * OpenJobDate and Labour Sales' Over Target) — read once per RO, not summed
  * per row. Job Desc / VAS counts are genuinely per-row (each row is one job
  * performed) and attributed to that row's RO's Close SA.
+ *
+ * Labour Sales / Part Sale attribution (which SA a labour or parts line
+ * belongs to) deliberately does NOT use `serviceInfoRows`/`serviceInfoBpRows`
+ * above — those are this one day's Service Info only, but a labour/parts
+ * line's own date (Doc. Date / RefDocNo's RO) routinely lands on a different
+ * day than its RO's Service Info date (GS: a few days; BP, which can stay
+ * open for weeks, much further) — confirmed 2026-10-22/23 against real TR01A
+ * data: ~11% of a month's Labour Sales lines were silently un-attributed to
+ * any SA by a same-day-only join. `roCloseSaMap` (recompute.ts, via
+ * raw-upload-rows/store.ts's loadRoCloseSaPairs — a ±30-day window around
+ * this date, not just this date) is the fix: it's used only for Labour
+ * Sales/Part Sale's closeSaName lookup, never for RO count / vehicle count /
+ * job-type counts etc., which stay correctly scoped to this day's own
+ * Service Info (`roInfoByRo`).
  */
 
 const VIN_COLUMN = "Vin no";
@@ -107,7 +121,7 @@ export function normalizeCloseSaName(name: unknown): string {
   return String(name ?? "").replace(/\s+/g, " ").trim();
 }
 
-function normalizeRo(value: unknown): string {
+export function normalizeRo(value: unknown): string {
   return String(value ?? "").trim().replace(/-/g, "").toUpperCase();
 }
 
@@ -318,7 +332,11 @@ export function computeCloseSaAnalytics(
   serviceInfoBpRows: Record<string, unknown>[],
   labourSalesRows: Record<string, unknown>[],
   partSaleRows: Record<string, unknown>[],
-  tier: "A" | "B" | null
+  tier: "A" | "B" | null,
+  /** RO → Close SA name, from a wider window than this date's own Service
+   * Info rows — see this module's doc comment above. Only Labour Sales /
+   * Part Sale attribution uses this; everything else uses `roInfoByRo`. */
+  roCloseSaMap: Map<string, string>
 ): Map<string, CloseSaDailyMetrics> {
   const byCloseSa = new Map<string, CloseSaDailyMetrics>();
   const metricsFor = (name: string): CloseSaDailyMetrics => {
@@ -413,8 +431,9 @@ export function computeCloseSaAnalytics(
   }
   for (const [name, set] of brakeSkimmingRosBySa) metricsFor(name).brakeSkimmingCount = set.size;
 
-  // --- Labour Sales: join by RO (undashed, confirmed 100% match), sum
-  // labour revenue/hours per line, Over Target once per RO.
+  // --- Labour Sales: join by RO (undashed), sum labour revenue/hours per
+  // line, Over Target once per RO. Close SA comes from roCloseSaMap (a wider
+  // window), not roInfoByRo (this day only) — see module doc comment above.
   const overTargetSeenRo = new Set<string>(); // "closeSaName|ro" — Over Target repeats per line, add once per RO
   const labourByRoAndJobCode = new Map<string, number>(); // ro|jobCode -> summed Sub Total After Discount, for the VAS real-revenue join below
   for (const row of labourSalesRows) {
@@ -424,14 +443,14 @@ export function computeCloseSaAnalytics(
     const after = parseAmount(row[LS_SUB_TOTAL_AFTER_COLUMN]);
     labourByRoAndJobCode.set(ro + "|" + jobCode, (labourByRoAndJobCode.get(ro + "|" + jobCode) ?? 0) + after);
 
-    const info = roInfoByRo.get(ro);
-    if (!info || !info.closeSaName) continue;
-    const m = metricsFor(info.closeSaName);
+    const closeSaName = roCloseSaMap.get(ro);
+    if (!closeSaName) continue;
+    const m = metricsFor(closeSaName);
     m.labourRevenueBefore += parseAmount(row[LS_SUB_TOTAL_BEFORE_COLUMN]);
     m.labourRevenueAfter += after;
     m.soldHours += parseAmount(row[LS_SOLD_HOUR_COLUMN]);
 
-    const seenKey = info.closeSaName + "|" + ro;
+    const seenKey = closeSaName + "|" + ro;
     if (!overTargetSeenRo.has(seenKey)) {
       overTargetSeenRo.add(seenKey);
       const overTargetRaw = normalizeText(row[LS_OVER_TARGET_COLUMN]);
@@ -461,17 +480,19 @@ export function computeCloseSaAnalytics(
   }
 
   // --- Part Sale: join by RefDocNo (dash-stripped) to the RO. Confirmed
-  // ~65-68% real match rate, never assumed to be exhaustive.
+  // ~65-68% real match rate, never assumed to be exhaustive. Close SA comes
+  // from roCloseSaMap (a wider window), not roInfoByRo (this day only) —
+  // see module doc comment above.
   const matchedRosBySa = new Map<string, Set<string>>();
   for (const row of partSaleRows) {
     const refDoc = normalizeRo(row[PS_REF_DOC_NO_COLUMN]);
     if (!refDoc) continue;
-    const info = roInfoByRo.get(refDoc);
-    if (!info || !info.closeSaName) continue;
-    const m = metricsFor(info.closeSaName);
+    const closeSaName = roCloseSaMap.get(refDoc);
+    if (!closeSaName) continue;
+    const m = metricsFor(closeSaName);
 
-    if (!matchedRosBySa.has(info.closeSaName)) matchedRosBySa.set(info.closeSaName, new Set());
-    matchedRosBySa.get(info.closeSaName)!.add(refDoc);
+    if (!matchedRosBySa.has(closeSaName)) matchedRosBySa.set(closeSaName, new Set());
+    matchedRosBySa.get(closeSaName)!.add(refDoc);
 
     m.partsRevenue += toQty(row[PS_NET_AMNT_COLUMN]);
 

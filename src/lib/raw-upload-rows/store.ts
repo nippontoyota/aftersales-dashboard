@@ -116,6 +116,30 @@ export async function loadRawUploadRows(reportType: RawUploadReportType, date: s
   return rows.map((r) => r.row_data);
 }
 
+/** Job Order No → Close Service Advisor Name for every Service Info (GS +
+ * BP) row this branch has within ±30 days of `centerDate` — for attributing
+ * Labour Sales / Part Sale lines to the SA who closed their RO even when
+ * that line's own date differs from the RO's Service Info date (confirmed
+ * 2026-10-23: Labour Sales' "Doc. Date" and Service Info's upload date
+ * routinely drift a few days for GS, and much further for BP jobs that stay
+ * open for weeks — see close-sa-analytics/compute.ts). Projects only the two
+ * columns needed, not the full row_data, so a 60-day window stays well under
+ * a second even for a branch's busiest months (confirmed: pulling full
+ * row_data for one branch's entire history took ~100s; this two-column,
+ * 60-day-window version took ~1s) — unlike the full-row/full-history
+ * approach, this stays fast no matter how much history accumulates. */
+export async function loadRoCloseSaPairs(branch: string, centerDate: string): Promise<{ ro: unknown; sa: unknown }[]> {
+  const { rows } = await pool.query<{ ro: unknown; sa: unknown }>(
+    `select row_data->>'Job Order No' as ro, row_data->>'Close Service Advisor Name' as sa
+     from raw_upload_rows
+     where report_type in ('service_info', 'service_info_bp')
+       and branch = $1
+       and date between ($2::date - interval '30 days') and ($2::date + interval '30 days')`,
+    [branch, centerDate]
+  );
+  return rows;
+}
+
 /** Fast duplicate-upload check — returns the date of the first prior batch
  * whose content hash matches `contentHash`, or null if no duplicate exists.
  * Replaces the old loadAllRawUploadRowsBefore + JS hash-loop approach
