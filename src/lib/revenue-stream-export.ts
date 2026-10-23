@@ -1,5 +1,6 @@
-import * as XLSX from "xlsx";
+import { Workbook, type Worksheet, type Row, type Borders } from "exceljs";
 import { formatPercent } from "./format";
+import { achievementTone } from "./aggregate";
 import { REGIONS, type RegionName } from "./regions";
 import type { Report, BranchReport } from "./report";
 import { buildReport } from "./report";
@@ -15,7 +16,41 @@ import { DAILY_REPORT_ROWS, branchCell, regionTotalCell, type MetricDef, type Ro
  * live dashboard; a short list of shop-floor metrics we don't capture
  * anywhere (see UNTRACKED_LABELS) are left as blank label-only rows for a
  * branch to fill by hand after downloading.
+ *
+ * Switched from the `xlsx` package to ExcelJS (2026-10-23, at the user's
+ * request, after confirming the Python-styling alternative would mean
+ * standing up a second runtime just to format a spreadsheet) — ExcelJS can
+ * write real cell styling (fills, borders, fonts, merges), which `xlsx`'s
+ * free build can't (see the Incentive Slab Targets export's own comment).
+ * Colours below reuse the app's own design tokens (globals.css) and
+ * achievementTone()'s thresholds rather than inventing a new palette.
  */
+
+const COLOR = {
+  titleFill: "FFDC2626", // --color-accent
+  titleText: "FFFFFFFF",
+  headerFill: "FFCBD5E1", // --color-border-strong
+  headerText: "FF0F172A", // --color-fg
+  groupFill: "FFF1F5F9", // --color-surface-2
+  groupText: "FF0F172A",
+  warnBannerFill: "FFFFFBEB", // --color-warn-soft
+  warnBannerText: "FFB45309", // --color-warn
+  border: "FFCBD5E1", // --color-border-strong
+  mutedText: "FF475569", // --color-fg-muted
+  good: "FF047857",
+  goodSoft: "FFECFDF5",
+  warn: "FFB45309",
+  warnSoft: "FFFFFBEB",
+  bad: "FFB91C1C",
+  badSoft: "FFFEF2F2",
+} as const;
+
+const THIN_BORDER: Partial<Borders> = {
+  top: { style: "thin", color: { argb: COLOR.border } },
+  left: { style: "thin", color: { argb: COLOR.border } },
+  bottom: { style: "thin", color: { argb: COLOR.border } },
+  right: { style: "thin", color: { argb: COLOR.border } },
+};
 
 const REGION_ORDER: RegionName[] = ["Central", "South", "North"];
 
@@ -71,53 +106,126 @@ function cellFor(col: Col, def: MetricDef, byBranch: Map<string, BranchReport>, 
   return regionTotalCell(def, branches);
 }
 
-/** Mutable row accumulator for one sheet — tracks which row indices are
- * percentage-formatted so toSheet() can apply "0.0%" after the fact (the
- * community SheetJS build this app already uses elsewhere has no cell-style
- * API beyond number formats — see api/vp/slab-targets-export/route.ts). */
-function sheetBuilder() {
-  const aoa: (string | number)[][] = [];
-  const percentRows = new Set<number>();
-  return {
-    push(row: (string | number)[], isPercent = false) {
-      if (isPercent) percentRows.add(aoa.length);
-      aoa.push(row);
-    },
-    blank() {
-      aoa.push([]);
-    },
-    aoa,
-    percentRows,
-  };
-}
-type SheetBuilder = ReturnType<typeof sheetBuilder>;
+// ---- styling helpers --------------------------------------------------
 
-function sheetHeaderRows(cols: Col[], report: Report): (string | number)[][] {
-  return [
-    ["Nippon Group — Revenue Stream Daily Report"],
-    [`As of ${report.date}`],
-    ["Metric", ...cols.map(headerLabel)],
-    ["", ...cols.map(subHeaderLabel)],
-  ];
+function addTitleRow(ws: Worksheet, text: string, totalCols: number): void {
+  const row = ws.addRow([text]);
+  ws.mergeCells(row.number, 1, row.number, totalCols);
+  const cell = row.getCell(1);
+  cell.font = { bold: true, size: 14, color: { argb: COLOR.titleText } };
+  cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR.titleFill } };
+  cell.alignment = { horizontal: "center", vertical: "middle" };
+  row.height = 26;
 }
 
-function pushMetricRows(sb: SheetBuilder, def: MetricDef, cols: Col[], byBranch: Map<string, BranchReport>, report: Report) {
+function addSubtitleRow(ws: Worksheet, text: string, totalCols: number): void {
+  const row = ws.addRow([text]);
+  ws.mergeCells(row.number, 1, row.number, totalCols);
+  const cell = row.getCell(1);
+  cell.font = { italic: true, color: { argb: COLOR.mutedText } };
+  cell.alignment = { horizontal: "center" };
+}
+
+function addHeaderRows(ws: Worksheet, cols: Col[], totalCols: number): void {
+  const row1 = ws.addRow(["Metric", ...cols.map(headerLabel)]);
+  const row2 = ws.addRow(["", ...cols.map(subHeaderLabel)]);
+  for (const row of [row1, row2]) {
+    for (let c = 1; c <= totalCols; c++) {
+      const cell = row.getCell(c);
+      cell.font = { bold: true, color: { argb: COLOR.headerText } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR.headerFill } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = THIN_BORDER;
+    }
+  }
+  row1.height = 18;
+}
+
+function addGroupRow(ws: Worksheet, label: string, totalCols: number, variant: "default" | "warn" = "default"): void {
+  const row = ws.addRow([label.toUpperCase()]);
+  ws.mergeCells(row.number, 1, row.number, totalCols);
+  const cell = row.getCell(1);
+  const [fill, text] = variant === "warn" ? [COLOR.warnBannerFill, COLOR.warnBannerText] : [COLOR.groupFill, COLOR.groupText];
+  cell.font = { bold: true, color: { argb: text } };
+  cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+  cell.border = THIN_BORDER;
+}
+
+/** Plain data row — number format picked per cell (one decimal only when the
+ * value actually has one, e.g. Synthetic Oil litres) so whole-rupee/count
+ * figures don't grow a spurious ".0". */
+function styleDataRow(row: Row, totalCols: number, opts: { isPercent: boolean; muted?: boolean }): void {
+  const labelCell = row.getCell(1);
+  labelCell.font = { italic: !!opts.muted, color: { argb: opts.muted ? COLOR.mutedText : "FF0F172A" } };
+  labelCell.border = THIN_BORDER;
+  for (let c = 2; c <= totalCols; c++) {
+    const cell = row.getCell(c);
+    cell.border = THIN_BORDER;
+    cell.alignment = { horizontal: "right" };
+    if (typeof cell.value !== "number") continue;
+    cell.numFmt = opts.isPercent ? "0.0%" : Number.isInteger(cell.value) ? "#,##0" : "#,##0.0";
+  }
+}
+
+/** Achievement-% row — each cell additionally tinted by achievementTone()'s
+ * own good/warn/critical thresholds, reused as-is so the colour bands can
+ * never drift from what the live dashboard calls "on track". */
+function styleAchRow(row: Row, totalCols: number): void {
+  const labelCell = row.getCell(1);
+  labelCell.font = { italic: true, color: { argb: COLOR.mutedText } };
+  labelCell.border = THIN_BORDER;
+  for (let c = 2; c <= totalCols; c++) {
+    const cell = row.getCell(c);
+    cell.border = THIN_BORDER;
+    cell.alignment = { horizontal: "right" };
+    if (typeof cell.value !== "number") continue;
+    cell.numFmt = "0.0%";
+    cell.font = { bold: true };
+    const tone = achievementTone(cell.value);
+    const [textColor, fillColor] =
+      tone === "good" ? [COLOR.good, COLOR.goodSoft] : tone === "warn" ? [COLOR.warn, COLOR.warnSoft] : tone === "critical" ? [COLOR.bad, COLOR.badSoft] : [null, null];
+    if (textColor && fillColor) {
+      cell.font = { bold: true, color: { argb: textColor } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillColor } };
+    }
+  }
+}
+
+function styleBlankManualRow(row: Row, totalCols: number): void {
+  for (let c = 1; c <= totalCols; c++) {
+    const cell = row.getCell(c);
+    cell.border = THIN_BORDER;
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR.warnBannerFill } };
+    if (c === 1) cell.font = { color: { argb: COLOR.warnBannerText } };
+  }
+}
+
+// ---- row builders -------------------------------------------------------
+
+function pushMetricRows(ws: Worksheet, def: MetricDef, cols: Col[], byBranch: Map<string, BranchReport>, report: Report, totalCols: number): void {
   const isPercentMetric = def.fmt === formatPercent;
   const cells = cols.map((col) => cellFor(col, def, byBranch, report));
-  if (cells.some((c) => c.today !== null)) sb.push([`${def.label} — Today`, ...cells.map((c) => c.today ?? "")], isPercentMetric);
-  if (cells.some((c) => c.mtd !== null)) sb.push([`${def.label} — MTD`, ...cells.map((c) => c.mtd ?? "")], isPercentMetric);
-  if (cells.some((c) => c.target !== null)) sb.push([`${def.label} — Target`, ...cells.map((c) => c.target ?? "")], isPercentMetric);
-  if (cells.some((c) => c.ratio !== null)) sb.push([`${def.label} — Ach %`, ...cells.map((c) => c.ratio ?? "")], true);
+  if (cells.some((c) => c.today !== null)) {
+    styleDataRow(ws.addRow([`${def.label} — Today`, ...cells.map((c) => c.today ?? "")]), totalCols, { isPercent: isPercentMetric });
+  }
+  if (cells.some((c) => c.mtd !== null)) {
+    styleDataRow(ws.addRow([`${def.label} — MTD`, ...cells.map((c) => c.mtd ?? "")]), totalCols, { isPercent: isPercentMetric });
+  }
+  if (cells.some((c) => c.target !== null)) {
+    styleDataRow(ws.addRow([`${def.label} — Target`, ...cells.map((c) => c.target ?? "")]), totalCols, { isPercent: isPercentMetric, muted: true });
+  }
+  if (cells.some((c) => c.ratio !== null)) {
+    styleAchRow(ws.addRow([`${def.label} — Ach %`, ...cells.map((c) => c.ratio ?? "")]), totalCols);
+  }
 }
 
-function buildSection(rowDefs: RowDef[], sb: SheetBuilder, cols: Col[], byBranch: Map<string, BranchReport>, report: Report) {
+function buildSection(rowDefs: RowDef[], ws: Worksheet, cols: Col[], byBranch: Map<string, BranchReport>, report: Report, totalCols: number): void {
   for (const row of rowDefs) {
     if (row.kind === "group") {
-      sb.blank();
-      sb.push([row.label.toUpperCase()]);
+      addGroupRow(ws, row.label, totalCols);
       continue;
     }
-    pushMetricRows(sb, row, cols, byBranch, report);
+    pushMetricRows(ws, row, cols, byBranch, report, totalCols);
   }
 }
 
@@ -166,12 +274,11 @@ const UNTRACKED_LABELS = [
   "TGLOSS Mech Care Penetration",
 ];
 
-function buildUntrackedSection(sb: SheetBuilder, cols: Col[]) {
-  sb.blank();
-  sb.push(["MANUAL ENTRY — NOT TRACKED BY THE DASHBOARD (fill in by hand)"]);
+function buildUntrackedSection(ws: Worksheet, cols: Col[], totalCols: number): void {
+  addGroupRow(ws, "Manual Entry — Not Tracked By The Dashboard (fill in by hand)", totalCols, "warn");
   for (const label of UNTRACKED_LABELS) {
-    sb.push([`${label} — Today`, ...cols.map(() => "")]);
-    sb.push([`${label} — MTD`, ...cols.map(() => "")]);
+    styleBlankManualRow(ws.addRow([`${label} — Today`, ...cols.map(() => "")]), totalCols);
+    styleBlankManualRow(ws.addRow([`${label} — MTD`, ...cols.map(() => "")]), totalCols);
   }
 }
 
@@ -188,48 +295,49 @@ function improvementRow(cols: Col[], label: string, thisReport: Report, baseRepo
   return row;
 }
 
-function buildComparisonSection(
-  sb: SheetBuilder,
-  cols: Col[],
-  report: Report,
-  lastMonthReport: Report | null,
-  lastYearReport: Report | null
-) {
+function buildComparisonSection(ws: Worksheet, cols: Col[], report: Report, lastMonthReport: Report | null, lastYearReport: Report | null, totalCols: number): void {
   const totalDef = findMetric("Total MTD (Rs)");
-  sb.blank();
-  sb.push(["COMPARISON — TOTAL REVENUE STREAM MTD (Rs)"]);
+  addGroupRow(ws, "Comparison — Total Revenue Stream MTD (Rs)", totalCols);
   const byBranch = byBranchMap(report);
-  sb.push([`${report.date} — Total MTD (Rs)`, ...cols.map((col) => cellFor(col, totalDef, byBranch, report).mtd ?? "")]);
+  styleDataRow(
+    ws.addRow([`${report.date} — Total MTD (Rs)`, ...cols.map((col) => cellFor(col, totalDef, byBranch, report).mtd ?? "")]),
+    totalCols,
+    { isPercent: false }
+  );
 
   if (lastMonthReport) {
     const lmByBranch = byBranchMap(lastMonthReport);
-    sb.push([
-      `Same date last month (${lastMonthReport.date}) — Total MTD (Rs)`,
-      ...cols.map((col) => cellFor(col, totalDef, lmByBranch, lastMonthReport).mtd ?? ""),
-    ]);
-    sb.push(improvementRow(cols, "Improvement over last month %", report, lastMonthReport), true);
+    styleDataRow(
+      ws.addRow([
+        `Same date last month (${lastMonthReport.date}) — Total MTD (Rs)`,
+        ...cols.map((col) => cellFor(col, totalDef, lmByBranch, lastMonthReport).mtd ?? ""),
+      ]),
+      totalCols,
+      { isPercent: false, muted: true }
+    );
+    styleDataRow(ws.addRow(improvementRow(cols, "Improvement over last month %", report, lastMonthReport)), totalCols, { isPercent: true });
   }
 
   if (lastYearReport) {
     const lyByBranch = byBranchMap(lastYearReport);
-    sb.push([
-      `Same date last year (${lastYearReport.date}) — Total MTD (Rs)`,
-      ...cols.map((col) => cellFor(col, totalDef, lyByBranch, lastYearReport).mtd ?? ""),
-    ]);
-    sb.push(improvementRow(cols, "Improvement over last year %", report, lastYearReport), true);
+    styleDataRow(
+      ws.addRow([
+        `Same date last year (${lastYearReport.date}) — Total MTD (Rs)`,
+        ...cols.map((col) => cellFor(col, totalDef, lyByBranch, lastYearReport).mtd ?? ""),
+      ]),
+      totalCols,
+      { isPercent: false, muted: true }
+    );
+    styleDataRow(ws.addRow(improvementRow(cols, "Improvement over last year %", report, lastYearReport)), totalCols, { isPercent: true });
   }
 }
 
-function toSheet(aoa: (string | number)[][], percentRows: Set<number>, totalCols: number): XLSX.WorkSheet {
-  const sheet = XLSX.utils.aoa_to_sheet(aoa);
-  sheet["!cols"] = Array.from({ length: totalCols }, (_, i) => ({ wch: i === 0 ? 42 : 14 }));
-  for (const r of percentRows) {
-    for (let c = 1; c < totalCols; c++) {
-      const cell = sheet[XLSX.utils.encode_cell({ r, c })];
-      if (cell && cell.t === "n") cell.z = "0.0%";
-    }
-  }
-  return sheet;
+function setupSheet(ws: Worksheet, cols: Col[], report: Report, totalCols: number): void {
+  ws.columns = Array.from({ length: totalCols }, (_, i) => ({ width: i === 0 ? 42 : 14 }));
+  ws.views = [{ state: "frozen", xSplit: 1, ySplit: 4 }];
+  addTitleRow(ws, "Nippon Group — Revenue Stream Daily Report", totalCols);
+  addSubtitleRow(ws, `As of ${report.date}`, totalCols);
+  addHeaderRows(ws, cols, totalCols);
 }
 
 export type RevenueStreamWorkbookInput = {
@@ -238,26 +346,27 @@ export type RevenueStreamWorkbookInput = {
   lastYearReport: Report | null;
 };
 
-export function buildRevenueStreamWorkbook(input: RevenueStreamWorkbookInput): XLSX.WorkBook {
+export function buildRevenueStreamWorkbook(input: RevenueStreamWorkbookInput): Workbook {
   const { report, lastMonthReport, lastYearReport } = input;
   const cols = buildColumns();
   const byBranch = byBranchMap(report);
   const totalCols = cols.length + 1;
 
-  const summarySb = sheetBuilder();
-  for (const row of sheetHeaderRows(cols, report)) summarySb.push(row);
-  buildSection(SUMMARY_ROWS, summarySb, cols, byBranch, report);
-  buildComparisonSection(summarySb, cols, report, lastMonthReport, lastYearReport);
+  const workbook = new Workbook();
+  workbook.creator = "Nippon Group Aftersales Dashboard";
+  workbook.created = new Date();
 
-  const detailSb = sheetBuilder();
-  for (const row of sheetHeaderRows(cols, report)) detailSb.push(row);
-  buildSection(DAILY_REPORT_ROWS, detailSb, cols, byBranch, report);
-  buildUntrackedSection(detailSb, cols);
-  buildComparisonSection(detailSb, cols, report, lastMonthReport, lastYearReport);
+  const summary = workbook.addWorksheet("Daily Summary");
+  setupSheet(summary, cols, report, totalCols);
+  buildSection(SUMMARY_ROWS, summary, cols, byBranch, report, totalCols);
+  buildComparisonSection(summary, cols, report, lastMonthReport, lastYearReport, totalCols);
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, toSheet(summarySb.aoa, summarySb.percentRows, totalCols), "Daily Summary");
-  XLSX.utils.book_append_sheet(workbook, toSheet(detailSb.aoa, detailSb.percentRows, totalCols), "Daily Detail");
+  const detail = workbook.addWorksheet("Daily Detail");
+  setupSheet(detail, cols, report, totalCols);
+  buildSection(DAILY_REPORT_ROWS, detail, cols, byBranch, report, totalCols);
+  buildUntrackedSection(detail, cols, totalCols);
+  buildComparisonSection(detail, cols, report, lastMonthReport, lastYearReport, totalCols);
+
   return workbook;
 }
 
@@ -281,7 +390,7 @@ export const sameDayLastYear = (date: string): string => shiftMonths(date, -12);
  * month / last year, each best-effort — a missing one just drops its rows)
  * and assembles the full workbook. Null when there's no report at all for
  * `date` (mirrors every other export route's 404 case). */
-export async function loadRevenueStreamWorkbook(date: string): Promise<{ workbook: XLSX.WorkBook; report: Report } | null> {
+export async function loadRevenueStreamWorkbook(date: string): Promise<{ workbook: Workbook; report: Report } | null> {
   const report = await buildReport(date);
   if (!report) return null;
   const [lastMonthReport, lastYearReport] = await Promise.all([buildReport(sameDayLastMonth(date)), buildReport(sameDayLastYear(date))]);

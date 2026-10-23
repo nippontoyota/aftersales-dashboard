@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import { getCurrentAdmin } from "@/lib/auth";
 import { reportingDate } from "@/lib/reporting-date";
 import { loadReportHolidaySet } from "@/lib/report-holidays/store";
@@ -24,7 +23,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "No report for this date." }, { status: 404 });
   }
 
-  const buffer: Buffer = XLSX.write(result.workbook, { type: "buffer", bookType: "xlsx" });
+  const buffer = await result.workbook.xlsx.writeBuffer();
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
