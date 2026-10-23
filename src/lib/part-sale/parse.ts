@@ -116,6 +116,25 @@ export function isExcludedCustomer(customerName: string): boolean {
   return EXCLUDED_CUSTOMER_SUBSTRINGS.some((needle) => normalized.includes(needle));
 }
 
+/** Branch-to-branch stock transfers, not retail/job sales — the DMS books
+ * them in the Part Sale Report like any other row, so a transferred part
+ * that happens to be a tracked VAS/DIY item (e.g. Engine Flush) would
+ * otherwise get counted as if it were sold. Identified by CustomerName, not
+ * BillNo prefix: confirmed against the full upload history 2026-10-23 that
+ * every outbound transfer (`E`-prefix BillNo) names the receiving branch
+ * itself as the "customer" (e.g. "NIPPON TOYOTA NIPPON - KOTTAYAM") and
+ * every inbound transfer (`D`-prefix BillNo) uses the placeholder "Internal
+ * Customer" — 100% correlated, no false positives found among real
+ * customers or the "Service  Workshop" placeholder used for genuine
+ * job-linked counter sales. Does not affect External Sales, which already
+ * only counts `A`-type bills (transfers never are). */
+const INTERNAL_TRANSFER_CUSTOMER_SUBSTRINGS = ["nippon toyota", "internal customer"];
+
+export function isInternalTransferRow(customerName: string): boolean {
+  const normalized = customerName.toLowerCase();
+  return INTERNAL_TRANSFER_CUSTOMER_SUBSTRINGS.some((needle) => normalized.includes(needle));
+}
+
 /** DIY — any row whose PartNo starts with "D-DIY" (e.g. "D-DIYRATS053",
  * "D-DIYKLPF001" — rat repellent spray, car perfume, that kind of small
  * retail item), independent of bill type. Shown as an additional
@@ -284,21 +303,25 @@ export function partSaleCountsFromRows(rows: Record<string, unknown>[], isFTypeE
   for (const row of rows) {
     const part = normalizePart(row[PART_NO_COLUMN]);
     const qty = toQty(row[SALE_QTY_COLUMN]);
-    if (ENGINE_FLUSH_PARTS.includes(part)) engineFlush += qty;
-    else if (INJECTOR_CLEANER_PARTS.includes(part)) injectorCleaner += qty;
-    else if (SYNTHETIC_OIL_PARTS.includes(part)) syntheticOilRaw += qty;
-    else if (BRAKE_CLEANING_SPRAY_PARTS.includes(part)) brakeCleaningSpray += qty;
+    const customerName = normalizePart(row[CUSTOMER_NAME_COLUMN]);
+    const isTransfer = isInternalTransferRow(customerName);
+
+    if (!isTransfer) {
+      if (ENGINE_FLUSH_PARTS.includes(part)) engineFlush += qty;
+      else if (INJECTOR_CLEANER_PARTS.includes(part)) injectorCleaner += qty;
+      else if (SYNTHETIC_OIL_PARTS.includes(part)) syntheticOilRaw += qty;
+      else if (BRAKE_CLEANING_SPRAY_PARTS.includes(part)) brakeCleaningSpray += qty;
+
+      if (part.toUpperCase().startsWith(DIY_PART_PREFIX)) {
+        diyCount += qty;
+        diyRevenue += toQty(row[NET_AMNT_COLUMN]);
+      }
+    }
 
     const billNo = normalizePart(row[BILL_NO_COLUMN]);
     const refDocNo = normalizePart(row[REF_DOC_NO_COLUMN]);
-    const customerName = normalizePart(row[CUSTOMER_NAME_COLUMN]);
     if (isExternalSalesRow(billNo, refDocNo, isFTypeEligible) && !isExcludedCustomer(customerName)) {
       externalSales += toQty(row[NET_AMNT_COLUMN]);
-    }
-
-    if (part.toUpperCase().startsWith(DIY_PART_PREFIX)) {
-      diyCount += qty;
-      diyRevenue += toQty(row[NET_AMNT_COLUMN]);
     }
   }
 
