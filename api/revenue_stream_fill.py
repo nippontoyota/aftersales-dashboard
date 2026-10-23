@@ -247,6 +247,13 @@ def build_workbook(payload: dict) -> bytes:
 
     fix_sheet2(ws2)
 
+    # The template itself opens to Sheet2 by default (its workbook-level
+    # active-tab setting, independent of sheet order) — overridden to Sheet1
+    # per the user's request (2026-10-23).
+    wb.active = wb.sheetnames.index("Sheet1")
+    for i, ws in enumerate(wb.worksheets):
+        ws.sheet_view.tabSelected = i == wb.sheetnames.index("Sheet1")
+
     wb.calculation.fullCalcOnLoad = True
 
     buf = io.BytesIO()
