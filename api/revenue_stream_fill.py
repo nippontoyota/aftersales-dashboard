@@ -22,7 +22,7 @@ Row-by-row mapping (confirmed against the template he supplied,
 - PATCHED_FORMULA_ROWS: rows 73/76 (TGLOSS Service Penetration, TGLOSS SPO)
   hold a VLOOKUP into an external workbook link that doesn't exist alongside
   this file — dead formulas. We already compute the same figures
-  (penetrationTGlossService/spoTGloss), so these two rows get their formula
+  (penetrationTGlossService/tGlossSpo), so these two rows get their formula
   replaced with the literal value instead of being left broken.
 - UNTRACKED_CLEAR_ROWS: metrics the template tracks (T Club, Extended
   Warranty, Smiles, GR→BP Conversion, Unique VIN VAS, Total Car Care
@@ -99,9 +99,12 @@ ROW_FIELD_MAP: dict[int, str] = {
 }
 
 # Dead VLOOKUP rows — overwritten even though the original cell is a formula.
+# Row 76 is formatted as a percentage (0.0%) and its cached pre-break values
+# were all 0-1 ratios, so despite the "T Gloss SPO" label it's the
+# achievement ratio (spoTGloss ÷ spoTGlossTarget), not the Rs figure itself.
 PATCHED_FORMULA_ROWS: dict[int, str] = {
     73: "penetrationTGlossService",
-    76: "spoTGloss",
+    76: "tGlossSpo",
 }
 
 # Real metrics the template tracks that nothing in our pipeline captures —
