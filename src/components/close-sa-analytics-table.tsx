@@ -4,16 +4,29 @@ import { useMemo, useState } from "react";
 import { CollapsibleCard } from "./collapsible-card";
 import { tglossText } from "./tgloss-text";
 import { formatCompact, formatNumber } from "@/lib/format";
-import { em60OtdPct, type CloseSaPeriodTotals } from "@/lib/close-sa-analytics/aggregate";
+import {
+  bpLabourGentani,
+  bpPartsGentani,
+  bpTglossGentani,
+  em60OtdPct,
+  emToPmPct,
+  sameDayDeliveryPct,
+  tglossGentaniVsPitched,
+  tglossPitchRatePct,
+  type CloseSaPeriodTotals,
+} from "@/lib/close-sa-analytics/aggregate";
 import { REGIONS, regionForBranch } from "@/lib/regions";
 
 /**
- * Close SA Analytics — per Service Advisor totals for a period, built from
- * Service Info + Labour Sales + Part Sale (Cost & Sales deliberately left
- * out, set aside by the user 2026-10-22). One row per Close SA; expand a row
- * for its full Job Desc breakdown and job-mix counts. Used on /branches
- * (HQ, every SA company-wide, `showBranch`) and /dashboard (a branch's own
- * SAs only).
+ * SA Analytics (renamed from "Close SA Analytics" 2026-10-23) — per Service
+ * Advisor totals for a period, built from Service Info + Labour Sales +
+ * Part Sale (Cost & Sales deliberately left out, set aside by the user
+ * 2026-10-22). One row per Close SA; expand a row for its full Job Desc
+ * breakdown and job-mix counts. Rendered once per GS/BP/Accessories/PDI
+ * category by sa-analytics-sections.tsx — this component itself doesn't
+ * know about categories, just renders whatever `totals` it's given. Used on
+ * /branches (HQ, every SA company-wide, `showBranch`) and /dashboard (a
+ * branch's own SAs only).
  */
 
 type SortKey =
@@ -26,7 +39,8 @@ type SortKey =
   | "tyreCount"
   | "batteryCount"
   | "em60Count"
-  | "em60OtdRate";
+  | "em60OtdRate"
+  | "sameDayDeliveryRate";
 type SortState = { key: SortKey; dir: "asc" | "desc" } | null;
 
 function getSortValue(t: CloseSaPeriodTotals, key: SortKey): string | number {
@@ -53,6 +67,8 @@ function getSortValue(t: CloseSaPeriodTotals, key: SortKey): string | number {
       // No EM60 ROs at all → -1, below every real rate (0-1) — sorts to the
       // bottom on a descending click, same as every other "no data" row.
       return em60OtdPct(t) ?? -1;
+    case "sameDayDeliveryRate":
+      return sameDayDeliveryPct(t) ?? -1;
   }
 }
 
@@ -119,6 +135,19 @@ function em60OtdCell(totals: CloseSaPeriodTotals) {
   );
 }
 
+/** Job Open Date = Invoice Date, same calendar day — any RO, distinct from
+ * EM60's 60-minute-specific OTD. */
+function sameDayDeliveryCell(totals: CloseSaPeriodTotals) {
+  if (totals.roCount === 0) return <div className="whitespace-nowrap text-right text-sm text-fg-faint">—</div>;
+  const pct = sameDayDeliveryPct(totals)!;
+  return (
+    <div className="whitespace-nowrap text-right text-sm tabular-nums text-fg">
+      {totals.sameDayDeliveryCount}/{totals.roCount}
+      <span className="ml-1 text-[11px] font-normal text-fg-faint">({Math.round(pct * 100)}%)</span>
+    </div>
+  );
+}
+
 function countsSummary(counts: Record<string, number>): string {
   return Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
@@ -140,6 +169,9 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
         </td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.roCount))}</td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.distinctVehicleCount))}</td>
+        <td className="px-3 py-2 align-top" title="Job Open Date = Invoice Date, same calendar day">
+          {sameDayDeliveryCell(totals)}
+        </td>
         <td className="px-3 py-2 align-top">{moneyCell(totals.labourRevenueAfter)}</td>
         <td className="px-3 py-2 align-top">{partsCell(totals)}</td>
         <td className="px-3 py-2 align-top">{moneyCell(totals.vasBillRevenue)}</td>
@@ -156,29 +188,55 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
       </tr>
       {expanded ? (
         <tr className="border-t border-border-subtle bg-surface-2/40">
-          <td colSpan={10} className="px-3 py-3">
+          <td colSpan={11} className="px-3 py-3">
             <div className="grid grid-cols-1 gap-3 text-xs text-fg-subtle sm:grid-cols-3">
               <div>
                 <div className="mb-1 font-semibold text-fg-subtle">Job mix</div>
-                <div>AMC: {totals.amcCount}, FMSC: {totals.fmscCount}, EM: {totals.emCount}</div>
+                {/* FS = Free Service, confirmed 2026-10-23 to be the same
+                    thing already tracked as fmscCount (FMSC Flag) — just
+                    relabeled to match the term used elsewhere. */}
+                <div>AMC: {totals.amcCount}, FS: {totals.fmscCount}, EM: {totals.emCount}</div>
                 <div>Job Type — {countsSummary(totals.jobTypeCounts) || "—"}</div>
+                {totals.repeatJobCount > 0 ? (
+                  <div title="Same car, same Job Code, within 30 days — generic/catch-all codes excluded">
+                    Repeat jobs (30-day): {totals.repeatJobCount}
+                  </div>
+                ) : null}
               </div>
               <div>
                 <div className="mb-1 font-semibold text-fg-subtle">{tglossText("TGLOSS detail")}</div>
                 <div>Wheel Balancing: {totals.wheelBalancingCount}, Wheel Alignment: {totals.wheelAlignmentCount}</div>
                 <div>Brake Skimming: {totals.brakeSkimmingCount}, Evaporator Cleaning: {totals.evaporatorCleaningCount}</div>
+                <div>Mech Care: {totals.mechCareCount}</div>
+                <div title="Distinct ROs with at least one TGLOSS job code — 'pitched' means sold, not offered-and-declined">
+                  Pitched: {totals.tglossPitchedRoCount}/{totals.roCount}
+                  {tglossPitchRatePct(totals) !== null ? ` (${Math.round(tglossPitchRatePct(totals)! * 100)}%)` : ""}
+                </div>
+                <div title="TGLOSS ₹ ÷ ROs that actually had a TGLOSS job (not ÷ all ROs)">
+                  {tglossText("TGLOSS")} Gentani (vs pitched): ₹{formatCompact(tglossGentaniVsPitched(totals) ?? 0)}
+                </div>
+                <div title="EM-flagged ROs (any tier) ÷ total Periodic Maintenance ROs">
+                  EM-to-PM: {totals.pmRoCount > 0 ? `${totals.emCount}/${totals.pmRoCount} (${Math.round((emToPmPct(totals) ?? 0) * 100)}%)` : "—"}
+                </div>
               </div>
               <div>
                 <div className="mb-1 font-semibold text-fg-subtle">Parts detail (matched ROs only)</div>
                 <div>Engine Flush: {totals.engineFlushCount}, Injector Cleaner: {totals.injectorCleanerCount}</div>
                 <div>Synthetic Oil: {totals.syntheticOilLtrs.toFixed(1)} L, Brake Cleaning: {totals.brakeCleaningCount}</div>
-                <div>DIY: {totals.diyCount} (₹{formatCompact(totals.diyRevenue)}), External Sales: ₹{formatCompact(totals.externalSales)}</div>
+                <div>Brake Cleaning Labour: {totals.brakeCleaningLabourCount}</div>
+                <div>DIY: {totals.diyCount} (₹{formatCompact(totals.diyRevenue)})</div>
               </div>
             </div>
             {totals.bpRoCount > 0 ? (
               <div className="mt-2 text-xs text-fg-subtle">
-                <span className="font-semibold">Body &amp; Paint</span> — {totals.bpRoCount} ROs, Estimate ₹{formatCompact(totals.bpEstimateAmount)} vs Final ₹
-                {formatCompact(totals.bpFinalInvoiceAmount)}
+                <div>
+                  <span className="font-semibold">Body &amp; Paint</span> — {totals.bpRoCount} ROs, Estimate ₹{formatCompact(totals.bpEstimateAmount)} vs Final ₹
+                  {formatCompact(totals.bpFinalInvoiceAmount)}
+                </div>
+                <div>Repair Type — {countsSummary(totals.bpRepairTypeCounts) || "—"}</div>
+                <div title="BP Parts ₹ ÷ BP ROs">Parts Gentani: ₹{formatCompact(bpPartsGentani(totals) ?? 0)}</div>
+                <div title="BP Labour ₹ ÷ BP ROs">Service Gentani: ₹{formatCompact(bpLabourGentani(totals) ?? 0)}</div>
+                <div title="BP TGLOSS ₹ ÷ BP ROs">{tglossText("TGLOSS")} Gentani: ₹{formatCompact(bpTglossGentani(totals) ?? 0)}</div>
               </div>
             ) : null}
             <div className="mt-3 max-w-xl">
@@ -231,12 +289,16 @@ export function CloseSaAnalyticsTable({
   showBranch = false,
   defaultOpen,
   subtitle,
+  title = "SA Analytics",
 }: {
   totals: CloseSaPeriodTotals[];
   /** Shows each SA's branch(es) next to their name — /branches (HQ, company-wide) needs this; /dashboard (one branch) doesn't. */
   showBranch?: boolean;
   defaultOpen?: boolean;
   subtitle?: string;
+  /** Lets a category section (GS/BP/Accessories/PDI) distinguish itself —
+   * see sa-analytics-sections.tsx. Defaults to the plain title. */
+  title?: string;
 }) {
   const [sort, setSort] = useState<SortState>(null);
 
@@ -260,7 +322,7 @@ export function CloseSaAnalyticsTable({
 
   if (totals.length === 0) {
     return (
-      <CollapsibleCard title="Close SA Analytics" subtitle={subtitle ?? "no Service Info / Labour Sales / Part Sale data for this period"} defaultOpen={defaultOpen}>
+      <CollapsibleCard title={title} subtitle={subtitle ?? "no Service Info / Labour Sales / Part Sale data for this period"} defaultOpen={defaultOpen}>
         <div className="p-4 text-sm text-fg-subtle">Nothing to show yet.</div>
       </CollapsibleCard>
     );
@@ -268,7 +330,7 @@ export function CloseSaAnalyticsTable({
 
   return (
     <CollapsibleCard
-      title="Close SA Analytics"
+      title={title}
       subtitle={subtitle ?? "Service Info + Labour Sales + Part Sale, per Close SA — click a row for detail, click a header to sort"}
       defaultOpen={defaultOpen}
       clip
@@ -280,6 +342,7 @@ export function CloseSaAnalyticsTable({
               <SortableHeader label="Close SA" sortKey="closeSaName" sort={sort} onClick={handleHeaderClick} sticky />
               <SortableHeader label="ROs" sortKey="roCount" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Vehicles" sortKey="distinctVehicleCount" sort={sort} onClick={handleHeaderClick} />
+              <SortableHeader label="Same Day Delivery" sortKey="sameDayDeliveryRate" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Labour ₹" sortKey="labourRevenueAfter" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Parts ₹ (matched)" sortKey="partsRevenue" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label={tglossText("TGLOSS ₹")} sortKey="vasBillRevenue" sort={sort} onClick={handleHeaderClick} />

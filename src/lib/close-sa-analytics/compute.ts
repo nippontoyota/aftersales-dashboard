@@ -90,6 +90,9 @@ const LS_OVER_TARGET_COLUMN = "Over Target";
 
 const BP_EST_AMT_COLUMN = "EST_AMT";
 const BP_FINAL_INV_AMT_COLUMN = "FINAL_INV_AMT";
+/** Confirmed real values 2026-10-23: "1.Grooming Repair", "2.Superlight
+ * Repair", "3.Light Repair", "4.Medium Repair", "5.Heavy Repair" — BP only. */
+const BP_REP_TYPE_COLUMN = "BP Rep Type";
 
 const JOB_OPEN_DATE_COLUMN = "Job Open Date";
 const JOB_OPEN_TIME_COLUMN = "Job Open Time";
@@ -119,12 +122,56 @@ const EM60_TARGET_MINUTES = 60;
 const TYRE_PART_PREFIX = "T-";
 const BATTERY_PART_PREFIX = "B-";
 
+/** "TGLOSS Mech Care" — exact Job Desc match, same pattern as Wheel
+ * Balancing/Alignment. Confirmed 2026-10-23, at the user's request. */
+const MECH_CARE_DESC = "TGLOSS Mech Care";
+
+/** Brake Cleaning Labour — confirmed 2026-10-23, at the user's request: no
+ * job literally named "brake cleaning" exists; "CL/LU" (Clean/Lubricate) on
+ * a disc brake is the real labour op. FR + RR, both plain and the
+ * opposite-side "COMB" variant. */
+const BRAKE_CLEANING_LABOUR_CODES = new Set(["046043", "46043", "046043A", "46083"]);
+
+/** A Periodic Maintenance job — any "X,000 KM SERVICE" or "Vcare - X,000 KM
+ * SERVICE" line, regardless of EM flag. Denominator for EM-to-PM % (EM
+ * Flag any real tier ÷ this). Matches on Job Desc, same convention as the
+ * rest of this module (job codes for these aren't a clean numeric pattern
+ * across every branch's export, confirmed against real samples). */
+const PM_JOB_DESC_PATTERN = /^(?:\d{1,3}(?:,\d{2,3})*\s*KM SERVICE|Vcare - )/i;
+
+/** PDI (Pre-Delivery Inspection) — the job an SA does almost exclusively if
+ * they're a dedicated PDI advisor rather than a general one (confirmed
+ * 2026-10-22: one real SA had 24/24 ROs be exactly this, zero revenue). */
+export const PDI_JOB_DESC = "PRE-DELIVERY SERVICE - INSP";
+
+/** Catch-all/generic Job Codes the DMS itself uses for "doesn't fit a
+ * specific code" lines (e.g. "47299 OTHERS - BRAKE SHOE-DRUM", "ACCINS99
+ * Accessories Installation") — every one seen ends in "99". Excluded from
+ * the Same Car Same Work Repeat check (confirmed with the user 2026-10-23):
+ * these bundle many different real jobs under one code, so two "OTHERS -"
+ * lines on the same car are not evidence of the same actual work repeating. */
+export function isGenericCatchAllJobCode(jobCode: string): boolean {
+  return jobCode.toUpperCase().endsWith("99");
+}
+
+/** Same Car Same Work Repeat window — confirmed with the user 2026-10-23. */
+export const REPEAT_JOB_WINDOW_DAYS = 30;
+
 export function normalizeCloseSaName(name: unknown): string {
   return String(name ?? "").replace(/\s+/g, " ").trim();
 }
 
 export function normalizeRo(value: unknown): string {
   return String(value ?? "").trim().replace(/-/g, "").toUpperCase();
+}
+
+/** Body & Paint ROs are prefixed "BPJ", General Service "GSJ" — confirmed
+ * across every real sample seen in this module. Used to split Parts/Labour/
+ * TGLOSS revenue by GS vs BP without needing isBp from roInfoByRo (which
+ * Labour Sales/Part Sale rows can't rely on — see this module's top doc
+ * comment on why their SA lookup uses the wider roCloseSaMap instead). */
+function isBpRo(ro: string): boolean {
+  return ro.startsWith("BPJ");
 }
 
 function normalizeText(value: unknown): string {
@@ -160,6 +207,19 @@ function parseServiceInfoDateTime(dateStr: unknown, timeStr: unknown): number | 
   const minute = Number(tm[2]);
   if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) return null;
   return Date.UTC(year, month - 1, day, hour, minute) / 60_000;
+}
+
+/** Same date parsing as parseServiceInfoDateTime, date portion only — for
+ * Same Day Delivery, which only needs calendar-day equality, not a
+ * duration. Returns "YYYY-MM-DD" or null. */
+function parseServiceInfoDate(dateStr: unknown): string | null {
+  const dm = normalizeText(dateStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (!dm) return null;
+  const month = Number(dm[1]);
+  const day = Number(dm[2]);
+  const year = dm[3].length === 2 ? 2000 + Number(dm[3]) : Number(dm[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 export type CloseSaDailyMetrics = {
@@ -206,6 +266,27 @@ export type CloseSaDailyMetrics = {
   externalSales: number;
   tyreCount: number;
   batteryCount: number;
+  mechCareCount: number;
+  brakeCleaningLabourCount: number;
+  /** Distinct ROs with at least one TGLOSS-priced job code — "pitched" means
+   * sold here (confirmed with the user: we can only measure what was
+   * actually billed, not an offered-and-declined pitch). */
+  tglossPitchedRoCount: number;
+  /** Distinct ROs with a Periodic Maintenance job line, any EM status — the
+   * denominator for EM-to-PM %. */
+  pmRoCount: number;
+  /** Job Open Date = Invoice Date (same calendar day), any RO — distinct
+   * from EM60 OTD's 60-minute window. A date pair that didn't parse counts
+   * toward roCount but not here (same convention as em60OnTimeCount). */
+  sameDayDeliveryCount: number;
+  /** Parts/Labour/TGLOSS revenue, BP ROs only (RO prefix "BPJ") — the
+   * existing *Revenue fields above stay GS+BP combined; these are the BP
+   * slice for BP's own Parts/Service/TGLOSS Gentani ratios. */
+  bpLabourRevenue: number;
+  bpPartsRevenue: number;
+  bpTglossRevenue: number;
+  /** {"1.Grooming Repair": n, ...} — BP Rep Type's 5 real values, verbatim. */
+  bpRepairTypeCounts: Record<string, number>;
   bpFinalInvoiceAmount: number;
   bpEstimateAmount: number;
   bpRoCount: number;
@@ -246,6 +327,15 @@ function emptyMetrics(): CloseSaDailyMetrics {
     externalSales: 0,
     tyreCount: 0,
     batteryCount: 0,
+    mechCareCount: 0,
+    brakeCleaningLabourCount: 0,
+    tglossPitchedRoCount: 0,
+    pmRoCount: 0,
+    sameDayDeliveryCount: 0,
+    bpLabourRevenue: 0,
+    bpPartsRevenue: 0,
+    bpTglossRevenue: 0,
+    bpRepairTypeCounts: {},
     bpFinalInvoiceAmount: 0,
     bpEstimateAmount: 0,
     bpRoCount: 0,
@@ -289,6 +379,11 @@ type RoInfo = {
   appointment: boolean | null; // null = neither flag present
   bpEstAmt: number;
   bpFinalInvAmt: number;
+  bpRepType: string;
+  /** Job Open Date = Invoice Date — null when either side didn't parse
+   * (counts toward roCount but not sameDayDeliveryCount, same "don't guess"
+   * convention as em60DurationMinutes). */
+  sameDayDelivery: boolean | null;
   isBp: boolean;
 };
 
@@ -303,6 +398,9 @@ function readRoInfo(row: Record<string, unknown>, isBp: boolean): RoInfo {
           return open !== null && invoice !== null ? invoice - open : null;
         })()
       : null;
+  const openDate = parseServiceInfoDate(row[JOB_OPEN_DATE_COLUMN]);
+  const invoiceDate = parseServiceInfoDate(row[INVOICE_DATE_COLUMN]);
+  const sameDayDelivery = openDate !== null && invoiceDate !== null ? openDate === invoiceDate : null;
   return {
     closeSaName: normalizeCloseSaName(row[CLOSE_SA_NAME_COLUMN]),
     vin: normalizeText(row[VIN_COLUMN]),
@@ -316,6 +414,8 @@ function readRoInfo(row: Record<string, unknown>, isBp: boolean): RoInfo {
     appointment: appointmentRaw ? appointmentRaw === APPOINTMENT_VALUE : null,
     bpEstAmt: parseAmount(row[BP_EST_AMT_COLUMN]),
     bpFinalInvAmt: parseAmount(row[BP_FINAL_INV_AMT_COLUMN]),
+    bpRepType: normalizeText(row[BP_REP_TYPE_COLUMN]),
+    sameDayDelivery,
     isBp,
   };
 }
@@ -396,21 +496,25 @@ export function computeCloseSaAnalytics(
     if (info.bpPotential) m.bpPotentialCount++;
     if (info.appointment === true) m.appointmentCount++;
     else if (info.appointment === false) m.walkinCount++;
+    if (info.sameDayDelivery === true) m.sameDayDeliveryCount++;
 
     if (info.isBp) {
       if (!bpRoCountBySa.has(info.closeSaName)) bpRoCountBySa.set(info.closeSaName, new Set());
       bpRoCountBySa.get(info.closeSaName)!.add(ro);
       m.bpFinalInvoiceAmount += info.bpFinalInvAmt;
       m.bpEstimateAmount += info.bpEstAmt;
+      if (info.bpRepType) bump(m.bpRepairTypeCounts, info.bpRepType);
     }
   }
   for (const [name, set] of roCountBySa) metricsFor(name).roCount = set.size;
   for (const [name, set] of vehiclesBySa) metricsFor(name).vehicleVins = [...set];
   for (const [name, set] of bpRoCountBySa) metricsFor(name).bpRoCount = set.size;
 
-  // Brake Skimming is per distinct RO among matching rows, not per row (same
-  // rule as service-info/parse.ts) — tracked separately from the per-row loop.
+  // Brake Skimming / PM / TGLOSS-pitched are per distinct RO among matching
+  // rows, not per row — tracked separately from the per-row loop.
   const brakeSkimmingRosBySa = new Map<string, Set<string>>();
+  const pmRosBySa = new Map<string, Set<string>>();
+  const tglossPitchedRosBySa = new Map<string, Set<string>>();
 
   // --- Pass 2: per-row Job Desc / VAS counts, attributed to the row's RO's Close SA.
   for (const { row } of allSiRows) {
@@ -423,6 +527,7 @@ export function computeCloseSaAnalytics(
     if (desc) bump(m.jobDescCounts, desc);
     if (desc === WHEEL_BALANCING_DESC) m.wheelBalancingCount++;
     else if (desc === WHEEL_ALIGNMENT_DESC) m.wheelAlignmentCount++;
+    else if (desc === MECH_CARE_DESC) m.mechCareCount++;
     else if (isBrakeSkimmingDesc(desc)) {
       if (!brakeSkimmingRosBySa.has(info.closeSaName)) brakeSkimmingRosBySa.set(info.closeSaName, new Set());
       brakeSkimmingRosBySa.get(info.closeSaName)!.add(ro || `row-${JSON.stringify(row).length}`);
@@ -430,8 +535,20 @@ export function computeCloseSaAnalytics(
       // GS only — same as the branch-level calculation.
       m.evaporatorCleaningCount++;
     }
+
+    if (ro && PM_JOB_DESC_PATTERN.test(desc)) {
+      if (!pmRosBySa.has(info.closeSaName)) pmRosBySa.set(info.closeSaName, new Set());
+      pmRosBySa.get(info.closeSaName)!.add(ro);
+    }
+    const jobCode = normalizeText(row[JOB_CODE_COLUMN]);
+    if (ro && VAS_PRICE_BY_JOB_CODE.has(jobCode)) {
+      if (!tglossPitchedRosBySa.has(info.closeSaName)) tglossPitchedRosBySa.set(info.closeSaName, new Set());
+      tglossPitchedRosBySa.get(info.closeSaName)!.add(ro);
+    }
   }
   for (const [name, set] of brakeSkimmingRosBySa) metricsFor(name).brakeSkimmingCount = set.size;
+  for (const [name, set] of pmRosBySa) metricsFor(name).pmRoCount = set.size;
+  for (const [name, set] of tglossPitchedRosBySa) metricsFor(name).tglossPitchedRoCount = set.size;
 
   // --- Labour Sales: join by RO (undashed), sum labour revenue/hours per
   // line, Over Target once per RO. Close SA comes from roCloseSaMap (a wider
@@ -451,6 +568,8 @@ export function computeCloseSaAnalytics(
     m.labourRevenueBefore += parseAmount(row[LS_SUB_TOTAL_BEFORE_COLUMN]);
     m.labourRevenueAfter += after;
     m.soldHours += parseAmount(row[LS_SOLD_HOUR_COLUMN]);
+    if (BRAKE_CLEANING_LABOUR_CODES.has(jobCode)) m.brakeCleaningLabourCount++;
+    if (isBpRo(ro)) m.bpLabourRevenue += after;
 
     const seenKey = closeSaName + "|" + ro;
     if (!overTargetSeenRo.has(seenKey)) {
@@ -473,12 +592,9 @@ export function computeCloseSaAnalytics(
     const m = metricsFor(info.closeSaName);
 
     const matched = labourByRoAndJobCode.get(ro + "|" + jobCode);
-    if (matched !== undefined) {
-      m.vasBillRevenue += matched;
-    } else {
-      const series = normalizeText(row[SERIES_COLUMN]);
-      m.vasBillRevenue += vasPriceListValue(jobCode, series, tier);
-    }
+    const value = matched !== undefined ? matched : vasPriceListValue(jobCode, normalizeText(row[SERIES_COLUMN]), tier);
+    m.vasBillRevenue += value;
+    if (info.isBp) m.bpTglossRevenue += value;
   }
 
   // --- Part Sale: join by RefDocNo (dash-stripped) to the RO. Confirmed
@@ -496,7 +612,9 @@ export function computeCloseSaAnalytics(
     if (!matchedRosBySa.has(closeSaName)) matchedRosBySa.set(closeSaName, new Set());
     matchedRosBySa.get(closeSaName)!.add(refDoc);
 
-    m.partsRevenue += toQty(row[PS_NET_AMNT_COLUMN]);
+    const netAmnt = toQty(row[PS_NET_AMNT_COLUMN]);
+    m.partsRevenue += netAmnt;
+    if (isBpRo(refDoc)) m.bpPartsRevenue += netAmnt;
 
     const part = normalizePart(row[PS_PART_NO_COLUMN]);
     const qty = toQty(row[PS_SALE_QTY_COLUMN]);

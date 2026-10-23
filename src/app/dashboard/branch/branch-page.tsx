@@ -1,7 +1,7 @@
 import type { BranchView } from "@/lib/branch-view-data";
 import type { CloseSaPeriodTotals } from "@/lib/close-sa-analytics/aggregate";
 import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
-import { CloseSaAnalyticsTable } from "@/components/close-sa-analytics-table";
+import { SaAnalyticsSections } from "@/components/sa-analytics-sections";
 import { DateSelect } from "../date-select";
 import { IncentiveSlabIndicator } from "../incentive-slab-indicator";
 import { BranchOverviewBody } from "./branch-overview-body";
@@ -37,6 +37,7 @@ export function BranchAccountPage({
   incentiveSlabs,
   holidays,
   closeSaTotals,
+  accessoriesStaffNames,
   canDownloadRevenueStream,
 }: {
   view: BranchView | null;
@@ -54,6 +55,9 @@ export function BranchAccountPage({
   /** Month-to-date, this branch's own Close SAs only (2026-10-22) — see
    * close-sa-analytics/. */
   closeSaTotals: CloseSaPeriodTotals[];
+  /** This branch's own Accessories roster — for classifying SA Analytics
+   * into GS/BP/Accessories/PDI (2026-10-23). */
+  accessoriesStaffNames: string[];
   /** True only when `date` is today's own report date — the Revenue Stream
    * download is otherwise unreachable here, since this component only ever
    * renders once that date is published (showBranchDailyReport handles the
@@ -103,7 +107,11 @@ export function BranchAccountPage({
         )}
       </div>
       <div className="mt-4">
-        <CloseSaAnalyticsTable totals={closeSaTotals} subtitle={`Month-to-date for ${date} — Service Info + Labour Sales + Part Sale, per Close SA`} />
+        <SaAnalyticsSections
+          totals={closeSaTotals}
+          accessoriesStaffNamesByBranch={new Map([[branch, accessoriesStaffNames]])}
+          subtitlePrefix={`Month-to-date for ${date}`}
+        />
       </div>
     </div>
   );

@@ -1423,3 +1423,34 @@ create index if not exists n9_leads_icrop_date_idx on n9_leads (icrop_recommende
 -- explicit alters are what actually reaches the real database.
 alter table close_sa_analytics_daily add column if not exists em60_count integer not null default 0;
 alter table close_sa_analytics_daily add column if not exists em60_on_time_count integer not null default 0;
+
+-- 2026-10-23: SA Analytics round 2 (GS/BP/Accessories/PDI split + new
+-- counts), at the user's request — see close-sa-analytics/compute.ts for
+-- the exact match rules behind each.
+alter table close_sa_analytics_daily add column if not exists mech_care_count integer not null default 0;
+alter table close_sa_analytics_daily add column if not exists brake_cleaning_labour_count integer not null default 0;
+-- Distinct ROs with at least one TGLOSS-priced job code ("pitched" = sold —
+-- confirmed with the user: we can only measure what was actually billed,
+-- never an offered-and-declined pitch).
+alter table close_sa_analytics_daily add column if not exists tgloss_pitched_ro_count integer not null default 0;
+-- Distinct ROs with a Periodic Maintenance job line (any KM-interval
+-- service or Vcare), regardless of EM flag — the denominator for EM-to-PM %.
+alter table close_sa_analytics_daily add column if not exists pm_ro_count integer not null default 0;
+-- Job Open Date = Invoice Date (same calendar day), any RO — distinct from
+-- EM60's 60-minute OTD, this is a same-day-or-not check across everything.
+alter table close_sa_analytics_daily add column if not exists same_day_delivery_count integer not null default 0;
+-- Parts/Labour/TGLOSS revenue, split out for Body & Paint ROs specifically
+-- (identified by RO prefix "BPJ" — see compute.ts's isBpRo) — the existing
+-- labour_revenue_after/parts_revenue/vas_bill_revenue columns stay combined
+-- GS+BP, these are the BP-only slice needed for BP's own Parts/Service/
+-- TGLOSS Gentani ratios.
+alter table close_sa_analytics_daily add column if not exists bp_labour_revenue numeric not null default 0;
+alter table close_sa_analytics_daily add column if not exists bp_parts_revenue numeric not null default 0;
+alter table close_sa_analytics_daily add column if not exists bp_tgloss_revenue numeric not null default 0;
+-- {"1.Grooming Repair": n, ...} — BP Rep Type's 5 real values, verbatim.
+alter table close_sa_analytics_daily add column if not exists bp_repair_type_counts jsonb not null default '{}'::jsonb;
+-- bp_same_day_delivery_count dropped 2026-10-23, same day it was added — at
+-- the user's call: BP jobs routinely stay open for weeks (confirmed
+-- elsewhere in this codebase), so "same calendar day" isn't a meaningful
+-- signal for BP the way it is for GS.
+alter table close_sa_analytics_daily drop column if exists bp_same_day_delivery_count;

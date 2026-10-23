@@ -27,7 +27,10 @@ export async function saveCloseSaAnalyticsForDate(
            synthetic_oil_ltrs, brake_cleaning_count, diy_count, diy_revenue, external_sales,
            tyre_count, battery_count,
            bp_final_invoice_amount, bp_estimate_amount, bp_ro_count,
-           em60_count, em60_on_time_count
+           em60_count, em60_on_time_count,
+           mech_care_count, brake_cleaning_labour_count, tgloss_pitched_ro_count, pm_ro_count,
+           same_day_delivery_count, bp_labour_revenue, bp_parts_revenue, bp_tgloss_revenue,
+           bp_repair_type_counts
          ) values (
            $1, $2, $3, $4, $5::jsonb, $6::jsonb,
            $7, $8, $9, $10,
@@ -38,7 +41,10 @@ export async function saveCloseSaAnalyticsForDate(
            $28, $29, $30, $31, $32,
            $33, $34,
            $35, $36, $37,
-           $38, $39
+           $38, $39,
+           $40, $41, $42, $43,
+           $44, $45, $46, $47,
+           $48::jsonb
          )`,
         [
           date,
@@ -80,6 +86,15 @@ export async function saveCloseSaAnalyticsForDate(
           m.bpRoCount,
           m.em60Count,
           m.em60OnTimeCount,
+          m.mechCareCount,
+          m.brakeCleaningLabourCount,
+          m.tglossPitchedRoCount,
+          m.pmRoCount,
+          m.sameDayDeliveryCount,
+          m.bpLabourRevenue,
+          m.bpPartsRevenue,
+          m.bpTglossRevenue,
+          JSON.stringify(m.bpRepairTypeCounts),
         ]
       );
     }
@@ -142,6 +157,15 @@ function rowFromDb(r: Record<string, unknown>): CloseSaAnalyticsRow {
     externalSales: Number(r.external_sales),
     tyreCount: Number(r.tyre_count),
     batteryCount: Number(r.battery_count),
+    mechCareCount: Number(r.mech_care_count),
+    brakeCleaningLabourCount: Number(r.brake_cleaning_labour_count),
+    tglossPitchedRoCount: Number(r.tgloss_pitched_ro_count),
+    pmRoCount: Number(r.pm_ro_count),
+    sameDayDeliveryCount: Number(r.same_day_delivery_count),
+    bpLabourRevenue: Number(r.bp_labour_revenue),
+    bpPartsRevenue: Number(r.bp_parts_revenue),
+    bpTglossRevenue: Number(r.bp_tgloss_revenue),
+    bpRepairTypeCounts: (r.bp_repair_type_counts as Record<string, number>) ?? {},
     bpFinalInvoiceAmount: Number(r.bp_final_invoice_amount),
     bpEstimateAmount: Number(r.bp_estimate_amount),
     bpRoCount: Number(r.bp_ro_count),
