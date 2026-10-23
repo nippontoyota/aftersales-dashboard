@@ -115,6 +115,29 @@ export default async function DataPage() {
           )}
         </div>
 
+        <h1 className="mt-10 text-xl font-semibold tracking-tight text-fg">Revenue Stream Daily Template</h1>
+        <p className="mt-1 text-sm text-fg-subtle">
+          Excel download of today&apos;s report laid out as a daily-fill template — a compact summary tab and a full
+          per-branch detail tab, pre-filled with everything the dashboard tracks (GUS/BPU, VAS, Wheel Balancing,
+          Brake Skimming, Synthetic Oil, Scrap &amp; Used Oil, targets and more). A handful of shop-floor metrics we
+          don&apos;t capture anywhere (T Club, Extended Warranty, Smiles, GR→BP conversion, Unique VIN VAS, Total Car
+          Care Treatments, TP-TP/NTP-TP, TGLOSS Mech Care penetration) are left blank for branches to fill in by hand.
+        </p>
+        <div className="mt-4 rounded-lg border border-border bg-surface p-4 shadow-card">
+          <div className="text-sm text-fg-muted">
+            Downloading for <span className="font-semibold text-fg">{longDate(currentReportDate)}</span>.
+          </div>
+          <a
+            href={`/api/hq/revenue-stream-export?date=${currentReportDate}`}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
+          >
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+              <path d="M8 2v8m0 0-3-3m3 3 3-3M3 13h10" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Download Excel ({currentReportDate})
+          </a>
+        </div>
+
         <h1 className="mt-10 text-xl font-semibold tracking-tight text-fg">Incentive Slab Targets</h1>
         <p className="mt-1 text-sm text-fg-subtle">
           Each branch&apos;s four ascending revenue thresholds for the month — drives the Incentive Slab Achievement
