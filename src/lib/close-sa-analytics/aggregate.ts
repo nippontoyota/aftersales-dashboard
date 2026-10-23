@@ -125,14 +125,6 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
   return [...byName.values()].sort((a, b) => b.roCount - a.roCount);
 }
 
-/** Of the ROs this SA closed in the period, what share had a matching Part
- * Sale row — the honesty check so "Parts Revenue" is never read as
- * exhaustive. null when the SA closed no ROs at all. */
-export function partsMatchCoveragePct(totals: CloseSaPeriodTotals): number | null {
-  if (totals.roCount === 0) return null;
-  return totals.partsMatchedRoCount / totals.roCount;
-}
-
 /** Of this SA's EM60 (Periodic Maintenance, 60-min target) ROs, what share
  * were On-Time Delivery (Job Open → Invoice at or under 60 min). null when
  * the SA had no EM60 ROs in the period at all. */

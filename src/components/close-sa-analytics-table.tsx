@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { CollapsibleCard } from "./collapsible-card";
 import { tglossText } from "./tgloss-text";
 import { formatCompact, formatNumber } from "@/lib/format";
-import { em60OtdPct, partsMatchCoveragePct, type CloseSaPeriodTotals } from "@/lib/close-sa-analytics/aggregate";
+import { em60OtdPct, type CloseSaPeriodTotals } from "@/lib/close-sa-analytics/aggregate";
 import { REGIONS, regionForBranch } from "@/lib/regions";
 
 /**
@@ -88,15 +88,18 @@ function moneyCell(value: number) {
 }
 
 /** Parts Revenue is never exhaustive (RefDocNo→RO join confirmed ~65-68%
- * real match rate) — always shown with how many of this SA's ROs it
- * actually covered, so it's never mistaken for the whole picture. */
+ * real match rate) — always shown with how many ROs it actually matched, so
+ * it's never mistaken for the whole picture. No percentage (2026-10-23, at
+ * the user's request) — matched-RO count can exceed this period's own RO
+ * count (the match now spans the SA's whole RO history, not just this
+ * period's, see compute.ts's module doc comment), which made a literal "%"
+ * read as a bug (e.g. "118%") rather than what it actually is. */
 function partsCell(totals: CloseSaPeriodTotals) {
-  const pct = partsMatchCoveragePct(totals);
   return (
     <div className="whitespace-nowrap text-right text-sm tabular-nums text-fg">
       ₹{formatCompact(totals.partsRevenue)}
       <span className="ml-1 text-[11px] font-normal text-fg-faint">
-        ({totals.partsMatchedRoCount}/{totals.roCount} ROs{pct !== null ? `, ${Math.round(pct * 100)}%` : ""})
+        ({totals.partsMatchedRoCount}/{totals.roCount} ROs)
       </span>
     </div>
   );
@@ -159,7 +162,6 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
                 <div className="mb-1 font-semibold text-fg-subtle">Job mix</div>
                 <div>AMC: {totals.amcCount}, FMSC: {totals.fmscCount}, EM: {totals.emCount}</div>
                 <div>Job Type — {countsSummary(totals.jobTypeCounts) || "—"}</div>
-                <div>Pay Type — {countsSummary(totals.payTypeCounts) || "—"}</div>
               </div>
               <div>
                 <div className="mb-1 font-semibold text-fg-subtle">{tglossText("TGLOSS detail")}</div>
