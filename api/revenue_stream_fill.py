@@ -68,6 +68,7 @@ from http.server import BaseHTTPRequestHandler
 from typing import Callable, Optional
 
 from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "..", "templates", "revenue-stream-template.xlsx")
 
@@ -76,6 +77,7 @@ BRANCH_COLUMNS: dict[str, str] = {
     "TR01A": "K", "TR01B": "L", "TR01C": "M", "KL01A": "N", "KL01B": "O", "PH01A": "P",
     "TL01A": "S", "KT01A": "T", "KT01B": "U", "TI01A": "V", "IR01A": "W", "TI01B": "X", "TI01C": "Y",
 }
+COLUMN_TO_BRANCH: dict[str, str] = {col: branch for branch, col in BRANCH_COLUMNS.items()}
 
 ROW_FIELD_MAP: dict[int, str] = {
     3: "gusRoBilledForTheDay", 4: "gusRoMtd", 5: "gusPartsMtd", 6: "gusLabourMtd",
@@ -161,14 +163,26 @@ def touch_row(ws, row: int, value_for_branch: Callable[[str], Optional[float]]) 
         cell.value = value_for_branch(branch)
 
 
+# Rows 73/75/76's dead VLOOKUP was dragged across the whole D:AB range when
+# the template was built, not just the 18 branch columns — it's also sitting
+# in the region-total (I/Q/Z), group-total (AB) and spacer (J/R/AA) columns.
+DEAD_VLOOKUP_COLUMN_RANGE = range(4, 29)  # D .. AB
+
+
 def patch_formula_row(ws, row: int, value_for_branch: Callable[[str], Optional[float]]) -> None:
-    """Like touch_row, but also overwrites formula cells — for the two dead
-    VLOOKUP rows we're replacing outright."""
-    for branch, col in BRANCH_COLUMNS.items():
+    """Like touch_row, but also overwrites formula cells, and covers every
+    column D:AB rather than just the branch columns — for the dead VLOOKUP
+    rows (73/75/76), which is a wider range than every other mapped row.
+    A non-branch column (region/group totals, spacers) always clears to
+    None: these are ratio metrics, which the live dashboard itself leaves
+    blank at the total level (see daily-report-rows.ts's regionTotalCell)."""
+    for col_idx in DEAD_VLOOKUP_COLUMN_RANGE:
+        col = get_column_letter(col_idx)
         cell = ws[f"{col}{row}"]
         if cell.value is None:
             continue
-        cell.value = value_for_branch(branch)
+        branch = COLUMN_TO_BRANCH.get(col)
+        cell.value = value_for_branch(branch) if branch is not None else None
 
 
 def comparison_total(branch: str, branches: Optional[dict]) -> Optional[float]:
