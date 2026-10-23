@@ -13,6 +13,7 @@ import { adminIdentityLabel, type AdminAccount } from "@/lib/admin-store";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { loadIncentiveSlabTargets } from "@/lib/incentive-slabs/store";
 import { loadReportHolidaySet } from "@/lib/report-holidays/store";
+import { reportingDate } from "@/lib/reporting-date";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { formatCompactCurrency, formatPercent } from "@/lib/format";
 import { loadBranchView } from "@/lib/branch-view-data";
@@ -202,6 +203,7 @@ async function DashboardContent({
         incentiveSlabs={branchSlabTargets}
         holidays={holidays}
         closeSaTotals={aggregateCloseSaRows(closeSaRows)}
+        canDownloadRevenueStream={date === reportingDate(holidaySet)}
       />
     );
   }
