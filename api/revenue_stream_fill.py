@@ -31,6 +31,10 @@ Row-by-row mapping (confirmed against the template he supplied,
   template's old demo numbers) so a branch isn't misled into thinking a
   stale Oct-20 figure is today's — they're filled in by hand after download,
   same as before.
+- CLEAR_FORMULA_ROWS: row 75 (Mech Care Penetration) is the same kind of gap
+  as UNTRACKED_CLEAR_ROWS above, but the cell holds the same dead VLOOKUP as
+  73/76 rather than a plain number — cleared via patch_formula_row() so the
+  broken external-file reference doesn't linger in the formula bar.
 - Row 74 (Target TGLOSS Mech Care, a fixed 0.38 constant — the same number as
   row 72's) is left completely untouched: it's not a daily figure, so
   there's nothing to refresh.
@@ -108,8 +112,22 @@ PATCHED_FORMULA_ROWS: dict[int, str] = {
 }
 
 # Real metrics the template tracks that nothing in our pipeline captures —
-# cleared (not left stale) so a branch fills them in by hand.
-UNTRACKED_CLEAR_ROWS = [35, 36, 38, 39, 55, 67, 68, 69, 70, 75, 94, 95, 97, 98, 100, 101, 103, 104]
+# cleared (not left stale) so a branch fills them in by hand. Plain-literal
+# rows only; row 75 (Mech Care Penetration) is also untracked but is a dead
+# VLOOKUP formula, not a literal, so touch_row() would silently skip it —
+# see CLEAR_FORMULA_ROWS below for that one.
+UNTRACKED_CLEAR_ROWS = [35, 36, 38, 39, 55, 67, 68, 69, 70, 94, 95, 97, 98, 100, 101, 103, 104]
+
+# Dead VLOOKUP rows with no live equivalent — unlike PATCHED_FORMULA_ROWS,
+# these get cleared outright (blank) rather than filled, same reasoning as
+# UNTRACKED_CLEAR_ROWS but using patch_formula_row() since the cell holds a
+# formula, not a literal. Row 75 ("Penetration Mech Care") pointed at the
+# same broken external link as 73/76, but Mech Care Penetration isn't
+# anything we track — leaving the old formula in place would keep showing
+# whatever date/file it was last pointed at (confirmed 2026-10-23: a user
+# opening the generated file saw the Oct-20 external file path in the
+# formula bar for this cell).
+CLEAR_FORMULA_ROWS = [75]
 
 # Total MTD (Rs) excluding Scrap/Used Oil — matches the template's own row 15
 # formula (=Parts+Labour+Parts+Labour+External); rows 17/19 need this same
@@ -194,6 +212,9 @@ def build_workbook(payload: dict) -> bytes:
 
     for row in UNTRACKED_CLEAR_ROWS:
         touch_row(ws1, row, lambda b: None)
+
+    for row in CLEAR_FORMULA_ROWS:
+        patch_formula_row(ws1, row, lambda b: None)
 
     touch_row(ws1, 17, lambda b: comparison_total(b, branches_last_month))
     touch_row(ws1, 19, lambda b: comparison_total(b, branches_last_year))
