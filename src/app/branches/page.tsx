@@ -85,7 +85,7 @@ async function BranchesContent({
       <div className="mt-4 space-y-4">
         <RevenuePerVehicleTable branches={data.filteredBranches} />
         <StockServiceRateTable branches={data.filteredBranches} />
-        <BranchPerformanceHeatmap branches={data.filteredBranches} />
+        <BranchPerformanceHeatmap branches={data.filteredBranches} collapsible />
         <CloseSaAnalyticsTable
           totals={closeSaTotals}
           showBranch

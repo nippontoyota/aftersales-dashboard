@@ -10,6 +10,7 @@ import type { Snapshot } from "@/lib/snapshot-store";
 import type { BaToolBranchRow } from "@/lib/ba-tool/parse";
 import { tglossText } from "@/components/tgloss-text";
 import { Sparkline } from "@/components/sparkline";
+import { CollapsibleCard } from "@/components/collapsible-card";
 import { useSyncedMetric } from "./metric-sync";
 
 export type HeatmapMetricConfig = {
@@ -204,6 +205,7 @@ export function BranchPerformanceHeatmap({
   monthSnapshots,
   holidays: holidaysProp,
   branchNames,
+  collapsible = false,
 }: {
   branches: BranchReport[];
   /** Defaults to the main dashboard's own set (TGLOSS Revenue); the TKM Targets page passes its BPU/Offtake/Parts Retail/PM+OC metrics instead. */
@@ -220,6 +222,12 @@ export function BranchPerformanceHeatmap({
    * object, not a function, since this crosses the server/client boundary as
    * a prop from a Server Component page. */
   branchNames?: Record<string, string>;
+  /** Wraps the card in a CollapsibleCard, collapsed by default — the
+   * /branches (HQ admin) page's request (2026-10-23), so this heavy table
+   * doesn't dominate the page on load like the Close SA Analytics / Spare
+   * Parts KPI cards below it. Defaults to false (every other caller keeps
+   * the always-open card unchanged). */
+  collapsible?: boolean;
 }) {
   const branchName = (code: string) => branchNames?.[code] ?? code;
   const paceMode = Boolean(date);
@@ -293,22 +301,19 @@ export function BranchPerformanceHeatmap({
   // empty space to the right with 1-2 metrics.
   const compactCard = metrics.length <= 2;
 
-  return (
-    <div className={`rounded-lg border border-border bg-surface p-4 shadow-card ${compactCard ? "inline-block" : ""}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch Performance Heatmap — Achievement %</h2>
-        {paceMode ? (
-          <div className="flex flex-wrap items-center gap-3 text-[10px] text-fg-faint">
-            {LEGEND_ITEMS.map((item) => (
-              <span key={item.tone} className="inline-flex items-center gap-1">
-                <span className={`h-2.5 w-2.5 rounded-sm ${CELL_BG[item.tone].split(" ")[0]}`} />
-                {item.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-      <div className="mt-3 max-h-[420px] overflow-auto">
+  const legend = paceMode ? (
+    <div className="flex flex-wrap items-center gap-3 text-[10px] text-fg-faint">
+      {LEGEND_ITEMS.map((item) => (
+        <span key={item.tone} className="inline-flex items-center gap-1">
+          <span className={`h-2.5 w-2.5 rounded-sm ${CELL_BG[item.tone].split(" ")[0]}`} />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  ) : null;
+
+  const table = (
+      <div className="max-h-[420px] overflow-auto">
         {/* Metric columns stretch to fill a `w-full` table — fine with 4
             columns (TKM Targets), but with just 1 or 2 (the main dashboard's
             default, since T-Gloss was dropped 2026-09-21) that stretched a
@@ -453,6 +458,23 @@ export function BranchPerformanceHeatmap({
           </tbody>
         </table>
       </div>
+  );
+
+  if (collapsible) {
+    return (
+      <CollapsibleCard title="Branch Performance Heatmap — Achievement %" actions={legend} clip>
+        <div className={`p-4 ${compactCard ? "inline-block" : ""}`}>{table}</div>
+      </CollapsibleCard>
+    );
+  }
+
+  return (
+    <div className={`rounded-lg border border-border bg-surface p-4 shadow-card ${compactCard ? "inline-block" : ""}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch Performance Heatmap — Achievement %</h2>
+        {legend}
+      </div>
+      <div className="mt-3">{table}</div>
     </div>
   );
 }
