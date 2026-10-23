@@ -49,8 +49,8 @@ function branchMap(report: Report | null): Record<string, Report["branches"][num
 
 export async function GET(request: Request) {
   const admin = await getCurrentAdmin();
-  if (!admin || (admin.role !== "hq" && admin.role !== "branch")) {
-    return NextResponse.json({ error: "HQ or branch admin sign-in required." }, { status: 401 });
+  if (!admin || (admin.role !== "hq" && admin.role !== "branch" && admin.role !== "vp_service")) {
+    return NextResponse.json({ error: "HQ, branch, or VP Service sign-in required." }, { status: 401 });
   }
 
   const holidaySet = await loadReportHolidaySet();

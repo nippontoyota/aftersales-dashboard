@@ -133,6 +133,7 @@ async function Overview({
           basePath="/vp"
           flagHref={`${flagBase}&flag=1`}
           showPrint
+          downloadHref={`/api/hq/revenue-stream-export?date=${data.date}`}
           asOfLabel={uploadedAtLabel}
         />
       </div>
