@@ -1,3 +1,8 @@
 {
-  "regions": ["bom1"]
+  "regions": ["bom1"],
+  "functions": {
+    "api/revenue_stream_fill.py": {
+      "includeFiles": "templates/revenue-stream-template.xlsx"
+    }
+  }
 }
