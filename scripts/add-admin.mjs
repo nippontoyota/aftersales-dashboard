@@ -13,6 +13,7 @@
 //   node scripts/add-admin.mjs --username bpmco01a --bp-manager --branch CO01A --password "Something@2026"
 //   node scripts/add-admin.mjs --username bpho --bp-ho --password "Something@2026"
 //   node scripts/add-admin.mjs --username CE --ce --password "Something@2026"
+//   node scripts/add-admin.mjs --username biju --kl-cluster --password "Something@2026"
 import { randomBytes, scryptSync } from "node:crypto";
 import { Client } from "pg";
 import "./load-env.mjs";
@@ -35,16 +36,17 @@ const isHqViewer = args.includes("--hq-viewer");
 const isBpManager = args.includes("--bp-manager");
 const isBpHo = args.includes("--bp-ho");
 const isCe = args.includes("--ce");
+const isKlCluster = args.includes("--kl-cluster");
 
 const VALID_REGIONS = ["North", "Central", "South"];
 
 if (
   !username ||
   !password ||
-  (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts && !isHqViewer && !isBpManager && !isBpHo && !isCe)
+  (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts && !isHqViewer && !isBpManager && !isBpHo && !isCe && !isKlCluster)
 ) {
   console.error(
-    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --hq-viewer | --region <North|Central|South> | --vp | --ceo | --accounts | --bp-manager --branch <BRANCH> | --bp-ho | --ce)",
+    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --hq-viewer | --region <North|Central|South> | --vp | --ceo | --accounts | --bp-manager --branch <BRANCH> | --bp-ho | --ce | --kl-cluster)",
   );
   process.exit(1);
 }
@@ -79,6 +81,8 @@ const role = isHqViewer
   ? "bp_manager"
   : isCe
   ? "ce"
+  : isKlCluster
+  ? "kl_cluster"
   : region
   ? "regional"
   : "branch";

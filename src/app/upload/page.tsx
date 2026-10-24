@@ -27,6 +27,7 @@ export default async function UploadPage() {
   if (admin?.role === "accounts") redirect("/accounts");
   if (admin?.role === "hq_viewer") redirect("/dashboard");
   if (admin?.role === "regional") redirect("/dashboard");
+  if (admin?.role === "kl_cluster") redirect("/kl-branches");
   if (admin?.role === "bp_manager" || admin?.role === "bp_ho") redirect("/bp-referrals");
   const identity = admin ? adminIdentityLabel(admin) : "";
   const nav = admin

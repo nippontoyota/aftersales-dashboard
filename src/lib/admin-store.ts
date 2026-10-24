@@ -53,13 +53,19 @@ export type AdminAccount =
   | { username: string; passwordHash: string; salt: string; role: "bp_ho"; canViewDashboard: true }
   // Company-wide Customer Engagement workspace. It has no access to the
   // operational dashboards and no branch/region scope.
-  | { username: string; passwordHash: string; salt: string; role: "ce"; canViewDashboard: false };
+  | { username: string; passwordHash: string; salt: string; role: "ce"; canViewDashboard: false }
+  // Read-only, scoped to just KL01A + KL01B (see kl-branches-data.ts) — one
+  // account for a single overseer (Biju S Pillai) who needs both branches
+  // but not the whole South region. Never uploads, never sets targets, no
+  // Queries access. Same shape as vp_service/ceo/accounts (no branch/region
+  // column — the two branches are hardcoded in code, not stored per-admin).
+  | { username: string; passwordHash: string; salt: string; role: "kl_cluster"; canViewDashboard: true };
 
 type AdminRow = {
   username: string;
   password_hash: string;
   salt: string;
-  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer" | "bp_manager" | "bp_ho" | "ce";
+  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer" | "bp_manager" | "bp_ho" | "ce" | "kl_cluster";
   branch: string | null;
   region: string | null;
 };
@@ -75,6 +81,7 @@ function toAccount(row: AdminRow): AdminAccount {
   if (row.role === "bp_manager") return { ...base, role: "bp_manager", branch: row.branch! };
   if (row.role === "bp_ho") return { ...base, role: "bp_ho" };
   if (row.role === "ce") return { ...base, role: "ce", canViewDashboard: false };
+  if (row.role === "kl_cluster") return { ...base, role: "kl_cluster" };
   if (row.role === "hq") return { ...base, role: "hq" };
   throw new Error(`Unsupported admin role: ${String(row.role)}`);
 }
@@ -90,6 +97,7 @@ export function adminIdentityLabel(admin: AdminAccount): string {
   if (admin.role === "accounts") return "Accounts";
   if (admin.role === "bp_ho") return "BP HO";
   if (admin.role === "ce") return "Customer Engagement";
+  if (admin.role === "kl_cluster") return "KL01A / KL01B overseer";
   if (admin.role === "bp_manager") return `${admin.branch} BP Manager`;
   return `${admin.branch} branch`;
 }

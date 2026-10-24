@@ -1453,4 +1453,28 @@ alter table close_sa_analytics_daily add column if not exists bp_repair_type_cou
 -- the user's call: BP jobs routinely stay open for weeks (confirmed
 -- elsewhere in this codebase), so "same calendar day" isn't a meaningful
 -- signal for BP the way it is for GS.
+
+-- 2026-10-24: 'kl_cluster' — a single read-only account for Biju S Pillai,
+-- who oversees just KL01A + KL01B (not the whole South region, so the
+-- existing 'regional' role doesn't fit). No branch/region column is used —
+-- the two branches are hardcoded in code (see src/lib/kl-branches-data.ts),
+-- same pattern central-region-data.ts already uses for Central's own branch
+-- list. Never uploads, never sets targets — see kl-branches-guard.ts.
+alter table admins drop constraint if exists admins_role_check;
+alter table admins add constraint admins_role_check
+  check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce', 'kl_cluster'));
+alter table admins drop constraint if exists admins_role_scope_consistency;
+alter table admins add constraint admins_role_scope_consistency check (
+  (role = 'branch'      and branch is not null and region is null) or
+  (role = 'hq'          and branch is null     and region is null) or
+  (role = 'regional'    and branch is null     and region in ('North', 'Central', 'South')) or
+  (role = 'vp_service'  and branch is null     and region is null) or
+  (role = 'ceo'         and branch is null     and region is null) or
+  (role = 'accounts'    and branch is null     and region is null) or
+  (role = 'hq_viewer'   and branch is null     and region is null) or
+  (role = 'bp_manager'  and branch is not null and region is null) or
+  (role = 'bp_ho'       and branch is null     and region is null) or
+  (role = 'ce'          and branch is null     and region is null) or
+  (role = 'kl_cluster'  and branch is null     and region is null)
+);
 alter table close_sa_analytics_daily drop column if exists bp_same_day_delivery_count;

@@ -57,6 +57,7 @@ export default async function DashboardPage({
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
   if (admin?.role === "bp_manager" || admin?.role === "bp_ho") redirect("/bp-referrals");
+  if (admin?.role === "kl_cluster") redirect("/kl-branches");
   if (!admin?.canViewDashboard) {
     redirect("/upload");
   }

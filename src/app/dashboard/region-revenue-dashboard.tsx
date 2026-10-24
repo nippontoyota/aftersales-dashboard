@@ -87,12 +87,17 @@ export function RegionRevenueDashboard({
   regionName,
   branchReports,
   daysSincePrevious,
+  /** Where the date picker navigates to — defaults to /dashboard (every
+   * existing caller). The kl_cluster role's standalone page (no sidebar,
+   * not under /dashboard) passes its own route here instead, 2026-10-24. */
+  basePath = "/dashboard",
 }: {
   view: RegionRevenueView;
   dates: string[];
   uploadedAt: string;
   isPublished: boolean;
   regionName: string;
+  basePath?: string;
   /** Every branch's full BranchReport, for the click-to-expand metrics popup
    * on each branch's column header (2026-10-22, at the regional managers'
    * request — reuses CondensedMetrics, the same curated view a branch
@@ -132,7 +137,7 @@ export function RegionRevenueDashboard({
           <h1 className="text-xl font-semibold tracking-tight text-fg">{regionName} — Regional Overview</h1>
           <p className="mt-1 text-xs text-fg-faint">Month-to-date for {view.date}. Data as of {asOf(uploadedAt)} IST.</p>
         </div>
-        <DateSelect dates={dates} selected={view.date} region="All" />
+        <DateSelect dates={dates} selected={view.date} region="All" basePath={basePath} />
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
