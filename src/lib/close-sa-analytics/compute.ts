@@ -464,6 +464,18 @@ export function computeCloseSaAnalytics(
     if (!roInfoByRo.has(ro)) roInfoByRo.set(ro, readRoInfo(row, isBp));
   }
 
+  // An RO's EM Flag is DMS-set independently of its Job Desc lines, and real
+  // data has shown it can be populated (e.g. EM60) on an RO that's actually
+  // PDI, not Periodic Maintenance (confirmed 2026-10-24, SIVADAS O/TI01A: 4
+  // "PRE-DELIVERY SERVICE - INSP"-only ROs carried EM Flag=EM60). So EM/EM60
+  // only count an RO when it also has at least one real PM job line —
+  // computed up front here so Pass 1 below can gate on it.
+  const roHasPmLine = new Set<string>();
+  for (const { row } of allSiRows) {
+    const ro = normalizeRo(row[JOB_ORDER_NO_COLUMN]);
+    if (ro && PM_JOB_DESC_PATTERN.test(normalizeText(row[JOB_DESC_COLUMN]))) roHasPmLine.add(ro);
+  }
+
   // Per-SA RO-level aggregates (counted once per RO, not per row).
   const vehiclesBySa = new Map<string, Set<string>>();
   const roCountBySa = new Map<string, Set<string>>();
@@ -488,8 +500,10 @@ export function computeCloseSaAnalytics(
     // which real data never contains (see EM60_VALUE's doc comment above),
     // so emCount had silently been 0 for every SA since this feature
     // shipped. Any non-"NO", non-blank value is a real EM tier (60/90/120).
-    if (info.emFlag && info.emFlag !== "NO") m.emCount++;
-    if (info.emFlag === EM60_VALUE) {
+    // Fixed 2026-10-24 — also requires roHasPmLine (see above): an EM Flag
+    // without a real PM job line on the RO isn't a genuine EM visit.
+    if (roHasPmLine.has(ro) && info.emFlag && info.emFlag !== "NO") m.emCount++;
+    if (roHasPmLine.has(ro) && info.emFlag === EM60_VALUE) {
       m.em60Count++;
       if (info.em60DurationMinutes !== null && info.em60DurationMinutes <= EM60_TARGET_MINUTES) m.em60OnTimeCount++;
     }
