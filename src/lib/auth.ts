@@ -77,9 +77,20 @@ export const SESSION_COOKIE_NAME = SESSION_COOKIE;
 export function verifySessionToken(token: string | undefined | null): string | null {
   if (!token) return null;
 
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const [username, expiresAtStr, signature] = parts;
+  // Split from the right, not token.split(".") into exactly 3 parts — a
+  // username containing a literal "." (e.g. "biju.kollam", added 2026-10-24
+  // for the kl_cluster role) has more than 2 dots in the token, so a
+  // 3-part split silently rejected every one of its sessions as malformed,
+  // bouncing it straight back to /login with no error at all. expiresAt and
+  // the hex signature never contain a dot themselves, so the last two
+  // dot-delimited segments are always exactly those two, whatever the
+  // username contains.
+  const lastDot = token.lastIndexOf(".");
+  const secondLastDot = lastDot === -1 ? -1 : token.lastIndexOf(".", lastDot - 1);
+  if (lastDot === -1 || secondLastDot === -1) return null;
+  const username = token.slice(0, secondLastDot);
+  const expiresAtStr = token.slice(secondLastDot + 1, lastDot);
+  const signature = token.slice(lastDot + 1);
   const payload = `${username}.${expiresAtStr}`;
 
   let expectedSig: string;
