@@ -8,11 +8,14 @@ import type { CloseSaAnalyticsRow } from "./store";
  * single day's row to already be cumulative. `jobDescCounts`/`jobTypeCounts`/
  * `payTypeCounts` are merged key-by-key across days. */
 export type CloseSaPeriodTotals = Omit<CloseSaAnalyticsRow, "date" | "vehicleVins"> & {
-  /** Present only when aggregating across branches (e.g. /branches) — the
-   * single branch this SA's rows all shared, or more than one entry if the
-   * same normalized name turned up at more than one branch (a real risk —
-   * two different people can share a name, and this is name-only matching
-   * with no SA-code key available outside Cost & Sales). */
+  /** Always exactly one branch — the one this row's SA is scoped to.
+   * Aggregation keys on (branch, closeSaName), never name alone: two
+   * different people can share a name at different branches (confirmed
+   * 2026-10-24, "Akhil K R" at both CO01A and CO01B), and this is name-only
+   * matching with no SA-code key available outside Cost & Sales, so branch
+   * is the only thing that can tell them apart. Kept as an array (rather
+   * than a single string) for backwards compatibility with the UI code that
+   * reads it. */
   branches: string[];
   /** Union of every day's vehicleVins in the period, deduped — the true
    * distinct-vehicles-this-period count, not a sum of daily counts (which
@@ -30,14 +33,17 @@ function mergeCounts(target: Record<string, number>, source: Record<string, numb
 }
 
 /** Rolls up a list of daily rows (any mix of branches/dates/SAs) into one
- * row per close_sa_name. Pass rows already scoped to the period/branch(es)
- * you want totaled — this does no date or branch filtering of its own. */
+ * row per (branch, close_sa_name) — never per name alone, since the same
+ * name can belong to two different people at two different branches. Pass
+ * rows already scoped to the period/branch(es) you want totaled — this does
+ * no date or branch filtering of its own. */
 export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriodTotals[] {
-  const byName = new Map<string, CloseSaPeriodTotals>();
+  const byKey = new Map<string, CloseSaPeriodTotals>();
   const vinSets = new Map<string, Set<string>>();
 
   for (const r of rows) {
-    let acc = byName.get(r.closeSaName);
+    const key = `${r.branch}|${r.closeSaName}`;
+    let acc = byKey.get(key);
     if (!acc) {
       acc = {
         closeSaName: r.closeSaName,
@@ -90,12 +96,12 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
         bpRoCount: 0,
         repeatJobCount: 0,
       };
-      byName.set(r.closeSaName, acc);
+      byKey.set(key, acc);
     }
     if (!acc.branches.includes(r.branch)) acc.branches.push(r.branch);
 
-    if (!vinSets.has(r.closeSaName)) vinSets.set(r.closeSaName, new Set());
-    const vinSet = vinSets.get(r.closeSaName)!;
+    if (!vinSets.has(key)) vinSets.set(key, new Set());
+    const vinSet = vinSets.get(key)!;
     for (const vin of r.vehicleVins) if (vin) vinSet.add(vin);
 
     acc.roCount += r.roCount;
@@ -144,11 +150,11 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
     acc.bpRoCount += r.bpRoCount;
   }
 
-  for (const acc of byName.values()) {
-    acc.distinctVehicleCount = vinSets.get(acc.closeSaName)?.size ?? 0;
+  for (const [key, acc] of byKey) {
+    acc.distinctVehicleCount = vinSets.get(key)?.size ?? 0;
   }
 
-  return [...byName.values()].sort((a, b) => b.roCount - a.roCount);
+  return [...byKey.values()].sort((a, b) => b.roCount - a.roCount);
 }
 
 /** Of this SA's EM60 (Periodic Maintenance, 60-min target) ROs, what share
@@ -231,7 +237,10 @@ export function groupByCategory(totals: CloseSaPeriodTotals[], accessoriesStaffN
 }
 
 /** Fills in repeatJobCount (0 by default — see the type's own doc comment)
- * from a separately-loaded repeat-jobs.ts result. Mutates `totals` in place. */
+ * from a separately-loaded repeat-jobs.ts result. `counts` is keyed by
+ * repeatJobCountsBySa's `${branch}|${closeSaName}` composite — never by name
+ * alone, for the same same-name-different-branch reason as the aggregation
+ * above. Mutates `totals` in place. */
 export function mergeRepeatJobCounts(totals: CloseSaPeriodTotals[], counts: Map<string, number>): void {
-  for (const t of totals) t.repeatJobCount = counts.get(t.closeSaName) ?? 0;
+  for (const t of totals) t.repeatJobCount = counts.get(`${t.branches[0]}|${t.closeSaName}`) ?? 0;
 }

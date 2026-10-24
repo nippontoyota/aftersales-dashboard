@@ -21,6 +21,7 @@ import { isGenericCatchAllJobCode, normalizeCloseSaName, REPEAT_JOB_WINDOW_DAYS 
  * same actual work repeating.
  */
 export type RepeatJobFlag = {
+  branch: string;
   vin: string;
   jobCode: string;
   jobDesc: string;
@@ -79,6 +80,7 @@ export async function findRepeatJobs(branch: string, fromDate: string, toDate: s
       if (cur.date < fromDate || cur.date > toDate) continue; // only the repeat landing in the requested period
       const [vin, jobCode] = key.split("|");
       flags.push({
+        branch,
         vin,
         jobCode,
         jobDesc: cur.jobDesc,
@@ -95,12 +97,16 @@ export async function findRepeatJobs(branch: string, fromDate: string, toDate: s
   return flags;
 }
 
-/** Attributed to the SA who closed the repeat (2nd) RO. */
+/** Attributed to the SA who closed the repeat (2nd) RO. Keyed by
+ * `${branch}|${closeSaName}`, not name alone — flags from multiple branches
+ * are routinely flattened together by callers (e.g. /branches), and two
+ * different people can share a name at different branches. */
 export function repeatJobCountsBySa(flags: RepeatJobFlag[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const f of flags) {
     if (!f.secondCloseSa) continue;
-    counts.set(f.secondCloseSa, (counts.get(f.secondCloseSa) ?? 0) + 1);
+    const key = `${f.branch}|${f.secondCloseSa}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return counts;
 }
