@@ -9,6 +9,7 @@ import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-
 import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
 import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
 import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
+import { recomputeUniqueVinVas } from "@/lib/unique-vin-vas/recompute";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -129,6 +130,7 @@ export async function POST(request: Request) {
   // already swallows its own errors; this is a no-op before 2026-10-01).
   await recomputeVasRevenueReal(admin.branch, date);
   await recomputeCloseSaAnalytics(admin.branch, date);
+  await recomputeUniqueVinVas(admin.branch, date);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }

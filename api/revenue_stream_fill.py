@@ -25,12 +25,14 @@ Row-by-row mapping (confirmed against the template he supplied,
   (penetrationTGlossService/tGlossSpo), so these two rows get their formula
   replaced with the literal value instead of being left broken.
 - UNTRACKED_CLEAR_ROWS: metrics the template tracks (T Club, Extended
-  Warranty, Smiles, GR→BP Conversion, Unique VIN VAS, Total Car Care
-  Treatments, TP-TP, NTP-TP) that nothing in our upload pipeline captures —
-  same gap the original ExcelJS version flagged. Cleared (not left with the
-  template's old demo numbers) so a branch isn't misled into thinking a
-  stale Oct-20 figure is today's — they're filled in by hand after download,
-  same as before.
+  Warranty, Smiles, GR→BP Conversion, Total Car Care Treatments, TP-TP,
+  NTP-TP) that nothing in our upload pipeline captures — same gap the
+  original ExcelJS version flagged. Cleared (not left with the template's
+  old demo numbers) so a branch isn't misled into thinking a stale Oct-20
+  figure is today's — they're filled in by hand after download, same as
+  before. Unique VIN VAS (rows 94/95) moved out of this list 2026-10-24 —
+  see unique-vin-vas/compute.ts; it's now a live ROW_FIELD_MAP entry like
+  everything else in the CPU/BPU/Offtake/Parts Retail/PM+OC block.
 - CLEAR_FORMULA_ROWS: row 75 (Mech Care Penetration) is the same kind of gap
   as UNTRACKED_CLEAR_ROWS above, but the cell holds the same dead VLOOKUP as
   73/76 rather than a plain number — cleared via patch_formula_row() so the
@@ -102,6 +104,7 @@ ROW_FIELD_MAP: dict[int, str] = {
     84: "offtakeTarget", 85: "offtakeForThePreviousDay", 86: "offtakeAchievementForTheMonth",
     87: "partsRetailTarget", 88: "partsRetailForTheDay", 89: "partsRetailAchievementForTheMonth",
     90: "pmOcTarget", 91: "pmOcForTheDay", 92: "pmOcAchievementForTheMonth",
+    94: "uniqueVinVasForTheDay", 95: "uniqueVinVasAchievementForTheMonth",
 }
 
 # Dead VLOOKUP rows — overwritten even though the original cell is a formula.
@@ -118,7 +121,7 @@ PATCHED_FORMULA_ROWS: dict[int, str] = {
 # rows only; row 75 (Mech Care Penetration) is also untracked but is a dead
 # VLOOKUP formula, not a literal, so touch_row() would silently skip it —
 # see CLEAR_FORMULA_ROWS below for that one.
-UNTRACKED_CLEAR_ROWS = [35, 36, 38, 39, 55, 67, 68, 69, 70, 94, 95, 97, 98, 100, 101, 103, 104]
+UNTRACKED_CLEAR_ROWS = [35, 36, 38, 39, 55, 67, 68, 69, 70, 97, 98, 100, 101, 103, 104]
 
 # Dead VLOOKUP rows with no live equivalent — unlike PATCHED_FORMULA_ROWS,
 # these get cleared outright (blank) rather than filled, same reasoning as
