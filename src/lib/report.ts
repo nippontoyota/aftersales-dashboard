@@ -94,14 +94,16 @@ export type BranchReport = {
   pmOcAchievementForTheMonth: number | null;
 
   // Unique VIN VAS (2026-10-24, at the user's request, for the Revenue
-  // Stream Excel export's rows 94/95): distinct vehicles with >=1 TGLOSS
-  // job code billed on an RO not closed by an accessories-staff SA, GS+BP
-  // combined — see unique-vin-vas/compute.ts. No target exists yet, so
-  // (unlike the pmOc-style fields above) "AchievementForTheMonth" here is
-  // genuinely just the raw MTD sum, not an achievement ratio — same
-  // "Achvmnt for the month" cell convention the template already uses for
-  // CPU/BPU/Offtake/Parts Retail/PM+OC above, which turn out to hold plain
-  // MTD numbers too once you check report.ts, not true percentages.
+  // Stream Excel export's rows 94/95): distinct ROs with >=1 TGLOSS job
+  // code billed, not closed by an accessories-staff SA, GS+BP combined —
+  // see unique-vin-vas/compute.ts. Plain RO count, no VIN dedup (the user's
+  // explicit call after comparing both on real October data). No target
+  // exists yet, so (unlike the pmOc-style fields above)
+  // "AchievementForTheMonth" here is genuinely just the raw MTD sum, not an
+  // achievement ratio — same "Achvmnt for the month" cell convention the
+  // template already uses for CPU/BPU/Offtake/Parts Retail/PM+OC above,
+  // which turn out to hold plain MTD numbers too once you check report.ts,
+  // not true percentages.
   uniqueVinVasForTheDay: number | null;
   uniqueVinVasAchievementForTheMonth: number | null;
 

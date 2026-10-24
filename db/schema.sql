@@ -1479,23 +1479,22 @@ alter table admins add constraint admins_role_scope_consistency check (
 );
 
 -- Unique VIN VAS (2026-10-24, at the user's request, for the Revenue Stream
--- Excel export's rows 94/95): distinct vehicles (Vin no) with >=1 TGLOSS-
--- priced job code (VAS_PRICE_BY_JOB_CODE) billed on an RO NOT closed by an
--- accessories-staff SA, GS + BP Service Info combined, one count per
--- (date, branch) — same precompute-at-upload-time pattern as
--- vas_revenue_real above, so report.ts's hot read path never joins
--- raw_upload_rows itself (see the 2026-10-01 Vercel-timeout fix this
--- codebase already learned that lesson from). Recomputed in full on every
--- Service Info (GS or BP) upload touching that date — see
--- unique-vin-vas/recompute.ts.
+-- Excel export's rows 94/95): distinct ROs with >=1 TGLOSS-priced job code
+-- (VAS_PRICE_BY_JOB_CODE) billed, NOT closed by an accessories-staff SA,
+-- GS + BP Service Info combined, one count per (date, branch) — same
+-- precompute-at-upload-time pattern as vas_revenue_real above, so
+-- report.ts's hot read path never joins raw_upload_rows itself (see the
+-- 2026-10-01 Vercel-timeout fix this codebase already learned that lesson
+-- from). Recomputed in full on every Service Info (GS or BP) upload
+-- touching that date — see unique-vin-vas/recompute.ts.
 --
--- Counting rule confirmed with the user 2026-10-24: this is a same-day
--- distinct-VIN count, so several qualifying ROs for the same VIN on the
--- SAME date (even across GS/BP or across branches) count once; the same
--- VIN qualifying again on a LATER date counts again. MTD ("for the month")
--- is the sum of each day's count here — same accumulation pattern as every
--- other MTD figure in this dashboard — never a cross-day dedup, which is
--- exactly what makes a later date count separately.
+-- Plain RO count, no VIN dedup — the user's explicit call (2026-10-24)
+-- after comparing both approaches on real October data: this RO-wise count
+-- totalled 5,720 company-wide for Oct 1-24 vs 5,699 for a same-day-VIN-
+-- dedup version that had briefly been tried first; the user chose the
+-- former, rare repeat-same-VIN-same-day cases included as-is. MTD ("for
+-- the month") is the sum of each day's count here — same accumulation
+-- pattern as every other MTD figure in this dashboard.
 create table if not exists unique_vin_vas_daily (
   date date not null,
   branch text not null,
