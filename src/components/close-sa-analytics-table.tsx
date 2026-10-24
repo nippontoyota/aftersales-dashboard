@@ -155,9 +155,28 @@ function countsSummary(counts: Record<string, number>): string {
     .join(", ");
 }
 
-function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch: boolean }) {
+/** The BP table variant drops Same Day Delivery/EM60/EM60 OTD (columns +
+ * expanded-detail lines) — BP jobs stay open for weeks and don't carry real
+ * EM/PM data, so these are always 0/empty for BP SAs (2026-10-24, at the
+ * user's request) — and puts the Body & Paint block first in the expanded
+ * detail, since it's the primary thing worth looking at there. */
+function SaRow({ totals, showBranch, isBp }: { totals: CloseSaPeriodTotals; showBranch: boolean; isBp: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const topJobDescs = Object.entries(totals.jobDescCounts).sort((a, b) => b[1] - a[1]);
+
+  const bpBlock =
+    totals.bpRoCount > 0 ? (
+      <div className="text-xs text-fg-subtle">
+        <div>
+          <span className="font-semibold">Body &amp; Paint</span> — {totals.bpRoCount} ROs, Estimate ₹{formatCompact(totals.bpEstimateAmount)} vs Final ₹
+          {formatCompact(totals.bpFinalInvoiceAmount)}
+        </div>
+        <div>Repair Type — {countsSummary(totals.bpRepairTypeCounts) || "—"}</div>
+        <div title="BP Parts ₹ ÷ BP ROs">Parts Gentani: ₹{formatCompact(bpPartsGentani(totals) ?? 0)}</div>
+        <div title="BP Labour ₹ ÷ BP ROs">Service Gentani: ₹{formatCompact(bpLabourGentani(totals) ?? 0)}</div>
+        <div title="BP TGLOSS ₹ ÷ BP ROs">{tglossText("TGLOSS")} Gentani: ₹{formatCompact(bpTglossGentani(totals) ?? 0)}</div>
+      </div>
+    ) : null;
 
   return (
     <>
@@ -169,9 +188,11 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
         </td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.roCount))}</td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.distinctVehicleCount))}</td>
-        <td className="px-3 py-2 align-top" title="Job Open Date = Invoice Date, same calendar day">
-          {sameDayDeliveryCell(totals)}
-        </td>
+        {isBp ? null : (
+          <td className="px-3 py-2 align-top" title="Job Open Date = Invoice Date, same calendar day">
+            {sameDayDeliveryCell(totals)}
+          </td>
+        )}
         <td className="px-3 py-2 align-top">{moneyCell(totals.labourRevenueAfter)}</td>
         <td className="px-3 py-2 align-top">{partsCell(totals)}</td>
         <td className="px-3 py-2 align-top">{moneyCell(totals.vasBillRevenue)}</td>
@@ -181,21 +202,26 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
         <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
           {cell(formatNumber(totals.batteryCount))}
         </td>
-        <td className="px-3 py-2 align-top">{cell(formatNumber(totals.em60Count))}</td>
-        <td className="px-3 py-2 align-top" title="Job Open → Invoice at or under 60 minutes">
-          {em60OtdCell(totals)}
-        </td>
+        {isBp ? null : (
+          <>
+            <td className="px-3 py-2 align-top">{cell(formatNumber(totals.em60Count))}</td>
+            <td className="px-3 py-2 align-top" title="Job Open → Invoice at or under 60 minutes">
+              {em60OtdCell(totals)}
+            </td>
+          </>
+        )}
       </tr>
       {expanded ? (
         <tr className="border-t border-border-subtle bg-surface-2/40">
-          <td colSpan={11} className="px-3 py-3">
+          <td colSpan={isBp ? 8 : 11} className="px-3 py-3">
+            {isBp ? <div className="mb-2">{bpBlock}</div> : null}
             <div className="grid grid-cols-1 gap-3 text-xs text-fg-subtle sm:grid-cols-3">
               <div>
                 <div className="mb-1 font-semibold text-fg-subtle">Job mix</div>
                 {/* FS = Free Service, confirmed 2026-10-23 to be the same
                     thing already tracked as fmscCount (FMSC Flag) — just
                     relabeled to match the term used elsewhere. */}
-                <div>AMC: {totals.amcCount}, FS: {totals.fmscCount}, EM: {totals.emCount}</div>
+                {isBp ? null : <div>AMC: {totals.amcCount}, FS: {totals.fmscCount}, EM: {totals.emCount}</div>}
                 <div>Job Type — {countsSummary(totals.jobTypeCounts) || "—"}</div>
                 {totals.repeatJobCount > 0 ? (
                   <div title="Same car, same Job Code, within 30 days — generic/catch-all codes excluded">
@@ -215,9 +241,11 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
                 <div title="TGLOSS ₹ ÷ ROs that actually had a TGLOSS job (not ÷ all ROs)">
                   {tglossText("TGLOSS")} Gentani (vs pitched): ₹{formatCompact(tglossGentaniVsPitched(totals) ?? 0)}
                 </div>
-                <div title="EM-flagged ROs (any tier) ÷ total Periodic Maintenance ROs">
-                  EM-to-PM: {totals.pmRoCount > 0 ? `${totals.emCount}/${totals.pmRoCount} (${Math.round((emToPmPct(totals) ?? 0) * 100)}%)` : "—"}
-                </div>
+                {isBp ? null : (
+                  <div title="EM-flagged ROs (any tier) ÷ total Periodic Maintenance ROs">
+                    EM-to-PM: {totals.pmRoCount > 0 ? `${totals.emCount}/${totals.pmRoCount} (${Math.round((emToPmPct(totals) ?? 0) * 100)}%)` : "—"}
+                  </div>
+                )}
               </div>
               <div>
                 <div className="mb-1 font-semibold text-fg-subtle">Parts detail (matched ROs only)</div>
@@ -227,18 +255,7 @@ function SaRow({ totals, showBranch }: { totals: CloseSaPeriodTotals; showBranch
                 <div>DIY: {totals.diyCount} (₹{formatCompact(totals.diyRevenue)})</div>
               </div>
             </div>
-            {totals.bpRoCount > 0 ? (
-              <div className="mt-2 text-xs text-fg-subtle">
-                <div>
-                  <span className="font-semibold">Body &amp; Paint</span> — {totals.bpRoCount} ROs, Estimate ₹{formatCompact(totals.bpEstimateAmount)} vs Final ₹
-                  {formatCompact(totals.bpFinalInvoiceAmount)}
-                </div>
-                <div>Repair Type — {countsSummary(totals.bpRepairTypeCounts) || "—"}</div>
-                <div title="BP Parts ₹ ÷ BP ROs">Parts Gentani: ₹{formatCompact(bpPartsGentani(totals) ?? 0)}</div>
-                <div title="BP Labour ₹ ÷ BP ROs">Service Gentani: ₹{formatCompact(bpLabourGentani(totals) ?? 0)}</div>
-                <div title="BP TGLOSS ₹ ÷ BP ROs">{tglossText("TGLOSS")} Gentani: ₹{formatCompact(bpTglossGentani(totals) ?? 0)}</div>
-              </div>
-            ) : null}
+            {isBp ? null : <div className="mt-2">{bpBlock}</div>}
             <div className="mt-3 max-w-xl">
               <div className="mb-1 text-xs font-semibold text-fg-subtle">Job Desc breakdown ({topJobDescs.length} distinct)</div>
               {topJobDescs.length > 0 ? (
@@ -290,6 +307,7 @@ export function CloseSaAnalyticsTable({
   defaultOpen,
   subtitle,
   title = "SA Analytics",
+  isBp = false,
 }: {
   totals: CloseSaPeriodTotals[];
   /** Shows each SA's branch(es) next to their name — /branches (HQ, company-wide) needs this; /dashboard (one branch) doesn't. */
@@ -299,6 +317,11 @@ export function CloseSaAnalyticsTable({
   /** Lets a category section (GS/BP/Accessories/PDI) distinguish itself —
    * see sa-analytics-sections.tsx. Defaults to the plain title. */
   title?: string;
+  /** The BP category's own layout (2026-10-24, at the user's request): drops
+   * Same Day Delivery/EM60/EM60 OTD (always empty for BP — no real EM/PM
+   * data) and puts the Body & Paint block first in the expanded detail. See
+   * SaRow's own doc comment. */
+  isBp?: boolean;
 }) {
   const [sort, setSort] = useState<SortState>(null);
 
@@ -342,19 +365,23 @@ export function CloseSaAnalyticsTable({
               <SortableHeader label="Close SA" sortKey="closeSaName" sort={sort} onClick={handleHeaderClick} sticky />
               <SortableHeader label="ROs" sortKey="roCount" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Vehicles" sortKey="distinctVehicleCount" sort={sort} onClick={handleHeaderClick} />
-              <SortableHeader label="Same Day Delivery" sortKey="sameDayDeliveryRate" sort={sort} onClick={handleHeaderClick} />
+              {isBp ? null : <SortableHeader label="Same Day Delivery" sortKey="sameDayDeliveryRate" sort={sort} onClick={handleHeaderClick} />}
               <SortableHeader label="Labour ₹" sortKey="labourRevenueAfter" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Parts ₹ (matched)" sortKey="partsRevenue" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label={tglossText("TGLOSS ₹")} sortKey="vasBillRevenue" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Tyre" sortKey="tyreCount" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Battery" sortKey="batteryCount" sort={sort} onClick={handleHeaderClick} />
-              <SortableHeader label="EM60" sortKey="em60Count" sort={sort} onClick={handleHeaderClick} />
-              <SortableHeader label="EM60 OTD" sortKey="em60OtdRate" sort={sort} onClick={handleHeaderClick} />
+              {isBp ? null : (
+                <>
+                  <SortableHeader label="EM60" sortKey="em60Count" sort={sort} onClick={handleHeaderClick} />
+                  <SortableHeader label="EM60 OTD" sortKey="em60OtdRate" sort={sort} onClick={handleHeaderClick} />
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
             {sortedTotals.map((t) => (
-              <SaRow key={`${t.branches.join(",")}|${t.closeSaName}`} totals={t} showBranch={showBranch} />
+              <SaRow key={`${t.branches.join(",")}|${t.closeSaName}`} totals={t} showBranch={showBranch} isBp={isBp} />
             ))}
           </tbody>
         </table>

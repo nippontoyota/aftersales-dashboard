@@ -46,6 +46,7 @@ export function SaAnalyticsSections({
           totals={groups[cat]}
           showBranch={showBranch}
           subtitle={subtitlePrefix ? `${subtitlePrefix} — ${cat} (${groups[cat].length} SAs)` : undefined}
+          isBp={cat === "BP"}
         />
       ))}
     </div>
