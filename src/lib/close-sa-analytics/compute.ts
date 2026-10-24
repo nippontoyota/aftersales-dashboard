@@ -110,10 +110,15 @@ const PROMISE_DELIVERY_TIME_COLUMN = "Promise Delivery Time";
  * Invoice Date, which also works but wasn't what they asked for). Raw
  * column name's spelling ("NINETH") is the DMS export's own, not a typo. */
 const NINTH_SMS_SEND_DT_COLUMN = "NINETH_SMS_SEND_DT";
-/** BP OTD's on-time window width, confirmed with the user 2026-10-24: handover
- * must land in [Promise − 24h, Promise] — arriving more than 24h early fails
- * this just like arriving late does, deliberately not "early is fine". */
-const BP_OTD_WINDOW_MINUTES = 24 * 60;
+/** BP OTD's on-time window, confirmed with the user 2026-10-24 — revised
+ * same day from an initial "strict 24h before" to a calendar-day-based
+ * window, then again to 2 days: on-time is [midnight at the start of the
+ * calendar day 2 days before the Promise date, Promise Date/Time] — e.g.
+ * Promise = 24/10 18:00 means anything from 22/10 00:00 through 24/10 18:00
+ * counts, not a rolling 48h countback from 18:00. Arriving before that
+ * midnight, or after the promise, fails — deliberately not "early is fine". */
+const BP_OTD_WINDOW_DAYS = 2;
+const MINUTES_PER_DAY = 24 * 60;
 
 const JOB_OPEN_DATE_COLUMN = "Job Open Date";
 const JOB_OPEN_TIME_COLUMN = "Job Open Time";
@@ -613,7 +618,9 @@ export function computeCloseSaAnalytics(
       }
       if (info.bpPromiseAt !== null && info.bpHandoverAt !== null) {
         m.bpOtdEligibleCount++;
-        if (info.bpHandoverAt <= info.bpPromiseAt && info.bpHandoverAt >= info.bpPromiseAt - BP_OTD_WINDOW_MINUTES) {
+        const promiseDayStart = Math.floor(info.bpPromiseAt / MINUTES_PER_DAY) * MINUTES_PER_DAY;
+        const windowStart = promiseDayStart - BP_OTD_WINDOW_DAYS * MINUTES_PER_DAY;
+        if (info.bpHandoverAt <= info.bpPromiseAt && info.bpHandoverAt >= windowStart) {
           m.bpOtdOnTimeCount++;
         }
       }

@@ -163,7 +163,7 @@ function bpOtdCell(totals: CloseSaPeriodTotals) {
   if (totals.bpOtdEligibleCount === 0) return <div className="whitespace-nowrap text-right text-sm text-fg-faint">—</div>;
   const pct = bpOtdPct(totals)!;
   return (
-    <div className="whitespace-nowrap text-right text-sm tabular-nums text-fg" title="Handover (NINETH_SMS_SEND_DT) within 24h before, or at, the Promise Delivery Date/Time">
+    <div className="whitespace-nowrap text-right text-sm tabular-nums text-fg" title="Handover from midnight 2 days before the Promise date, through the Promise Delivery Date/Time">
       {totals.bpOtdOnTimeCount}/{totals.bpOtdEligibleCount}
       <span className="ml-1 text-[11px] font-normal text-fg-faint">({Math.round(pct * 100)}%)</span>
     </div>
@@ -239,7 +239,7 @@ function SaRow({ totals, showBranch, isBp }: { totals: CloseSaPeriodTotals; show
         </td>
         {isBp ? (
           <>
-            <td className="px-3 py-2 align-top" title="Handover (NINETH_SMS_SEND_DT) within 24h before, or at, the Promise Delivery Date/Time">
+            <td className="px-3 py-2 align-top" title="Handover from midnight 2 days before the Promise date, through the Promise Delivery Date/Time">
               {bpOtdCell(totals)}
             </td>
             <td className="px-3 py-2 align-top" title="Unique Work Order numbers ÷ unique ROs">
