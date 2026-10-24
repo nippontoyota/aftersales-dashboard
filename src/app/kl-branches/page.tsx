@@ -6,7 +6,7 @@ import { loadCloseSaAnalyticsForBranch } from "@/lib/close-sa-analytics/store";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { loadCentralMetricTargetsView } from "@/lib/central-metric-targets/view-data";
 import { loadBillTotalsByMonth } from "@/lib/bill/store";
-import { loadCancellationKpis } from "@/lib/cancellation/store";
+import { loadCancellationKpis, listCancellationFiles, type CancellationFileInfo } from "@/lib/cancellation/store";
 import { reconcileCancellations } from "@/lib/cancellation/reconcile";
 import { formatCompactCurrency } from "@/lib/format";
 import { branchName } from "@/lib/branch-names";
@@ -76,7 +76,7 @@ async function KlBranchesContent({ searchParams }: { searchParams: Promise<{ dat
     (b): b is BranchReport => b !== undefined,
   );
 
-  const [view, saByBranch, kpis, flaggedByBranch, billMonths] = await Promise.all([
+  const [view, saByBranch, kpis, flaggedByBranch, billMonths, cancellationFiles] = await Promise.all([
     loadKlBranchesView(date, report),
     Promise.all(
       KL_BRANCHES.map(async (branch) => {
@@ -93,6 +93,7 @@ async function KlBranchesContent({ searchParams }: { searchParams: Promise<{ dat
     loadCancellationKpis(month, [...KL_BRANCHES]),
     Promise.all(KL_BRANCHES.map((branch) => reconcileCancellations(month, branch))),
     loadBillTotalsByMonth([...KL_BRANCHES]),
+    listCancellationFiles(month, [...KL_BRANCHES]),
   ]);
 
   const metrics = await loadCentralMetricTargetsView(klBranchReports, date, holidaySet);
@@ -109,6 +110,11 @@ async function KlBranchesContent({ searchParams }: { searchParams: Promise<{ dat
   const flaggedCountByBranch = new Map(
     KL_BRANCHES.map((branch, i) => [branch, flaggedByBranch[i].rows.filter((r) => r.flagged && r.branch === branch).length]),
   );
+
+  const filesByBranch = new Map<string, CancellationFileInfo[]>();
+  for (const f of cancellationFiles) filesByBranch.set(f.branch, [...(filesByBranch.get(f.branch) ?? []), f]);
+  const pdfHref = (b: string, id: number) => `/api/cancellations/${b}/${month}/pdf/${id}`;
+  const uploadLabel = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
 
   return (
     <div>
@@ -152,6 +158,7 @@ async function KlBranchesContent({ searchParams }: { searchParams: Promise<{ dat
             {KL_BRANCHES.map((branch) => {
               const k = kpiByBranch.get(branch);
               const flaggedCount = flaggedCountByBranch.get(branch) ?? 0;
+              const files = filesByBranch.get(branch) ?? [];
               return (
                 <div key={branch} className="rounded-lg border border-border bg-surface p-4 shadow-card">
                   <div className={eyebrow}>{branchName(branch)}</div>
@@ -170,6 +177,21 @@ async function KlBranchesContent({ searchParams }: { searchParams: Promise<{ dat
                       <div className="text-[10px] text-fg-faint">Flagged</div>
                     </div>
                   </div>
+                  {files.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-x-1.5 gap-y-1 border-t border-border-subtle pt-2.5 text-xs">
+                      {files.map((f) => (
+                        <a
+                          key={f.id}
+                          href={pdfHref(f.branch, f.id)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-accent-text hover:underline"
+                        >
+                          {files.length > 1 ? `${uploadLabel(f.uploadedAt)} (PDF)` : "Open report (PDF)"}
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

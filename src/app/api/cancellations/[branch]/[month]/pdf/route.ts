@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { REGIONS } from "@/lib/regions";
+import { KL_BRANCHES } from "@/lib/kl-branches-data";
 import { getLatestCancellationFile } from "@/lib/cancellation/store";
 
 /** Legacy/bookmarked link — a branch-month can now have several uploads
@@ -20,6 +21,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bra
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
   if (admin.role === "regional" && !(REGIONS[admin.region] as readonly string[]).includes(branch)) {
+    return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  }
+  if (admin.role === "kl_cluster" && !(KL_BRANCHES as readonly string[]).includes(branch)) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
