@@ -1,5 +1,5 @@
 import { classifySaCategory, type CloseSaPeriodTotals, type SaCategory } from "@/lib/close-sa-analytics/aggregate";
-import { CloseSaAnalyticsTable } from "./close-sa-analytics-table";
+import { CloseSaAnalyticsTable, type SaVariant } from "./close-sa-analytics-table";
 
 /**
  * Splits SA Analytics into the 4 categories the user asked for 2026-10-23:
@@ -18,6 +18,12 @@ const CATEGORY_LABELS: Record<SaCategory, string> = {
   BP: "SA Analytics — BP",
   Accessories: "SA Analytics — Accessories",
   PDI: "SA Analytics — PDI",
+};
+const CATEGORY_VARIANT: Record<SaCategory, SaVariant> = {
+  GS: "default",
+  BP: "bp",
+  Accessories: "accessories",
+  PDI: "pdi",
 };
 
 export function SaAnalyticsSections({
@@ -46,7 +52,7 @@ export function SaAnalyticsSections({
           totals={groups[cat]}
           showBranch={showBranch}
           subtitle={subtitlePrefix ? `${subtitlePrefix} — ${cat} (${groups[cat].length} SAs)` : undefined}
-          isBp={cat === "BP"}
+          variant={CATEGORY_VARIANT[cat]}
         />
       ))}
     </div>

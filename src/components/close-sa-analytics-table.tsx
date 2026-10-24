@@ -26,10 +26,15 @@ import { REGIONS, regionForBranch } from "@/lib/regions";
  * 2026-10-22). One row per Close SA; expand a row for its full Job Desc
  * breakdown and job-mix counts. Rendered once per GS/BP/Accessories/PDI
  * category by sa-analytics-sections.tsx — this component itself doesn't
- * know about categories, just renders whatever `totals` it's given. Used on
- * /branches (HQ, every SA company-wide, `showBranch`) and /dashboard (a
- * branch's own SAs only).
+ * know about categories beyond `variant`, just renders whatever `totals`
+ * it's given. Used on /branches (HQ, every SA company-wide, `showBranch`)
+ * and /dashboard (a branch's own SAs only).
  */
+
+/** Which category table this is — each one drops columns/expanded-detail
+ * lines that don't apply to it (2026-10-24, at the user's request). "default"
+ * is GS, the only variant with every column and every expanded-detail line. */
+export type SaVariant = "default" | "bp" | "accessories" | "pdi";
 
 type SortKey =
   | "closeSaName"
@@ -156,9 +161,9 @@ function sameDayDeliveryCell(totals: CloseSaPeriodTotals) {
   );
 }
 
-/** BP OTD: handover inside [Promise − 24h, Promise] ÷ ROs where both that
- * and Promise Delivery Date/Time parsed — "—" when neither side was ever
- * on file for this SA's ROs (real coverage is ~87%, not 100%). */
+/** BP OTD: handover inside [midnight 2 days before Promise, Promise] ÷ ROs
+ * where both that and Promise Delivery Date/Time parsed — "—" when neither
+ * side was ever on file for this SA's ROs (real coverage is ~87%, not 100%). */
 function bpOtdCell(totals: CloseSaPeriodTotals) {
   if (totals.bpOtdEligibleCount === 0) return <div className="whitespace-nowrap text-right text-sm text-fg-faint">—</div>;
   const pct = bpOtdPct(totals)!;
@@ -190,28 +195,67 @@ function countsSummary(counts: Record<string, number>): string {
     .join(", ");
 }
 
-/** The BP table variant drops Same Day Delivery/EM60/EM60 OTD (columns +
- * expanded-detail lines) — BP jobs stay open for weeks and don't carry real
- * EM/PM data, so these are always 0/empty for BP SAs (2026-10-24, at the
- * user's request) — and puts the Body & Paint block first in the expanded
- * detail, since it's the primary thing worth looking at there. */
-function SaRow({ totals, showBranch, isBp }: { totals: CloseSaPeriodTotals; showBranch: boolean; isBp: boolean }) {
+/** Per-variant column count, for the expanded row's colSpan — must match
+ * exactly how many <td>s SaRow's main <tr> renders for that variant. */
+function columnCount(variant: SaVariant): number {
+  switch (variant) {
+    case "pdi":
+      return 4; // Close SA, ROs, Vehicles, Same Day Delivery
+    case "accessories":
+      return 8; // + Labour/Parts/TGLOSS/Tyre
+    case "bp":
+      return 10; // Close SA, ROs, Vehicles, Labour/Parts/TGLOSS/Tyre/Battery, OTD, SMB Utilization %
+    case "default":
+      return 11; // everything
+  }
+}
+
+/** Each category's own layout (2026-10-24, at the user's request) — see
+ * `SaVariant`'s own doc comment for the general idea. Per variant:
+ * - bp: drops Same Day Delivery/EM60/EM60 OTD (always empty for BP — no real
+ *   EM/PM data), adds its own OTD/SMB Utilization % columns, puts the Body &
+ *   Paint block first in the expanded detail (the primary thing worth
+ *   looking at there), drops the AMC/FS/EM job-mix line and the EM-to-PM
+ *   line (same reason as Same Day Delivery/EM60).
+ * - accessories: drops Battery/EM60/EM60 OTD columns, drops the whole Job
+ *   mix block, drops EM-to-PM, and Parts detail shows only DIY.
+ * - pdi: drops everything past Same Day Delivery (columns and the whole
+ *   expanded-detail grid) — only the Job Desc breakdown stays. */
+function SaRow({ totals, showBranch, variant }: { totals: CloseSaPeriodTotals; showBranch: boolean; variant: SaVariant }) {
   const [expanded, setExpanded] = useState(false);
   const topJobDescs = Object.entries(totals.jobDescCounts).sort((a, b) => b[1] - a[1]);
 
-  const bpBlock =
-    totals.bpRoCount > 0 ? (
-      <div className="text-xs text-fg-subtle">
-        <div>
-          <span className="font-semibold">Body &amp; Paint</span> — {totals.bpRoCount} ROs, Estimate ₹{formatCompact(totals.bpEstimateAmount)} vs Final ₹
-          {formatCompact(totals.bpFinalInvoiceAmount)}
-        </div>
-        <div>Repair Type — {countsSummary(totals.bpRepairTypeCounts) || "—"}</div>
-        <div title="BP Parts ₹ ÷ BP ROs">Parts Gentani: ₹{formatCompact(bpPartsGentani(totals) ?? 0)}</div>
-        <div title="BP Labour ₹ ÷ BP ROs">Service Gentani: ₹{formatCompact(bpLabourGentani(totals) ?? 0)}</div>
-        <div title="BP TGLOSS ₹ ÷ BP ROs">{tglossText("TGLOSS")} Gentani: ₹{formatCompact(bpTglossGentani(totals) ?? 0)}</div>
+  const showSameDayDelivery = variant !== "bp";
+  const showMoneyCols = variant !== "pdi"; // Labour ₹/Parts ₹/TGLOSS ₹/Tyre
+  const showBattery = variant === "default" || variant === "bp";
+  const showEm60Cols = variant === "default";
+  const showBpOtdSmbCols = variant === "bp";
+
+  const showDetailGrid = variant !== "pdi";
+  const showJobMix = variant === "default" || variant === "bp";
+  const showAmcFsEm = variant === "default";
+  const showLabourDetail = variant !== "pdi";
+  const showEmToPm = variant === "default";
+  const showPartsDetail = variant !== "pdi";
+  const showFullPartsDetail = variant === "default" || variant === "bp";
+  const showBpBlock = totals.bpRoCount > 0 && variant !== "pdi";
+  const bpBlockFirst = variant === "bp";
+
+  const bpBlock = showBpBlock ? (
+    <div className="text-xs text-fg-subtle">
+      <div>
+        <span className="font-semibold">Body &amp; Paint</span> — {totals.bpRoCount} ROs, Estimate ₹{formatCompact(totals.bpEstimateAmount)} vs Final ₹
+        {formatCompact(totals.bpFinalInvoiceAmount)}
       </div>
-    ) : null;
+      <div>Repair Type — {countsSummary(totals.bpRepairTypeCounts) || "—"}</div>
+      <div title="BP Parts ₹ ÷ BP ROs">Parts Gentani: ₹{formatCompact(bpPartsGentani(totals) ?? 0)}</div>
+      <div title="BP Labour ₹ ÷ BP ROs">Service Gentani: ₹{formatCompact(bpLabourGentani(totals) ?? 0)}</div>
+      <div title="BP TGLOSS ₹ ÷ BP ROs">{tglossText("TGLOSS")} Gentani: ₹{formatCompact(bpTglossGentani(totals) ?? 0)}</div>
+    </div>
+  ) : null;
+
+  const detailColCount = (showJobMix ? 1 : 0) + (showLabourDetail ? 1 : 0) + (showPartsDetail ? 1 : 0);
+  const gridColsClass = detailColCount >= 3 ? "sm:grid-cols-3" : detailColCount === 2 ? "sm:grid-cols-2" : "sm:grid-cols-1";
 
   return (
     <>
@@ -223,21 +267,27 @@ function SaRow({ totals, showBranch, isBp }: { totals: CloseSaPeriodTotals; show
         </td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.roCount))}</td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.distinctVehicleCount))}</td>
-        {isBp ? null : (
+        {showSameDayDelivery ? (
           <td className="px-3 py-2 align-top" title="Job Open Date = Invoice Date, same calendar day">
             {sameDayDeliveryCell(totals)}
           </td>
-        )}
-        <td className="px-3 py-2 align-top">{moneyCell(totals.labourRevenueAfter)}</td>
-        <td className="px-3 py-2 align-top">{partsCell(totals)}</td>
-        <td className="px-3 py-2 align-top">{moneyCell(totals.vasBillRevenue)}</td>
-        <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
-          {cell(formatNumber(totals.tyreCount))}
-        </td>
-        <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
-          {cell(formatNumber(totals.batteryCount))}
-        </td>
-        {isBp ? (
+        ) : null}
+        {showMoneyCols ? (
+          <>
+            <td className="px-3 py-2 align-top">{moneyCell(totals.labourRevenueAfter)}</td>
+            <td className="px-3 py-2 align-top">{partsCell(totals)}</td>
+            <td className="px-3 py-2 align-top">{moneyCell(totals.vasBillRevenue)}</td>
+            <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
+              {cell(formatNumber(totals.tyreCount))}
+            </td>
+          </>
+        ) : null}
+        {showBattery ? (
+          <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
+            {cell(formatNumber(totals.batteryCount))}
+          </td>
+        ) : null}
+        {showBpOtdSmbCols ? (
           <>
             <td className="px-3 py-2 align-top" title="Handover from midnight 2 days before the Promise date, through the Promise Delivery Date/Time">
               {bpOtdCell(totals)}
@@ -246,60 +296,73 @@ function SaRow({ totals, showBranch, isBp }: { totals: CloseSaPeriodTotals; show
               {bpSmbUtilizationCell(totals)}
             </td>
           </>
-        ) : (
+        ) : null}
+        {showEm60Cols ? (
           <>
             <td className="px-3 py-2 align-top">{cell(formatNumber(totals.em60Count))}</td>
             <td className="px-3 py-2 align-top" title="Job Open → Invoice at or under 60 minutes">
               {em60OtdCell(totals)}
             </td>
           </>
-        )}
+        ) : null}
       </tr>
       {expanded ? (
         <tr className="border-t border-border-subtle bg-surface-2/40">
-          <td colSpan={isBp ? 10 : 11} className="px-3 py-3">
-            {isBp ? <div className="mb-2">{bpBlock}</div> : null}
-            <div className="grid grid-cols-1 gap-3 text-xs text-fg-subtle sm:grid-cols-3">
-              <div>
-                <div className="mb-1 font-semibold text-fg-subtle">Job mix</div>
-                {/* FS = Free Service, confirmed 2026-10-23 to be the same
-                    thing already tracked as fmscCount (FMSC Flag) — just
-                    relabeled to match the term used elsewhere. */}
-                {isBp ? null : <div>AMC: {totals.amcCount}, FS: {totals.fmscCount}, EM: {totals.emCount}</div>}
-                <div>Job Type — {countsSummary(totals.jobTypeCounts) || "—"}</div>
-                {totals.repeatJobCount > 0 ? (
-                  <div title="Same car, same Job Code, within 30 days — generic/catch-all codes excluded">
-                    Repeat jobs (30-day): {totals.repeatJobCount}
+          <td colSpan={columnCount(variant)} className="px-3 py-3">
+            {bpBlockFirst && bpBlock ? <div className="mb-2">{bpBlock}</div> : null}
+            {showDetailGrid ? (
+              <div className={`grid grid-cols-1 gap-3 text-xs text-fg-subtle ${gridColsClass}`}>
+                {showJobMix ? (
+                  <div>
+                    <div className="mb-1 font-semibold text-fg-subtle">Job mix</div>
+                    {/* FS = Free Service, confirmed 2026-10-23 to be the same
+                        thing already tracked as fmscCount (FMSC Flag) — just
+                        relabeled to match the term used elsewhere. */}
+                    {showAmcFsEm ? <div>AMC: {totals.amcCount}, FS: {totals.fmscCount}, EM: {totals.emCount}</div> : null}
+                    <div>Job Type — {countsSummary(totals.jobTypeCounts) || "—"}</div>
+                    {totals.repeatJobCount > 0 ? (
+                      <div title="Same car, same Job Code, within 30 days — generic/catch-all codes excluded">
+                        Repeat jobs (30-day): {totals.repeatJobCount}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {showLabourDetail ? (
+                  <div>
+                    <div className="mb-1 font-semibold text-fg-subtle">Labour Detail</div>
+                    <div>Wheel Balancing: {totals.wheelBalancingCount}, Wheel Alignment: {totals.wheelAlignmentCount}</div>
+                    <div>Brake Skimming: {totals.brakeSkimmingCount}, Evaporator Cleaning: {totals.evaporatorCleaningCount}</div>
+                    <div>Mech Care: {totals.mechCareCount}</div>
+                    <div title="Distinct ROs with at least one TGLOSS job code — 'pitched' means sold, not offered-and-declined">
+                      Pitched: {totals.tglossPitchedRoCount}/{totals.roCount}
+                      {tglossPitchRatePct(totals) !== null ? ` (${Math.round(tglossPitchRatePct(totals)! * 100)}%)` : ""}
+                    </div>
+                    <div title="TGLOSS ₹ ÷ ROs that actually had a TGLOSS job (not ÷ all ROs)">
+                      {tglossText("TGLOSS")} Gentani (vs pitched): ₹{formatCompact(tglossGentaniVsPitched(totals) ?? 0)}
+                    </div>
+                    {showEmToPm ? (
+                      <div title="EM-flagged ROs (any tier) ÷ total Periodic Maintenance ROs">
+                        EM-to-PM: {totals.pmRoCount > 0 ? `${totals.emCount}/${totals.pmRoCount} (${Math.round((emToPmPct(totals) ?? 0) * 100)}%)` : "—"}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {showPartsDetail ? (
+                  <div>
+                    <div className="mb-1 font-semibold text-fg-subtle">Parts detail (matched ROs only)</div>
+                    {showFullPartsDetail ? (
+                      <>
+                        <div>Engine Flush: {totals.engineFlushCount}, Injector Cleaner: {totals.injectorCleanerCount}</div>
+                        <div>Synthetic Oil: {totals.syntheticOilLtrs.toFixed(1)} L, Brake Cleaning: {totals.brakeCleaningCount}</div>
+                        <div>Brake Cleaning Labour: {totals.brakeCleaningLabourCount}</div>
+                      </>
+                    ) : null}
+                    <div>DIY: {totals.diyCount} (₹{formatCompact(totals.diyRevenue)})</div>
                   </div>
                 ) : null}
               </div>
-              <div>
-                <div className="mb-1 font-semibold text-fg-subtle">{tglossText("TGLOSS detail")}</div>
-                <div>Wheel Balancing: {totals.wheelBalancingCount}, Wheel Alignment: {totals.wheelAlignmentCount}</div>
-                <div>Brake Skimming: {totals.brakeSkimmingCount}, Evaporator Cleaning: {totals.evaporatorCleaningCount}</div>
-                <div>Mech Care: {totals.mechCareCount}</div>
-                <div title="Distinct ROs with at least one TGLOSS job code — 'pitched' means sold, not offered-and-declined">
-                  Pitched: {totals.tglossPitchedRoCount}/{totals.roCount}
-                  {tglossPitchRatePct(totals) !== null ? ` (${Math.round(tglossPitchRatePct(totals)! * 100)}%)` : ""}
-                </div>
-                <div title="TGLOSS ₹ ÷ ROs that actually had a TGLOSS job (not ÷ all ROs)">
-                  {tglossText("TGLOSS")} Gentani (vs pitched): ₹{formatCompact(tglossGentaniVsPitched(totals) ?? 0)}
-                </div>
-                {isBp ? null : (
-                  <div title="EM-flagged ROs (any tier) ÷ total Periodic Maintenance ROs">
-                    EM-to-PM: {totals.pmRoCount > 0 ? `${totals.emCount}/${totals.pmRoCount} (${Math.round((emToPmPct(totals) ?? 0) * 100)}%)` : "—"}
-                  </div>
-                )}
-              </div>
-              <div>
-                <div className="mb-1 font-semibold text-fg-subtle">Parts detail (matched ROs only)</div>
-                <div>Engine Flush: {totals.engineFlushCount}, Injector Cleaner: {totals.injectorCleanerCount}</div>
-                <div>Synthetic Oil: {totals.syntheticOilLtrs.toFixed(1)} L, Brake Cleaning: {totals.brakeCleaningCount}</div>
-                <div>Brake Cleaning Labour: {totals.brakeCleaningLabourCount}</div>
-                <div>DIY: {totals.diyCount} (₹{formatCompact(totals.diyRevenue)})</div>
-              </div>
-            </div>
-            {isBp ? null : <div className="mt-2">{bpBlock}</div>}
+            ) : null}
+            {!bpBlockFirst && bpBlock ? <div className="mt-2">{bpBlock}</div> : null}
             <div className="mt-3 max-w-xl">
               <div className="mb-1 text-xs font-semibold text-fg-subtle">Job Desc breakdown ({topJobDescs.length} distinct)</div>
               {topJobDescs.length > 0 ? (
@@ -351,7 +414,7 @@ export function CloseSaAnalyticsTable({
   defaultOpen,
   subtitle,
   title = "SA Analytics",
-  isBp = false,
+  variant = "default",
 }: {
   totals: CloseSaPeriodTotals[];
   /** Shows each SA's branch(es) next to their name — /branches (HQ, company-wide) needs this; /dashboard (one branch) doesn't. */
@@ -361,11 +424,9 @@ export function CloseSaAnalyticsTable({
   /** Lets a category section (GS/BP/Accessories/PDI) distinguish itself —
    * see sa-analytics-sections.tsx. Defaults to the plain title. */
   title?: string;
-  /** The BP category's own layout (2026-10-24, at the user's request): drops
-   * Same Day Delivery/EM60/EM60 OTD (always empty for BP — no real EM/PM
-   * data) and puts the Body & Paint block first in the expanded detail. See
-   * SaRow's own doc comment. */
-  isBp?: boolean;
+  /** Each category's own column/expanded-detail layout — see SaVariant and
+   * SaRow's own doc comments. Defaults to GS's full layout. */
+  variant?: SaVariant;
 }) {
   const [sort, setSort] = useState<SortState>(null);
 
@@ -395,6 +456,12 @@ export function CloseSaAnalyticsTable({
     );
   }
 
+  const showSameDayDelivery = variant !== "bp";
+  const showMoneyCols = variant !== "pdi";
+  const showBattery = variant === "default" || variant === "bp";
+  const showEm60Cols = variant === "default";
+  const showBpOtdSmbCols = variant === "bp";
+
   return (
     <CollapsibleCard
       title={title}
@@ -409,28 +476,33 @@ export function CloseSaAnalyticsTable({
               <SortableHeader label="Close SA" sortKey="closeSaName" sort={sort} onClick={handleHeaderClick} sticky />
               <SortableHeader label="ROs" sortKey="roCount" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Vehicles" sortKey="distinctVehicleCount" sort={sort} onClick={handleHeaderClick} />
-              {isBp ? null : <SortableHeader label="Same Day Delivery" sortKey="sameDayDeliveryRate" sort={sort} onClick={handleHeaderClick} />}
-              <SortableHeader label="Labour ₹" sortKey="labourRevenueAfter" sort={sort} onClick={handleHeaderClick} />
-              <SortableHeader label="Parts ₹ (matched)" sortKey="partsRevenue" sort={sort} onClick={handleHeaderClick} />
-              <SortableHeader label={tglossText("TGLOSS ₹")} sortKey="vasBillRevenue" sort={sort} onClick={handleHeaderClick} />
-              <SortableHeader label="Tyre" sortKey="tyreCount" sort={sort} onClick={handleHeaderClick} />
-              <SortableHeader label="Battery" sortKey="batteryCount" sort={sort} onClick={handleHeaderClick} />
-              {isBp ? (
+              {showSameDayDelivery ? <SortableHeader label="Same Day Delivery" sortKey="sameDayDeliveryRate" sort={sort} onClick={handleHeaderClick} /> : null}
+              {showMoneyCols ? (
+                <>
+                  <SortableHeader label="Labour ₹" sortKey="labourRevenueAfter" sort={sort} onClick={handleHeaderClick} />
+                  <SortableHeader label="Parts ₹ (matched)" sortKey="partsRevenue" sort={sort} onClick={handleHeaderClick} />
+                  <SortableHeader label={tglossText("TGLOSS ₹")} sortKey="vasBillRevenue" sort={sort} onClick={handleHeaderClick} />
+                  <SortableHeader label="Tyre" sortKey="tyreCount" sort={sort} onClick={handleHeaderClick} />
+                </>
+              ) : null}
+              {showBattery ? <SortableHeader label="Battery" sortKey="batteryCount" sort={sort} onClick={handleHeaderClick} /> : null}
+              {showBpOtdSmbCols ? (
                 <>
                   <SortableHeader label="OTD" sortKey="bpOtdRate" sort={sort} onClick={handleHeaderClick} />
                   <SortableHeader label="SMB Utilization %" sortKey="bpSmbUtilizationRate" sort={sort} onClick={handleHeaderClick} />
                 </>
-              ) : (
+              ) : null}
+              {showEm60Cols ? (
                 <>
                   <SortableHeader label="EM60" sortKey="em60Count" sort={sort} onClick={handleHeaderClick} />
                   <SortableHeader label="EM60 OTD" sortKey="em60OtdRate" sort={sort} onClick={handleHeaderClick} />
                 </>
-              )}
+              ) : null}
             </tr>
           </thead>
           <tbody>
             {sortedTotals.map((t) => (
-              <SaRow key={`${t.branches.join(",")}|${t.closeSaName}`} totals={t} showBranch={showBranch} isBp={isBp} />
+              <SaRow key={`${t.branches.join(",")}|${t.closeSaName}`} totals={t} showBranch={showBranch} variant={variant} />
             ))}
           </tbody>
         </table>
