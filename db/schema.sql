@@ -1503,3 +1503,25 @@ create table if not exists unique_vin_vas_daily (
   primary key (date, branch)
 );
 alter table close_sa_analytics_daily drop column if exists bp_same_day_delivery_count;
+
+-- Total Car Care Treatments (2026-10-24, at the user's request, for the
+-- Revenue Stream Excel export's rows 97/98 — the template's own
+-- "(w/o Mech Care)" wording was dropped from those labels the same day,
+-- since this now counts every TGLOSS treatment, Mech Care included).
+-- Counts every TGLOSS-priced job-code LINE billed (VAS_PRICE_BY_JOB_CODE),
+-- not deduped per RO — an RO with 3 TGLOSS treatments on it counts as 3 —
+-- on ROs NOT closed by an accessories-staff SA, GS + BP Service Info
+-- combined, one count per (date, branch). Same precompute-at-upload-time
+-- pattern as unique_vin_vas_daily/vas_revenue_real above (never a live
+-- raw_upload_rows join in report.ts's hot path). Recomputed in full on
+-- every Service Info (GS or BP) upload touching that date — see
+-- total-car-care/recompute.ts. MTD ("for the month") is the sum of each
+-- day's count here, same accumulation pattern as every other MTD figure
+-- in this dashboard.
+create table if not exists total_car_care_treatments_daily (
+  date date not null,
+  branch text not null,
+  count integer not null default 0,
+  computed_at timestamptz not null default now(),
+  primary key (date, branch)
+);

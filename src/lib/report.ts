@@ -22,6 +22,8 @@ import type { VasRevenueRealSnapshot } from "./vas-revenue-real/store";
 import { VAS_REAL_CUTOVER_DATE } from "./vas-revenue-real/compute";
 import { loadUniqueVinVasForDate, loadAllUniqueVinVasForMonthUpTo } from "./unique-vin-vas/store";
 import type { UniqueVinVasSnapshot } from "./unique-vin-vas/store";
+import { loadTotalCarCareTreatmentsForDate, loadAllTotalCarCareTreatmentsForMonthUpTo } from "./total-car-care/store";
+import type { TotalCarCareSnapshot } from "./total-car-care/store";
 
 const FIXED_TGLOSS_SERVICE_TARGET = 0.38;
 
@@ -106,6 +108,15 @@ export type BranchReport = {
   // not true percentages.
   uniqueVinVasForTheDay: number | null;
   uniqueVinVasAchievementForTheMonth: number | null;
+
+  // Total Car Care Treatments (2026-10-24, at the user's request, for the
+  // same export's rows 97/98 — label there dropped "(w/o Mech Care)" the
+  // same day). Every TGLOSS-priced job-code LINE billed, not deduped per
+  // RO (an RO with 3 TGLOSS treatments counts as 3) — see total-car-care/
+  // compute.ts. Same "AchievementForTheMonth is really just the raw MTD
+  // sum" convention as uniqueVinVasAchievementForTheMonth above.
+  totalCarCareTreatmentsForTheDay: number | null;
+  totalCarCareTreatmentsAchievementForTheMonth: number | null;
 
   // TGLOSS (T-Gloss/Lexus revenue) — Target = GUS RO MTD × 38% × Rs 3,000
   // (see VAS_BILL_TARGET_RO_SHARE/PER_RO above); Achievement = Service
@@ -462,7 +473,9 @@ function computeBranchReport(
   cancelledAccessoriesAdjustment: CancelledAccessoriesAdjustment | undefined,
   crossMonthReplacementAdjustment: CrossMonthReplacementAdjustment | undefined,
   uniqueVinVasToday: UniqueVinVasSnapshot | undefined,
-  uniqueVinVasMonth: UniqueVinVasSnapshot[]
+  uniqueVinVasMonth: UniqueVinVasSnapshot[],
+  totalCarCareToday: TotalCarCareSnapshot | undefined,
+  totalCarCareMonth: TotalCarCareSnapshot[]
 ): BranchReport {
   const y = (key: keyof BaToolBranchRow) => (yesterday ? num(yesterday[key] as number | string | null) : null);
   const t = (key: keyof BaToolBranchRow) => (today ? num(today[key] as number | string | null) : null);
@@ -585,6 +598,9 @@ function computeBranchReport(
 
     uniqueVinVasForTheDay: uniqueVinVasToday?.count ?? null,
     uniqueVinVasAchievementForTheMonth: sumBy(uniqueVinVasMonth, (s) => s.count),
+
+    totalCarCareTreatmentsForTheDay: totalCarCareToday?.count ?? null,
+    totalCarCareTreatmentsAchievementForTheMonth: sumBy(totalCarCareMonth, (s) => s.count),
 
     vasBillTarget,
     vasAchievementForTheDay: vasRealCutoverActive ? (vasRevenueRealToday ?? null) : (serviceInfoToday?.counts.vasRevenue ?? null),
@@ -723,6 +739,8 @@ export async function buildReport(date: string): Promise<Report | null> {
     crossMonthReplacementAdjustment,
     uniqueVinVasTodayList,
     uniqueVinVasMonthList,
+    totalCarCareTodayList,
+    totalCarCareMonthList,
   ] = await Promise.all([
     loadPreviousSnapshot(date),
     loadCombinedServiceInfoSnapshotsForDate(date),
@@ -739,6 +757,8 @@ export async function buildReport(date: string): Promise<Report | null> {
     loadCrossMonthReplacementAdjustmentForMonth(date),
     loadUniqueVinVasForDate(date),
     loadAllUniqueVinVasForMonthUpTo(date),
+    loadTotalCarCareTreatmentsForDate(date),
+    loadAllTotalCarCareTreatmentsForMonthUpTo(date),
   ]);
 
   // Only needed for the !today branch-discovery set below — derived from the
@@ -753,6 +773,8 @@ export async function buildReport(date: string): Promise<Report | null> {
   const partSaleMonth = groupByBranch(partSaleMonthList);
   const uniqueVinVasToday = byBranch(uniqueVinVasTodayList);
   const uniqueVinVasMonth = groupByBranch(uniqueVinVasMonthList);
+  const totalCarCareToday = byBranch(totalCarCareTodayList);
+  const totalCarCareMonth = groupByBranch(totalCarCareMonthList);
 
   // Fold an online store's own Part Sale Report (e.g. CO01C's) into its
   // parent's MTD figures (e.g. CO01A's) — same "folds into the parent"
@@ -826,7 +848,9 @@ export async function buildReport(date: string): Promise<Report | null> {
         cancelledAccessoriesAdjustment.get(branch),
         crossMonthReplacementAdjustment.get(branch),
         uniqueVinVasToday.get(branch),
-        uniqueVinVasMonth.get(branch) ?? []
+        uniqueVinVasMonth.get(branch) ?? [],
+        totalCarCareToday.get(branch),
+        totalCarCareMonth.get(branch) ?? []
       )
     );
 
@@ -893,7 +917,9 @@ export async function buildReport(date: string): Promise<Report | null> {
       cancelledAccessoriesAdjustment.get(branchRow.branch),
       crossMonthReplacementAdjustment.get(branchRow.branch),
       uniqueVinVasToday.get(branchRow.branch),
-      uniqueVinVasMonth.get(branchRow.branch) ?? []
+      uniqueVinVasMonth.get(branchRow.branch) ?? [],
+      totalCarCareToday.get(branchRow.branch),
+      totalCarCareMonth.get(branchRow.branch) ?? []
     );
     const onlineStoreBreakdown = onlineStoreBreakdowns.get(branchRow.branch);
     return onlineStoreBreakdown ? { ...branchReport, onlineStoreBreakdown } : branchReport;

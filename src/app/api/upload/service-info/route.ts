@@ -10,6 +10,7 @@ import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/uploa
 import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
 import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
 import { recomputeUniqueVinVas } from "@/lib/unique-vin-vas/recompute";
+import { recomputeTotalCarCareTreatments } from "@/lib/total-car-care/recompute";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -131,6 +132,7 @@ export async function POST(request: Request) {
   await recomputeVasRevenueReal(admin.branch, date);
   await recomputeCloseSaAnalytics(admin.branch, date);
   await recomputeUniqueVinVas(admin.branch, date);
+  await recomputeTotalCarCareTreatments(admin.branch, date);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }
