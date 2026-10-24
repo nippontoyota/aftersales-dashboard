@@ -470,7 +470,7 @@ export function CloseSaAnalyticsTable({
       clip
     >
       <div className="max-h-[calc(100dvh-15rem)] overflow-auto">
-        <table className="min-w-full text-xs">
+        <table className="text-xs">
           <thead className="text-left text-fg-subtle [&>tr>th]:sticky [&>tr>th]:top-0 [&>tr>th]:z-10 [&>tr>th]:bg-surface-2 [&>tr>th]:shadow-[inset_0_-1px_0_var(--color-border)]">
             <tr>
               <SortableHeader label="Close SA" sortKey="closeSaName" sort={sort} onClick={handleHeaderClick} sticky />
