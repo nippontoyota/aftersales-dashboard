@@ -8,6 +8,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { loadDashboardData, loadNavState } from "@/lib/dashboard-data";
 import { NoDataForDate } from "@/components/no-data-for-date";
 import { SaAnalyticsSections } from "@/components/sa-analytics-sections";
+import { SaBranchSelect } from "@/components/sa-branch-select";
 import { aggregateCloseSaRows, mergeRepeatJobCounts } from "@/lib/close-sa-analytics/aggregate";
 import { findRepeatJobs, repeatJobCountsBySa } from "@/lib/close-sa-analytics/repeat-jobs";
 import { loadCloseSaAnalyticsForAllBranches } from "@/lib/close-sa-analytics/store";
@@ -16,7 +17,7 @@ import { BranchPerformanceHeatmap } from "../dashboard/branch-performance-heatma
 import { RevenuePerVehicleTable } from "../dashboard/revenue-per-vehicle-table";
 import { StockServiceRateTable } from "../dashboard/stock-service-rate-table";
 
-export default async function BranchesPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string }> }) {
+export default async function BranchesPage({ searchParams }: { searchParams: Promise<{ date?: string; region?: string; saBranch?: string }> }) {
   const admin = await getCurrentAdmin();
   if (admin?.role === "vp_service") redirect("/vp");
   if (admin?.role === "ceo") redirect("/ceo");
@@ -44,7 +45,7 @@ async function BranchesContent({
   searchParams,
   admin,
 }: {
-  searchParams: Promise<{ date?: string; region?: string }>;
+  searchParams: Promise<{ date?: string; region?: string; saBranch?: string }>;
   admin: AdminAccount;
 }) {
   const params = await searchParams;
@@ -69,7 +70,13 @@ async function BranchesContent({
     loadCloseSaAnalyticsForAllBranches(monthStart, data.date),
     listAllAccessoriesStaff(),
   ]);
-  const closeSaTotals = aggregateCloseSaRows(closeSaRows);
+  const closeSaTotalsAll = aggregateCloseSaRows(closeSaRows);
+
+  // SA Analytics' own branch filter (2026-10-24, at the user's request) —
+  // deliberately separate from the page's region selector above, which never
+  // touched SA Analytics (always showed all 18 branches' SAs together).
+  const saBranch = params.saBranch && params.saBranch !== "All" ? params.saBranch : null;
+  const closeSaTotals = saBranch ? closeSaTotalsAll.filter((t) => t.branches[0] === saBranch) : closeSaTotalsAll;
 
   const accessoriesStaffNamesByBranch = new Map<string, string[]>();
   for (const s of allAccessoriesStaff) {
@@ -79,7 +86,8 @@ async function BranchesContent({
 
   // Same Car Same Work Repeat is a live cross-date check, not part of the
   // daily snapshot (see repeat-jobs.ts) — one query per branch actually
-  // involved this period, not all 18 regardless.
+  // involved this period (and now, actually displayed — filtering saBranch
+  // first means a single-branch selection only queries that one branch).
   const branchesInvolved = [...new Set(closeSaTotals.flatMap((t) => t.branches))];
   const repeatFlagsByBranch = await Promise.all(branchesInvolved.map((b) => findRepeatJobs(b, monthStart, data.date)));
   const repeatCounts = repeatJobCountsBySa(repeatFlagsByBranch.flat());
@@ -105,11 +113,21 @@ async function BranchesContent({
         <RevenuePerVehicleTable branches={data.filteredBranches} />
         <StockServiceRateTable branches={data.filteredBranches} />
         <BranchPerformanceHeatmap branches={data.filteredBranches} collapsible />
+        <div className="flex items-center justify-end gap-2 text-xs text-fg-subtle">
+          <span>SA Analytics branch:</span>
+          <SaBranchSelect
+            selected={saBranch ?? "All"}
+            date={data.date}
+            basePath="/branches"
+            extraParams={data.region !== "All" ? { region: data.region } : undefined}
+            branches={data.report.branches.map((b) => b.branch)}
+          />
+        </div>
         <SaAnalyticsSections
           totals={closeSaTotals}
           accessoriesStaffNamesByBranch={accessoriesStaffNamesByBranch}
-          showBranch
-          subtitlePrefix={`Month-to-date for ${data.date}, company-wide`}
+          showBranch={!saBranch}
+          subtitlePrefix={`Month-to-date for ${data.date}, ${saBranch ?? "company-wide"}`}
         />
       </div>
     </div>

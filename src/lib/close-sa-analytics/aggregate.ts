@@ -94,6 +94,9 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
         bpFinalInvoiceAmount: 0,
         bpEstimateAmount: 0,
         bpRoCount: 0,
+        bpWorkOrderCount: 0,
+        bpOtdEligibleCount: 0,
+        bpOtdOnTimeCount: 0,
         repeatJobCount: 0,
       };
       byKey.set(key, acc);
@@ -148,6 +151,9 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
     acc.bpFinalInvoiceAmount += r.bpFinalInvoiceAmount;
     acc.bpEstimateAmount += r.bpEstimateAmount;
     acc.bpRoCount += r.bpRoCount;
+    acc.bpWorkOrderCount += r.bpWorkOrderCount;
+    acc.bpOtdEligibleCount += r.bpOtdEligibleCount;
+    acc.bpOtdOnTimeCount += r.bpOtdOnTimeCount;
   }
 
   for (const [key, acc] of byKey) {
@@ -206,6 +212,22 @@ export function bpLabourGentani(totals: CloseSaPeriodTotals): number | null {
 export function bpTglossGentani(totals: CloseSaPeriodTotals): number | null {
   if (totals.bpRoCount === 0) return null;
   return totals.bpTglossRevenue / totals.bpRoCount;
+}
+
+/** Unique Work Order (workOrdNo) ÷ unique RO — "SMB Utilization %", null
+ * when the SA has no BP ROs at all (not every BP RO gets a Work Order, so
+ * this is usually under 100%). */
+export function bpSmbUtilizationPct(totals: CloseSaPeriodTotals): number | null {
+  if (totals.bpRoCount === 0) return null;
+  return totals.bpWorkOrderCount / totals.bpRoCount;
+}
+
+/** Handover (NINETH_SMS_SEND_DT) landing in [Promise − 24h, Promise] ÷ ROs
+ * where both that and Promise Delivery Date/Time parsed — null when none
+ * did (real coverage is ~87%, not every RO has both fields on file). */
+export function bpOtdPct(totals: CloseSaPeriodTotals): number | null {
+  if (totals.bpOtdEligibleCount === 0) return null;
+  return totals.bpOtdOnTimeCount / totals.bpOtdEligibleCount;
 }
 
 export type SaCategory = "GS" | "BP" | "Accessories" | "PDI";

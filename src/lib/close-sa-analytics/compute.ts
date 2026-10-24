@@ -93,6 +93,27 @@ const BP_FINAL_INV_AMT_COLUMN = "FINAL_INV_AMT";
 /** Confirmed real values 2026-10-23: "1.Grooming Repair", "2.Superlight
  * Repair", "3.Light Repair", "4.Medium Repair", "5.Heavy Repair" — BP only. */
 const BP_REP_TYPE_COLUMN = "BP Rep Type";
+/** BP's own Work Order number (e.g. "BPP260323601") — distinct from Job
+ * Order No (the RO, e.g. "BPJ2603236"). Confirmed 2026-10-24 against real
+ * CO01A data: never more than one Work Order per RO, but not every RO has
+ * one (342 distinct ROs vs 317 distinct Work Orders, Oct 2026). */
+const WORK_ORDER_NO_COLUMN = "workOrdNo";
+/** BP only — two separate columns (unlike Job Open/Invoice Date's combined
+ * date+time elsewhere). Time is 4-digit zero-padded "HHMM", no colon
+ * (confirmed against real data: "0900".."2300", 47 distinct values). */
+const PROMISE_DELIVERY_DATE_COLUMN = "Promise Delivery Date";
+const PROMISE_DELIVERY_TIME_COLUMN = "Promise Delivery Time";
+/** The 9th (final) customer SMS's send timestamp — confirmed 2026-10-24
+ * against real data to track within minutes of Invoice Date across every
+ * sample checked, i.e. it's sent right at vehicle handover. Used as BP OTD's
+ * "actually given over" timestamp, at the user's explicit direction (over
+ * Invoice Date, which also works but wasn't what they asked for). Raw
+ * column name's spelling ("NINETH") is the DMS export's own, not a typo. */
+const NINTH_SMS_SEND_DT_COLUMN = "NINETH_SMS_SEND_DT";
+/** BP OTD's on-time window width, confirmed with the user 2026-10-24: handover
+ * must land in [Promise − 24h, Promise] — arriving more than 24h early fails
+ * this just like arriving late does, deliberately not "early is fine". */
+const BP_OTD_WINDOW_MINUTES = 24 * 60;
 
 const JOB_OPEN_DATE_COLUMN = "Job Open Date";
 const JOB_OPEN_TIME_COLUMN = "Job Open Time";
@@ -222,6 +243,45 @@ function parseServiceInfoDate(dateStr: unknown): string | null {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+function parseMmDdYy(dateStr: unknown): { year: number; month: number; day: number } | null {
+  const dm = normalizeText(dateStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (!dm) return null;
+  const month = Number(dm[1]);
+  const day = Number(dm[2]);
+  const year = dm[3].length === 2 ? 2000 + Number(dm[3]) : Number(dm[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year, month, day };
+}
+
+/** BP's Promise Delivery Date + Time (separate columns, time as zero-padded
+ * "HHMM" with no colon — see PROMISE_DELIVERY_TIME_COLUMN's doc comment).
+ * Minutes since epoch, or null if either side didn't parse. */
+function parsePromiseDeliveryAt(dateValue: unknown, timeValue: unknown): number | null {
+  const d = parseMmDdYy(dateValue);
+  const tm = normalizeText(timeValue).match(/^(\d{2})(\d{2})$/);
+  if (!d || !tm) return null;
+  const hour = Number(tm[1]);
+  const minute = Number(tm[2]);
+  if (hour > 23 || minute > 59) return null;
+  return Date.UTC(d.year, d.month - 1, d.day, hour, minute) / 60_000;
+}
+
+/** "MM/DD/YYYY HH:MM" combined date+time — NINETH_SMS_SEND_DT's own format
+ * (space-separated, colon time), distinct from every other date/time column
+ * in this module. Minutes since epoch, or null if unparseable/missing. */
+function parseCombinedDateTime(value: unknown): number | null {
+  const s = normalizeText(value);
+  const spaceIdx = s.indexOf(" ");
+  if (spaceIdx < 0) return null;
+  const d = parseMmDdYy(s.slice(0, spaceIdx));
+  const tm = s.slice(spaceIdx + 1).match(/^(\d{1,2}):(\d{2})$/);
+  if (!d || !tm) return null;
+  const hour = Number(tm[1]);
+  const minute = Number(tm[2]);
+  if (hour > 23 || minute > 59) return null;
+  return Date.UTC(d.year, d.month - 1, d.day, hour, minute) / 60_000;
+}
+
 export type CloseSaDailyMetrics = {
   roCount: number;
   /** Every distinct Vin no for this SA's ROs that day — kept as the actual
@@ -290,6 +350,20 @@ export type CloseSaDailyMetrics = {
   bpFinalInvoiceAmount: number;
   bpEstimateAmount: number;
   bpRoCount: number;
+  /** Distinct BP Work Order numbers (workOrdNo) — BP SMB Utilization %'s
+   * numerator (2026-10-24, at the user's request: unique Work Order ÷ unique
+   * RO). Not every RO gets a Work Order created, so always ≤ bpRoCount. */
+  bpWorkOrderCount: number;
+  /** BP ROs where both Promise Delivery Date/Time and the handover SMS
+   * (NINETH_SMS_SEND_DT — confirmed 2026-10-24 to track within minutes of
+   * Invoice Date, i.e. the actual handover moment) parsed — denominator for
+   * BP OTD%. Real coverage is ~87% (checked CO01A, Oct 2026), so this is
+   * usually under bpRoCount. */
+  bpOtdEligibleCount: number;
+  /** Of bpOtdEligibleCount, how many had the handover land inside [Promise
+   * − 24h, Promise] — confirmed with the user 2026-10-24: arriving more than
+   * 24h before the promise fails this just like arriving late does. */
+  bpOtdOnTimeCount: number;
 };
 
 function emptyMetrics(): CloseSaDailyMetrics {
@@ -339,6 +413,9 @@ function emptyMetrics(): CloseSaDailyMetrics {
     bpFinalInvoiceAmount: 0,
     bpEstimateAmount: 0,
     bpRoCount: 0,
+    bpWorkOrderCount: 0,
+    bpOtdEligibleCount: 0,
+    bpOtdOnTimeCount: 0,
   };
 }
 
@@ -385,6 +462,14 @@ type RoInfo = {
    * convention as em60DurationMinutes). */
   sameDayDelivery: boolean | null;
   isBp: boolean;
+  /** BP's own Work Order number — "" when absent (not every RO gets one). */
+  workOrdNo: string;
+  /** Promise Delivery Date+Time, minutes since epoch — null if either side
+   * didn't parse (BP only; always null on a GS row, no such columns). */
+  bpPromiseAt: number | null;
+  /** NINETH_SMS_SEND_DT ("vehicle ready" SMS), minutes since epoch — null if
+   * unparseable/missing (BP only). */
+  bpHandoverAt: number | null;
 };
 
 function readRoInfo(row: Record<string, unknown>, isBp: boolean): RoInfo {
@@ -417,6 +502,9 @@ function readRoInfo(row: Record<string, unknown>, isBp: boolean): RoInfo {
     bpRepType: normalizeText(row[BP_REP_TYPE_COLUMN]),
     sameDayDelivery,
     isBp,
+    workOrdNo: normalizeText(row[WORK_ORDER_NO_COLUMN]),
+    bpPromiseAt: parsePromiseDeliveryAt(row[PROMISE_DELIVERY_DATE_COLUMN], row[PROMISE_DELIVERY_TIME_COLUMN]),
+    bpHandoverAt: parseCombinedDateTime(row[NINTH_SMS_SEND_DT_COLUMN]),
   };
 }
 
@@ -480,6 +568,7 @@ export function computeCloseSaAnalytics(
   const vehiclesBySa = new Map<string, Set<string>>();
   const roCountBySa = new Map<string, Set<string>>();
   const bpRoCountBySa = new Map<string, Set<string>>();
+  const bpWorkOrdersBySa = new Map<string, Set<string>>();
   for (const [ro, info] of roInfoByRo) {
     if (!info.closeSaName) continue;
     const m = metricsFor(info.closeSaName);
@@ -518,11 +607,22 @@ export function computeCloseSaAnalytics(
       m.bpFinalInvoiceAmount += info.bpFinalInvAmt;
       m.bpEstimateAmount += info.bpEstAmt;
       if (info.bpRepType) bump(m.bpRepairTypeCounts, info.bpRepType);
+      if (info.workOrdNo) {
+        if (!bpWorkOrdersBySa.has(info.closeSaName)) bpWorkOrdersBySa.set(info.closeSaName, new Set());
+        bpWorkOrdersBySa.get(info.closeSaName)!.add(info.workOrdNo);
+      }
+      if (info.bpPromiseAt !== null && info.bpHandoverAt !== null) {
+        m.bpOtdEligibleCount++;
+        if (info.bpHandoverAt <= info.bpPromiseAt && info.bpHandoverAt >= info.bpPromiseAt - BP_OTD_WINDOW_MINUTES) {
+          m.bpOtdOnTimeCount++;
+        }
+      }
     }
   }
   for (const [name, set] of roCountBySa) metricsFor(name).roCount = set.size;
   for (const [name, set] of vehiclesBySa) metricsFor(name).vehicleVins = [...set];
   for (const [name, set] of bpRoCountBySa) metricsFor(name).bpRoCount = set.size;
+  for (const [name, set] of bpWorkOrdersBySa) metricsFor(name).bpWorkOrderCount = set.size;
 
   // Brake Skimming / PM / TGLOSS-pitched are per distinct RO among matching
   // rows, not per row — tracked separately from the per-row loop.

@@ -6,7 +6,9 @@ import { tglossText } from "./tgloss-text";
 import { formatCompact, formatNumber } from "@/lib/format";
 import {
   bpLabourGentani,
+  bpOtdPct,
   bpPartsGentani,
+  bpSmbUtilizationPct,
   bpTglossGentani,
   em60OtdPct,
   emToPmPct,
@@ -40,7 +42,9 @@ type SortKey =
   | "batteryCount"
   | "em60Count"
   | "em60OtdRate"
-  | "sameDayDeliveryRate";
+  | "sameDayDeliveryRate"
+  | "bpOtdRate"
+  | "bpSmbUtilizationRate";
 type SortState = { key: SortKey; dir: "asc" | "desc" } | null;
 
 function getSortValue(t: CloseSaPeriodTotals, key: SortKey): string | number {
@@ -69,6 +73,10 @@ function getSortValue(t: CloseSaPeriodTotals, key: SortKey): string | number {
       return em60OtdPct(t) ?? -1;
     case "sameDayDeliveryRate":
       return sameDayDeliveryPct(t) ?? -1;
+    case "bpOtdRate":
+      return bpOtdPct(t) ?? -1;
+    case "bpSmbUtilizationRate":
+      return bpSmbUtilizationPct(t) ?? -1;
   }
 }
 
@@ -148,6 +156,33 @@ function sameDayDeliveryCell(totals: CloseSaPeriodTotals) {
   );
 }
 
+/** BP OTD: handover inside [Promise − 24h, Promise] ÷ ROs where both that
+ * and Promise Delivery Date/Time parsed — "—" when neither side was ever
+ * on file for this SA's ROs (real coverage is ~87%, not 100%). */
+function bpOtdCell(totals: CloseSaPeriodTotals) {
+  if (totals.bpOtdEligibleCount === 0) return <div className="whitespace-nowrap text-right text-sm text-fg-faint">—</div>;
+  const pct = bpOtdPct(totals)!;
+  return (
+    <div className="whitespace-nowrap text-right text-sm tabular-nums text-fg" title="Handover (NINETH_SMS_SEND_DT) within 24h before, or at, the Promise Delivery Date/Time">
+      {totals.bpOtdOnTimeCount}/{totals.bpOtdEligibleCount}
+      <span className="ml-1 text-[11px] font-normal text-fg-faint">({Math.round(pct * 100)}%)</span>
+    </div>
+  );
+}
+
+/** Unique Work Order (workOrdNo) ÷ unique BP RO — "—" when the SA has no BP
+ * ROs at all. */
+function bpSmbUtilizationCell(totals: CloseSaPeriodTotals) {
+  if (totals.bpRoCount === 0) return <div className="whitespace-nowrap text-right text-sm text-fg-faint">—</div>;
+  const pct = bpSmbUtilizationPct(totals)!;
+  return (
+    <div className="whitespace-nowrap text-right text-sm tabular-nums text-fg" title="Unique Work Order numbers ÷ unique ROs">
+      {totals.bpWorkOrderCount}/{totals.bpRoCount}
+      <span className="ml-1 text-[11px] font-normal text-fg-faint">({Math.round(pct * 100)}%)</span>
+    </div>
+  );
+}
+
 function countsSummary(counts: Record<string, number>): string {
   return Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
@@ -202,7 +237,16 @@ function SaRow({ totals, showBranch, isBp }: { totals: CloseSaPeriodTotals; show
         <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
           {cell(formatNumber(totals.batteryCount))}
         </td>
-        {isBp ? null : (
+        {isBp ? (
+          <>
+            <td className="px-3 py-2 align-top" title="Handover (NINETH_SMS_SEND_DT) within 24h before, or at, the Promise Delivery Date/Time">
+              {bpOtdCell(totals)}
+            </td>
+            <td className="px-3 py-2 align-top" title="Unique Work Order numbers ÷ unique ROs">
+              {bpSmbUtilizationCell(totals)}
+            </td>
+          </>
+        ) : (
           <>
             <td className="px-3 py-2 align-top">{cell(formatNumber(totals.em60Count))}</td>
             <td className="px-3 py-2 align-top" title="Job Open → Invoice at or under 60 minutes">
@@ -213,7 +257,7 @@ function SaRow({ totals, showBranch, isBp }: { totals: CloseSaPeriodTotals; show
       </tr>
       {expanded ? (
         <tr className="border-t border-border-subtle bg-surface-2/40">
-          <td colSpan={isBp ? 8 : 11} className="px-3 py-3">
+          <td colSpan={isBp ? 10 : 11} className="px-3 py-3">
             {isBp ? <div className="mb-2">{bpBlock}</div> : null}
             <div className="grid grid-cols-1 gap-3 text-xs text-fg-subtle sm:grid-cols-3">
               <div>
@@ -371,7 +415,12 @@ export function CloseSaAnalyticsTable({
               <SortableHeader label={tglossText("TGLOSS ₹")} sortKey="vasBillRevenue" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Tyre" sortKey="tyreCount" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Battery" sortKey="batteryCount" sort={sort} onClick={handleHeaderClick} />
-              {isBp ? null : (
+              {isBp ? (
+                <>
+                  <SortableHeader label="OTD" sortKey="bpOtdRate" sort={sort} onClick={handleHeaderClick} />
+                  <SortableHeader label="SMB Utilization %" sortKey="bpSmbUtilizationRate" sort={sort} onClick={handleHeaderClick} />
+                </>
+              ) : (
                 <>
                   <SortableHeader label="EM60" sortKey="em60Count" sort={sort} onClick={handleHeaderClick} />
                   <SortableHeader label="EM60 OTD" sortKey="em60OtdRate" sort={sort} onClick={handleHeaderClick} />

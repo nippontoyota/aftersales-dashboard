@@ -1525,3 +1525,11 @@ create table if not exists total_car_care_treatments_daily (
   computed_at timestamptz not null default now(),
   primary key (date, branch)
 );
+
+-- BP SMB Utilization % + BP OTD (2026-10-24, at the user's request): unique
+-- Work Order (workOrdNo) ÷ unique RO, and handover (NINETH_SMS_SEND_DT)
+-- landing in [Promise Delivery Date/Time − 24h, Promise] — see compute.ts's
+-- CloseSaDailyMetrics doc comments for the exact rules.
+alter table close_sa_analytics_daily add column if not exists bp_work_order_count integer not null default 0;
+alter table close_sa_analytics_daily add column if not exists bp_otd_eligible_count integer not null default 0;
+alter table close_sa_analytics_daily add column if not exists bp_otd_on_time_count integer not null default 0;
