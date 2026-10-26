@@ -267,11 +267,6 @@ function SaRow({ totals, showBranch, variant }: { totals: CloseSaPeriodTotals; s
         </td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.roCount))}</td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.distinctVehicleCount))}</td>
-        {showSameDayDelivery ? (
-          <td className="px-3 py-2 align-top" title="Job Open Date = Invoice Date, same calendar day">
-            {sameDayDeliveryCell(totals)}
-          </td>
-        ) : null}
         {showMoneyCols ? (
           <>
             <td className="px-3 py-2 align-top">{moneyCell(totals.labourRevenueAfter)}</td>
@@ -285,6 +280,11 @@ function SaRow({ totals, showBranch, variant }: { totals: CloseSaPeriodTotals; s
         {showBattery ? (
           <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
             {cell(formatNumber(totals.batteryCount))}
+          </td>
+        ) : null}
+        {showSameDayDelivery ? (
+          <td className="px-3 py-2 align-top" title="Job Open Date = Invoice Date, same calendar day">
+            {sameDayDeliveryCell(totals)}
           </td>
         ) : null}
         {showBpOtdSmbCols ? (
@@ -476,7 +476,6 @@ export function CloseSaAnalyticsTable({
               <SortableHeader label="Close SA" sortKey="closeSaName" sort={sort} onClick={handleHeaderClick} sticky />
               <SortableHeader label="ROs" sortKey="roCount" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Vehicles" sortKey="distinctVehicleCount" sort={sort} onClick={handleHeaderClick} />
-              {showSameDayDelivery ? <SortableHeader label="Same Day Delivery" sortKey="sameDayDeliveryRate" sort={sort} onClick={handleHeaderClick} /> : null}
               {showMoneyCols ? (
                 <>
                   <SortableHeader label="Labour ₹" sortKey="labourRevenueAfter" sort={sort} onClick={handleHeaderClick} />
@@ -486,6 +485,7 @@ export function CloseSaAnalyticsTable({
                 </>
               ) : null}
               {showBattery ? <SortableHeader label="Battery" sortKey="batteryCount" sort={sort} onClick={handleHeaderClick} /> : null}
+              {showSameDayDelivery ? <SortableHeader label="Same Day Delivery" sortKey="sameDayDeliveryRate" sort={sort} onClick={handleHeaderClick} /> : null}
               {showBpOtdSmbCols ? (
                 <>
                   <SortableHeader label="OTD" sortKey="bpOtdRate" sort={sort} onClick={handleHeaderClick} />
