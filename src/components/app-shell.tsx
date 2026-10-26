@@ -61,6 +61,7 @@ const ACCOUNTS_NAV_ITEMS = [{ href: "/accounts", label: "Overview", key: "accoun
 const CENTRAL_NAV_ITEMS = [
   { href: "/dashboard", label: "My Region", key: "dashboard" as const },
   { href: "/dashboard/central/tkm-targets", label: "TKM Targets", key: "central-tkm-targets" as const },
+  { href: "/dashboard/central/sa-analytics", label: "SA Analytics", key: "central-sa-analytics" as const },
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
@@ -73,6 +74,7 @@ const CENTRAL_NAV_ITEMS = [
 const REGIONAL_RM_NAV_ITEMS = [
   { href: "/dashboard", label: "My Region", key: "dashboard" as const },
   { href: "/dashboard/region/tkm-targets", label: "TKM Targets", key: "region-tkm-targets" as const },
+  { href: "/dashboard/region/sa-analytics", label: "SA Analytics", key: "region-sa-analytics" as const },
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
@@ -317,8 +319,10 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   accounts: DashboardIcon,
   "central-tkm-targets": TkmTargetsIcon,
   "central-set-targets": SetTargetsIcon,
+  "central-sa-analytics": BranchesIcon,
   "region-tkm-targets": TkmTargetsIcon,
   "region-set-targets": SetTargetsIcon,
+  "region-sa-analytics": BranchesIcon,
   ce: ChatIcon,
 };
 
