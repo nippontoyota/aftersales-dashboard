@@ -1532,4 +1532,22 @@ create table if not exists total_car_care_treatments_daily (
 -- CloseSaDailyMetrics doc comments for the exact rules.
 alter table close_sa_analytics_daily add column if not exists bp_work_order_count integer not null default 0;
 alter table close_sa_analytics_daily add column if not exists bp_otd_eligible_count integer not null default 0;
+
+-- BP Referrals: BPM-entered RO number replaces the old blind vehicle-reg-no
+-- scan as the ₹200 completion trigger (2026-10-26, at the user's request —
+-- the BPM at the branch now types in the actual RO number against their own
+-- queue entry, rather than the system guessing off vehicle reg no alone).
+-- pending_ro_no is set the moment a BPM enters a number that doesn't yet
+-- match anything uploaded; matched_ro_no/ro_matched_at (already existed)
+-- still fire the moment that RO + a matching vehicle_reg_no actually shows
+-- up in a Cost & Sales Report - BP upload — same upload-triggered matcher
+-- and BP HO "re-scan" backstop as before, just keyed off pending_ro_no
+-- instead of scanning every open referral by reg no. See ro-matcher.ts.
+alter table bp_referrals add column if not exists pending_ro_no text;
+alter table bp_referrals add column if not exists pending_ro_entered_at timestamptz;
+alter table bp_referrals add column if not exists pending_ro_entered_by text references admins(username);
+
+alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
+alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
+  check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered'));
 alter table close_sa_analytics_daily add column if not exists bp_otd_on_time_count integer not null default 0;

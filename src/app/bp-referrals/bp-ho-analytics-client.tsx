@@ -223,7 +223,9 @@ function ReferralTable({
                   <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
                     {r.payment_type === "CP" ? "Customer paid" : r.payment_type === "IP" ? "Insurance paid" : "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg">{r.matched_ro_no ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg">
+                    {r.matched_ro_no ?? (r.pending_ro_no ? <span className="text-fg-faint">{r.pending_ro_no} (pending)</span> : "—")}
+                  </td>
                   <td className="px-3 py-2.5">
                     {r.vehicle_image_url ? (
                       <button

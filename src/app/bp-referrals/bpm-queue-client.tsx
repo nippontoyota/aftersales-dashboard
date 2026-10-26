@@ -4,12 +4,14 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
 import {
+  enterRoNumberAction,
   getReferralActivityAction,
   logFollowUpContactAction,
   markNotConnectedAction,
   submitCallOutcomeAction,
   transferReferralAction,
   type BpmActionState,
+  type EnterRoActionState,
 } from "./bpm-actions";
 import type { ActivityRow } from "@/lib/bp-referrals/store";
 import { NotConnectedReasonFields } from "./not-connected-reason-fields";
@@ -36,6 +38,8 @@ export type BpmQueueReferral = {
   handled_by: string | null;
   matched_ro_no: string | null;
   ro_matched_at: Date | string | null;
+  pending_ro_no: string | null;
+  pending_ro_entered_at: Date | string | null;
   closed_at: Date | string | null;
   closed_reason: "not_genuine" | "not_interested" | null;
   not_interested_reason: string | null;
@@ -137,6 +141,7 @@ const ACTIVITY_LABEL: Record<ActivityRow["activityType"], string> = {
   not_connected: "Not connected",
   call_outcome: "Call outcome",
   follow_up: "Follow-up",
+  ro_entered: "RO entered",
 };
 
 function ActivityHistory({ referralId }: { referralId: number }) {
@@ -240,6 +245,45 @@ function LogFollowUpButton({ id, onDone }: { id: number; onDone: () => void }) {
         {pending ? "Saving…" : "Log follow-up — spoke to customer"}
       </button>
       {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
+    </form>
+  );
+}
+
+const ENTER_RO_INIT: EnterRoActionState = { error: null, status: null };
+
+/** BPM types the actual RO number in — the ₹200 completion trigger
+ * (2026-10-26). Completes immediately if that RO's already in an upload
+ * with a matching vehicle reg no; otherwise saves as pending and the next
+ * upload (or BP HO's re-scan backstop) confirms it automatically. Stays
+ * open for re-entry while pending, in case the BPM mistyped it the first
+ * time — only closes once ro_matched_at is actually set. */
+function EnterRoForm({ id, pendingRoNo, onDone }: { id: number; pendingRoNo: string | null; onDone: () => void }) {
+  const [state, action, pending] = useActionState(enterRoNumberAction, ENTER_RO_INIT);
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      className="rounded-md border border-border-strong bg-surface-2/50 p-3"
+    >
+      <input type="hidden" name="id" value={id} />
+      <span className={eyebrow}>{pendingRoNo ? "Re-enter RO number" : "Enter RO number"}</span>
+      {pendingRoNo ? (
+        <p className="mt-0.5 text-xs text-fg-faint">
+          Currently pending: <span className="font-mono text-fg-muted">{pendingRoNo}</span> — not yet confirmed in an upload.
+        </p>
+      ) : null}
+      <input name="roNo" required placeholder="e.g. BPJ00123" className={`${control} mt-1 w-full px-2 font-mono`} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="mt-2 h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+      >
+        {pending ? "Saving…" : "Save RO number"}
+      </button>
+      {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
+      {state.status === "pending" ? <p className="mt-1 text-xs text-fg-faint">Saved — will confirm once that RO shows up in an upload.</p> : null}
     </form>
   );
 }
@@ -525,6 +569,11 @@ function DetailModal({
                 <span className="text-fg-faint">Matched RO</span>
                 <span className="font-mono text-fg">{r.matched_ro_no}</span>
               </div>
+            ) : r.pending_ro_no ? (
+              <div className="flex justify-between">
+                <span className="text-fg-faint">RO entered (pending)</span>
+                <span className="font-mono text-fg">{r.pending_ro_no}</span>
+              </div>
             ) : null}
             {tab === "followup" ? (
               <div className="flex justify-between">
@@ -550,7 +599,8 @@ function DetailModal({
         ) : null}
 
         {canAct && tab === "followup" ? (
-          <div className="mt-4 border-t border-border-subtle pt-3">
+          <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
+            <EnterRoForm id={r.id} pendingRoNo={r.pending_ro_no} onDone={onClose} />
             <LogFollowUpButton id={r.id} onDone={onClose} />
           </div>
         ) : null}

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
 import { listBranchCodes } from "@/lib/admin-store";
 import {
+  enterRoNumber,
   loadActivityForReferral,
   loadOverdueFollowUps,
   loadUrgentUnconnected,
@@ -163,6 +164,30 @@ export async function logFollowUpContactAction(_prev: BpmActionState, formData: 
   }
   revalidatePath("/bp-referrals");
   return { error: null, ok: true };
+}
+
+export type EnterRoActionState = { error: string | null; status: "completed" | "pending" | null };
+
+/** BPM types in the actual RO number against their own queue entry — the
+ * ₹200 completion trigger (2026-10-26, replacing the old blind vehicle-reg-
+ * no auto-match). See store.ts's enterRoNumber() for the validation rules. */
+export async function enterRoNumberAction(_prev: EnterRoActionState, formData: FormData): Promise<EnterRoActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", status: null };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", status: null };
+
+  const roNo = String(formData.get("roNo") ?? "").trim();
+  if (!roNo) return { error: "Enter the RO number.", status: null };
+
+  try {
+    const status = await enterRoNumber(id, admin.branch, admin.username, roNo);
+    revalidatePath("/bp-referrals");
+    return { error: null, status };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't save that RO number.", status: null };
+  }
 }
 
 /** The detail modal's "History" section — every bp_manager/bp_ho/hq viewer

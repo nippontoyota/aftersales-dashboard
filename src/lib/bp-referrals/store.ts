@@ -29,6 +29,8 @@ export type BpReferralRow = {
   handled_by: string | null;
   matched_ro_no: string | null;
   ro_matched_at: Date | string | null;
+  pending_ro_no: string | null;
+  pending_ro_entered_at: Date | string | null;
   closed_at: Date | string | null;
   closed_reason: "not_genuine" | "not_interested" | null;
   /** Why the customer declined, once genuine + not interested — a distinct
@@ -45,7 +47,8 @@ const SELECT_COLUMNS = `
   r.id, r.referring_employee_id, r.referring_employee_name, r.referring_employee_branch,
   r.vehicle_image_url, r.customer_phone, r.submitted_at, r.vehicle_reg_no, r.vehicle_model, r.location, r.description,
   r.assigned_branch, r.call_status, r.genuine, r.estimate_amount, r.customer_interested, r.payment_type,
-  r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.closed_at, r.closed_reason, r.not_interested_reason,
+  r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.pending_ro_no, r.pending_ro_entered_at,
+  r.closed_at, r.closed_reason, r.not_interested_reason,
   r.last_contacted_at, lt.from_branch as transferred_from
 `;
 
@@ -121,7 +124,7 @@ async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
 
 async function logActivity(
   referralId: number,
-  activityType: "not_connected" | "call_outcome" | "follow_up",
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered",
   remark: string,
   performedBy: string,
   notConnectedReason?: string,
@@ -213,7 +216,7 @@ export async function logFollowUpContact(id: number, branch: string, performedBy
 
 export type ActivityRow = {
   id: number;
-  activityType: "not_connected" | "call_outcome" | "follow_up";
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered";
   remark: string;
   notConnectedReason: string | null;
   performedBy: string;
@@ -226,7 +229,7 @@ export type ActivityRow = {
 export async function loadActivityForReferral(referralId: number): Promise<ActivityRow[]> {
   const { rows } = await pool.query<{
     id: number;
-    activity_type: "not_connected" | "call_outcome" | "follow_up";
+    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered";
     remark: string;
     not_connected_reason: string | null;
     performed_by: string;
@@ -326,6 +329,67 @@ export async function transferReferral(id: number, fromBranch: string, toBranch:
   } finally {
     client.release();
   }
+}
+
+/** BPM types in the actual RO number against their own queue entry
+ * (2026-10-26, the user's call — replaces the old blind vehicle-reg-no-only
+ * auto-match as the ₹200 completion trigger). Checked immediately against
+ * everything already uploaded (raw_upload_rows, report_type 'ssrv089_bp',
+ * BPJ-prefixed) — completes right away ("completed") if that RO's VehRegNo
+ * matches this referral's own vehicle_reg_no. If the RO isn't in any upload
+ * yet, it's saved as pending_ro_no ("pending") and the same upload-triggered
+ * matcher that handles a fresh upload (see ro-matcher.ts) picks it up once
+ * it lands — the BPM never has to re-enter it. If the RO IS found but
+ * against a different vehicle, rejected outright with nothing saved, so a
+ * mistyped RO can't silently misattribute a payout. */
+export async function enterRoNumber(id: number, branch: string, enteredBy: string, roNo: string): Promise<"completed" | "pending"> {
+  await assertOwnedByBranch(id, branch);
+
+  const { rows } = await pool.query<{
+    genuine: boolean | null;
+    customer_interested: boolean | null;
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+    vehicle_reg_no: string | null;
+  }>(`select genuine, customer_interested, closed_at, ro_matched_at, vehicle_reg_no from bp_referrals where id = $1`, [id]);
+  const referral = rows[0];
+  if (!referral || !referral.genuine || !referral.customer_interested || referral.closed_at || referral.ro_matched_at) {
+    throw new Error("This referral isn't open for an RO entry.");
+  }
+  if (!referral.vehicle_reg_no) {
+    throw new Error("This referral has no vehicle registration number on record.");
+  }
+
+  const normalizedRo = roNo.trim().toUpperCase();
+  const normalizedReg = referral.vehicle_reg_no.trim().toUpperCase().replace(/[\s-]/g, "");
+
+  const { rows: uploaded } = await pool.query<{ veh_reg_no: string | null }>(
+    `select row_data->>'VehRegNo' as veh_reg_no from raw_upload_rows
+     where report_type = 'ssrv089_bp' and upper(coalesce(row_data->>'JobOrder No', '')) = $1
+     limit 1`,
+    [normalizedRo],
+  );
+
+  if (uploaded.length > 0) {
+    const uploadedReg = String(uploaded[0].veh_reg_no ?? "").toUpperCase().replace(/[\s-]/g, "");
+    if (uploadedReg !== normalizedReg) {
+      throw new Error("That RO is recorded against a different vehicle — check the number and try again.");
+    }
+    await pool.query(
+      `update bp_referrals set matched_ro_no = $2, ro_matched_at = now(), completion_triggered_at = now(), pending_ro_no = null
+       where id = $1`,
+      [id, normalizedRo],
+    );
+    await logActivity(id, "ro_entered", `RO entered: ${normalizedRo} (confirmed)`, enteredBy);
+    return "completed";
+  }
+
+  await pool.query(
+    `update bp_referrals set pending_ro_no = $2, pending_ro_entered_at = now(), pending_ro_entered_by = $3 where id = $1`,
+    [id, normalizedRo, enteredBy],
+  );
+  await logActivity(id, "ro_entered", `RO entered: ${normalizedRo} (pending confirmation)`, enteredBy);
+  return "pending";
 }
 
 /** Read-only, for a BPM whose own employee's referral got transferred

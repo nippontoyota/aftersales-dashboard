@@ -35,9 +35,9 @@ export async function assignBranchAction(_prev: BpHoActionState, formData: FormD
 
 export type RescanState = { error: string | null; matchedCount: number | null };
 
-/** The RO-match backstop button — re-scans every saved Cost & Sales Report
- * - BP row for a match, not just the next upload. See ro-matcher.ts's
- * rescanUnmatchedReferrals(). */
+/** The RO-match backstop button — re-checks every BPM-entered pending RO
+ * number against every saved Cost & Sales Report - BP row, not just the next
+ * upload. See ro-matcher.ts's rescanUnmatchedReferrals(). */
 export async function rescanUnmatchedReferralsAction(_prev: RescanState): Promise<RescanState> {
   const admin = requireBpHoAccess(await getCurrentAdmin());
   if (!admin) return { error: "Not allowed.", matchedCount: null };
