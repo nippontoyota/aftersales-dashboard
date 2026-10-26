@@ -251,39 +251,37 @@ function LogFollowUpButton({ id, onDone }: { id: number; onDone: () => void }) {
 
 const ENTER_RO_INIT: EnterRoActionState = { error: null, status: null };
 
-/** BPM types the actual RO number in — the ₹200 completion trigger
- * (2026-10-26). Completes immediately if that RO's already in an upload
- * with a matching vehicle reg no; otherwise saves as pending and the next
- * upload (or BP HO's re-scan backstop) confirms it automatically. Stays
- * open for re-entry while pending, in case the BPM mistyped it the first
- * time — only closes once ro_matched_at is actually set. */
-function EnterRoForm({ id, pendingRoNo, onDone }: { id: number; pendingRoNo: string | null; onDone: () => void }) {
+/** BPM types the actual RO number in, right on the Follow-up row itself —
+ * the ₹200 completion trigger (2026-10-26, moved inline from the detail
+ * modal at the user's request so it doesn't take an extra click to reach).
+ * Completes immediately if that RO's already in an upload with a matching
+ * vehicle reg no; otherwise saves as pending and the next upload (or BP
+ * HO's re-scan backstop) confirms it automatically. Stays open for
+ * re-entry while pending, in case the BPM mistyped it the first time. The
+ * wrapping onClick stopPropagation keeps a click inside the form from also
+ * opening the row's detail modal (see QueueList's <tr onClick>). */
+function EnterRoInlineForm({ id, pendingRoNo }: { id: number; pendingRoNo: string | null }) {
   const [state, action, pending] = useActionState(enterRoNumberAction, ENTER_RO_INIT);
   return (
-    <form
-      action={async (fd) => {
-        await action(fd);
-        onDone();
-      }}
-      className="rounded-md border border-border-strong bg-surface-2/50 p-3"
-    >
+    <form action={action} onClick={(e) => e.stopPropagation()} className="flex flex-wrap items-center gap-1.5">
       <input type="hidden" name="id" value={id} />
-      <span className={eyebrow}>{pendingRoNo ? "Re-enter RO number" : "Enter RO number"}</span>
-      {pendingRoNo ? (
-        <p className="mt-0.5 text-xs text-fg-faint">
-          Currently pending: <span className="font-mono text-fg-muted">{pendingRoNo}</span> — not yet confirmed in an upload.
-        </p>
-      ) : null}
-      <input name="roNo" required placeholder="e.g. BPJ00123" className={`${control} mt-1 w-full px-2 font-mono`} />
+      <input
+        name="roNo"
+        required
+        defaultValue={pendingRoNo ?? ""}
+        placeholder="e.g. BPJ00123"
+        className="h-7 w-28 rounded-md border border-border-strong bg-surface px-2 text-xs font-mono text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      />
       <button
         type="submit"
         disabled={pending}
-        className="mt-2 h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+        className="h-7 shrink-0 rounded-md bg-accent px-2 text-xs font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
       >
-        {pending ? "Saving…" : "Save RO number"}
+        {pending ? "…" : "Save"}
       </button>
-      {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
-      {state.status === "pending" ? <p className="mt-1 text-xs text-fg-faint">Saved — will confirm once that RO shows up in an upload.</p> : null}
+      {state.error ? <span className="w-full text-[11px] text-bad">{state.error}</span> : null}
+      {state.status === "pending" ? <span className="w-full text-[11px] text-fg-faint">Pending — confirms on next upload.</span> : null}
+      {state.status === "completed" ? <span className="w-full text-[11px] text-good-text">Confirmed — ₹200 triggered.</span> : null}
     </form>
   );
 }
@@ -600,7 +598,6 @@ function DetailModal({
 
         {canAct && tab === "followup" ? (
           <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
-            <EnterRoForm id={r.id} pendingRoNo={r.pending_ro_no} onDone={onClose} />
             <LogFollowUpButton id={r.id} onDone={onClose} />
           </div>
         ) : null}
@@ -646,6 +643,11 @@ function QueueList({
   }, [referrals]);
 
   const filtered = referrals.filter((r) => classify(r) === tab);
+  // RO entry only ever applies on the Follow-up tab (genuine + interested,
+  // not yet RO-matched — see classify()), and only for a referral this
+  // viewer's own branch actually owns (same as every other action button).
+  const showRoColumn = tab === "followup";
+  const columnCount = (showBranchColumn ? 5 : 4) + (showRoColumn ? 1 : 0);
 
   return (
     <>
@@ -681,33 +683,46 @@ function QueueList({
               {showBranchColumn ? <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th> : null}
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Reg No</th>
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Status</th>
+              {showRoColumn ? <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">RO Number</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={showBranchColumn ? 5 : 4} className="px-3 py-8 text-center text-sm text-fg-muted">
+                <td colSpan={columnCount} className="px-3 py-8 text-center text-sm text-fg-muted">
                   Nothing here.
                 </td>
               </tr>
             ) : (
-              filtered.map((r) => (
-                <tr key={r.id} className="cursor-pointer transition-colors hover:bg-surface-2/50" onClick={() => setSelected(r)}>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{fmt(r.submitted_at)}</td>
-                  <td className="px-3 py-2.5 font-medium text-fg">
-                    {r.referring_employee_name ?? "—"}
-                    {r.transferred_from ? <span className="ml-1.5 text-xs text-fg-faint">(from {branchName(r.transferred_from)})</span> : null}
-                  </td>
-                  {showBranchColumn ? <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{branchName(r.assigned_branch ?? "")}</td> : null}
-                  <td className="whitespace-nowrap px-3 py-2.5">
-                    <div className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</div>
-                    {r.vehicle_model ? <div className="text-xs text-fg-faint">{r.vehicle_model}</div> : null}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2.5">
-                    <StatusBadge r={r} />
-                  </td>
-                </tr>
-              ))
+              filtered.map((r) => {
+                const canAct = !readOnly && r.assigned_branch === ownBranch;
+                return (
+                  <tr key={r.id} className="cursor-pointer transition-colors hover:bg-surface-2/50" onClick={() => setSelected(r)}>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{fmt(r.submitted_at)}</td>
+                    <td className="px-3 py-2.5 font-medium text-fg">
+                      {r.referring_employee_name ?? "—"}
+                      {r.transferred_from ? <span className="ml-1.5 text-xs text-fg-faint">(from {branchName(r.transferred_from)})</span> : null}
+                    </td>
+                    {showBranchColumn ? <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{branchName(r.assigned_branch ?? "")}</td> : null}
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      <div className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</div>
+                      {r.vehicle_model ? <div className="text-xs text-fg-faint">{r.vehicle_model}</div> : null}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      <StatusBadge r={r} />
+                    </td>
+                    {showRoColumn ? (
+                      <td className="px-3 py-2.5">
+                        {canAct ? (
+                          <EnterRoInlineForm id={r.id} pendingRoNo={r.pending_ro_no} />
+                        ) : (
+                          <span className="font-mono text-xs text-fg-faint">{r.pending_ro_no ?? "—"}</span>
+                        )}
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
