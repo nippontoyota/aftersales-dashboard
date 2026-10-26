@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 
-type TabKey = "overview" | "trends" | "regions" | "insights" | "more";
+type TabKey = "overview" | "trends" | "regions" | "more";
 
 /**
  * Executive Overview's section switcher (2026-09-15, at the user's request —
@@ -15,13 +15,11 @@ export function DashboardTabs({
   overview,
   trends,
   regions,
-  insights,
   more,
 }: {
   overview: ReactNode;
   trends: ReactNode;
   regions: ReactNode;
-  insights: ReactNode;
   /** Other KPIs / Bills — omitted entirely when there's nothing to show. */
   more?: ReactNode;
 }) {
@@ -31,11 +29,10 @@ export function DashboardTabs({
     { key: "overview", label: "Overview", show: true },
     { key: "trends", label: "Trends", show: true },
     { key: "regions", label: "Regions", show: true },
-    { key: "insights", label: "Insights", show: true },
     { key: "more", label: "More", show: more != null },
   ];
 
-  const content: Record<TabKey, ReactNode> = { overview, trends, regions, insights, more };
+  const content: Record<TabKey, ReactNode> = { overview, trends, regions, more };
 
   return (
     <div>

@@ -1,8 +1,8 @@
 import { BP_BAYS, bpBayUtilization, gsBayUtilization, GS_BAYS, sumBayUtilization, type BayUtilization } from "./bay-capacity";
 import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, grossProfitPerRo, revenuePerRo, type HeroSummary, type KpiSummary } from "./aggregate";
 import { REGIONS, type RegionName } from "./regions";
-import { loadReportHolidaySet } from "./report-holidays/store";
-import { sundayOffWorkingDaysElapsedInMonth, sundayOffWorkingDaysInMonth } from "./reporting-date";
+import { loadReportHoliday, loadReportHolidaySet } from "./report-holidays/store";
+import { latestNonHolidayDate, sundayOffWorkingDaysElapsedInMonth, sundayOffWorkingDaysInMonth } from "./reporting-date";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { computeTrendSeries } from "./trend";
 import { isDatePublished } from "./publish-store";
@@ -167,6 +167,11 @@ export type CeoData = {
    * must reuse this same set, so a Sunday or holiday grades identically
    * everywhere (2026-09-29). */
   holidays: string[];
+  /** Set when `date` itself is flagged in report_holidays — lets the page
+   * explain a partial/empty report as "this was a holiday" instead of a
+   * false "still syncing" warning, since no further branches are expected
+   * to file for it (2026-10-22). */
+  holiday: { note: string | null } | null;
   group: {
     hero: HeroSummary;
     kpis: KpiSummary;
@@ -235,22 +240,24 @@ function buildCallout(regions: CeoRegionRollup[]): CeoCallout | null {
 }
 
 export async function loadCeoData(requestedDate?: string): Promise<CeoData | null> {
-  const dates = await listSnapshotDates();
+  const [dates, holidays] = await Promise.all([listSnapshotDates(), loadReportHolidaySet()]);
   if (dates.length === 0) return null;
 
-  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
+  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : latestNonHolidayDate(dates, holidays)!;
 
   const month = date.substring(0, 7);
+  const isHolidayDate = holidays.has(date);
 
-  const [report, holidays, monthSnapshots, slabTargets, published, scom205Count, gusSplitByBranch] = await Promise.all([
+  const [report, monthSnapshots, slabTargets, published, scom205Count, gusSplitByBranch, holidayRecord] = await Promise.all([
     buildReport(date),
-    loadReportHolidaySet(),
     loadSnapshotsForMonthUpTo(date),
     loadIncentiveSlabTargets(month),
     isDatePublished(date),
     countScom205BranchesForDate(date),
     loadGusSplitForMonth(date),
+    isHolidayDate ? loadReportHoliday(date) : Promise.resolve(null),
   ]);
+  const holiday = holidayRecord ? { note: holidayRecord.note } : null;
 
   if (!report) {
     return {
@@ -259,6 +266,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
       report: null,
       workingDaysElapsed: 0,
       holidays: [...holidays],
+      holiday,
       group: null,
       regions: [],
       revenueTrend: [],
@@ -332,6 +340,7 @@ export async function loadCeoData(requestedDate?: string): Promise<CeoData | nul
     report,
     workingDaysElapsed,
     holidays: [...holidays],
+    holiday,
     group: {
       hero: groupHero,
       kpis: computeKpiSummary(report.branches),

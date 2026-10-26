@@ -75,6 +75,7 @@ export default async function CancellationsPage({
   if (admin.role === "vp_service") redirect("/vp");
   if (admin.role === "ceo") redirect("/ceo");
   if (admin.role === "accounts") redirect("/accounts");
+  if (admin.role === "kl_cluster") redirect("/kl-branches");
   const nav = await loadNavState(admin);
   const identity = adminIdentityLabel(admin);
   const params = await searchParams;
@@ -103,6 +104,7 @@ export default async function CancellationsPage({
       isRegional={admin.role === "regional"}
       isBranch={admin.role === "branch"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
+      regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       queriesBadge={nav.queriesBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}

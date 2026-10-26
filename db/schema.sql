@@ -1214,3 +1214,322 @@ create index if not exists bp_referral_activity_referral_idx on bp_referral_acti
 -- bp_referral_activity) so BP HO can see WHY a customer declined without
 -- digging through free-text history.
 alter table bp_referrals add column if not exists not_interested_reason text;
+
+-- 2026-10-20: same idea for "not connected" attempts — a structured reason
+-- code (rnr/switched_off/invalid_number/busy/not_reachable/other) alongside
+-- the existing free-text remark (which for the five presets just holds the
+-- matching label, and for 'other' is the BPM's own mandatory text), so the
+-- common cases are countable without parsing free text.
+alter table bp_referral_activity add column if not exists not_connected_reason text;
+
+-- 2026-10-22: Inactive Customer Referrals — leads submitted by employees
+-- (via the same kind of external form/bot as BP referrals) naming an
+-- inactive customer worth re-engaging. This table already exists in
+-- production, created out-of-band alongside the webhook receiver
+-- (src/app/api/webhooks/inactive-referral/route.ts); the `create table if
+-- not exists` below documents its real shape. See src/lib/inactive-referrals/.
+create table if not exists inactive_customer_referrals (
+  id                         serial       primary key,
+  referral_date              varchar,
+  vehicle_reg_no             varchar      not null,
+  vehicle_model              varchar      not null,
+  customer_name              varchar      not null,
+  customer_phone_1           varchar      not null,
+  customer_phone_2           varchar,
+  customer_address           text,
+  referring_employee_id      varchar      not null,
+  referring_employee_name    varchar,
+  referring_employee_branch  varchar,
+  dealer_code                varchar,
+  submitted_at               timestamptz  default now()
+);
+
+-- Branch call/update workflow — a branch admin (role 'branch') works the
+-- referrals resolved to their own branch: call the customer, mark
+-- connected/not-connected. assigned_branch resolves referring_employee_branch
+-- (falling back to dealer_code) through the same free-text-to-branch-code
+-- matching already used for BP referrals (see bp-referrals/branch-match.ts)
+-- — rows that don't resolve to a known branch stay unassigned and invisible
+-- to any branch's queue, same convention as bp_referrals.assigned_branch.
+alter table inactive_customer_referrals add column if not exists assigned_branch varchar;
+alter table inactive_customer_referrals add column if not exists call_status text not null default 'pending';
+alter table inactive_customer_referrals drop constraint if exists inactive_customer_referrals_call_status_check;
+alter table inactive_customer_referrals add constraint inactive_customer_referrals_call_status_check
+  check (call_status in ('pending', 'not_connected', 'connected'));
+alter table inactive_customer_referrals add column if not exists handled_by text references admins(username);
+alter table inactive_customer_referrals add column if not exists last_contacted_at timestamptz;
+create index if not exists inactive_customer_referrals_assigned_branch_idx on inactive_customer_referrals (assigned_branch);
+
+-- Append-only call log (same reasoning as bp_referral_activity — a branch
+-- may try more than once before connecting, and each attempt's own remark
+-- stays visible rather than being overwritten).
+create table if not exists inactive_referral_calls (
+  id             bigserial    primary key,
+  referral_id    integer      not null references inactive_customer_referrals(id),
+  call_status    text         not null check (call_status in ('not_connected', 'connected')),
+  remark         text         not null,
+  performed_by   text         not null references admins(username),
+  performed_at   timestamptz  not null default now()
+);
+create index if not exists inactive_referral_calls_referral_idx on inactive_referral_calls (referral_id, performed_at);
+
+-- 2026-10-22: Close SA Analytics — everything Service Info / Labour Sales /
+-- Part Sale can attribute to whichever Service Advisor closed an RO. Cost &
+-- Sales (SSRV089) deliberately left out for now (set aside by the user).
+-- Precomputed at upload time (same reasoning as vas_revenue_real /
+-- cancelled_accessories_adjustments above: the underlying join reads
+-- raw_upload_rows across three report types and must never run live on
+-- every /branches or /dashboard page load), one row per (branch, date,
+-- close_sa_name) — close_sa_name is whitespace/case-normalized the same way
+-- accessories-staff.ts matches names, never the raw DMS string. MTD = sum of
+-- every day's row this month, same accumulation pattern as the rest of the
+-- dashboard. See src/lib/close-sa-analytics/compute.ts for the join logic
+-- and exactly which report contributes which column.
+create table if not exists close_sa_analytics_daily (
+  date date not null,
+  branch text not null,
+  close_sa_name text not null,
+  ro_count integer not null default 0,
+  -- Every distinct Vin no this SA closed an RO for that day, as a jsonb
+  -- array — not just a count, so a period rollup (aggregate.ts) can union
+  -- several days' arrays into a true distinct-vehicles-this-month count
+  -- instead of summing daily counts, which would double-count a vehicle
+  -- that came back on more than one day in the period.
+  vehicle_vins jsonb not null default '[]'::jsonb,
+  -- {"job desc": count} — every distinct Job Desc this SA closed that day,
+  -- not just the 4 VAS-tagged ones. jsonb rather than fixed columns since
+  -- the real set of descriptions is large and open-ended.
+  job_desc_counts jsonb not null default '{}'::jsonb,
+  wheel_balancing_count integer not null default 0,
+  wheel_alignment_count integer not null default 0,
+  brake_skimming_count integer not null default 0,
+  evaporator_cleaning_count integer not null default 0,
+  vas_bill_revenue numeric not null default 0,
+  -- {"Customer": n, "Warranty": n, ...} / {"CASH": n, "CREDIT": n, ...} —
+  -- same reasoning as job_desc_counts: the full value set for Job Type/Pay
+  -- Type was never fully confirmed against real data, so this stays open
+  -- rather than guessing at fixed columns.
+  job_type_counts jsonb not null default '{}'::jsonb,
+  pay_type_counts jsonb not null default '{}'::jsonb,
+  amc_count integer not null default 0,
+  fmsc_count integer not null default 0,
+  -- em_count fixed 2026-10-23 — previously checked EM Flag = 'Y', which real
+  -- data never contains (its real values are "NO"/"EM60"/"EM90"/"EM120"), so
+  -- this had been silently 0 for every SA since the table was created.
+  em_count integer not null default 0,
+  -- EM60 only (EM90/EM120 excluded, at the user's request) + On-Time
+  -- Delivery: Job Open Date/Time to Invoice Date/Time at or under 60
+  -- minutes. Both added 2026-10-23 — see close-sa-analytics/compute.ts.
+  em60_count integer not null default 0,
+  em60_on_time_count integer not null default 0,
+  appointment_count integer not null default 0,
+  walkin_count integer not null default 0,
+  bp_potential_count integer not null default 0,
+  -- Labour Sales Report, joined to Service Info's Close SA by RO (Job No. /
+  -- Job Order No, same undashed format — confirmed 100% match across 5
+  -- branches, unlike Part Sale's RefDocNo join below).
+  labour_revenue_before numeric not null default 0,
+  labour_revenue_after numeric not null default 0,
+  sold_hours numeric not null default 0,
+  -- One value per RO, repeated on every one of its labour lines (confirmed
+  -- against 626 real multi-line ROs) — counted once per RO here, never
+  -- summed per line, or it would multiply by that RO's line count.
+  over_target_total numeric not null default 0,
+  -- Part Sale Report, joined by RefDocNo (dash-stripped) to the RO. Real
+  -- coverage confirmed ~65-68% across 3 branches/same day — never 100%, so
+  -- parts_matched_ro_count is stored alongside the revenue to show how much
+  -- of this SA's parts activity is actually represented here.
+  parts_revenue numeric not null default 0,
+  parts_matched_ro_count integer not null default 0,
+  engine_flush_count numeric not null default 0,
+  injector_cleaner_count numeric not null default 0,
+  synthetic_oil_ltrs numeric not null default 0,
+  brake_cleaning_count numeric not null default 0,
+  diy_count numeric not null default 0,
+  diy_revenue numeric not null default 0,
+  external_sales numeric not null default 0,
+  -- 2026-10-22: PartNo prefix "T-"/"B-" in Part Sale Report, confirmed
+  -- against real data as genuine tyre/battery SKUs (see compute.ts) — same
+  -- RefDocNo→RO join and matched-coverage caveat as the rest of this block.
+  tyre_count numeric not null default 0,
+  battery_count numeric not null default 0,
+  -- Body & Paint only (Service Info - BP's own FINAL_INV_AMT/EST_AMT, one
+  -- value per RO repeated on every line, same pattern as Over Target above).
+  bp_final_invoice_amount numeric not null default 0,
+  bp_estimate_amount numeric not null default 0,
+  bp_ro_count integer not null default 0,
+  computed_at timestamptz not null default now(),
+  primary key (date, branch, close_sa_name)
+);
+create index if not exists close_sa_analytics_daily_branch_date_idx on close_sa_analytics_daily (branch, date);
+
+-- 2026-10-22: Tyre/Battery counts, added after the table above was already
+-- live — create table if not exists is a no-op on an existing table, so
+-- these need their own alter (the create table above already lists them
+-- inline too, for a fresh database). PartNo prefix "T-"/"B-" in Part Sale
+-- Report, confirmed against real data as genuine tyre/battery SKUs.
+alter table close_sa_analytics_daily add column if not exists tyre_count numeric not null default 0;
+alter table close_sa_analytics_daily add column if not exists battery_count numeric not null default 0;
+
+-- MRS N-9 list: TKM's own i-CROP export of vehicles due ~9 days out, sent
+-- the day the Direct Mailer goes out (DM Planned Date) and the CAC team
+-- calls ~2 days later (1st CALL Planned Date). We import this daily and
+-- match it against ce_leads by VIN so our own MRS calling only catches
+-- leads due around the same date that this list missed, rather than
+-- duplicating TKM's own DM+call pipeline. See scripts/import-n9-list.mjs
+-- and src/lib/ce/n9.mjs. Never hand-edited.
+create table if not exists n9_imports (
+  id bigint generated always as identity primary key,
+  source_file_name text not null,
+  file_sha256 text,
+  uploaded_by text not null references admins(username),
+  uploaded_at timestamptz not null default now(),
+  row_count integer not null,
+  extract_date date not null
+);
+create unique index if not exists n9_imports_file_sha256_idx on n9_imports (file_sha256) where file_sha256 is not null;
+
+create table if not exists n9_leads (
+  id bigint generated always as identity primary key,
+  vin text not null,
+  extract_date date not null,
+  customer_name text,
+  mobile_number text,
+  registration_no text,
+  vehicle_model text,
+  vehicle_sales_type text,
+  dm_planned_date date,
+  first_call_planned_date date,
+  -- The actual TKM-computed due date ("N") and which rule produced it —
+  -- a "... Months )" name is time-triggered, a "...km service )" name is
+  -- distance-triggered; null when TKM hasn't computed one yet (new
+  -- deliveries not yet due for anything beyond their first checkup).
+  icrop_recommended_name text,
+  icrop_recommended_date date,
+  -- "2" + a reason (e.g. bad phone number) means TKM flagged this row as
+  -- unreachable from its own data — still worth checking against ours.
+  activity_category text,
+  activity_cat2_reason text,
+  source_import_id bigint not null references n9_imports(id),
+  imported_at timestamptz not null default now(),
+  unique (vin, extract_date)
+);
+create index if not exists n9_leads_vin_idx on n9_leads (vin);
+create index if not exists n9_leads_icrop_date_idx on n9_leads (icrop_recommended_date);
+
+-- 2026-10-23: close_sa_analytics_daily already existed live before this
+-- change, so (same reasoning as tyre_count/battery_count's own alter
+-- above) the create table's inline columns are a no-op there — these two
+-- explicit alters are what actually reaches the real database.
+alter table close_sa_analytics_daily add column if not exists em60_count integer not null default 0;
+alter table close_sa_analytics_daily add column if not exists em60_on_time_count integer not null default 0;
+
+-- 2026-10-23: SA Analytics round 2 (GS/BP/Accessories/PDI split + new
+-- counts), at the user's request — see close-sa-analytics/compute.ts for
+-- the exact match rules behind each.
+alter table close_sa_analytics_daily add column if not exists mech_care_count integer not null default 0;
+alter table close_sa_analytics_daily add column if not exists brake_cleaning_labour_count integer not null default 0;
+-- Distinct ROs with at least one TGLOSS-priced job code ("pitched" = sold —
+-- confirmed with the user: we can only measure what was actually billed,
+-- never an offered-and-declined pitch).
+alter table close_sa_analytics_daily add column if not exists tgloss_pitched_ro_count integer not null default 0;
+-- Distinct ROs with a Periodic Maintenance job line (any KM-interval
+-- service or Vcare), regardless of EM flag — the denominator for EM-to-PM %.
+alter table close_sa_analytics_daily add column if not exists pm_ro_count integer not null default 0;
+-- Job Open Date = Invoice Date (same calendar day), any RO — distinct from
+-- EM60's 60-minute OTD, this is a same-day-or-not check across everything.
+alter table close_sa_analytics_daily add column if not exists same_day_delivery_count integer not null default 0;
+-- Parts/Labour/TGLOSS revenue, split out for Body & Paint ROs specifically
+-- (identified by RO prefix "BPJ" — see compute.ts's isBpRo) — the existing
+-- labour_revenue_after/parts_revenue/vas_bill_revenue columns stay combined
+-- GS+BP, these are the BP-only slice needed for BP's own Parts/Service/
+-- TGLOSS Gentani ratios.
+alter table close_sa_analytics_daily add column if not exists bp_labour_revenue numeric not null default 0;
+alter table close_sa_analytics_daily add column if not exists bp_parts_revenue numeric not null default 0;
+alter table close_sa_analytics_daily add column if not exists bp_tgloss_revenue numeric not null default 0;
+-- {"1.Grooming Repair": n, ...} — BP Rep Type's 5 real values, verbatim.
+alter table close_sa_analytics_daily add column if not exists bp_repair_type_counts jsonb not null default '{}'::jsonb;
+-- bp_same_day_delivery_count dropped 2026-10-23, same day it was added — at
+-- the user's call: BP jobs routinely stay open for weeks (confirmed
+-- elsewhere in this codebase), so "same calendar day" isn't a meaningful
+-- signal for BP the way it is for GS.
+
+-- 2026-10-24: 'kl_cluster' — a single read-only account for Biju S Pillai,
+-- who oversees just KL01A + KL01B (not the whole South region, so the
+-- existing 'regional' role doesn't fit). No branch/region column is used —
+-- the two branches are hardcoded in code (see src/lib/kl-branches-data.ts),
+-- same pattern central-region-data.ts already uses for Central's own branch
+-- list. Never uploads, never sets targets — see kl-branches-guard.ts.
+alter table admins drop constraint if exists admins_role_check;
+alter table admins add constraint admins_role_check
+  check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce', 'kl_cluster'));
+alter table admins drop constraint if exists admins_role_scope_consistency;
+alter table admins add constraint admins_role_scope_consistency check (
+  (role = 'branch'      and branch is not null and region is null) or
+  (role = 'hq'          and branch is null     and region is null) or
+  (role = 'regional'    and branch is null     and region in ('North', 'Central', 'South')) or
+  (role = 'vp_service'  and branch is null     and region is null) or
+  (role = 'ceo'         and branch is null     and region is null) or
+  (role = 'accounts'    and branch is null     and region is null) or
+  (role = 'hq_viewer'   and branch is null     and region is null) or
+  (role = 'bp_manager'  and branch is not null and region is null) or
+  (role = 'bp_ho'       and branch is null     and region is null) or
+  (role = 'ce'          and branch is null     and region is null) or
+  (role = 'kl_cluster'  and branch is null     and region is null)
+);
+
+-- Unique VIN VAS (2026-10-24, at the user's request, for the Revenue Stream
+-- Excel export's rows 94/95): distinct ROs with >=1 TGLOSS-priced job code
+-- (VAS_PRICE_BY_JOB_CODE) billed, NOT closed by an accessories-staff SA,
+-- GS + BP Service Info combined, one count per (date, branch) — same
+-- precompute-at-upload-time pattern as vas_revenue_real above, so
+-- report.ts's hot read path never joins raw_upload_rows itself (see the
+-- 2026-10-01 Vercel-timeout fix this codebase already learned that lesson
+-- from). Recomputed in full on every Service Info (GS or BP) upload
+-- touching that date — see unique-vin-vas/recompute.ts.
+--
+-- Plain RO count, no VIN dedup — the user's explicit call (2026-10-24)
+-- after comparing both approaches on real October data: this RO-wise count
+-- totalled 5,720 company-wide for Oct 1-24 vs 5,699 for a same-day-VIN-
+-- dedup version that had briefly been tried first; the user chose the
+-- former, rare repeat-same-VIN-same-day cases included as-is. MTD ("for
+-- the month") is the sum of each day's count here — same accumulation
+-- pattern as every other MTD figure in this dashboard.
+create table if not exists unique_vin_vas_daily (
+  date date not null,
+  branch text not null,
+  count integer not null default 0,
+  computed_at timestamptz not null default now(),
+  primary key (date, branch)
+);
+alter table close_sa_analytics_daily drop column if exists bp_same_day_delivery_count;
+
+-- Total Car Care Treatments (2026-10-24, at the user's request, for the
+-- Revenue Stream Excel export's rows 97/98 — the template's own
+-- "(w/o Mech Care)" wording was dropped from those labels the same day,
+-- since this now counts every TGLOSS treatment, Mech Care included).
+-- Counts every TGLOSS-priced job-code LINE billed (VAS_PRICE_BY_JOB_CODE),
+-- not deduped per RO — an RO with 3 TGLOSS treatments on it counts as 3 —
+-- on ROs NOT closed by an accessories-staff SA, GS + BP Service Info
+-- combined, one count per (date, branch). Same precompute-at-upload-time
+-- pattern as unique_vin_vas_daily/vas_revenue_real above (never a live
+-- raw_upload_rows join in report.ts's hot path). Recomputed in full on
+-- every Service Info (GS or BP) upload touching that date — see
+-- total-car-care/recompute.ts. MTD ("for the month") is the sum of each
+-- day's count here, same accumulation pattern as every other MTD figure
+-- in this dashboard.
+create table if not exists total_car_care_treatments_daily (
+  date date not null,
+  branch text not null,
+  count integer not null default 0,
+  computed_at timestamptz not null default now(),
+  primary key (date, branch)
+);
+
+-- BP SMB Utilization % + BP OTD (2026-10-24, at the user's request): unique
+-- Work Order (workOrdNo) ÷ unique RO, and handover (NINETH_SMS_SEND_DT)
+-- landing in [Promise Delivery Date/Time − 24h, Promise] — see compute.ts's
+-- CloseSaDailyMetrics doc comments for the exact rules.
+alter table close_sa_analytics_daily add column if not exists bp_work_order_count integer not null default 0;
+alter table close_sa_analytics_daily add column if not exists bp_otd_eligible_count integer not null default 0;
+alter table close_sa_analytics_daily add column if not exists bp_otd_on_time_count integer not null default 0;

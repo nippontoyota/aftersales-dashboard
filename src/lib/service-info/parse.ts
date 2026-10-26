@@ -38,17 +38,19 @@ import { seriesToSize } from "../vas-series-map";
  * nothing to vasRevenue, regardless of job code/series match. Only this
  * total is filtered — the four plain counts above are unaffected.
  */
-const JOB_DESC_COLUMN = "Job Desc";
-const JOB_CODE_COLUMN = "Job Code";
-const SERIES_COLUMN = "Series";
-const JOB_ORDER_NO_COLUMN = "Job Order No";
+// Exported (2026-10-22) so close-sa-analytics/compute.ts can re-derive these
+// same per-row matches grouped by Close SA instead of only by branch total.
+export const JOB_DESC_COLUMN = "Job Desc";
+export const JOB_CODE_COLUMN = "Job Code";
+export const SERIES_COLUMN = "Series";
+export const JOB_ORDER_NO_COLUMN = "Job Order No";
 // Not "Close SA Name" (that's SSRV089's column name) — Service Info Report
 // exports spell this out in full. Confirmed 2026-09-01 against real
 // re-uploaded raw_upload_rows data after the exclusion silently matched
 // nothing: the column was never present under the assumed name, so
 // isAccessoriesStaff() was always being asked to match against "" and
 // correctly (per its own logic) finding nothing every time.
-const CLOSE_SA_NAME_COLUMN = "Close Service Advisor Name";
+export const CLOSE_SA_NAME_COLUMN = "Close Service Advisor Name";
 
 /** GS and BP Service Info Report exports share the exact same required
  * columns (see REQUIRED_COLUMNS below), so the structural check alone can't
@@ -69,8 +71,8 @@ export function isBpFlavoredServiceInfo(rows: Record<string, unknown>[]): boolea
   return rows.length > 0 && Object.prototype.hasOwnProperty.call(rows[0], GR_BP_FLG_COLUMN);
 }
 
-const WHEEL_BALANCING_DESC = "WB (OFF-VEHICLE, TWO WHEELS) - ADJST";
-const WHEEL_ALIGNMENT_DESC = "WHEEL ALIGNMENT - INSP";
+export const WHEEL_BALANCING_DESC = "WB (OFF-VEHICLE, TWO WHEELS) - ADJST";
+export const WHEEL_ALIGNMENT_DESC = "WHEEL ALIGNMENT - INSP";
 /** Brake Skimming = any brake-disc resurfacing job: front OR rear axle, done
  * on the car (mobile lathe) or off it (bench lathe), one side or the
  * opposite ("COMB: OPP-GRIND"). The DMS spells the ~8 variants
@@ -89,7 +91,7 @@ export function isBrakeSkimmingDesc(desc: string): boolean {
  * treatments are deliberately excluded, as are AC Duct Cleaning, Odour
  * Neutralizer and evaporator R&R (replacement). Confirmed with the user
  * 2026-09-07 (was Front + Rear before). Counted per row. */
-const EVAPORATOR_CLEANING_DESC = "TGLOSS Air Fresh-Front Evaporator";
+export const EVAPORATOR_CLEANING_DESC = "TGLOSS Air Fresh-Front Evaporator";
 
 export type ServiceInfoCounts = {
   wheelBalancing: number;

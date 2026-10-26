@@ -144,6 +144,34 @@ function slabColumn(
   };
 }
 
+/** One row's branch, actual (shared across all 4 slabs), and its own slab targets — the same rows/combine
+ * rules VpBranchSlabTable renders (CO01E folded into "CO01B + CO01E", Group first), factored out as a pure
+ * function so the Excel export route (api/vp/slab-targets-export) can reuse it and never drift from what's
+ * on screen. Doesn't touch the render path below. */
+export type SlabExportRow = { branch: string; totalRevenueStreamMtd: number | null; targets: IncentiveSlabTargets | undefined };
+
+export function buildSlabRows(
+  branches: BranchReport[],
+  group: VpScopeMetrics,
+  incentiveSlabTargets: Record<string, IncentiveSlabTargets>
+): SlabExportRow[] {
+  const targetsByBranch: Record<string, IncentiveSlabTargets> = { ...incentiveSlabTargets };
+  const combinedTargets = aggregateIncentiveSlabTargets(incentiveSlabTargets, CO01B_SLAB_COMBINED_BRANCHES);
+  if (combinedTargets) targetsByBranch[CO01B_COMBINED_LABEL] = combinedTargets;
+
+  const branchRows: SlabExportRow[] = branches
+    .filter((b) => b.branch !== "CO01E")
+    .sort(regionSort)
+    .map((b) =>
+      b.branch === "CO01B"
+        ? { branch: CO01B_COMBINED_LABEL, totalRevenueStreamMtd: combinedActual(branches, CO01B_SLAB_COMBINED_BRANCHES), targets: targetsByBranch[CO01B_COMBINED_LABEL] }
+        : { branch: b.branch, totalRevenueStreamMtd: b.totalRevenueStreamMtd, targets: targetsByBranch[b.branch] }
+    );
+
+  const totalRow: SlabExportRow = { branch: ALL_BRANCHES_LABEL, totalRevenueStreamMtd: group.totalRevenueStreamMtd, targets: group.incentiveSlabs };
+  return branchRows.length > 0 ? [totalRow, ...branchRows] : branchRows;
+}
+
 export function VpBranchSlabTable({
   branches,
   group,
@@ -186,6 +214,18 @@ export function VpBranchSlabTable({
       scroll={false}
       roomy
       renderBranchCell={(row) => <VpBranchLabel label={row.branch} />}
+      actions={
+        <a
+          href={`/api/vp/slab-targets-export?date=${date}`}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2.5 py-1 text-[11px] font-medium text-fg-muted hover:bg-surface-2 hover:text-fg"
+          title="Download Target and Achievement in ₹, whole rupees, as an Excel file"
+        >
+          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            <path d="M8 2v8m0 0-3-3m3 3 3-3M3 13h10" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Download Excel
+        </a>
+      }
     />
   );
 }

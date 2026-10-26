@@ -32,8 +32,14 @@ const NAV_ITEMS = [
   // their own uploads, not the company-wide dashboard state).
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true, hqOnly: false },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true, hqOnly: false },
-  { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: true },
-  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false, hqOnly: false },
+  { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: true, branchOnly: false },
+  // Inactive Customer Referrals — branch + HQ (2026-10-22), separate from BP
+  // Referrals above: a branch calls its own inactive customers to
+  // re-engage them, no BPM/payout workflow involved; HQ gets a read-only
+  // company-wide view of the same list (see branchOrHqOnly below).
+  // See src/app/referrals/.
+  { href: "/referrals", label: "Referrals", key: "referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: false, branchOnly: false, branchOrHqOnly: true },
+  { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false, hqOnly: false, branchOnly: false },
 ];
 
 /** The Accounts view (role `accounts`) gets its own single-item nav —
@@ -61,6 +67,18 @@ const CENTRAL_NAV_ITEMS = [
   { href: "/dashboard/central/set-targets", label: "Set Targets", key: "central-set-targets" as const },
 ];
 
+/** South/North regional managers' own nav (2026-10-20, same shape as
+ * Central's — see CENTRAL_NAV_ITEMS, including TKM Targets, generalized the
+ * same day to cover any region, not just Central). */
+const REGIONAL_RM_NAV_ITEMS = [
+  { href: "/dashboard", label: "My Region", key: "dashboard" as const },
+  { href: "/dashboard/region/tkm-targets", label: "TKM Targets", key: "region-tkm-targets" as const },
+  { href: "/queries", label: "Queries", key: "queries" as const },
+  { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
+  { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
+  { href: "/dashboard/region/set-targets", label: "Set Targets", key: "region-set-targets" as const },
+];
+
 /** HQ-only tools, kept apart from the day-to-day nav above — administrative
  * rather than something anyone checks routinely, so they sit as a small
  * link list near the account area at the bottom instead of the main list. */
@@ -81,6 +99,7 @@ type NavKey =
   | (typeof UTILITY_NAV_ITEMS)[number]["key"]
   | (typeof ACCOUNTS_NAV_ITEMS)[number]["key"]
   | (typeof CENTRAL_NAV_ITEMS)[number]["key"]
+  | (typeof REGIONAL_RM_NAV_ITEMS)[number]["key"]
   | "bills"
   | "bp-referrals";
 
@@ -171,6 +190,16 @@ function BpReferralsIcon() {
       <path d="M2 12h16v2.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V12z" strokeLinejoin="round" />
       <circle cx="6.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
       <circle cx="13.5" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function ReferralsIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <circle cx="7" cy="6.5" r="2.5" />
+      <path d="M2.5 16v-1a4.5 4.5 0 0 1 4.5-4.5h0a4.5 4.5 0 0 1 4.5 4.5v1" strokeLinecap="round" />
+      <path d="M13 4.2a2.8 2.8 0 0 1 0 5.1M16 16v-.9a4 4 0 0 0-2.7-3.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -281,12 +310,15 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   bills: BillsIcon,
   cancellations: CancellationsIcon,
   "bp-referrals": BpReferralsIcon,
+  referrals: ReferralsIcon,
   upload: UploadIcon,
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,
   accounts: DashboardIcon,
   "central-tkm-targets": TkmTargetsIcon,
   "central-set-targets": SetTargetsIcon,
+  "region-tkm-targets": TkmTargetsIcon,
+  "region-set-targets": SetTargetsIcon,
   ce: ChatIcon,
 };
 
@@ -298,6 +330,7 @@ export function AppShell({
   canUpload = true,
   accountsNav = false,
   centralNav = false,
+  regionalRmNav = false,
   slimNav = false,
   isRegional = false,
   isBranch = false,
@@ -324,10 +357,13 @@ export function AppShell({
    * upload, no company tabs, no HQ utilities). Defaults to false. */
   accountsNav?: boolean;
   /** Central regional manager: replace the whole nav with CENTRAL_NAV_ITEMS
-   * (My Region, TKM Targets, Queries, Bills, Cancellations, Set Targets) —
-   * North/South keep the generic regional nav below unchanged. Defaults to
-   * false. */
+   * (My Region, TKM Targets, Queries, Bills, Cancellations, Set Targets).
+   * Defaults to false. */
   centralNav?: boolean;
+  /** South/North regional manager: replace the whole nav with
+   * REGIONAL_RM_NAV_ITEMS — same shape as centralNav, minus Central's own
+   * extra TKM Targets page. Defaults to false. */
+  regionalRmNav?: boolean;
   /** Branch / regional accounts: drop the company-wide pages (TKM Targets,
    * Alerts, Branch Performance, Reports) from the sidebar entirely — their
    * content now lives on the branch-first dashboard. Leaves My Branch /
@@ -360,14 +396,18 @@ export function AppShell({
     ? ACCOUNTS_NAV_ITEMS
     : centralNav
     ? CENTRAL_NAV_ITEMS.map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item))
+    : regionalRmNav
+    ? REGIONAL_RM_NAV_ITEMS.map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item))
     : NAV_ITEMS.filter(
         (item) =>
           (!item.requiresDashboard || showDashboardLink) &&
           (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload) &&
-          (!item.hqOnly || isHq),
+          (!item.hqOnly || isHq) &&
+          (!item.branchOnly || isBranch) &&
+          (!item.branchOrHqOnly || isBranch || isHq),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
-  const utilityItems = isHq && !accountsNav && !centralNav ? UTILITY_NAV_ITEMS : [];
+  const utilityItems = isHq && !accountsNav && !centralNav && !regionalRmNav ? UTILITY_NAV_ITEMS : [];
 
   const navLink = (item: { href: string; label: string; key: NavKey }, compact: boolean) => {
     const Icon = ICONS[item.key];

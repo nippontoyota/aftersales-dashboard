@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { isBodyPaintOnly } from "../body-paint-only.ts";
 
 export const DMS_HEADERS = [
   "Branch", "Name", "Tel No.", "Mobile No.", "VIN", "Model", "Delivery Date",
@@ -86,6 +87,7 @@ export function parseDmsWorkbook(buffer, today) {
   const selected = new Map();
   let sourceRowCount = 0;
   let invalidContactRows = 0;
+  let bodyPaintOnlyRows = 0;
 
   for (let index = 1; index < sheetRows.length; index++) {
     const source = sheetRows[index] ?? [];
@@ -98,6 +100,13 @@ export function parseDmsWorkbook(buffer, today) {
     const latestServiceBranchCode = extractDmsBranchCode(at(source, "Last Service-in Branch"));
     if (!saleBranchCode) throw new Error(`Row ${rowNumber}: Branch must start with a bracketed branch code.`);
     if (!latestServiceBranchCode) throw new Error(`Row ${rowNumber}: Last Service-in Branch must start with a bracketed branch code.`);
+    // CO01E/KL01B/TR01B do Body & Paint work only (see body-paint-only.ts) —
+    // a "Last Service-in" recorded there is never a periodic-maintenance
+    // visit, so it must not count toward a vehicle's due-for-service date.
+    if (isBodyPaintOnly(latestServiceBranchCode)) {
+      bodyPaintOnlyRows++;
+      continue;
+    }
     const contactNumber = normalizeIndianMobile(at(source, "Mobile No.")) ?? normalizeIndianMobile(at(source, "Tel No."));
     if (!contactNumber) invalidContactRows++;
     const row = {
@@ -121,12 +130,14 @@ export function parseDmsWorkbook(buffer, today) {
 
   if (!sourceRowCount) throw new Error("The workbook contains no DMS rows.");
   const rows = [...selected.values()].map(({ row }) => row);
+  if (!rows.length) throw new Error("Every row's Last Service-in Branch is Body & Paint-only; nothing to import.");
   const dates = rows.map((row) => row.latestServiceDate).sort();
   return {
     rows,
     sourceRowCount,
-    duplicateRows: sourceRowCount - rows.length,
+    duplicateRows: sourceRowCount - bodyPaintOnlyRows - rows.length,
     invalidContactRows,
+    bodyPaintOnlyRows,
     minReportDate: dates[0],
     maxReportDate: dates[dates.length - 1],
   };

@@ -1,11 +1,10 @@
-import type { BranchView, RegionRollup } from "@/lib/branch-view-data";
+import type { BranchView } from "@/lib/branch-view-data";
+import type { CloseSaPeriodTotals } from "@/lib/close-sa-analytics/aggregate";
 import type { IncentiveSlabTargets } from "@/lib/incentive-slabs/store";
-import { BODY_PAINT_ONLY_BRANCHES } from "@/lib/report";
+import { SaAnalyticsSections } from "@/components/sa-analytics-sections";
 import { DateSelect } from "../date-select";
 import { IncentiveSlabIndicator } from "../incentive-slab-indicator";
 import { BranchOverviewBody } from "./branch-overview-body";
-import { RegionRollup as RegionRollupPanel } from "./region-rollup";
-import { RegionTable, type RegionTableRow } from "./region-table";
 
 function asOf(uploadedAt: string): string {
   return new Date(uploadedAt).toLocaleString("en-IN", {
@@ -37,6 +36,9 @@ export function BranchAccountPage({
   uploadedAt,
   incentiveSlabs,
   holidays,
+  closeSaTotals,
+  accessoriesStaffNames,
+  canDownloadRevenueStream,
 }: {
   view: BranchView | null;
   branch: string;
@@ -50,6 +52,22 @@ export function BranchAccountPage({
   incentiveSlabs?: IncentiveSlabTargets;
   /** HQ-flagged report_holidays, for the Incentive Slab forecast (2026-09-29). */
   holidays?: string[];
+  /** Month-to-date, this branch's own Close SAs only (2026-10-22) — see
+   * close-sa-analytics/. */
+  closeSaTotals: CloseSaPeriodTotals[];
+  /** This branch's own Accessories roster — for classifying SA Analytics
+   * into GS/BP/Accessories/PDI (2026-10-23). */
+  accessoriesStaffNames: string[];
+  /** True only when `date` is today's own report date — the Revenue Stream
+   * download is otherwise unreachable here, since this component only ever
+   * renders once that date is published (showBranchDailyReport handles the
+   * pre-publish case) — see dashboard/page.tsx. The API route itself also
+   * re-checks today+published independently, so this prop only controls
+   * whether the button is shown, never whether the download is allowed
+   * (2026-10-23, at the user's request: every branch should get the same
+   * company-wide Revenue Stream file HQ downloads, once HQ publishes the
+   * day). */
+  canDownloadRevenueStream: boolean;
 }) {
   return (
     <div className="mx-auto max-w-[1400px] p-6">
@@ -59,6 +77,23 @@ export function BranchAccountPage({
         date={date}
         dates={dates}
       />
+      {canDownloadRevenueStream && (
+        <div className="mt-4 flex flex-col gap-2 rounded-lg border border-border bg-surface p-4 shadow-card sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-fg-muted">
+            Today&apos;s Revenue Stream workbook is ready — the same company-wide file HQ downloads, every branch side
+            by side.
+          </div>
+          <a
+            href="/api/hq/revenue-stream-export"
+            className="inline-flex items-center gap-1.5 self-start rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-fg-muted hover:bg-surface-2 hover:text-fg sm:self-auto"
+          >
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+              <path d="M8 2v8m0 0-3-3m3 3 3-3M3 13h10" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Download Excel ({date})
+          </a>
+        </div>
+      )}
       <div className="mt-4 flex justify-center rounded-lg border border-border bg-surface p-4 shadow-card sm:justify-start">
         <IncentiveSlabIndicator scopeLabel={branch} actual={view?.totalRevenueMtd ?? null} slabs={incentiveSlabs} date={date} holidays={holidays} size={108} />
       </div>
@@ -71,52 +106,12 @@ export function BranchAccountPage({
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-export function RegionAccountPage({
-  rollup,
-  branches,
-  date,
-  dates,
-  uploadedAt,
-}: {
-  rollup: RegionRollup | null;
-  branches: BranchView[];
-  date: string;
-  dates: string[];
-  uploadedAt: string;
-}) {
-  const rows: RegionTableRow[] = branches.map((v) => ({
-    branch: v.branch,
-    bodyPaintOnly: BODY_PAINT_ONLY_BRANCHES.has(v.branch),
-    totalRevenue: v.totalRevenueMtd,
-    rankTotal: v.ranks.totalRevenue,
-    revenuePerCar: v.revenuePerCar,
-    vasPct: v.vasPct,
-    gusRoMtd: v.report.gusRoMtd,
-    bpuRoMtd: v.report.bpuRoMtd,
-  }));
-  const bodies = branches.map((v) => <BranchOverviewBody key={v.branch} view={v} date={date} />);
-
-  return (
-    <div className="mx-auto max-w-[1400px] p-6">
-      <Header
-        title={`${rollup?.region ?? "Region"} — Regional Overview`}
-        sub={`Month-to-date for ${date}. Pick a branch row to expand its full view. Data as of ${asOf(uploadedAt)} IST.`}
-        date={date}
-        dates={dates}
-      />
-      <div className="mt-4 space-y-4">
-        {rollup ? <RegionRollupPanel rollup={rollup} /> : null}
-        {rows.length ? (
-          <RegionTable rows={rows} bodies={bodies} />
-        ) : (
-          <div className="rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
-            No branch data for this region on {date} yet.
-          </div>
-        )}
+      <div className="mt-4">
+        <SaAnalyticsSections
+          totals={closeSaTotals}
+          accessoriesStaffNamesByBranch={new Map([[branch, accessoriesStaffNames]])}
+          subtitlePrefix={`Month-to-date for ${date}`}
+        />
       </div>
     </div>
   );

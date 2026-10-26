@@ -19,6 +19,7 @@ export function VpHeader({
   dateExtraParams,
   flagHref,
   showPrint = false,
+  downloadHref,
   asOfLabel,
   backHref,
   backLabel,
@@ -33,6 +34,8 @@ export function VpHeader({
   dateExtraParams?: Record<string, string>;
   flagHref: string;
   showPrint?: boolean;
+  /** When set, shows a "Download Excel" link to the daily Revenue Stream workbook for this date — the same file HQ/branches download (2026-10-23). */
+  downloadHref?: string;
   asOfLabel?: string;
   /** A "← …" link above the eyebrow — e.g. back to Regions from a branch. */
   backHref?: string;
@@ -65,6 +68,17 @@ export function VpHeader({
             <DateSelect dates={dates} selected={date} region="All" basePath={basePath} extraParams={dateExtraParams} />
           ) : null}
           <RaiseQueryButton flagHref={flagHref} />
+          {downloadHref ? (
+            <a
+              href={downloadHref}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 print:hidden"
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                <path d="M8 2v8m0 0-3-3m3 3 3-3M3 13h10" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Download Excel
+            </a>
+          ) : null}
           {showPrint ? <PrintButton /> : null}
         </div>
       </div>

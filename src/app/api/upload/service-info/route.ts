@@ -7,7 +7,10 @@ import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/sto
 import { isBpFlavoredServiceInfo, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-info/store";
 import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
+import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
 import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
+import { recomputeUniqueVinVas } from "@/lib/unique-vin-vas/recompute";
+import { recomputeTotalCarCareTreatments } from "@/lib/total-car-care/recompute";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -127,6 +130,9 @@ export async function POST(request: Request) {
   // otherwise-successful upload (see vas-revenue-real/recompute.ts, which
   // already swallows its own errors; this is a no-op before 2026-10-01).
   await recomputeVasRevenueReal(admin.branch, date);
+  await recomputeCloseSaAnalytics(admin.branch, date);
+  await recomputeUniqueVinVas(admin.branch, date);
+  await recomputeTotalCarCareTreatments(admin.branch, date);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }

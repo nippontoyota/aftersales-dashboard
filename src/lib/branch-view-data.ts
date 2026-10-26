@@ -130,23 +130,19 @@ function maskReport(report: Report): Report {
   return { ...report, branches: maskBranchRevenue(report.branches, report.date) };
 }
 
-/** Load the data shared by every branch on the page (a regional grid reuses
- * one call across all its branches). `report` / `monthSnapshots` /
- * `serviceInfoMonthSnapshots` are already loaded by dashboard-data — pass
- * them in to avoid a second fetch.
+/** Load the data shared by every branch on the page. `report` /
+ * `monthSnapshots` / `serviceInfoMonthSnapshots` are already loaded by
+ * dashboard-data — pass them in to avoid a second fetch.
  *
- * `maskRevenue` (2026-09-26) — true only for a branch admin's own view
- * (loadBranchView); `report` itself is already masked by dashboard-data in
- * that case, but the extra prior-month/trend reports fetched below are
- * this function's own, so they need the same treatment here. loadRegionView
- * always passes false — a regional manager sees real revenue for every
- * date, backfilled or not. */
+ * Masks pre-Aug-2026 revenue (2026-09-26) for a branch admin's own view
+ * (loadBranchView, the only caller); `report` itself is already masked by
+ * dashboard-data, but the extra prior-month/trend reports fetched below are
+ * this function's own, so they need the same treatment here. */
 async function loadShared(
   date: string,
   report: Report,
   monthSnapshots: Snapshot[],
   serviceInfoMonthSnapshots: ServiceInfoSnapshot[],
-  maskRevenue: boolean,
 ): Promise<Shared> {
   const allDates = await listSnapshotDates();
   const month = date.slice(0, 7);
@@ -165,10 +161,8 @@ async function loadShared(
     loadReportHolidaySet(),
   ]);
 
-  const priorReports = maskRevenue
-    ? priorReportsRaw.map((r) => (r.report ? { date: r.date, report: maskReport(r.report) } : r))
-    : priorReportsRaw;
-  const prevMonthReport = maskRevenue && prevMonthReportRaw ? maskReport(prevMonthReportRaw) : prevMonthReportRaw;
+  const priorReports = priorReportsRaw.map((r) => (r.report ? { date: r.date, report: maskReport(r.report) } : r));
+  const prevMonthReport = prevMonthReportRaw ? maskReport(prevMonthReportRaw) : prevMonthReportRaw;
 
   const reportsByDate = [
     ...priorReports.filter((r): r is { date: string; report: Report } => r.report !== null),
@@ -358,80 +352,7 @@ export async function loadBranchView(
   monthSnapshots: Snapshot[],
   serviceInfoMonthSnapshots: ServiceInfoSnapshot[],
 ): Promise<BranchView | null> {
-  // Always a branch admin's own dashboard (the only caller) — mask.
-  const shared = await loadShared(date, report, monthSnapshots, serviceInfoMonthSnapshots, true);
+  const shared = await loadShared(date, report, monthSnapshots, serviceInfoMonthSnapshots);
   return buildView(branch, shared);
 }
 
-// ---------------------------------------------------------------------------
-// Regional manager view: a region roll-up + a per-branch table.
-
-export type RegionRollup = {
-  region: RegionName;
-  totalRevenue: number | null;
-  vasActual: number | null;
-  vasTarget: number | null;
-  vasPct: number | null;
-  workingDays: { elapsed: number; total: number };
-  projectedTotalRevenue: number | null;
-  /** Rank of this region among the three, by total revenue stream. */
-  rank: { rank: number; of: number };
-  /** All three regions' total revenue stream — for the comparison bars. */
-  allRegions: { region: RegionName; totalRevenue: number | null }[];
-};
-
-export async function loadRegionView(
-  region: RegionName,
-  date: string,
-  report: Report,
-  monthSnapshots: Snapshot[],
-  serviceInfoMonthSnapshots: ServiceInfoSnapshot[],
-): Promise<{ rollup: RegionRollup; branches: BranchView[] }> {
-  // Regional managers always see real revenue, backfilled or not — never mask.
-  const shared = await loadShared(date, report, monthSnapshots, serviceInfoMonthSnapshots, false);
-  const present = new Set(report.branches.map((b) => b.branch));
-
-  const branches = (REGIONS[region] as readonly string[])
-    .filter((code) => present.has(code))
-    .map((code) => buildView(code, shared))
-    .filter((v): v is BranchView => v !== null);
-
-  const regionSum = (rg: RegionName, pick: (b: BranchReport) => number | null): number | null => {
-    const codes: readonly string[] = REGIONS[rg];
-    const vals = report.branches.filter((b) => codes.includes(b.branch)).map(pick).filter((v): v is number => v !== null);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
-  };
-
-  const allRegions = (Object.keys(REGIONS) as RegionName[]).map((rg) => ({
-    region: rg,
-    totalRevenue: regionSum(rg, (b) => b.totalRevenueStreamMtd),
-  }));
-  const sortedByRevenue = [...allRegions]
-    .filter((r): r is { region: RegionName; totalRevenue: number } => r.totalRevenue !== null)
-    .sort((a, b) => b.totalRevenue - a.totalRevenue);
-  const rankIdx = sortedByRevenue.findIndex((r) => r.region === region);
-
-  const workingDays = {
-    elapsed: countWorkingDaysElapsed(date, shared.holidays),
-    total: countWorkingDaysInMonth(date, shared.holidays),
-  };
-  const totalRevenue = regionSum(region, (b) => b.totalRevenueStreamMtd);
-  const vasActual = regionSum(region, (b) => b.vasAchievementForTheMonth);
-  const vasTarget = regionSum(region, (b) => b.vasBillTarget);
-
-  return {
-    rollup: {
-      region,
-      totalRevenue,
-      vasActual,
-      vasTarget,
-      vasPct: vasActual !== null && vasTarget ? vasActual / vasTarget : null,
-      workingDays,
-      projectedTotalRevenue:
-        totalRevenue !== null && workingDays.elapsed > 0 ? (totalRevenue / workingDays.elapsed) * workingDays.total : null,
-      rank: { rank: rankIdx === -1 ? sortedByRevenue.length + 1 : rankIdx + 1, of: allRegions.length },
-      allRegions,
-    },
-    branches,
-  };
-}

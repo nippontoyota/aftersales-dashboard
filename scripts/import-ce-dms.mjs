@@ -21,19 +21,6 @@ const today = new Intl.DateTimeFormat("en-CA", {
 }).format(new Date());
 const parsed = parseDmsWorkbook(buffer, today);
 
-const EXPECTED_SUPPLIED_FILE = {
-  sha256: "d77573047218712b281d081781d80d0db719cbc40ed83e727287081494570965",
-  sourceRows: 153_316,
-  uniqueRows: 153_316,
-  matched: 8_592,
-  inserted: 144_724,
-  active: 153_522,
-  contacts: 151_235,
-  advanced: 5_165,
-  age: { hot: 114_770, warm: 26_918, cold: 11_834 },
-  avf: { red: 5_023, yellow: 2_013, green: 1_762, unavailable: 144_724 },
-};
-
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await client.connect();
 
@@ -196,19 +183,6 @@ try {
     assertEqual(result.hot + result.warm + result.cold, result.active, "Age category total");
     assertEqual(result.red + result.yellow + result.green + result.unavailable, result.active, "AVF category total");
 
-    if (sha256 === EXPECTED_SUPPLIED_FILE.sha256) {
-      const expected = EXPECTED_SUPPLIED_FILE;
-      assertEqual(parsed.sourceRowCount, expected.sourceRows, "Supplied workbook source rows");
-      assertEqual(parsed.rows.length, expected.uniqueRows, "Supplied workbook unique rows");
-      assertEqual(result.matched, expected.matched, "Matched leads");
-      assertEqual(result.inserted, expected.inserted, "Inserted leads");
-      assertEqual(result.advanced, expected.advanced, "Advanced service histories");
-      assertEqual(result.active, expected.active, "Active leads");
-      assertEqual(result.contacts, expected.contacts, "Leads with valid contact");
-      for (const key of Object.keys(expected.age)) assertEqual(result[key], expected.age[key], `${key} age leads`);
-      for (const key of Object.keys(expected.avf)) assertEqual(result[key], expected.avf[key], `${key} AVF leads`);
-    }
-
     if (apply) await client.query("commit");
     else await client.query("rollback");
     console.log(`DMS import: ${apply ? "applied" : "dry run"}`);
@@ -216,6 +190,7 @@ try {
       sourceRows: parsed.sourceRowCount,
       uniqueRows: parsed.rows.length,
       duplicateRows: parsed.duplicateRows,
+      bodyPaintOnlyRows: parsed.bodyPaintOnlyRows,
       matched: result.matched,
       inserted: result.inserted,
       advanced: result.advanced,

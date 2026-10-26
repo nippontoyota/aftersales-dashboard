@@ -6,7 +6,10 @@ import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { isBpFlavoredServiceInfo, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
+import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
 import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
+import { recomputeUniqueVinVas } from "@/lib/unique-vin-vas/recompute";
+import { recomputeTotalCarCareTreatments } from "@/lib/total-car-care/recompute";
 
 /** Service Information Report - BP — required daily like every other
  * upload. The raw file is always kept (see raw-report-uploads/store.ts),
@@ -135,6 +138,9 @@ export async function POST(request: Request) {
   // otherwise-successful upload (see vas-revenue-real/recompute.ts, which
   // already swallows its own errors; this is a no-op before 2026-10-01).
   await recomputeVasRevenueReal(admin.branch, date);
+  await recomputeCloseSaAnalytics(admin.branch, date);
+  await recomputeUniqueVinVas(admin.branch, date);
+  await recomputeTotalCarCareTreatments(admin.branch, date);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name, bpCounts });
 }

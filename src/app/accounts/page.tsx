@@ -70,7 +70,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-8">
       {!data.isPublished && (
-        <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} />
+        <DraftWarning uploadedBranches={data.uploadedBranchCount} totalBranches={data.totalBranchCount} holiday={data.holiday} />
       )}
       <AccountsHeader
         eyebrow="Nippon Group · Accounts"

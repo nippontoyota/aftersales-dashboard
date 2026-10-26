@@ -6,6 +6,7 @@ import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { loadPartSaleSnapshot, savePartSaleSnapshot } from "@/lib/part-sale/store";
 import { checkBillOverlap, checkSaleDateSanity } from "@/lib/part-sale/upload-validation";
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
+import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -105,6 +106,11 @@ export async function POST(request: Request) {
   } finally {
     dbClient.release();
   }
+
+  // Outside the save above — a recompute failure shouldn't block an
+  // otherwise-successful upload (see close-sa-analytics/recompute.ts, which
+  // already swallows its own errors).
+  await recomputeCloseSaAnalytics(admin.branch, date);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }

@@ -112,7 +112,7 @@ export async function replaceCeLeads(
       [fileName, username, parsed.rows.length, parsed.minReportDate, parsed.maxReportDate],
     );
     const importId = imported.rows[0].id;
-    await client.query("update ce_leads set active = false where active and dms_import_id is null");
+    await client.query("update ce_leads set active = false where active");
 
     const records = parsed.rows.map((row) => ({
       allocated_dealer: row.allocatedDealer,
@@ -157,10 +157,22 @@ export async function replaceCeLeads(
       on conflict (vin) do update set
         allocated_dealer = excluded.allocated_dealer, dealer_zone = excluded.dealer_zone,
         sale_dealer_code = excluded.sale_dealer_code, sales_date = excluded.sales_date, uio_year = excluded.uio_year,
-        sale_branch_code = excluded.sale_branch_code, n_dealer_code = excluded.n_dealer_code, avf = excluded.avf,
-        n_report_date = excluded.n_report_date, n_mileage = excluded.n_mileage, n1_dealer_code = excluded.n1_dealer_code,
-        n1_report_date = excluded.n1_report_date, n1_mileage = excluded.n1_mileage, n2_dealer_code = excluded.n2_dealer_code,
-        n2_mileage = excluded.n2_mileage, n2_report_date = excluded.n2_report_date,
+        sale_branch_code = excluded.sale_branch_code,
+        -- The N/N1/N2/avf service-history chain may have been advanced past
+        -- this workbook's extract date by a later DMS import (dms.mjs) — only
+        -- let this upload move it forward, never back, mirroring the "newer
+        -- wins" guard import-ce-dms.mjs already applies to the same columns.
+        n_dealer_code = case when excluded.n_report_date > ce_leads.n_report_date then excluded.n_dealer_code else ce_leads.n_dealer_code end,
+        avf = case when excluded.n_report_date > ce_leads.n_report_date then excluded.avf else ce_leads.avf end,
+        n_report_date = case when excluded.n_report_date > ce_leads.n_report_date then excluded.n_report_date else ce_leads.n_report_date end,
+        n_mileage = case when excluded.n_report_date > ce_leads.n_report_date then excluded.n_mileage else ce_leads.n_mileage end,
+        n1_dealer_code = case when excluded.n_report_date > ce_leads.n_report_date then excluded.n1_dealer_code else ce_leads.n1_dealer_code end,
+        n1_report_date = case when excluded.n_report_date > ce_leads.n_report_date then excluded.n1_report_date else ce_leads.n1_report_date end,
+        n1_mileage = case when excluded.n_report_date > ce_leads.n_report_date then excluded.n1_mileage else ce_leads.n1_mileage end,
+        n2_dealer_code = case when excluded.n_report_date > ce_leads.n_report_date then excluded.n2_dealer_code else ce_leads.n2_dealer_code end,
+        n2_mileage = case when excluded.n_report_date > ce_leads.n_report_date then excluded.n2_mileage else ce_leads.n2_mileage end,
+        n2_report_date = case when excluded.n_report_date > ce_leads.n_report_date then excluded.n2_report_date else ce_leads.n2_report_date end,
+        dms_import_id = case when excluded.n_report_date > ce_leads.n_report_date then null else ce_leads.dms_import_id end,
         customer_first_name = excluded.customer_first_name, customer_family_name = excluded.customer_family_name,
         active = true, source_import_id = excluded.source_import_id, imported_at = now()`,
       [JSON.stringify(records), importId],

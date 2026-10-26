@@ -5,10 +5,9 @@ import type { TglossException, VpScopeMetrics } from "@/lib/vp-data";
  * The Executive Overview's "read this first" line (2026-09-28, at the VP's
  * request for a one-line "so what" instead of making him piece the story
  * together from 5 cards and a grid). Exactly one sentence, chosen by
- * priority from real, already-computed numbers — same "not AI, not
- * invented" philosophy as dashboard/insights-panel.tsx, just capped at one
- * line instead of a bulleted list (the detailed exceptions banner and full
- * grid still exist right below for anyone who wants more).
+ * priority from real, already-computed numbers — not AI, not invented
+ * (the detailed exceptions banner and full grid still exist right below
+ * for anyone who wants more).
  *
  * Priority: a meaningful month-over-month move on Total Revenue Stream
  * (the number the VP asked to unstub first) beats everything else; then the

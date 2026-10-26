@@ -37,6 +37,8 @@ export function MonthlyBreakdownTable({ metric, branchLabels }: { metric: Centra
 
   if (months.length === 0) return null;
 
+  const branchCount = metric.rows.length;
+
   return (
     <div className="mt-2 border-t border-dashed border-border-subtle pt-2">
       <button
@@ -52,7 +54,10 @@ export function MonthlyBreakdownTable({ metric, branchLabels }: { metric: Centra
 
       {expanded ? (
         <div className="mt-2 overflow-x-auto">
-          <div className="grid min-w-[560px] grid-cols-[52px_repeat(4,minmax(0,1fr))] items-center gap-x-2 gap-y-1.5">
+          <div
+            className="grid items-center gap-x-2 gap-y-1.5"
+            style={{ gridTemplateColumns: `52px repeat(${branchCount}, minmax(0,1fr))`, minWidth: `${52 + branchCount * 110}px` }}
+          >
             <span className="text-[9.5px] font-medium uppercase tracking-wide text-fg-faint">Month</span>
             {metric.rows.map((r) => (
               <span key={r.branch} className="truncate text-[9.5px] font-medium uppercase tracking-wide text-fg-faint" title={r.branch}>

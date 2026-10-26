@@ -22,6 +22,8 @@ import { saveServiceInfoSnapshot } from "@/lib/service-info/store";
 import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
+import { recomputeUniqueVinVas } from "@/lib/unique-vin-vas/recompute";
+import { recomputeTotalCarCareTreatments } from "@/lib/total-car-care/recompute";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { saveSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { checkInvoiceDocDateSanity, checkInvoiceOverlap } from "@/lib/ssrv089/upload-validation";
@@ -167,6 +169,8 @@ export async function POST(request: Request) {
           uploadedBy: admin.username,
         });
         await recomputeVasRevenueReal(branch, date);
+        await recomputeUniqueVinVas(branch, date);
+        await recomputeTotalCarCareTreatments(branch, date);
         return NextResponse.json({ success: true, type, variant, date, branch, sourceFileName: file.name, bpCounts });
       }
       const svcInfoStaffNames = await listAccessoriesStaffNamesForBranch(branch);
@@ -215,6 +219,8 @@ export async function POST(request: Request) {
         siClient.release();
       }
       await recomputeVasRevenueReal(branch, date);
+      await recomputeUniqueVinVas(branch, date);
+      await recomputeTotalCarCareTreatments(branch, date);
       return NextResponse.json({ success: true, type, variant, date, branch, counts });
     }
 

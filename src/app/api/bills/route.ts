@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadBillsForMonth, loadBillTotalsByMonth, type BillBranchScope } from "@/lib/bill/store";
 import { REGIONS } from "@/lib/regions";
+import { KL_BRANCHES } from "@/lib/kl-branches-data";
 
 export async function GET(request: Request) {
   const admin = await getCurrentAdmin();
@@ -12,7 +13,13 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const month = searchParams.get("month");
   const branch: BillBranchScope =
-    admin.role === "branch" ? admin.branch : admin.role === "regional" ? REGIONS[admin.region] : undefined;
+    admin.role === "branch"
+      ? admin.branch
+      : admin.role === "regional"
+        ? REGIONS[admin.region]
+        : admin.role === "kl_cluster"
+          ? KL_BRANCHES
+          : undefined;
 
   if (month) {
     if (!/^\d{4}-\d{2}$/.test(month)) {

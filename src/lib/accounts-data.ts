@@ -6,6 +6,8 @@ import { buildReport, type BranchReport, type Report } from "./report";
 import { listSnapshotDates } from "./snapshot-store";
 import { isDatePublished } from "./publish-store";
 import { countScom205BranchesForDate } from "./scom205/store";
+import { loadReportHoliday, loadReportHolidaySet } from "./report-holidays/store";
+import { latestNonHolidayDate } from "./reporting-date";
 
 /**
  * The data foundation for the Accounts (finance) executive view (/accounts).
@@ -38,6 +40,10 @@ export type AccountsData = {
   isPublished: boolean;
   uploadedBranchCount: number;
   totalBranchCount: number;
+  /** Set when `date` itself is flagged in report_holidays — lets the page
+   * explain a partial/empty report as "this was a holiday" instead of a
+   * false "still syncing" warning (2026-10-22). */
+  holiday: { note: string | null } | null;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -50,16 +56,24 @@ function sumCancellations(rows: CancellationMonthSummary[]): { count: number; be
 }
 
 export async function loadAccountsData(requestedDate?: string): Promise<AccountsData | null> {
-  const dates = await listSnapshotDates();
+  const [dates, holidays] = await Promise.all([listSnapshotDates(), loadReportHolidaySet()]);
   if (dates.length === 0) return null;
 
-  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : dates.at(-1)!;
+  const date = requestedDate && DATE_RE.test(requestedDate) ? requestedDate : latestNonHolidayDate(dates, holidays)!;
   const month = date.slice(0, 7);
+  const isHolidayDate = holidays.has(date);
 
-  const [reportRaw, allCancellationSummaries, published, scom205Count] = await Promise.all([buildReport(date), loadCancellationMonthSummaries(), isDatePublished(date), countScom205BranchesForDate(date)]);
+  const [reportRaw, allCancellationSummaries, published, scom205Count, holidayRecord] = await Promise.all([
+    buildReport(date),
+    loadCancellationMonthSummaries(),
+    isDatePublished(date),
+    countScom205BranchesForDate(date),
+    isHolidayDate ? loadReportHoliday(date) : Promise.resolve(null),
+  ]);
+  const holiday = holidayRecord ? { note: holidayRecord.note } : null;
 
   if (!reportRaw) {
-    return { date, dates, month, report: null, group: null, regions: [], cancellationsByBranch: new Map(), isPublished: published, uploadedBranchCount: 0, totalBranchCount: 18 };
+    return { date, dates, month, report: null, group: null, regions: [], cancellationsByBranch: new Map(), isPublished: published, uploadedBranchCount: 0, totalBranchCount: 18, holiday };
   }
 
   // Accounts sees revenue masked before Aug 2026 too (2026-09-26, at HQ's
@@ -95,5 +109,6 @@ export async function loadAccountsData(requestedDate?: string): Promise<Accounts
     isPublished: published,
     uploadedBranchCount: scom205Count,
     totalBranchCount: 18 + (hasCo01c ? 1 : 0),
+    holiday,
   };
 }

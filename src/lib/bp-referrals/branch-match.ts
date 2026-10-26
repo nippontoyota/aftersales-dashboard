@@ -22,15 +22,30 @@ function normalize(s: string): string {
   return s.trim().toLowerCase();
 }
 
-/** Resolves a free-text location name to a branch code, or null if it
- * doesn't match any known branch name. Case-insensitive, trims whitespace. */
+/** Resolves a free-text location name to a branch code with no special
+ * casing — plain first-match-wins against BRANCH_NAMES (CO01B, the general
+ * branch, comes before CO01E in that map, so "Kalamassery" alone lands on
+ * CO01B). Used anywhere the BP-specific override below doesn't apply — see
+ * resolveBranchCode(). */
+export function resolveBranchCodeByName(rawText: string | null | undefined): string | null {
+  if (!rawText) return null;
+  const normalized = normalize(rawText);
+  if (!normalized) return null;
+  for (const [code, name] of Object.entries(BRANCH_NAMES)) {
+    if (normalize(name) === normalized) return code;
+  }
+  return null;
+}
+
+/** Same as resolveBranchCodeByName, but a BP referral from Kalamassery
+ * always routes to the dedicated BP branch (CO01E) when one exists — see
+ * the NAME_OVERRIDE comment above. BP-referral-specific; anything that
+ * isn't about the body-shop referral program should use
+ * resolveBranchCodeByName() directly instead. */
 export function resolveBranchCode(rawText: string | null | undefined): string | null {
   if (!rawText) return null;
   const normalized = normalize(rawText);
   if (!normalized) return null;
   if (NAME_OVERRIDE[normalized]) return NAME_OVERRIDE[normalized];
-  for (const [code, name] of Object.entries(BRANCH_NAMES)) {
-    if (normalize(name) === normalized) return code;
-  }
-  return null;
+  return resolveBranchCodeByName(rawText);
 }
