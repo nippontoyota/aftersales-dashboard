@@ -32,11 +32,16 @@ export type BpReferralRow = {
   pending_ro_no: string | null;
   pending_ro_entered_at: Date | string | null;
   closed_at: Date | string | null;
-  closed_reason: "not_genuine" | "not_interested" | null;
+  closed_reason: "not_genuine" | "not_interested" | "lost" | null;
   /** Why the customer declined, once genuine + not interested — a distinct
    * structured field from the call-outcome remark/damage description,
    * which stays in bp_referral_activity (2026-10-17, the user's call). */
   not_interested_reason: string | null;
+  /** Why a validated (genuine + interested) referral got closed out as
+   * "Lost" instead of completing — e.g. the customer took the car to
+   * another workshop. Mandatory on that path, same shape as
+   * not_interested_reason (2026-10-27, the user's request). */
+  lost_reason: string | null;
   last_contacted_at: Date | string | null;
   /** Most recent transfer's origin branch, if this referral has ever been
    * transferred — null otherwise. Joined in, not a real column. */
@@ -48,7 +53,7 @@ const SELECT_COLUMNS = `
   r.vehicle_image_url, r.customer_phone, r.submitted_at, r.vehicle_reg_no, r.vehicle_model, r.location, r.description,
   r.assigned_branch, r.call_status, r.genuine, r.estimate_amount, r.customer_interested, r.payment_type,
   r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.pending_ro_no, r.pending_ro_entered_at,
-  r.closed_at, r.closed_reason, r.not_interested_reason,
+  r.closed_at, r.closed_reason, r.not_interested_reason, r.lost_reason,
   r.last_contacted_at, lt.from_branch as transferred_from
 `;
 
@@ -124,7 +129,7 @@ async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
 
 async function logActivity(
   referralId: number,
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered",
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost",
   remark: string,
   performedBy: string,
   notConnectedReason?: string,
@@ -214,9 +219,35 @@ export async function logFollowUpContact(id: number, branch: string, performedBy
   await logActivity(id, "follow_up", remark, performedBy);
 }
 
+/** BPM closes out a validated (genuine + interested) referral as "Lost" —
+ * the customer took the car elsewhere instead of bringing it in, so there's
+ * no point following up any further (2026-10-27, the user's request). Only
+ * valid while the referral is still open and unmatched — once an RO is
+ * entered or matched the case is already done, and a closed case can't be
+ * closed again. validated_at is left untouched, so the referring employee
+ * keeps their ₹50 validation payout, same precedent as not_interested. */
+export async function closeFollowUpAsLost(id: number, branch: string, performedBy: string, lostReason: string): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  const { rows } = await pool.query<{
+    validated_at: Date | string | null;
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+    pending_ro_no: string | null;
+  }>(`select validated_at, closed_at, ro_matched_at, pending_ro_no from bp_referrals where id = $1`, [id]);
+  const referral = rows[0];
+  if (!referral || !referral.validated_at || referral.closed_at || referral.ro_matched_at || referral.pending_ro_no) {
+    throw new Error("This referral isn't open for a Lost close-out.");
+  }
+  await pool.query(
+    `update bp_referrals set closed_at = now(), closed_reason = 'lost', lost_reason = $2, handled_by = $3 where id = $1`,
+    [id, lostReason, performedBy],
+  );
+  await logActivity(id, "lost", lostReason, performedBy);
+}
+
 export type ActivityRow = {
   id: number;
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered";
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost";
   remark: string;
   notConnectedReason: string | null;
   performedBy: string;
@@ -485,6 +516,7 @@ export type BranchRollupRow = {
   completed: number;
   notGenuine: number;
   notInterested: number;
+  lost: number;
   pending: number;
 };
 
@@ -498,6 +530,7 @@ export async function loadBranchRollup(): Promise<BranchRollupRow[]> {
     completed: string;
     not_genuine: string;
     not_interested: string;
+    lost: string;
     pending: string;
   }>(
     `select assigned_branch,
@@ -506,6 +539,7 @@ export async function loadBranchRollup(): Promise<BranchRollupRow[]> {
             count(*) filter (where ro_matched_at is not null) as completed,
             count(*) filter (where closed_reason = 'not_genuine') as not_genuine,
             count(*) filter (where closed_reason = 'not_interested') as not_interested,
+            count(*) filter (where closed_reason = 'lost') as lost,
             count(*) filter (where closed_at is null and validated_at is null) as pending
      from bp_referrals
      where assigned_branch is not null and assigned_branch <> ''
@@ -520,6 +554,7 @@ export async function loadBranchRollup(): Promise<BranchRollupRow[]> {
     completed: Number(r.completed),
     notGenuine: Number(r.not_genuine),
     notInterested: Number(r.not_interested),
+    lost: Number(r.lost),
     pending: Number(r.pending),
   }));
 }

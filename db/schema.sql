@@ -48,21 +48,12 @@ create table if not exists admins (
 -- Upgrade an existing database:
 alter table admins add column if not exists region text;
 alter table admins drop constraint if exists branch_role_consistency;
-alter table admins drop constraint if exists admins_role_check;
-alter table admins add constraint admins_role_check check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce'));
-alter table admins drop constraint if exists admins_role_scope_consistency;
-alter table admins add constraint admins_role_scope_consistency check (
-  (role = 'branch'     and branch is not null and region is null) or
-  (role = 'hq'         and branch is null     and region is null) or
-  (role = 'regional'   and branch is null     and region in ('North', 'Central', 'South')) or
-  (role = 'vp_service' and branch is null     and region is null) or
-  (role = 'ceo'        and branch is null     and region is null) or
-  (role = 'accounts'   and branch is null     and region is null) or
-  (role = 'hq_viewer'  and branch is null     and region is null) or
-  (role = 'bp_manager' and branch is not null and region is null) or
-  (role = 'bp_ho'      and branch is null     and region is null) or
-  (role = 'ce'         and branch is null     and region is null)
-);
+-- admins_role_check/admins_role_scope_consistency used to be re-applied here
+-- too (narrower than the final version further down in this file) — removed
+-- 2026-10-27 since re-applying a now-superseded, narrower role list mid-
+-- script breaks a full schema.sql replay once any admin has a role (e.g.
+-- 'kl_cluster') the later rows don't yet know about. See the final
+-- admins_role_check/admins_role_scope_consistency block for the current one.
 
 -- VP Service → HQ query/flag threads. The VP pins a flag to whatever they
 -- were looking at (page + date + optional region/branch/metric/value); HQ
@@ -1082,22 +1073,12 @@ create index if not exists bp_referral_transfers_referral_idx on bp_referral_tra
 -- stored here, so no region column needed for this role.
 -- 'bp_ho' — read-only, company-wide analytical view across all branches,
 -- same shape as vp_service/ceo/accounts (no branch/region/publish gate).
-alter table admins drop constraint if exists admins_role_check;
-alter table admins add constraint admins_role_check
-  check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce'));
-alter table admins drop constraint if exists admins_role_scope_consistency;
-alter table admins add constraint admins_role_scope_consistency check (
-  (role = 'branch'      and branch is not null and region is null) or
-  (role = 'hq'          and branch is null     and region is null) or
-  (role = 'regional'    and branch is null     and region in ('North', 'Central', 'South')) or
-  (role = 'vp_service'  and branch is null     and region is null) or
-  (role = 'ceo'         and branch is null     and region is null) or
-  (role = 'accounts'    and branch is null     and region is null) or
-  (role = 'hq_viewer'   and branch is null     and region is null) or
-  (role = 'bp_manager'  and branch is not null and region is null) or
-  (role = 'bp_ho'       and branch is null     and region is null) or
-  (role = 'ce'          and branch is null     and region is null)
-);
+-- (admins_role_check/admins_role_scope_consistency for this role list were
+-- re-applied here too, duplicating the identical alter block above — removed
+-- 2026-10-27 since it broke a full schema.sql replay against a database that
+-- already has a 'kl_cluster' admin: re-applying this narrower, now-superseded
+-- constraint mid-script rejects that row before the final widened version
+-- further down ever runs. See that final block for the current constraint.)
 
 -- Customer Engagement annual UIO dataset and append-only workflow history.
 create table if not exists ce_lead_imports (
@@ -1551,3 +1532,20 @@ alter table bp_referral_activity drop constraint if exists bp_referral_activity_
 alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
   check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered'));
 alter table close_sa_analytics_daily add column if not exists bp_otd_on_time_count integer not null default 0;
+
+-- BP Referrals: BPM can close out a validated (genuine + interested) referral
+-- as "Lost" once the customer's taken the car elsewhere instead of bringing
+-- it in (2026-10-27, at the user's request) — distinct from not_genuine/
+-- not_interested since the lead itself was good and the referring employee
+-- still earns the ₹50 validation payout, same precedent as not_interested.
+-- lost_reason is a mandatory free-text field, same shape as
+-- not_interested_reason.
+alter table bp_referrals add column if not exists lost_reason text;
+
+alter table bp_referrals drop constraint if exists bp_referrals_closed_reason_check;
+alter table bp_referrals add constraint bp_referrals_closed_reason_check
+  check (closed_reason is null or closed_reason in ('not_genuine', 'not_interested', 'lost'));
+
+alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
+alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
+  check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost'));

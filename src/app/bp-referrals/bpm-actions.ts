@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
 import { listBranchCodes } from "@/lib/admin-store";
 import {
+  closeFollowUpAsLost,
   enterRoNumber,
   loadActivityForReferral,
   loadOverdueFollowUps,
@@ -161,6 +162,28 @@ export async function logFollowUpContactAction(_prev: BpmActionState, formData: 
     await logFollowUpContact(id, admin.branch, admin.username, remark);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't update that referral.", ok: false };
+  }
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
+}
+
+/** Closes out a validated (genuine + interested) referral as "Lost" — the
+ * BPM's call that the customer took the car elsewhere and there's no point
+ * following up any further (2026-10-27, the user's request). Mandatory
+ * reason, same shape as every other action here. */
+export async function closeFollowUpAsLostAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const lostReason = requiredRemark(formData);
+  if (!lostReason) return { error: "Enter the reason this is lost.", ok: false };
+
+  try {
+    await closeFollowUpAsLost(id, admin.branch, admin.username, lostReason);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't close that referral.", ok: false };
   }
   revalidatePath("/bp-referrals");
   return { error: null, ok: true };

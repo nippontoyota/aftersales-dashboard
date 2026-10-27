@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
 import {
+  closeFollowUpAsLostAction,
   enterRoNumberAction,
   getReferralActivityAction,
   logFollowUpContactAction,
@@ -41,8 +42,9 @@ export type BpmQueueReferral = {
   pending_ro_no: string | null;
   pending_ro_entered_at: Date | string | null;
   closed_at: Date | string | null;
-  closed_reason: "not_genuine" | "not_interested" | null;
+  closed_reason: "not_genuine" | "not_interested" | "lost" | null;
   not_interested_reason: string | null;
+  lost_reason: string | null;
   last_contacted_at: Date | string | null;
   transferred_from: string | null;
 };
@@ -100,10 +102,11 @@ function StatusBadge({ r }: { r: BpmQueueReferral }) {
     );
   }
   if (tab === "closed") {
+    const label = r.closed_reason === "not_genuine" ? "Not genuine" : r.closed_reason === "lost" ? "Lost" : "Not interested";
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-fg-faint">
         <Dot className="bg-fg-faint" />
-        {r.closed_reason === "not_genuine" ? "Not genuine" : "Not interested"}
+        {label}
       </span>
     );
   }
@@ -142,6 +145,7 @@ const ACTIVITY_LABEL: Record<ActivityRow["activityType"], string> = {
   call_outcome: "Call outcome",
   follow_up: "Follow-up",
   ro_entered: "RO entered",
+  lost: "Lost",
 };
 
 function ActivityHistory({ referralId }: { referralId: number }) {
@@ -245,6 +249,50 @@ function LogFollowUpButton({ id, onDone }: { id: number; onDone: () => void }) {
         {pending ? "Saving…" : "Log follow-up — spoke to customer"}
       </button>
       {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
+    </form>
+  );
+}
+
+function CloseLostButton({ id, onDone }: { id: number; onDone: () => void }) {
+  const [state, action, pending] = useActionState(closeFollowUpAsLostAction, INIT);
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="h-8 rounded-md border border-bad/30 px-3 text-sm font-medium text-bad hover:bg-bad-soft"
+      >
+        Lost — car went elsewhere
+      </button>
+    );
+  }
+
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      className="rounded-md border border-bad/30 bg-bad-soft/30 p-3"
+    >
+      <input type="hidden" name="id" value={id} />
+      <span className={eyebrow}>Reason this is lost (required)</span>
+      <textarea name="remark" required rows={2} placeholder="e.g. Customer took the car to a local workshop" className={remarkField} />
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="h-8 rounded-md bg-bad-solid px-3 text-sm font-semibold text-on-accent hover:opacity-90 disabled:opacity-60"
+        >
+          {pending ? "Closing…" : "Close as Lost"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-fg-muted hover:underline">
+          Cancel
+        </button>
+        {state.error ? <span className="text-xs text-bad">{state.error}</span> : null}
+      </div>
     </form>
   );
 }
@@ -550,6 +598,12 @@ function DetailModal({
                 <p className="mt-0.5 text-fg">{r.not_interested_reason}</p>
               </div>
             ) : null}
+            {r.lost_reason ? (
+              <div>
+                <span className="text-fg-faint">Reason lost</span>
+                <p className="mt-0.5 text-fg">{r.lost_reason}</p>
+              </div>
+            ) : null}
             {r.payment_type ? (
               <div className="flex justify-between">
                 <span className="text-fg-faint">Payment type</span>
@@ -599,6 +653,7 @@ function DetailModal({
         {canAct && tab === "followup" ? (
           <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
             <LogFollowUpButton id={r.id} onDone={onClose} />
+            <CloseLostButton id={r.id} onDone={onClose} />
           </div>
         ) : null}
 
