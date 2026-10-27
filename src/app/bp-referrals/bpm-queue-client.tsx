@@ -74,7 +74,7 @@ function isFollowUpOverdue(r: BpmQueueReferral): boolean {
 }
 
 function classify(r: BpmQueueReferral): Tab {
-  if (r.ro_matched_at) return "completed";
+  if (r.ro_matched_at || r.pending_ro_no) return "completed";
   if (r.closed_at) return "closed";
   if (r.validated_at) return "followup";
   const elapsedHours = hoursSince(r.last_contacted_at ?? r.submitted_at);

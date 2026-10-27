@@ -33,7 +33,7 @@ const FOLLOW_UP_OVERDUE_HOURS = 24;
 type Status = "pending" | "not_connected" | "followup" | "followup_overdue" | "completed" | "not_genuine" | "not_interested" | "dropped";
 
 function classify(r: BpmQueueReferral): Status {
-  if (r.ro_matched_at) return "completed";
+  if (r.ro_matched_at || r.pending_ro_no) return "completed";
   if (r.closed_reason === "not_genuine") return "not_genuine";
   if (r.closed_reason === "not_interested") return "not_interested";
   if (r.validated_at) return hoursSince(r.last_contacted_at) >= FOLLOW_UP_OVERDUE_HOURS ? "followup_overdue" : "followup";

@@ -178,7 +178,7 @@ export async function loadOverdueFollowUps(branch: string): Promise<BpReferralRo
   const { rows } = await pool.query<BpReferralRow>(
     `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
      where r.assigned_branch = $1 and r.genuine = true and r.customer_interested = true
-       and r.closed_at is null and r.ro_matched_at is null
+       and r.closed_at is null and r.ro_matched_at is null and r.pending_ro_no is null
        and r.last_contacted_at <= now() - interval '${FOLLOW_UP_OVERDUE_HOURS} hours'
      order by r.last_contacted_at asc`,
     [branch],
