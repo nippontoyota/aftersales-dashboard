@@ -531,7 +531,19 @@ export function computeCloseSaAnalytics(
   /** RO → Close SA name, from a wider window than this date's own Service
    * Info rows — see this module's doc comment above. Only Labour Sales /
    * Part Sale attribution uses this; everything else uses `roInfoByRo`. */
-  roCloseSaMap: Map<string, string>
+  roCloseSaMap: Map<string, string>,
+  /** Every Part Sale row (any date, this branch's whole history) whose
+   * RefDocNo matches one of TODAY's closing ROs (the ROs in
+   * serviceInfoRows/serviceInfoBpRows) — used only for tyre/battery.
+   * Confirmed with the user 2026-10-28: unlike every other Part-Sale-derived
+   * metric above (scoped to this day's own Part Sale rows, i.e. "parts
+   * billed this day"), tyre/battery should reflect "ROs this SA closed this
+   * day", since a part is routinely billed before its job physically
+   * closes — unlike those other metrics, this is recomputed fresh from the
+   * RO's full Part Sale history every time this date is recomputed, so it
+   * never needs a separate catch-up once the RO closes (see
+   * close-sa-analytics/recompute.ts). */
+  partSaleRowsForTyreBattery: Record<string, unknown>[]
 ): Map<string, CloseSaDailyMetrics> {
   const byCloseSa = new Map<string, CloseSaDailyMetrics>();
   const metricsFor = (name: string): CloseSaDailyMetrics => {
@@ -748,8 +760,6 @@ export function computeCloseSaAnalytics(
       m.diyCount += qty;
       m.diyRevenue += toQty(row[PS_NET_AMNT_COLUMN]);
     }
-    if (part.toUpperCase().startsWith(TYRE_PART_PREFIX)) m.tyreCount += qty;
-    if (part.toUpperCase().startsWith(BATTERY_PART_PREFIX)) m.batteryCount += qty;
 
     const billNo = normalizePart(row[PS_BILL_NO_COLUMN]);
     const customerName = normalizePart(row[PS_CUSTOMER_NAME_COLUMN]);
@@ -758,6 +768,20 @@ export function computeCloseSaAnalytics(
     }
   }
   for (const [name, set] of matchedRosBySa) metricsFor(name).partsMatchedRoCount = set.size;
+
+  // --- Tyre / Battery: scoped to the ROs that CLOSED today, not to "parts
+  // billed today" — see partSaleRowsForTyreBattery's doc comment above.
+  for (const row of partSaleRowsForTyreBattery) {
+    const refDoc = normalizeRo(row[PS_REF_DOC_NO_COLUMN]);
+    if (!refDoc) continue;
+    const closeSaName = roCloseSaMap.get(refDoc);
+    if (!closeSaName) continue;
+    const m = metricsFor(closeSaName);
+    const part = normalizePart(row[PS_PART_NO_COLUMN]);
+    const qty = toQty(row[PS_SALE_QTY_COLUMN]);
+    if (part.toUpperCase().startsWith(TYRE_PART_PREFIX)) m.tyreCount += qty;
+    if (part.toUpperCase().startsWith(BATTERY_PART_PREFIX)) m.batteryCount += qty;
+  }
 
   return byCloseSa;
 }

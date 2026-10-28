@@ -1549,3 +1549,17 @@ alter table bp_referrals add constraint bp_referrals_closed_reason_check
 alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
 alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
   check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost'));
+
+-- Close SA Analytics tyre/battery (2026-10-28, at the user's request): keyed
+-- to the day the RO closed, not the day the part was billed — see
+-- close-sa-analytics/compute.ts's partSaleRowsForTyreBattery doc comment —
+-- so every recompute now looks up a branch's whole Part Sale history by
+-- RefDocNo. Unindexed, a single such lookup took ~9.6s against one branch's
+-- 138k Part Sale rows (confirmed 2026-10-28) — this index is what makes that
+-- fast on every live Service Info upload, not just the backfill. Created
+-- with `concurrently` in production to avoid locking raw_upload_rows against
+-- writes; omitted here since CONCURRENTLY can't run inside a transaction
+-- block, which is how this file is normally replayed.
+create index if not exists raw_upload_rows_part_sale_refdoc_idx
+  on raw_upload_rows (branch, (upper(replace(row_data->>'RefDocNo', '-', ''))))
+  where report_type = 'part_sale';
