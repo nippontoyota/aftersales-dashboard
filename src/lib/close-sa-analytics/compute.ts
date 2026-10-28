@@ -534,16 +534,16 @@ export function computeCloseSaAnalytics(
   roCloseSaMap: Map<string, string>,
   /** Every Part Sale row (any date, this branch's whole history) whose
    * RefDocNo matches one of TODAY's closing ROs (the ROs in
-   * serviceInfoRows/serviceInfoBpRows) — used only for tyre/battery.
-   * Confirmed with the user 2026-10-28: unlike every other Part-Sale-derived
-   * metric above (scoped to this day's own Part Sale rows, i.e. "parts
-   * billed this day"), tyre/battery should reflect "ROs this SA closed this
+   * serviceInfoRows/serviceInfoBpRows) — used for tyre/battery, Parts ₹
+   * (matched), and matched-RO count. Confirmed with the user 2026-10-28:
+   * unlike engine-flush/injector-cleaner/synthetic-oil/brake-cleaning/DIY/
+   * external-sales above (scoped to this day's own Part Sale rows, i.e.
+   * "parts billed this day"), these should reflect "ROs this SA closed this
    * day", since a part is routinely billed before its job physically
-   * closes — unlike those other metrics, this is recomputed fresh from the
-   * RO's full Part Sale history every time this date is recomputed, so it
-   * never needs a separate catch-up once the RO closes (see
-   * close-sa-analytics/recompute.ts). */
-  partSaleRowsForTyreBattery: Record<string, unknown>[]
+   * closes — this is recomputed fresh from the RO's full Part Sale history
+   * every time this date is recomputed, so it never needs a separate
+   * catch-up once the RO closes (see close-sa-analytics/recompute.ts). */
+  partSaleRowsForClosedRos: Record<string, unknown>[]
 ): Map<string, CloseSaDailyMetrics> {
   const byCloseSa = new Map<string, CloseSaDailyMetrics>();
   const metricsFor = (name: string): CloseSaDailyMetrics => {
@@ -733,21 +733,17 @@ export function computeCloseSaAnalytics(
   // --- Part Sale: join by RefDocNo (dash-stripped) to the RO. Confirmed
   // ~65-68% real match rate, never assumed to be exhaustive. Close SA comes
   // from roCloseSaMap (a wider window), not roInfoByRo (this day only) —
-  // see module doc comment above.
-  const matchedRosBySa = new Map<string, Set<string>>();
+  // see module doc comment above. Parts ₹/matched-RO count and tyre/battery
+  // moved off this loop (2026-10-28, at the user's request) — see
+  // partSaleRowsForClosedRos below; DIY/engine-flush/injector-cleaner/
+  // synthetic-oil/brake-cleaning/external-sales stay scoped to "parts billed
+  // today", unchanged.
   for (const row of partSaleRows) {
     const refDoc = normalizeRo(row[PS_REF_DOC_NO_COLUMN]);
     if (!refDoc) continue;
     const closeSaName = roCloseSaMap.get(refDoc);
     if (!closeSaName) continue;
     const m = metricsFor(closeSaName);
-
-    if (!matchedRosBySa.has(closeSaName)) matchedRosBySa.set(closeSaName, new Set());
-    matchedRosBySa.get(closeSaName)!.add(refDoc);
-
-    const netAmnt = toQty(row[PS_NET_AMNT_COLUMN]);
-    m.partsRevenue += netAmnt;
-    if (isBpRo(refDoc)) m.bpPartsRevenue += netAmnt;
 
     const part = normalizePart(row[PS_PART_NO_COLUMN]);
     const qty = toQty(row[PS_SALE_QTY_COLUMN]);
@@ -767,21 +763,32 @@ export function computeCloseSaAnalytics(
       m.externalSales += toQty(row[PS_NET_AMNT_COLUMN]);
     }
   }
-  for (const [name, set] of matchedRosBySa) metricsFor(name).partsMatchedRoCount = set.size;
 
-  // --- Tyre / Battery: scoped to the ROs that CLOSED today, not to "parts
-  // billed today" — see partSaleRowsForTyreBattery's doc comment above.
-  for (const row of partSaleRowsForTyreBattery) {
+  // --- Tyre / Battery / Parts ₹ (matched) / matched-RO count: scoped to the
+  // ROs that CLOSED today, not to "parts billed today" — see
+  // partSaleRowsForClosedRos's doc comment above. Extended to Parts ₹ and
+  // its matched-RO count 2026-10-28, same request/reasoning as tyre/battery.
+  const matchedRosBySa = new Map<string, Set<string>>();
+  for (const row of partSaleRowsForClosedRos) {
     const refDoc = normalizeRo(row[PS_REF_DOC_NO_COLUMN]);
     if (!refDoc) continue;
     const closeSaName = roCloseSaMap.get(refDoc);
     if (!closeSaName) continue;
     const m = metricsFor(closeSaName);
+
+    if (!matchedRosBySa.has(closeSaName)) matchedRosBySa.set(closeSaName, new Set());
+    matchedRosBySa.get(closeSaName)!.add(refDoc);
+
+    const netAmnt = toQty(row[PS_NET_AMNT_COLUMN]);
+    m.partsRevenue += netAmnt;
+    if (isBpRo(refDoc)) m.bpPartsRevenue += netAmnt;
+
     const part = normalizePart(row[PS_PART_NO_COLUMN]);
     const qty = toQty(row[PS_SALE_QTY_COLUMN]);
     if (part.toUpperCase().startsWith(TYRE_PART_PREFIX)) m.tyreCount += qty;
     if (part.toUpperCase().startsWith(BATTERY_PART_PREFIX)) m.batteryCount += qty;
   }
+  for (const [name, set] of matchedRosBySa) metricsFor(name).partsMatchedRoCount = set.size;
 
   return byCloseSa;
 }

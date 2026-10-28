@@ -44,16 +44,17 @@ async function recomputeCloseSaAnalyticsForDates(branch: string, dates: string[]
         loadRawUploadRows("part_sale", date, branch),
       ]);
 
-      // Tyre/battery is keyed to the ROs closing TODAY, not to today's own
-      // Part Sale rows (see computeCloseSaAnalytics's partSaleRowsForTyreBattery
-      // doc comment) — so it needs every Part Sale row anywhere in history
-      // for those ROs, fetched fresh on every recompute of this date.
+      // Tyre/battery and Parts ₹ (matched) are keyed to the ROs closing
+      // TODAY, not to today's own Part Sale rows (see computeCloseSaAnalytics's
+      // partSaleRowsForClosedRos doc comment) — so they need every Part Sale
+      // row anywhere in history for those ROs, fetched fresh on every
+      // recompute of this date.
       const closingRos = [
         ...new Set(
           [...serviceInfoRows, ...serviceInfoBpRows].map((row) => normalizeRo((row as Record<string, unknown>)[JOB_ORDER_NO_COLUMN])).filter(Boolean)
         ),
       ];
-      const partSaleRowsForTyreBattery = await loadPartSaleRowsForRos(branch, closingRos);
+      const partSaleRowsForClosedRos = await loadPartSaleRowsForRos(branch, closingRos);
 
       const byCloseSa = computeCloseSaAnalytics(
         serviceInfoRows as Record<string, unknown>[],
@@ -62,7 +63,7 @@ async function recomputeCloseSaAnalyticsForDates(branch: string, dates: string[]
         partSaleRows as Record<string, unknown>[],
         tier,
         roCloseSaMap,
-        partSaleRowsForTyreBattery as Record<string, unknown>[]
+        partSaleRowsForClosedRos as Record<string, unknown>[]
       );
       await saveCloseSaAnalyticsForDate(branch, date, byCloseSa);
     } catch (err) {
@@ -92,12 +93,14 @@ export async function recomputeCloseSaAnalytics(branch: string, date: string): P
  * finally closes in Service Info, because recomputeCloseSaAnalytics only
  * ever runs for the date of whichever file was just uploaded.
  *
- * Only matters for the Part-Sale-date-scoped metrics now (parts revenue,
- * DIY, engine flush, etc.) — tyre/battery (2026-10-28) is keyed to the RO's
- * close date and re-fetched fresh from the RO's whole Part Sale history on
- * every recompute, so it's already correct the moment Service Info is
- * recomputed; this catch-up is redundant for tyre/battery but harmless
- * (recomputeCloseSaAnalyticsForDates recomputes the whole day either way).
+ * Only matters for the metrics still scoped to "parts billed this day" now
+ * (DIY, engine flush, injector cleaner, synthetic oil, brake cleaning,
+ * external sales) — tyre/battery and Parts ₹ (matched)/matched-RO count
+ * (2026-10-28) are keyed to the RO's close date and re-fetched fresh from
+ * the RO's whole Part Sale history on every recompute, so they're already
+ * correct the moment Service Info is recomputed; this catch-up is redundant
+ * for those but harmless (recomputeCloseSaAnalyticsForDates recomputes the
+ * whole day either way).
  *
  * Call this right after a Service Info / Service Info (BP) upload with the
  * ROs that upload just saved — it finds every Part Sale date (this branch's
