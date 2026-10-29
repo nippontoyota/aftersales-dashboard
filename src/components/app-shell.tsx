@@ -246,15 +246,6 @@ function ChatIcon() {
   );
 }
 
-function SignOutIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
-      <path d="M8 4H5.5A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8" strokeLinecap="round" />
-      <path d="M12.5 13.5 16 10l-3.5-3.5M16 10H8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 const SIDEBAR_STORAGE_KEY = "nt-sidebar-collapsed";
 const SIDEBAR_EVENT = "nt-sidebar-change";
 
@@ -496,23 +487,6 @@ export function AppShell({
           {utilityItems.map((item) => navLink(item, compact))}
         </nav>
       ) : null}
-
-      <div className={`border-t border-border-subtle ${compact ? "p-2" : "p-3"}`}>
-        <form action={logoutAction}>
-          <button
-            type="submit"
-            title={compact ? "Sign out" : undefined}
-            aria-label={compact ? "Sign out" : undefined}
-            className={
-              compact
-                ? "flex w-full items-center justify-center rounded-md border border-border p-2 text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                : "w-full rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            }
-          >
-            {compact ? <SignOutIcon /> : "Sign out"}
-          </button>
-        </form>
-      </div>
     </>
   );
 
@@ -560,7 +534,17 @@ export function AppShell({
             </button>
             <span className="text-sm font-semibold text-fg lg:hidden">Nippon Toyota</span>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </header>
         <main className="flex-1">{children}</main>
       </div>
