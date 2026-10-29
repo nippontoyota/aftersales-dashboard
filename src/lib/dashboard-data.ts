@@ -24,8 +24,8 @@ import { BRANCH_REVENUE_VISIBLE_FROM_MONTH, maskBranchRevenue } from "./branch-r
 export async function loadNavState(
   admin: AdminAccount,
 ): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean; slimNav: boolean; queriesBadge: number }> {
-  const canUpload = admin.role !== "regional" && admin.role !== "hq_viewer";
-  if (admin.role === "hq" || admin.role === "hq_viewer") {
+  const canUpload = admin.role !== "regional" && admin.role !== "hq_viewer" && admin.role !== "bp_ho";
+  if (admin.role === "hq" || admin.role === "hq_viewer" || admin.role === "bp_ho") {
     const [vpOpen, regionActionable] = await Promise.all([countOpenForHq(), countActionableForHq()]);
     return { companyTabs: true, dashboardLabel: "Executive Overview", canUpload, slimNav: false, queriesBadge: vpOpen + regionActionable };
   }

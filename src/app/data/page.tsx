@@ -18,7 +18,7 @@ const longDate = (iso: string) =>
 
 export default async function DataPage() {
   const admin = await getCurrentAdmin();
-  if (admin?.role === "hq_viewer") redirect("/dashboard");
+  if (admin?.role === "hq_viewer" || admin?.role === "bp_ho") redirect("/dashboard");
   if (!admin || admin.role !== "hq") {
     redirect("/upload");
   }

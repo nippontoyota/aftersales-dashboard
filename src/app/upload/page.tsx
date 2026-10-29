@@ -21,14 +21,14 @@ import { UploadTabs } from "./upload-tabs";
 
 export default async function UploadPage() {
   const admin = await getCurrentAdmin();
-  // Regional managers, VP, CEO, Accounts, and HQ viewer are read-only — no upload surface at all.
+  // Regional managers, VP, CEO, Accounts, HQ viewer, and BP HO are read-only — no upload surface at all.
   if (admin?.role === "vp_service") redirect("/vp");
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
-  if (admin?.role === "hq_viewer") redirect("/dashboard");
+  if (admin?.role === "hq_viewer" || admin?.role === "bp_ho") redirect("/dashboard");
   if (admin?.role === "regional") redirect("/dashboard");
   if (admin?.role === "kl_cluster") redirect("/kl-branches");
-  if (admin?.role === "bp_manager" || admin?.role === "bp_ho") redirect("/bp-referrals");
+  if (admin?.role === "bp_manager") redirect("/bp-referrals");
   const identity = admin ? adminIdentityLabel(admin) : "";
   const nav = admin
     ? await loadNavState(admin)

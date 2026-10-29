@@ -42,7 +42,7 @@ export async function CancellationFlag({ admin }: { admin: AdminAccount }) {
   const value = flagged.reduce((s, r) => s + r.beforeTax, 0);
 
   let overdueCount = 0;
-  if (admin.role === "hq" || admin.role === "hq_viewer") {
+  if (admin.role === "hq" || admin.role === "hq_viewer" || admin.role === "bp_ho") {
     const justifications = await loadJustifications(flagged.map((r) => r.docNo));
     overdueCount = flagged.filter((r) => isJustificationOverdue(r.cancelAt, justifications.get(r.docNo))).length;
   }

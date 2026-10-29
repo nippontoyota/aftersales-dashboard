@@ -323,6 +323,7 @@ export function AppShell({
   current,
   showDashboardLink,
   isHq = false,
+  isBpHo = false,
   companyTabs = true,
   canUpload = true,
   accountsNav = false,
@@ -343,6 +344,12 @@ export function AppShell({
    * every existing call site (branch admins see neither) doesn't need
    * updating just to opt out. */
   isHq?: boolean;
+  /** BP HO (2026-10-29) — folded into the normal AppShell nav alongside the
+   * full read-only HQ suite (same scope as hq_viewer) instead of its own
+   * bare BpShell, so one account covers both without switching. Only gates
+   * the "BP Referrals" nav item itself, never the HQ-only utility tools
+   * (Data/Upload Sheet/CE Leads) — those stay `isHq`-only. */
+  isBpHo?: boolean;
   /** When false, the company-wide tabs (TKM Targets, Alerts, Branches,
    * Reports) are hidden — a branch admin whose latest date isn't published
    * yet only gets Daily Report + Upload. Defaults to true. */
@@ -400,7 +407,7 @@ export function AppShell({
           (!item.requiresDashboard || showDashboardLink) &&
           (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload) &&
-          (!item.hqOnly || isHq) &&
+          (!item.hqOnly || isHq || isBpHo) &&
           (!item.branchOnly || isBranch) &&
           (!item.branchOrHqOnly || isBranch || isHq),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));

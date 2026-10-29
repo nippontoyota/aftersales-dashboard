@@ -78,34 +78,31 @@ export default async function BpReferralsPage() {
     );
   }
 
-  // Company-wide analytics — BP HO's own bare-shell dashboard, and HQ's
-  // upgraded /bp-referrals nav item (same read-only view; no call workflow,
-  // that stays BPM-only). Both need assigned_branch resolved first, same as
-  // a BPM's own queue.
+  // Company-wide analytics — HQ's upgraded /bp-referrals nav item, and (as
+  // of 2026-10-29) BP HO's own account too: folded into the same AppShell
+  // nav as the rest of the read-only HQ suite (Dashboard, TKM Targets,
+  // Queries, Branch Performance, Reports, Cancellations — same scope as
+  // hq_viewer, see loadNavState) instead of its own bare BpShell, so BP HO
+  // no longer needs a separate admin account to check the main dashboard.
+  // Both need assigned_branch resolved first, same as a BPM's own queue.
   if (admin.role === "bp_ho" || admin.role === "hq") {
     await ensureAssignedBranches();
-    const [referrals, payoutLedger, branchRollup, branchCodes] = await Promise.all([
+    const [referrals, payoutLedger, branchRollup, branchCodes, navState] = await Promise.all([
       loadAllReferrals(),
       loadPayoutLedger(),
       loadBranchRollup(),
       listBranchCodes(),
+      loadNavState(admin),
     ]);
 
-    if (admin.role === "bp_ho") {
-      return (
-        <BpShell identity={adminIdentityLabel(admin)}>
-          <BpHoAnalyticsClient referrals={referrals} payoutLedger={payoutLedger} branchRollup={branchRollup} branchCodes={branchCodes} />
-        </BpShell>
-      );
-    }
-
-    const navState = await loadNavState(admin);
     return (
       <AppShell
         current="bp-referrals"
         showDashboardLink={true}
-        isHq={true}
+        isHq={admin.role === "hq"}
+        isBpHo={admin.role === "bp_ho"}
         companyTabs={navState.companyTabs}
+        canUpload={navState.canUpload}
         queriesBadge={navState.queriesBadge}
         identity={adminIdentityLabel(admin)}
       >
