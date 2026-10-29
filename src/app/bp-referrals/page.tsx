@@ -4,6 +4,7 @@ import { BpShell } from "@/components/bp-shell";
 import { adminIdentityLabel, listBranchCodes } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadNavState } from "@/lib/dashboard-data";
+import { REGIONS } from "@/lib/regions";
 import {
   ensureAssignedBranches,
   loadAllReferrals,
@@ -41,6 +42,39 @@ export default async function BpReferralsPage() {
           transferredOut={transferredOut}
         />
       </BpShell>
+    );
+  }
+
+  // A regional manager's own scoped view (2026-10-29, the user's request) —
+  // same BP HO analytics component, filtered to their own region's branches,
+  // inside their usual AppShell (not BpShell, which is BP-specific chrome
+  // for the BPM/BP HO roles only). Read-only, same as BP HO, minus the
+  // company-wide "Re-check pending RO entries" admin action (canRescan).
+  if (admin.role === "regional") {
+    await ensureAssignedBranches();
+    const branches = [...REGIONS[admin.region]];
+    const [referrals, payoutLedger, branchRollup, navState] = await Promise.all([
+      loadRegionRollup(admin.region),
+      loadPayoutLedger(branches),
+      loadBranchRollup(branches),
+      loadNavState(admin),
+    ]);
+    return (
+      <AppShell
+        current="bp-referrals"
+        showDashboardLink={true}
+        isRegional={true}
+        centralNav={admin.region === "Central"}
+        regionalRmNav={admin.region !== "Central"}
+        companyTabs={navState.companyTabs}
+        canUpload={navState.canUpload}
+        slimNav={navState.slimNav}
+        dashboardLabel={navState.dashboardLabel}
+        queriesBadge={navState.queriesBadge}
+        identity={adminIdentityLabel(admin)}
+      >
+        <BpHoAnalyticsClient referrals={referrals} payoutLedger={payoutLedger} branchRollup={branchRollup} branchCodes={branches} canRescan={false} />
+      </AppShell>
     );
   }
 

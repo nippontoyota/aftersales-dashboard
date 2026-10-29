@@ -384,11 +384,16 @@ export function BpHoAnalyticsClient({
   payoutLedger,
   branchRollup,
   branchCodes: allBranchCodes,
+  canRescan = true,
 }: {
   referrals: BpmQueueReferral[];
   payoutLedger: PayoutLedgerRow[];
   branchRollup: BranchRollupRow[];
   branchCodes: string[];
+  /** Hides the "Re-check pending RO entries" button — a company-wide,
+   * write/admin action BP HO gets but a regional manager's own scoped view
+   * doesn't (2026-10-29, the user's call). Defaults to true (BP HO/HQ). */
+  canRescan?: boolean;
 }) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -596,7 +601,7 @@ export function BpHoAnalyticsClient({
             >
               Export CSV
             </a>
-            <RescanButton />
+            {canRescan ? <RescanButton /> : null}
           </div>
         </div>
         <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">

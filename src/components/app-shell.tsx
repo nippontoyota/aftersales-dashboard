@@ -65,6 +65,7 @@ const CENTRAL_NAV_ITEMS = [
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
+  { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const },
   { href: "/dashboard/central/set-targets", label: "Set Targets", key: "central-set-targets" as const },
 ];
 
@@ -78,6 +79,7 @@ const REGIONAL_RM_NAV_ITEMS = [
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
+  { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const },
   { href: "/dashboard/region/set-targets", label: "Set Targets", key: "region-set-targets" as const },
 ];
 

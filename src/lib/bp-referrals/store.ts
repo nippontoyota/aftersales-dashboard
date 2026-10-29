@@ -476,8 +476,15 @@ const COMPLETED_PAYOUT = 200;
  * its RO is matched (see ro-matcher.ts) — grouped per referring employee,
  * for BP HO to action payment manually (see the CSV export route). Only
  * employees with at least one validated referral appear; nothing is owed
- * otherwise. */
-export async function loadPayoutLedger(): Promise<PayoutLedgerRow[]> {
+ * otherwise.
+ *
+ * `branches`, when given, scopes this to a region (a regional manager's own
+ * view, see bp-referrals/page.tsx) — filtered on assigned_branch (where the
+ * work currently sits, same convention as loadBranchRollup below), NOT
+ * referring_employee_branch, since the latter is free text off the WhatsApp
+ * submission ("Kalamassery") rather than a resolved branch code and can't be
+ * matched against REGIONS reliably. */
+export async function loadPayoutLedger(branches?: string[]): Promise<PayoutLedgerRow[]> {
   const { rows } = await pool.query<{
     referring_employee_id: string | null;
     referring_employee_name: string | null;
@@ -490,7 +497,9 @@ export async function loadPayoutLedger(): Promise<PayoutLedgerRow[]> {
             count(*) filter (where ro_matched_at is not null) as completed_count
      from bp_referrals
      where validated_at is not null
+       and ($1::text[] is null or assigned_branch = any($1::text[]))
      group by referring_employee_id, referring_employee_name, referring_employee_branch`,
+    [branches ?? null],
   );
   return rows
     .map((r) => {
@@ -520,9 +529,11 @@ export type BranchRollupRow = {
   pending: number;
 };
 
-/** Company-wide branch/region breakdown — grouped by assigned_branch (where
- * the work currently sits), not the referring employee's own branch. */
-export async function loadBranchRollup(): Promise<BranchRollupRow[]> {
+/** Branch/region breakdown — grouped by assigned_branch (where the work
+ * currently sits), not the referring employee's own branch. Company-wide by
+ * default; `branches`, when given, scopes this to a region (a regional
+ * manager's own view — see bp-referrals/page.tsx). */
+export async function loadBranchRollup(branches?: string[]): Promise<BranchRollupRow[]> {
   const { rows } = await pool.query<{
     assigned_branch: string | null;
     total: string;
@@ -543,8 +554,10 @@ export async function loadBranchRollup(): Promise<BranchRollupRow[]> {
             count(*) filter (where closed_at is null and validated_at is null) as pending
      from bp_referrals
      where assigned_branch is not null and assigned_branch <> ''
+       and ($1::text[] is null or assigned_branch = any($1::text[]))
      group by assigned_branch
      order by assigned_branch`,
+    [branches ?? null],
   );
   return rows.map((r) => ({
     branch: r.assigned_branch ?? "",
