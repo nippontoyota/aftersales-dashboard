@@ -242,11 +242,11 @@ function sumField(branches: BranchReport[], key: SummableKey): number | null {
   return found ? total : null;
 }
 
-function buildAllBranchesRow(branches: BranchReport[], bpOnlyBranches: BranchReport[]): BranchReport {
+function buildAllBranchesRow(branches: BranchReport[], bpOnlyBranches: BranchReport[], label: string): BranchReport {
   const allForBpu = [...branches, ...bpOnlyBranches];
   return {
     ...branches[0],
-    branch: "All branches",
+    branch: label,
     gusRoMtd: sumField(branches, "gusRoMtd"),
     gusPartsMtd: sumField(branches, "gusPartsMtd"),
     gusLabourMtd: sumField(branches, "gusLabourMtd"),
@@ -285,6 +285,11 @@ export function RevenuePerVehicleTable({
   renderGusCell,
   renderBranchCell,
   bpOnlyRevenueTotals = false,
+  /** Label for the summary row prepended to the main table — defaults to
+   * "All branches" (HQ's /branches, the VP's page). A regional manager's
+   * scoped view (SA Analytics, 2026-10-30) passes its own region name here
+   * instead, since the row only ever sums the branches it was given. */
+  totalRowLabel = "All branches",
 }: {
   branches: BranchReport[];
   variant?: "full" | "compact";
@@ -294,6 +299,7 @@ export function RevenuePerVehicleTable({
   renderBranchCell?: (row: BranchReport) => ReactNode;
   /** Adds Total Revenue (MTD) and BPU Total Revenue (MTD) to the Body & Paint-only mini table — see buildBpOnlyColumns. Defaults off (HQ's /branches view). */
   bpOnlyRevenueTotals?: boolean;
+  totalRowLabel?: string;
 }) {
   const allColumns = buildColumns(renderGusCell);
   const columns = variant === "compact" ? allColumns.slice(0, 5) : allColumns;
@@ -301,7 +307,7 @@ export function RevenuePerVehicleTable({
   const bpOnlyBranches = branches.filter((b) => isBodyPaintOnly(b.branch));
 
   const rows = [...generalBranches].sort(regionSort);
-  const withTotal = rows.length > 0 ? [buildAllBranchesRow(generalBranches, bpOnlyBranches), ...rows] : rows;
+  const withTotal = rows.length > 0 ? [buildAllBranchesRow(generalBranches, bpOnlyBranches, totalRowLabel), ...rows] : rows;
   // "compact" is the VP's own variant — its tables scroll with the page
   // (not in their own capped-height box) and get a bit more breathing room;
   // the main dashboard's "full" variant is unchanged. See section-table.tsx.

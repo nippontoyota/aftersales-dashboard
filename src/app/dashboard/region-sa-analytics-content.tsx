@@ -10,6 +10,7 @@ import { latestNonHolidayDate } from "@/lib/reporting-date";
 import { REGIONS, type RegionName } from "@/lib/regions";
 import { listSnapshotDates } from "@/lib/snapshot-store";
 import { DateSelect } from "./date-select";
+import { RevenuePerVehicleTable } from "./revenue-per-vehicle-table";
 
 /**
  * SA Analytics for a regional manager — the same GS/BP/Accessories/PDI
@@ -62,6 +63,7 @@ export async function RegionSaAnalyticsContent({
   // (Central's online-store channel, folded into CO01A, never its own row in
   // report.branches), same source HQ's own branch dropdown uses.
   const regionBranchCodes = report.branches.map((b) => b.branch).filter((code) => (REGIONS[region] as readonly string[]).includes(code));
+  const regionBranches = report.branches.filter((b) => regionBranchCodes.includes(b.branch));
   const monthStart = `${date.slice(0, 7)}-01`;
 
   const [perBranchRows, perBranchAccessoriesStaff] = await Promise.all([
@@ -92,6 +94,10 @@ export async function RegionSaAnalyticsContent({
           </p>
         </div>
         <DateSelect dates={dates} selected={date} region="All" basePath={basePath} extraParams={saBranch ? { saBranch } : undefined} />
+      </div>
+
+      <div className="mt-4">
+        <RevenuePerVehicleTable branches={regionBranches} variant="compact" totalRowLabel={`${region} Rgn`} />
       </div>
 
       <div className="mt-4 flex items-center justify-end gap-2 text-xs text-fg-subtle">
