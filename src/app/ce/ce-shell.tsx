@@ -5,11 +5,12 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { logoutAction } from "@/lib/actions";
 import { MidnightRefresh } from "./midnight-refresh";
 
-type CeSection = "leads" | "avf" | "archive";
+type CeSection = "leads" | "avf" | "mrs" | "archive";
 
 const sections = [
   { key: "leads", href: "/ce", label: "Leads overview", description: "Call queue and follow-ups", icon: LeadsIcon },
   { key: "avf", href: "/ce/avf", label: "AVF analytics", description: "Mileage frequency bands", icon: AnalyticsIcon },
+  { key: "mrs", href: "/ce/mrs", label: "MRS catch list", description: "Due, missed by TKM's N-9", icon: MrsIcon },
 ] as const;
 
 function navClass(active: boolean) {
@@ -23,6 +24,12 @@ export function CeShell({ admin, current, children }: { admin: Extract<AdminAcco
     return (
       <AppShell current="ce" showDashboardLink isHq identity="HQ admin">
         <MidnightRefresh />
+        <nav className="flex gap-1 overflow-x-auto border-b border-border bg-surface px-4 pb-2 pt-3 sm:px-6" aria-label="CE sections">
+          {sections.map((item) => (
+            <Link key={item.key} href={item.href} aria-current={current === item.key ? "page" : undefined} className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium ${current === item.key ? "bg-accent-soft text-accent-text" : "text-fg-muted hover:bg-surface-2"}`}>{item.label}</Link>
+          ))}
+          <Link href="/ce/archive" aria-current={current === "archive" ? "page" : undefined} className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium ${current === "archive" ? "bg-accent-soft text-accent-text" : "text-fg-muted hover:bg-surface-2"}`}>Archive</Link>
+        </nav>
         {children}
       </AppShell>
     );
@@ -93,6 +100,10 @@ function LeadsIcon() {
 
 function AnalyticsIcon() {
   return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-5 w-5 shrink-0" aria-hidden="true"><path d="M3 16.5h14M4.5 14V9.5h3V14m1-7h3v7m1-10.5h3V14" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+}
+
+function MrsIcon() {
+  return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-5 w-5 shrink-0" aria-hidden="true"><path d="M10 5.5v4.5l3 2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="10" cy="10.5" r="6.5"/></svg>;
 }
 
 function ArchiveIcon() {

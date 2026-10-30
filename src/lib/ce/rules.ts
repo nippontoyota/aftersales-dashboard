@@ -205,14 +205,21 @@ function addDays(dateIso: string, days: number): string {
 // vehicles with no known TKM milestone: a fixed 6-month / 10,000km window
 // from the last known visit, whichever comes first — not an attempt to
 // replicate TKM's exact per-model schedule.
-const CE_DUE_MONTHS = 6;
-const CE_DUE_KM = 10_000;
+export const CE_DUE_MONTHS = 6;
+export const CE_DUE_KM = 10_000;
+
+// The daily MRS catch-list is bounded to a rolling window around today,
+// not "ever due" — a flat due-date proxy with no decay flags ~half of
+// all active ce_leads once every historical overdue lead counts, which
+// is a reactivation backlog, a different problem (see
+// project_mrs_n9_system.md). Confirmed with the user 2026-10-30.
+export const CE_MRS_WINDOW_DAYS = 14;
 
 // Below this, a vehicle is either barely driven or the mileage/date on
 // file is a placeholder (confirmed against real N-9 data: legitimate
 // rates run ~20-200+ km/day — see project_mrs_n9_system.md's outlier
 // analysis) — too unreliable to project a km-based date from at all.
-const CE_MIN_PLAUSIBLE_KM_PER_DAY = 1;
+export const CE_MIN_PLAUSIBLE_KM_PER_DAY = 1;
 
 /** The mileage rate used to project the km leg forward: this vehicle's
  * own recent N-to-N1 rate when a second visit exists (closer to what the
