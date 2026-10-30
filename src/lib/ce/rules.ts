@@ -188,3 +188,82 @@ export function nextIndiaMidnight(nowMs = Date.now()): number {
   const indiaNow = new Date(nowMs + indiaOffsetMs);
   return Date.UTC(indiaNow.getUTCFullYear(), indiaNow.getUTCMonth(), indiaNow.getUTCDate() + 1) - indiaOffsetMs;
 }
+
+function addMonths(dateIso: string, months: number): string {
+  const [year, month, day] = dateIso.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1 + months, day)).toISOString().slice(0, 10);
+}
+
+function addDays(dateIso: string, days: number): string {
+  return new Date(Date.parse(`${dateIso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+// TKM's own "months or km, whichever first" due-date logic (reverse-
+// engineered against 1,852 real N-9 rows across 3 days — see
+// project_mrs_n9_system.md) needs TKM's own schedule table to know which
+// milestone applies next; we don't have that. This is our proxy for
+// vehicles with no known TKM milestone: a fixed 6-month / 10,000km window
+// from the last known visit, whichever comes first — not an attempt to
+// replicate TKM's exact per-model schedule.
+const CE_DUE_MONTHS = 6;
+const CE_DUE_KM = 10_000;
+
+// Below this, a vehicle is either barely driven or the mileage/date on
+// file is a placeholder (confirmed against real N-9 data: legitimate
+// rates run ~20-200+ km/day — see project_mrs_n9_system.md's outlier
+// analysis) — too unreliable to project a km-based date from at all.
+const CE_MIN_PLAUSIBLE_KM_PER_DAY = 1;
+
+/** The mileage rate used to project the km leg forward: this vehicle's
+ * own recent N-to-N1 rate when a second visit exists (closer to what the
+ * real reverse-engineered TKM formula's residual variance suggested
+ * drives it), falling back to its lifetime rate (N mileage over its age
+ * since salesDate, matching TKM's own formula exactly) when there's only
+ * one visit on record. Null when neither is a plausible rate (see
+ * CE_MIN_PLAUSIBLE_KM_PER_DAY) rather than returning a near-zero rate
+ * that would project the km leg centuries into the future. */
+function ceMileageRate(input: {
+  salesDate: string;
+  nReportDate: string;
+  nMileage: number;
+  n1ReportDate: string | null;
+  n1Mileage: number | null;
+}): number | null {
+  if (input.n1ReportDate && input.n1Mileage !== null) {
+    const days = dateAgeInDays(input.n1ReportDate, input.nReportDate);
+    if (days > 0) {
+      const rate = (input.nMileage - input.n1Mileage) / days;
+      if (rate >= CE_MIN_PLAUSIBLE_KM_PER_DAY) return rate;
+    }
+  }
+  const lifetimeDays = dateAgeInDays(input.salesDate, input.nReportDate);
+  if (lifetimeDays <= 0) return null;
+  const lifetimeRate = input.nMileage / lifetimeDays;
+  return lifetimeRate >= CE_MIN_PLAUSIBLE_KM_PER_DAY ? lifetimeRate : null;
+}
+
+/** Our due-date proxy (see CE_DUE_MONTHS/CE_DUE_KM above) for a lead with
+ * no TKM-assigned milestone — never meant to override an actual
+ * `icrop_recommended_date` when one is known for this vehicle's current
+ * cycle; this is specifically for the vehicles no recent N-9 list has
+ * covered, where that field will never exist. */
+export function ceDueDate(input: {
+  salesDate: string;
+  nReportDate: string;
+  nMileage: number;
+  n1ReportDate: string | null;
+  n1Mileage: number | null;
+}): string {
+  const monthsDue = addMonths(input.nReportDate, CE_DUE_MONTHS);
+  const rate = ceMileageRate(input);
+  if (rate === null) return monthsDue;
+
+  const kmDueDays = CE_DUE_KM / rate;
+  const kmDue = addDays(input.nReportDate, kmDueDays);
+
+  // Compare as actual timestamps, not ISO strings — a string comparison
+  // breaks the moment either side falls outside the normal 4-digit-year
+  // range (JS renders those with a leading "+" and 6-digit year, which
+  // sorts before any normal date lexicographically).
+  return Date.parse(`${monthsDue}T00:00:00Z`) <= Date.parse(`${kmDue}T00:00:00Z`) ? monthsDue : kmDue;
+}

@@ -3,6 +3,7 @@ import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-stor
 import { getCurrentAdmin } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
+import { linkServiceInfoToCeLeads } from "@/lib/ce/service-info-link";
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { isBpFlavoredServiceInfo, JOB_ORDER_NO_COLUMN, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-info/store";
@@ -134,6 +135,7 @@ export async function POST(request: Request) {
   await catchUpPartSaleForClosedRos(admin.branch, rawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
   await recomputeUniqueVinVas(admin.branch, date);
   await recomputeTotalCarCareTreatments(admin.branch, date);
+  await linkServiceInfoToCeLeads(rawRows, admin.branch);
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }
