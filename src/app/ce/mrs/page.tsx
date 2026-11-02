@@ -8,6 +8,7 @@ import { CeShell } from "../ce-shell";
 import { BrandFilter, FilterBar, MultiSelectFilter } from "../filter-bar";
 import { ContactLink } from "../contact-link";
 import { assignCeLeadsEvenlyAction } from "../actions";
+import { SelectAllCheckbox } from "../select-all-checkbox";
 
 type Section = "priority" | "overdue";
 type Params = { section?: string | string[]; q?: string | string[]; dealer?: string | string[]; status?: string | string[]; brand?: string | string[]; page?: string | string[]; assigned?: string | string[]; assignError?: string | string[] };
@@ -143,7 +144,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
             <div className="mt-3 hidden overflow-x-auto rounded-lg border border-border bg-surface shadow-card md:block">
               <table className="w-full min-w-[1100px] text-left text-xs">
                 <thead className="bg-surface-2 text-[10px] uppercase tracking-wide text-fg-faint"><tr>
-                  {canAssign ? <th className="px-3 py-2.5 font-semibold"><span className="sr-only">Select</span></th> : null}
+                  {canAssign ? <th className="px-3 py-2.5 font-semibold"><SelectAllCheckbox className="h-3.5 w-3.5 accent-[var(--color-accent)]" /></th> : null}
                   {["Customer", "Contact", "VIN", "Model", "Allocated dealer", "Last visit", "Due", ...(section === "overdue" ? ["Overdue by"] : []), "Workflow", ...(showAssignedTo ? ["Assigned to"] : []), "Action"].map((label) => (
                     <th key={label} className="px-3 py-2.5 font-semibold">{label}</th>
                   ))}
@@ -170,6 +171,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
             </div>
 
             <div className="mt-3 space-y-2 md:hidden">
+              {canAssign ? <label className="flex items-center gap-2 text-xs font-medium text-fg-muted"><SelectAllCheckbox className="h-3.5 w-3.5 accent-[var(--color-accent)]" /> Select all</label> : null}
               {data.rows.map((lead) => (
                 <article key={lead.vin} className="rounded-lg border border-border bg-surface p-4 shadow-card">
                   <div className="flex items-start justify-between gap-3">
