@@ -202,10 +202,11 @@ function addDays(dateIso: string, days: number): string {
 // engineered against 1,852 real N-9 rows across 3 days — see
 // project_mrs_n9_system.md) needs TKM's own schedule table to know which
 // milestone applies next; we don't have that. This is our proxy for
-// vehicles with no known TKM milestone: a fixed 6-month / 10,000km window
-// from the last known visit, whichever comes first — not an attempt to
-// replicate TKM's exact per-model schedule.
-export const CE_DUE_MONTHS = 6;
+// vehicles with no known TKM milestone: the standard periodic-service
+// interval (12 months / 10,000km from the last known visit, whichever
+// comes first) — not an attempt to replicate TKM's exact per-model
+// schedule (early services have shorter, model-specific intervals).
+export const CE_DUE_MONTHS = 12;
 export const CE_DUE_KM = 10_000;
 
 // The daily MRS catch-list is bounded to a rolling window around today,
