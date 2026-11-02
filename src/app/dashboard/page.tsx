@@ -56,7 +56,7 @@ export default async function DashboardPage({
   if (admin?.role === "vp_service") redirect("/vp");
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
-  if (admin?.role === "bp_manager" || admin?.role === "bp_ho") redirect("/bp-referrals");
+  if (admin?.role === "bp_manager") redirect("/bp-referrals");
   if (admin?.role === "kl_cluster") redirect("/kl-branches");
   if (!admin?.canViewDashboard) {
     redirect("/upload");
@@ -69,6 +69,7 @@ export default async function DashboardPage({
       current="dashboard"
       showDashboardLink
       isHq={admin.role === "hq"}
+      isBpHo={admin.role === "bp_ho"}
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}

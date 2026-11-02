@@ -188,6 +188,34 @@ function bpSmbUtilizationCell(totals: CloseSaPeriodTotals) {
   );
 }
 
+/** One scrollable Job Desc list — factored out so the GS variant can render
+ * two of these side by side (general work vs TGLOSS-only, 2026-10-26, at the
+ * user's request) while every other variant keeps the single-list layout. */
+function JobDescList({ items, label }: { items: [string, number][]; label?: React.ReactNode }) {
+  return (
+    <div>
+      {label !== undefined ? <div className="mb-1 text-[11px] font-medium text-fg-subtle">{label}</div> : null}
+      {items.length > 0 ? (
+        // A plain table here stretches to this row's full width — the
+        // same width as the wide, horizontally-scrolled outer table —
+        // pushing the count off past whatever's currently in view
+        // (found 2026-10-22). A flex row per item keeps every count
+        // right next to its description instead.
+        <div className="max-h-48 overflow-y-auto rounded border border-border-subtle bg-surface">
+          {items.map(([desc, count], i) => (
+            <div key={desc} className={`flex items-baseline justify-between gap-3 px-2 py-1 text-xs ${i % 2 === 1 ? "bg-surface-2/40" : ""}`}>
+              <span className="text-fg-subtle">{desc}</span>
+              <span className="shrink-0 font-medium tabular-nums text-fg">{count}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-xs text-fg-faint">—</div>
+      )}
+    </div>
+  );
+}
+
 function countsSummary(counts: Record<string, number>): string {
   return Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
@@ -224,6 +252,11 @@ function columnCount(variant: SaVariant): number {
 function SaRow({ totals, showBranch, variant }: { totals: CloseSaPeriodTotals; showBranch: boolean; variant: SaVariant }) {
   const [expanded, setExpanded] = useState(false);
   const topJobDescs = Object.entries(totals.jobDescCounts).sort((a, b) => b[1] - a[1]);
+  // GS only (2026-10-26, at the user's request): split into general work vs
+  // TGLOSS-only, side by side, instead of one mixed list.
+  const splitJobDescsByTgloss = variant === "default";
+  const generalJobDescs = splitJobDescsByTgloss ? topJobDescs.filter(([desc]) => !desc.startsWith("TGLOSS")) : [];
+  const tglossJobDescs = splitJobDescsByTgloss ? topJobDescs.filter(([desc]) => desc.startsWith("TGLOSS")) : [];
 
   const showSameDayDelivery = variant !== "bp";
   const showMoneyCols = variant !== "pdi"; // Labour ₹/Parts ₹/TGLOSS ₹/Tyre
@@ -267,11 +300,6 @@ function SaRow({ totals, showBranch, variant }: { totals: CloseSaPeriodTotals; s
         </td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.roCount))}</td>
         <td className="px-3 py-2 align-top">{cell(formatNumber(totals.distinctVehicleCount))}</td>
-        {showSameDayDelivery ? (
-          <td className="px-3 py-2 align-top" title="Job Open Date = Invoice Date, same calendar day">
-            {sameDayDeliveryCell(totals)}
-          </td>
-        ) : null}
         {showMoneyCols ? (
           <>
             <td className="px-3 py-2 align-top">{moneyCell(totals.labourRevenueAfter)}</td>
@@ -285,6 +313,11 @@ function SaRow({ totals, showBranch, variant }: { totals: CloseSaPeriodTotals; s
         {showBattery ? (
           <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
             {cell(formatNumber(totals.batteryCount))}
+          </td>
+        ) : null}
+        {showSameDayDelivery ? (
+          <td className="px-3 py-2 align-top" title="Job Open Date = Invoice Date, same calendar day">
+            {sameDayDeliveryCell(totals)}
           </td>
         ) : null}
         {showBpOtdSmbCols ? (
@@ -363,24 +396,15 @@ function SaRow({ totals, showBranch, variant }: { totals: CloseSaPeriodTotals; s
               </div>
             ) : null}
             {!bpBlockFirst && bpBlock ? <div className="mt-2">{bpBlock}</div> : null}
-            <div className="mt-3 max-w-xl">
+            <div className={`mt-3 ${splitJobDescsByTgloss ? "max-w-4xl" : "max-w-xl"}`}>
               <div className="mb-1 text-xs font-semibold text-fg-subtle">Job Desc breakdown ({topJobDescs.length} distinct)</div>
-              {topJobDescs.length > 0 ? (
-                // A plain table here stretches to this row's full width — the
-                // same width as the wide, horizontally-scrolled outer table —
-                // pushing the count off past whatever's currently in view
-                // (found 2026-10-22). max-w-xl above + a flex row per item
-                // keeps every count right next to its description instead.
-                <div className="max-h-48 overflow-y-auto rounded border border-border-subtle bg-surface">
-                  {topJobDescs.map(([desc, count], i) => (
-                    <div key={desc} className={`flex items-baseline justify-between gap-3 px-2 py-1 text-xs ${i % 2 === 1 ? "bg-surface-2/40" : ""}`}>
-                      <span className="text-fg-subtle">{desc}</span>
-                      <span className="shrink-0 font-medium tabular-nums text-fg">{count}</span>
-                    </div>
-                  ))}
+              {splitJobDescsByTgloss ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <JobDescList items={generalJobDescs} label={`General (${generalJobDescs.length})`} />
+                  <JobDescList items={tglossJobDescs} label={tglossText(`TGLOSS (${tglossJobDescs.length})`)} />
                 </div>
               ) : (
-                <div className="text-xs text-fg-faint">—</div>
+                <JobDescList items={topJobDescs} />
               )}
             </div>
           </td>
@@ -476,7 +500,6 @@ export function CloseSaAnalyticsTable({
               <SortableHeader label="Close SA" sortKey="closeSaName" sort={sort} onClick={handleHeaderClick} sticky />
               <SortableHeader label="ROs" sortKey="roCount" sort={sort} onClick={handleHeaderClick} />
               <SortableHeader label="Vehicles" sortKey="distinctVehicleCount" sort={sort} onClick={handleHeaderClick} />
-              {showSameDayDelivery ? <SortableHeader label="Same Day Delivery" sortKey="sameDayDeliveryRate" sort={sort} onClick={handleHeaderClick} /> : null}
               {showMoneyCols ? (
                 <>
                   <SortableHeader label="Labour ₹" sortKey="labourRevenueAfter" sort={sort} onClick={handleHeaderClick} />
@@ -486,6 +509,7 @@ export function CloseSaAnalyticsTable({
                 </>
               ) : null}
               {showBattery ? <SortableHeader label="Battery" sortKey="batteryCount" sort={sort} onClick={handleHeaderClick} /> : null}
+              {showSameDayDelivery ? <SortableHeader label="Same Day Delivery" sortKey="sameDayDeliveryRate" sort={sort} onClick={handleHeaderClick} /> : null}
               {showBpOtdSmbCols ? (
                 <>
                   <SortableHeader label="OTD" sortKey="bpOtdRate" sort={sort} onClick={handleHeaderClick} />

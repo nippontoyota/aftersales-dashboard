@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
 import { listBranchCodes } from "@/lib/admin-store";
 import {
+  closeFollowUpAsLost,
+  enterRoNumber,
   loadActivityForReferral,
   loadOverdueFollowUps,
   loadUrgentUnconnected,
@@ -163,6 +165,52 @@ export async function logFollowUpContactAction(_prev: BpmActionState, formData: 
   }
   revalidatePath("/bp-referrals");
   return { error: null, ok: true };
+}
+
+/** Closes out a validated (genuine + interested) referral as "Lost" — the
+ * BPM's call that the customer took the car elsewhere and there's no point
+ * following up any further (2026-10-27, the user's request). Mandatory
+ * reason, same shape as every other action here. */
+export async function closeFollowUpAsLostAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const lostReason = requiredRemark(formData);
+  if (!lostReason) return { error: "Enter the reason this is lost.", ok: false };
+
+  try {
+    await closeFollowUpAsLost(id, admin.branch, admin.username, lostReason);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't close that referral.", ok: false };
+  }
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
+}
+
+export type EnterRoActionState = { error: string | null; status: "completed" | "pending" | null };
+
+/** BPM types in the actual RO number against their own queue entry — the
+ * ₹200 completion trigger (2026-10-26, replacing the old blind vehicle-reg-
+ * no auto-match). See store.ts's enterRoNumber() for the validation rules. */
+export async function enterRoNumberAction(_prev: EnterRoActionState, formData: FormData): Promise<EnterRoActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", status: null };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", status: null };
+
+  const roNo = String(formData.get("roNo") ?? "").trim();
+  if (!roNo) return { error: "Enter the RO number.", status: null };
+
+  try {
+    const status = await enterRoNumber(id, admin.branch, admin.username, roNo);
+    revalidatePath("/bp-referrals");
+    return { error: null, status };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't save that RO number.", status: null };
+  }
 }
 
 /** The detail modal's "History" section — every bp_manager/bp_ho/hq viewer

@@ -55,6 +55,7 @@ export default async function BillsPage({
       current="bills"
       showDashboardLink={admin.canViewDashboard}
       isHq={admin.role === "hq"}
+      isBpHo={admin.role === "bp_ho"}
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}

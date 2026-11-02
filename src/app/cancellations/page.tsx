@@ -98,6 +98,7 @@ export default async function CancellationsPage({
       current="cancellations"
       showDashboardLink={admin.canViewDashboard}
       isHq={admin.role === "hq"}
+      isBpHo={admin.role === "bp_ho"}
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}

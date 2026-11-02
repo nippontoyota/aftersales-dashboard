@@ -40,9 +40,10 @@ export function AssignBranchForm({ referralId, branchCodes }: { referralId: numb
 
 const RESCAN_INIT: RescanState = { error: null, matchedCount: null };
 
-/** The RO-match backstop button — re-scans every saved Cost & Sales Report
- * - BP row for a match, not just the next upload. See ro-matcher.ts's
- * rescanUnmatchedReferrals(). */
+/** The RO-match backstop button — re-checks every BPM-entered pending RO
+ * number against every saved Cost & Sales Report - BP row, not just the next
+ * upload (2026-10-26: repurposed from the old blind reg-no scan — see
+ * ro-matcher.ts's rescanUnmatchedReferrals()). */
 export function RescanButton() {
   const [state, action, pending] = useActionState(rescanUnmatchedReferralsAction, RESCAN_INIT);
   return (
@@ -53,12 +54,12 @@ export function RescanButton() {
           disabled={pending}
           className="rounded-md border border-border-strong px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 disabled:opacity-60"
         >
-          {pending ? "Re-scanning…" : "Re-scan for RO matches"}
+          {pending ? "Re-checking…" : "Re-check pending RO entries"}
         </button>
       </form>
       {state.matchedCount !== null ? (
         <span className="text-xs text-fg-muted">
-          {state.matchedCount === 0 ? "No new matches found." : `Matched ${state.matchedCount} referral${state.matchedCount === 1 ? "" : "s"}.`}
+          {state.matchedCount === 0 ? "No new matches found." : `Confirmed ${state.matchedCount} referral${state.matchedCount === 1 ? "" : "s"}.`}
         </span>
       ) : null}
       {state.error ? <span className="text-xs text-bad">{state.error}</span> : null}

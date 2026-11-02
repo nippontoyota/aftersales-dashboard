@@ -16,6 +16,14 @@ import { BRANCH_NAMES } from "@/lib/branch-names";
  */
 const NAME_OVERRIDE: Record<string, string> = {
   kalamassery: "CO01E",
+  // The WhatsApp bot sends the common spelling "Irinjalakuda"; BRANCH_NAMES
+  // has IR01A recorded as "Iringalakuda" (the user's own naming, set
+  // 2026-08-31 — not a typo to "fix" there), so the two never match as text.
+  irinjalakuda: "IR01A",
+  // The company's employee directory records CO01A's location as "Cochin",
+  // but BRANCH_NAMES has it as "Nettoor" — same kind of mismatch as
+  // Irinjalakuda above.
+  cochin: "CO01A",
 };
 
 function normalize(s: string): string {

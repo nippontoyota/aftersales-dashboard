@@ -29,11 +29,11 @@ export default async function BranchesPage({ searchParams }: { searchParams: Pro
   // Company-wide tools are HQ-only now — branch / regional get everything on
   // their own dashboard (slim nav, so there is no link here anyway; this
   // covers a bookmark or typed URL).
-  if (admin.role !== "hq" && admin.role !== "hq_viewer") redirect("/dashboard");
+  if (admin.role !== "hq" && admin.role !== "hq_viewer" && admin.role !== "bp_ho") redirect("/dashboard");
   const identity = adminIdentityLabel(admin);
 
   return (
-    <AppShell current="branches" showDashboardLink isHq={admin.role === "hq"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} queriesBadge={nav.queriesBadge} identity={identity}>
+    <AppShell current="branches" showDashboardLink isHq={admin.role === "hq"} isBpHo={admin.role === "bp_ho"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} queriesBadge={nav.queriesBadge} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton />}>
         <BranchesContent searchParams={searchParams} admin={admin} />
       </Suspense>

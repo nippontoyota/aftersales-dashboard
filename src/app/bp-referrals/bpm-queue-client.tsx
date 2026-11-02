@@ -4,12 +4,15 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
 import {
+  closeFollowUpAsLostAction,
+  enterRoNumberAction,
   getReferralActivityAction,
   logFollowUpContactAction,
   markNotConnectedAction,
   submitCallOutcomeAction,
   transferReferralAction,
   type BpmActionState,
+  type EnterRoActionState,
 } from "./bpm-actions";
 import type { ActivityRow } from "@/lib/bp-referrals/store";
 import { NotConnectedReasonFields } from "./not-connected-reason-fields";
@@ -36,9 +39,12 @@ export type BpmQueueReferral = {
   handled_by: string | null;
   matched_ro_no: string | null;
   ro_matched_at: Date | string | null;
+  pending_ro_no: string | null;
+  pending_ro_entered_at: Date | string | null;
   closed_at: Date | string | null;
-  closed_reason: "not_genuine" | "not_interested" | null;
+  closed_reason: "not_genuine" | "not_interested" | "lost" | null;
   not_interested_reason: string | null;
+  lost_reason: string | null;
   last_contacted_at: Date | string | null;
   transferred_from: string | null;
 };
@@ -70,7 +76,7 @@ function isFollowUpOverdue(r: BpmQueueReferral): boolean {
 }
 
 function classify(r: BpmQueueReferral): Tab {
-  if (r.ro_matched_at) return "completed";
+  if (r.ro_matched_at || r.pending_ro_no) return "completed";
   if (r.closed_at) return "closed";
   if (r.validated_at) return "followup";
   const elapsedHours = hoursSince(r.last_contacted_at ?? r.submitted_at);
@@ -96,10 +102,11 @@ function StatusBadge({ r }: { r: BpmQueueReferral }) {
     );
   }
   if (tab === "closed") {
+    const label = r.closed_reason === "not_genuine" ? "Not genuine" : r.closed_reason === "lost" ? "Lost" : "Not interested";
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-fg-faint">
         <Dot className="bg-fg-faint" />
-        {r.closed_reason === "not_genuine" ? "Not genuine" : "Not interested"}
+        {label}
       </span>
     );
   }
@@ -137,6 +144,8 @@ const ACTIVITY_LABEL: Record<ActivityRow["activityType"], string> = {
   not_connected: "Not connected",
   call_outcome: "Call outcome",
   follow_up: "Follow-up",
+  ro_entered: "RO entered",
+  lost: "Lost",
 };
 
 function ActivityHistory({ referralId }: { referralId: number }) {
@@ -240,6 +249,87 @@ function LogFollowUpButton({ id, onDone }: { id: number; onDone: () => void }) {
         {pending ? "Saving…" : "Log follow-up — spoke to customer"}
       </button>
       {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
+    </form>
+  );
+}
+
+function CloseLostButton({ id, onDone }: { id: number; onDone: () => void }) {
+  const [state, action, pending] = useActionState(closeFollowUpAsLostAction, INIT);
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="h-8 rounded-md border border-bad/30 px-3 text-sm font-medium text-bad hover:bg-bad-soft"
+      >
+        Lost — car went elsewhere
+      </button>
+    );
+  }
+
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      className="rounded-md border border-bad/30 bg-bad-soft/30 p-3"
+    >
+      <input type="hidden" name="id" value={id} />
+      <span className={eyebrow}>Reason this is lost (required)</span>
+      <textarea name="remark" required rows={2} placeholder="e.g. Customer took the car to a local workshop" className={remarkField} />
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="h-8 rounded-md bg-bad-solid px-3 text-sm font-semibold text-on-accent hover:opacity-90 disabled:opacity-60"
+        >
+          {pending ? "Closing…" : "Close as Lost"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-fg-muted hover:underline">
+          Cancel
+        </button>
+        {state.error ? <span className="text-xs text-bad">{state.error}</span> : null}
+      </div>
+    </form>
+  );
+}
+
+const ENTER_RO_INIT: EnterRoActionState = { error: null, status: null };
+
+/** BPM types the actual RO number in, right on the Follow-up row itself —
+ * the ₹200 completion trigger (2026-10-26, moved inline from the detail
+ * modal at the user's request so it doesn't take an extra click to reach).
+ * Completes immediately if that RO's already in an upload with a matching
+ * vehicle reg no; otherwise saves as pending and the next upload (or BP
+ * HO's re-scan backstop) confirms it automatically. Stays open for
+ * re-entry while pending, in case the BPM mistyped it the first time. The
+ * wrapping onClick stopPropagation keeps a click inside the form from also
+ * opening the row's detail modal (see QueueList's <tr onClick>). */
+function EnterRoInlineForm({ id, pendingRoNo }: { id: number; pendingRoNo: string | null }) {
+  const [state, action, pending] = useActionState(enterRoNumberAction, ENTER_RO_INIT);
+  return (
+    <form action={action} onClick={(e) => e.stopPropagation()} className="flex flex-wrap items-center gap-1.5">
+      <input type="hidden" name="id" value={id} />
+      <input
+        name="roNo"
+        required
+        defaultValue={pendingRoNo ?? ""}
+        placeholder="e.g. BPJ00123"
+        className="h-7 w-28 rounded-md border border-border-strong bg-surface px-2 text-xs font-mono text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      />
+      <button
+        type="submit"
+        disabled={pending}
+        className="h-7 shrink-0 rounded-md bg-accent px-2 text-xs font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+      >
+        {pending ? "…" : "Save"}
+      </button>
+      {state.error ? <span className="w-full text-[11px] text-bad">{state.error}</span> : null}
+      {state.status === "pending" ? <span className="w-full text-[11px] text-fg-faint">Pending — confirms on next upload.</span> : null}
+      {state.status === "completed" ? <span className="w-full text-[11px] text-good-text">Confirmed — ₹200 triggered.</span> : null}
     </form>
   );
 }
@@ -508,6 +598,12 @@ function DetailModal({
                 <p className="mt-0.5 text-fg">{r.not_interested_reason}</p>
               </div>
             ) : null}
+            {r.lost_reason ? (
+              <div>
+                <span className="text-fg-faint">Reason lost</span>
+                <p className="mt-0.5 text-fg">{r.lost_reason}</p>
+              </div>
+            ) : null}
             {r.payment_type ? (
               <div className="flex justify-between">
                 <span className="text-fg-faint">Payment type</span>
@@ -524,6 +620,11 @@ function DetailModal({
               <div className="flex justify-between">
                 <span className="text-fg-faint">Matched RO</span>
                 <span className="font-mono text-fg">{r.matched_ro_no}</span>
+              </div>
+            ) : r.pending_ro_no ? (
+              <div className="flex justify-between">
+                <span className="text-fg-faint">RO entered (pending)</span>
+                <span className="font-mono text-fg">{r.pending_ro_no}</span>
               </div>
             ) : null}
             {tab === "followup" ? (
@@ -550,8 +651,9 @@ function DetailModal({
         ) : null}
 
         {canAct && tab === "followup" ? (
-          <div className="mt-4 border-t border-border-subtle pt-3">
+          <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
             <LogFollowUpButton id={r.id} onDone={onClose} />
+            <CloseLostButton id={r.id} onDone={onClose} />
           </div>
         ) : null}
 
@@ -596,6 +698,11 @@ function QueueList({
   }, [referrals]);
 
   const filtered = referrals.filter((r) => classify(r) === tab);
+  // RO entry only ever applies on the Follow-up tab (genuine + interested,
+  // not yet RO-matched — see classify()), and only for a referral this
+  // viewer's own branch actually owns (same as every other action button).
+  const showRoColumn = tab === "followup";
+  const columnCount = (showBranchColumn ? 5 : 4) + (showRoColumn ? 1 : 0);
 
   return (
     <>
@@ -631,33 +738,46 @@ function QueueList({
               {showBranchColumn ? <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th> : null}
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Reg No</th>
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Status</th>
+              {showRoColumn ? <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">RO Number</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={showBranchColumn ? 5 : 4} className="px-3 py-8 text-center text-sm text-fg-muted">
+                <td colSpan={columnCount} className="px-3 py-8 text-center text-sm text-fg-muted">
                   Nothing here.
                 </td>
               </tr>
             ) : (
-              filtered.map((r) => (
-                <tr key={r.id} className="cursor-pointer transition-colors hover:bg-surface-2/50" onClick={() => setSelected(r)}>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{fmt(r.submitted_at)}</td>
-                  <td className="px-3 py-2.5 font-medium text-fg">
-                    {r.referring_employee_name ?? "—"}
-                    {r.transferred_from ? <span className="ml-1.5 text-xs text-fg-faint">(from {branchName(r.transferred_from)})</span> : null}
-                  </td>
-                  {showBranchColumn ? <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{branchName(r.assigned_branch ?? "")}</td> : null}
-                  <td className="whitespace-nowrap px-3 py-2.5">
-                    <div className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</div>
-                    {r.vehicle_model ? <div className="text-xs text-fg-faint">{r.vehicle_model}</div> : null}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2.5">
-                    <StatusBadge r={r} />
-                  </td>
-                </tr>
-              ))
+              filtered.map((r) => {
+                const canAct = !readOnly && r.assigned_branch === ownBranch;
+                return (
+                  <tr key={r.id} className="cursor-pointer transition-colors hover:bg-surface-2/50" onClick={() => setSelected(r)}>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{fmt(r.submitted_at)}</td>
+                    <td className="px-3 py-2.5 font-medium text-fg">
+                      {r.referring_employee_name ?? "—"}
+                      {r.transferred_from ? <span className="ml-1.5 text-xs text-fg-faint">(from {branchName(r.transferred_from)})</span> : null}
+                    </td>
+                    {showBranchColumn ? <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{branchName(r.assigned_branch ?? "")}</td> : null}
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      <div className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</div>
+                      {r.vehicle_model ? <div className="text-xs text-fg-faint">{r.vehicle_model}</div> : null}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5">
+                      <StatusBadge r={r} />
+                    </td>
+                    {showRoColumn ? (
+                      <td className="px-3 py-2.5">
+                        {canAct ? (
+                          <EnterRoInlineForm id={r.id} pendingRoNo={r.pending_ro_no} />
+                        ) : (
+                          <span className="font-mono text-xs text-fg-faint">{r.pending_ro_no ?? "—"}</span>
+                        )}
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

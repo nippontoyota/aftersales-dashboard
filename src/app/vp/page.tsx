@@ -162,6 +162,7 @@ async function Overview({
         <RevenuePerVehicleTable
           branches={data.report.branches}
           variant="compact"
+          bpOnlyRevenueTotals
           renderBranchCell={(row) => <VpBranchLabel label={row.branch} />}
           renderGusCell={(row, metric, value, plain) => {
             if (row.branch === "All branches" || value === null) return plain();

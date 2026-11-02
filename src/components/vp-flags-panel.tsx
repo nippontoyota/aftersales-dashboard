@@ -11,7 +11,7 @@ import { VpFlagThread } from "@/app/vp/vp-flag-thread";
  * app/queries/page.tsx's BranchQueriesContent).
  */
 export async function VpFlagsPanel({ admin }: { admin: AdminAccount }) {
-  if (admin.role !== "hq" && admin.role !== "hq_viewer" && admin.role !== "regional") return null;
+  if (admin.role !== "hq" && admin.role !== "hq_viewer" && admin.role !== "bp_ho" && admin.role !== "regional") return null;
 
   const threads =
     admin.role === "regional" ? await listVpQueryThreadsForRegion(admin.region) : await listAllVpQueryThreads();

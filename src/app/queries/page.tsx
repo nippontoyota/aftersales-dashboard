@@ -28,7 +28,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
   if (!admin?.canViewDashboard) redirect("/upload");
-  if (admin.role !== "hq" && admin.role !== "hq_viewer" && admin.role !== "regional" && admin.role !== "branch") redirect("/dashboard");
+  if (admin.role !== "hq" && admin.role !== "hq_viewer" && admin.role !== "bp_ho" && admin.role !== "regional" && admin.role !== "branch") redirect("/dashboard");
 
   const nav = await loadNavState(admin);
   const identity = adminIdentityLabel(admin);
@@ -38,6 +38,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
       current="queries"
       showDashboardLink
       isHq={admin.role === "hq"}
+      isBpHo={admin.role === "bp_ho"}
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
       isRegional={admin.role === "regional"}

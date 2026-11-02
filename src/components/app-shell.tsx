@@ -61,9 +61,11 @@ const ACCOUNTS_NAV_ITEMS = [{ href: "/accounts", label: "Overview", key: "accoun
 const CENTRAL_NAV_ITEMS = [
   { href: "/dashboard", label: "My Region", key: "dashboard" as const },
   { href: "/dashboard/central/tkm-targets", label: "TKM Targets", key: "central-tkm-targets" as const },
+  { href: "/dashboard/central/sa-analytics", label: "SA Analytics", key: "central-sa-analytics" as const },
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
+  { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const },
   { href: "/dashboard/central/set-targets", label: "Set Targets", key: "central-set-targets" as const },
 ];
 
@@ -73,9 +75,11 @@ const CENTRAL_NAV_ITEMS = [
 const REGIONAL_RM_NAV_ITEMS = [
   { href: "/dashboard", label: "My Region", key: "dashboard" as const },
   { href: "/dashboard/region/tkm-targets", label: "TKM Targets", key: "region-tkm-targets" as const },
+  { href: "/dashboard/region/sa-analytics", label: "SA Analytics", key: "region-sa-analytics" as const },
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
+  { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const },
   { href: "/dashboard/region/set-targets", label: "Set Targets", key: "region-set-targets" as const },
 ];
 
@@ -242,15 +246,6 @@ function ChatIcon() {
   );
 }
 
-function SignOutIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
-      <path d="M8 4H5.5A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8" strokeLinecap="round" />
-      <path d="M12.5 13.5 16 10l-3.5-3.5M16 10H8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 const SIDEBAR_STORAGE_KEY = "nt-sidebar-collapsed";
 const SIDEBAR_EVENT = "nt-sidebar-change";
 
@@ -317,8 +312,10 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   accounts: DashboardIcon,
   "central-tkm-targets": TkmTargetsIcon,
   "central-set-targets": SetTargetsIcon,
+  "central-sa-analytics": BranchesIcon,
   "region-tkm-targets": TkmTargetsIcon,
   "region-set-targets": SetTargetsIcon,
+  "region-sa-analytics": BranchesIcon,
   ce: ChatIcon,
 };
 
@@ -326,6 +323,7 @@ export function AppShell({
   current,
   showDashboardLink,
   isHq = false,
+  isBpHo = false,
   companyTabs = true,
   canUpload = true,
   accountsNav = false,
@@ -346,6 +344,12 @@ export function AppShell({
    * every existing call site (branch admins see neither) doesn't need
    * updating just to opt out. */
   isHq?: boolean;
+  /** BP HO (2026-10-29) — folded into the normal AppShell nav alongside the
+   * full read-only HQ suite (same scope as hq_viewer) instead of its own
+   * bare BpShell, so one account covers both without switching. Only gates
+   * the "BP Referrals" nav item itself, never the HQ-only utility tools
+   * (Data/Upload Sheet/CE Leads) — those stay `isHq`-only. */
+  isBpHo?: boolean;
   /** When false, the company-wide tabs (TKM Targets, Alerts, Branches,
    * Reports) are hidden — a branch admin whose latest date isn't published
    * yet only gets Daily Report + Upload. Defaults to true. */
@@ -403,7 +407,7 @@ export function AppShell({
           (!item.requiresDashboard || showDashboardLink) &&
           (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload) &&
-          (!item.hqOnly || isHq) &&
+          (!item.hqOnly || isHq || isBpHo) &&
           (!item.branchOnly || isBranch) &&
           (!item.branchOrHqOnly || isBranch || isHq),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
@@ -490,23 +494,6 @@ export function AppShell({
           {utilityItems.map((item) => navLink(item, compact))}
         </nav>
       ) : null}
-
-      <div className={`border-t border-border-subtle ${compact ? "p-2" : "p-3"}`}>
-        <form action={logoutAction}>
-          <button
-            type="submit"
-            title={compact ? "Sign out" : undefined}
-            aria-label={compact ? "Sign out" : undefined}
-            className={
-              compact
-                ? "flex w-full items-center justify-center rounded-md border border-border p-2 text-fg-subtle hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                : "w-full rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            }
-          >
-            {compact ? <SignOutIcon /> : "Sign out"}
-          </button>
-        </form>
-      </div>
     </>
   );
 
@@ -554,7 +541,17 @@ export function AppShell({
             </button>
             <span className="text-sm font-semibold text-fg lg:hidden">Nippon Toyota</span>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </header>
         <main className="flex-1">{children}</main>
       </div>

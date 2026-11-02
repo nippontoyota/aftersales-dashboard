@@ -116,6 +116,46 @@ export async function loadRawUploadRows(reportType: RawUploadReportType, date: s
   return rows.map((r) => r.row_data);
 }
 
+/** Distinct dates (any date, this branch's whole Part Sale history) whose
+ * RefDocNo — dash-stripped, uppercased, same normalization as
+ * close-sa-analytics/compute.ts's normalizeRo — matches one of the given
+ * ROs. Parts are issued by the parts team before the job actually closes
+ * (confirmed with the user 2026-10-27), so a Part Sale row can sit on a date
+ * that was already recomputed before its RO had a Close SA at all; this is
+ * how close-sa-analytics/recompute.ts's catchUpPartSaleForClosedRos finds
+ * which past dates need a second recompute once that RO finally closes. */
+export async function loadPartSaleDatesForRos(branch: string, normalizedRos: string[]): Promise<string[]> {
+  if (normalizedRos.length === 0) return [];
+  const { rows } = await pool.query<{ date: string }>(
+    `select distinct date::text as date
+     from raw_upload_rows
+     where report_type = 'part_sale' and branch = $1
+       and upper(replace(row_data->>'RefDocNo', '-', '')) = any($2::text[])`,
+    [branch, normalizedRos]
+  );
+  return rows.map((r) => r.date);
+}
+
+/** Full Part Sale rows (any date, this branch's whole history) whose
+ * RefDocNo matches one of the given ROs — close-sa-analytics/compute.ts's
+ * tyre/battery join. Tyre/battery is attributed to the day the RO closed,
+ * not the day the part was billed (confirmed with the user 2026-10-28: a
+ * part is routinely billed before the job it's for physically closes), so
+ * every recompute of a Service Info date needs that date's whole set of
+ * closing ROs' Part Sale rows, wherever they actually landed. Same RefDocNo
+ * normalization as loadPartSaleDatesForRos. */
+export async function loadPartSaleRowsForRos(branch: string, normalizedRos: string[]): Promise<unknown[]> {
+  if (normalizedRos.length === 0) return [];
+  const { rows } = await pool.query<{ row_data: unknown }>(
+    `select row_data
+     from raw_upload_rows
+     where report_type = 'part_sale' and branch = $1
+       and upper(replace(row_data->>'RefDocNo', '-', '')) = any($2::text[])`,
+    [branch, normalizedRos]
+  );
+  return rows.map((r) => r.row_data);
+}
+
 /** Job Order No → Close Service Advisor Name for every Service Info (GS +
  * BP) row this branch has ever filed, any date — for attributing Labour
  * Sales / Part Sale lines to the SA who closed their RO even when that

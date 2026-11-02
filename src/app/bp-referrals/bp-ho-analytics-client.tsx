@@ -30,12 +30,13 @@ function hoursSince(ts: Date | string | null): number {
 const UNCONNECTED_DROP_DAYS = 3;
 const FOLLOW_UP_OVERDUE_HOURS = 24;
 
-type Status = "pending" | "not_connected" | "followup" | "followup_overdue" | "completed" | "not_genuine" | "not_interested" | "dropped";
+type Status = "pending" | "not_connected" | "followup" | "followup_overdue" | "completed" | "not_genuine" | "not_interested" | "lost" | "dropped";
 
 function classify(r: BpmQueueReferral): Status {
-  if (r.ro_matched_at) return "completed";
+  if (r.ro_matched_at || r.pending_ro_no) return "completed";
   if (r.closed_reason === "not_genuine") return "not_genuine";
   if (r.closed_reason === "not_interested") return "not_interested";
+  if (r.closed_reason === "lost") return "lost";
   if (r.validated_at) return hoursSince(r.last_contacted_at) >= FOLLOW_UP_OVERDUE_HOURS ? "followup_overdue" : "followup";
   if (hoursSince(r.last_contacted_at ?? r.submitted_at) >= UNCONNECTED_DROP_DAYS * 24) return "dropped";
   if (r.call_status === "not_connected") return "not_connected";
@@ -50,6 +51,7 @@ const STATUS_LABEL: Record<Status, string> = {
   completed: "Completed",
   not_genuine: "Not genuine",
   not_interested: "Not interested",
+  lost: "Lost",
   dropped: "Dropped",
 };
 const STATUS_CLASS: Record<Status, string> = {
@@ -60,6 +62,7 @@ const STATUS_CLASS: Record<Status, string> = {
   completed: "bg-good-soft text-good-text",
   not_genuine: "bg-surface-2 text-fg-faint",
   not_interested: "bg-surface-2 text-fg-faint",
+  lost: "bg-surface-2 text-fg-faint",
   dropped: "bg-bad-soft text-bad",
 };
 
@@ -223,7 +226,9 @@ function ReferralTable({
                   <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
                     {r.payment_type === "CP" ? "Customer paid" : r.payment_type === "IP" ? "Insurance paid" : "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg">{r.matched_ro_no ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg">
+                    {r.matched_ro_no ?? (r.pending_ro_no ? <span className="text-fg-faint">{r.pending_ro_no} (pending)</span> : "—")}
+                  </td>
                   <td className="px-3 py-2.5">
                     {r.vehicle_image_url ? (
                       <button
@@ -379,11 +384,16 @@ export function BpHoAnalyticsClient({
   payoutLedger,
   branchRollup,
   branchCodes: allBranchCodes,
+  canRescan = true,
 }: {
   referrals: BpmQueueReferral[];
   payoutLedger: PayoutLedgerRow[];
   branchRollup: BranchRollupRow[];
   branchCodes: string[];
+  /** Hides the "Re-check pending RO entries" button — a company-wide,
+   * write/admin action BP HO gets but a regional manager's own scoped view
+   * doesn't (2026-10-29, the user's call). Defaults to true (BP HO/HQ). */
+  canRescan?: boolean;
 }) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -407,6 +417,7 @@ export function BpHoAnalyticsClient({
       completed: 0,
       not_genuine: 0,
       not_interested: 0,
+      lost: 0,
       dropped: 0,
     };
     for (const { status } of classified) counts[status]++;
@@ -509,6 +520,14 @@ export function BpHoAnalyticsClient({
           value={kpis.counts.not_interested}
           onClick={() => openKpi("Not interested", (r) => classify(r) === "not_interested")}
         />
+        <KpiCard
+          icon={<XCircleIcon />}
+          color="bad"
+          label="Lost"
+          sub="still ₹50"
+          value={kpis.counts.lost}
+          onClick={() => openKpi("Lost", (r) => classify(r) === "lost")}
+        />
       </div>
 
       {/* Needs attention */}
@@ -582,7 +601,7 @@ export function BpHoAnalyticsClient({
             >
               Export CSV
             </a>
-            <RescanButton />
+            {canRescan ? <RescanButton /> : null}
           </div>
         </div>
         <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
@@ -638,13 +657,14 @@ export function BpHoAnalyticsClient({
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Completed</th>
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Not genuine</th>
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Not interested</th>
+                <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Lost</th>
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Pending</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {branchRollup.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-sm text-fg-muted">
+                  <td colSpan={9} className="px-3 py-6 text-center text-sm text-fg-muted">
                     No referrals yet.
                   </td>
                 </tr>
@@ -658,6 +678,7 @@ export function BpHoAnalyticsClient({
                     <td className="px-3 py-2 text-right tabular-nums text-fg">{row.completed}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.notGenuine}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.notInterested}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.lost}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{row.pending}</td>
                   </tr>
                 ))

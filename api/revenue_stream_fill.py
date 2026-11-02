@@ -19,6 +19,12 @@ Row-by-row mapping (confirmed against the template he supplied,
   that (row, branch) pair — a blank cell there (e.g. the Body & Paint-only
   branches CO01E/TR01B/KL01B have no TGLOSS Service row) means the template
   itself doesn't track that metric for that branch, so it's left blank.
+  Exception: ALWAYS_FILL_ROWS (65/66, Scrap/Used Oil Revenue MTD) — no
+  branch is actually excluded from scrap/used-oil revenue, so a blank
+  template cell there is just a stale gap from 2026-10-20, not an
+  exclusion; those two rows get the live value (via fill_row()) regardless
+  of what the template cell started as (found 2026-10-26: KT01A, TI01B,
+  TI01C and TL01A were silently losing real MTD revenue this way).
 - PATCHED_FORMULA_ROWS: rows 73/76 (TGLOSS Service Penetration, TGLOSS SPO)
   hold a VLOOKUP into an external workbook link that doesn't exist alongside
   this file — dead formulas. We already compute the same figures
@@ -173,6 +179,28 @@ def touch_row(ws, row: int, value_for_branch: Callable[[str], Optional[float]]) 
         cell.value = value_for_branch(branch)
 
 
+# Rows 65/66 (Scrap Revenue MTD, Used Oil Revenue MTD) apply to every branch —
+# unlike the Body & Paint-only exclusions elsewhere on this sheet, no branch
+# is structurally excluded from scrap/used-oil revenue. A blank cell here is
+# just whatever the template happened to have on 2026-10-20 (some branches
+# hadn't billed scrap/oil yet that day), not a "this branch doesn't track
+# this" signal — so these two rows get the live value regardless of what the
+# template cell started as (2026-10-26, fixed after KT01A/TI01B/TI01C/TL01A
+# were found missing real revenue because their template cells were blank).
+ALWAYS_FILL_ROWS = {65, 66}
+
+
+def fill_row(ws, row: int, value_for_branch: Callable[[str], Optional[float]]) -> None:
+    """Like touch_row, but writes every branch's cell regardless of whether
+    the template cell started blank — only an existing formula is left
+    alone."""
+    for branch, col in BRANCH_COLUMNS.items():
+        cell = ws[f"{col}{row}"]
+        if is_formula(cell.value):
+            continue
+        cell.value = value_for_branch(branch)
+
+
 # Rows 73/75/76's dead VLOOKUP was dragged across the whole D:AB range when
 # the template was built, not just the 18 branch columns — it's also sitting
 # in the region-total (I/Q/Z), group-total (AB) and spacer (J/R/AA) columns.
@@ -229,7 +257,8 @@ def build_workbook(payload: dict) -> bytes:
     branches_last_year: Optional[dict] = payload.get("branchesLastYear")
 
     for row, field in ROW_FIELD_MAP.items():
-        touch_row(ws1, row, lambda b, f=field: (branches_today.get(b) or {}).get(f))
+        writer = fill_row if row in ALWAYS_FILL_ROWS else touch_row
+        writer(ws1, row, lambda b, f=field: (branches_today.get(b) or {}).get(f))
 
     for row, field in PATCHED_FORMULA_ROWS.items():
         patch_formula_row(ws1, row, lambda b, f=field: (branches_today.get(b) or {}).get(f))

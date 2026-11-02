@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { BranchReport } from "@/lib/report";
 import { isBodyPaintOnly } from "@/lib/report";
 import { achievementRatio } from "@/lib/aggregate";
-import { formatCompact } from "@/lib/format";
+import { formatCompact, formatCompactCurrency } from "@/lib/format";
 import { REGIONS, regionForBranch, type RegionName } from "@/lib/regions";
 import { SectionTable, type SectionColumn } from "./section-table";
 
@@ -30,6 +30,10 @@ import { SectionTable, type SectionColumn } from "./section-table";
 function perVehicleCell(revenue: number | null, roCount: number | null) {
   const value = achievementRatio(revenue, roCount);
   return <div className="w-20 whitespace-nowrap text-right text-sm font-semibold tabular-nums text-fg">{formatCompact(value)}</div>;
+}
+
+function currencyCell(value: number | null) {
+  return <div className="w-24 whitespace-nowrap text-right text-sm font-semibold tabular-nums text-fg">{formatCompactCurrency(value)}</div>;
 }
 
 export type Band = { min: number; className: string };
@@ -177,8 +181,38 @@ export const COLUMNS: SectionColumn[] = buildColumns();
 
 /** Never interactive — Body & Paint-only branches are excluded from every
  * rank pool (not comparable to a mixed branch's), so there's no
- * renderGusCell to wire up here even when the main table above has one. */
-const BP_ONLY_COLUMNS: SectionColumn[] = [bpuPartsColumn(), bpuLabourColumn()];
+ * renderGusCell to wire up here even when the main table above has one.
+ *
+ * `showRevenueTotals` prepends Total Revenue (MTD) and BPU Total Revenue
+ * (MTD) — plain ₹ figures, not per-car ratios — ahead of the existing
+ * BPU Parts/Labour (Rs/Car) pair (2026-10-26, at the VP's request: for just
+ * these 3 niche branches, the per-car ratios alone didn't tell him how much
+ * money is actually involved). VP-only (its own "compact" view) — /branches
+ * (HQ's identical view of the same component) is intentionally unchanged,
+ * so this is an opt-in prop, not a change to BP_ONLY_COLUMNS' default. Total
+ * Revenue is totalRevenueStreamMtd itself (already BPU + External Sales +
+ * Scrap/Oil for these branches, see body-paint-only.ts — GUS is forced to
+ * 0); BPU Total Revenue is just BPU Parts + BPU Labour added together. */
+function totalRevenueColumn(): SectionColumn {
+  return { label: "Total Revenue (MTD)", render: (r) => currencyCell(r.totalRevenueStreamMtd) };
+}
+
+function bpuTotalRevenueColumn(): SectionColumn {
+  return {
+    label: "BPU Total Revenue (MTD)",
+    render: (r) => {
+      const parts = r.bpuPartsMtd;
+      const labour = r.bpuLabourMtd;
+      const value = parts === null && labour === null ? null : (parts ?? 0) + (labour ?? 0);
+      return currencyCell(value);
+    },
+  };
+}
+
+function buildBpOnlyColumns(showRevenueTotals: boolean): SectionColumn[] {
+  const perCarColumns = [bpuPartsColumn(), bpuLabourColumn()];
+  return showRevenueTotals ? [totalRevenueColumn(), bpuTotalRevenueColumn(), ...perCarColumns] : perCarColumns;
+}
 
 /** Company-wide row — sum/sum, not an average of each branch's own ratio
  * (same weighted-ratio convention as Service Gentan I, confirmed with the
@@ -208,11 +242,11 @@ function sumField(branches: BranchReport[], key: SummableKey): number | null {
   return found ? total : null;
 }
 
-function buildAllBranchesRow(branches: BranchReport[], bpOnlyBranches: BranchReport[]): BranchReport {
+function buildAllBranchesRow(branches: BranchReport[], bpOnlyBranches: BranchReport[], label: string): BranchReport {
   const allForBpu = [...branches, ...bpOnlyBranches];
   return {
     ...branches[0],
-    branch: "All branches",
+    branch: label,
     gusRoMtd: sumField(branches, "gusRoMtd"),
     gusPartsMtd: sumField(branches, "gusPartsMtd"),
     gusLabourMtd: sumField(branches, "gusLabourMtd"),
@@ -250,6 +284,12 @@ export function RevenuePerVehicleTable({
    * Parts/Labour cells open its own rank + trend detail modal. */
   renderGusCell,
   renderBranchCell,
+  bpOnlyRevenueTotals = false,
+  /** Label for the summary row prepended to the main table — defaults to
+   * "All branches" (HQ's /branches, the VP's page). A regional manager's
+   * scoped view (SA Analytics, 2026-10-30) passes its own region name here
+   * instead, since the row only ever sums the branches it was given. */
+  totalRowLabel = "All branches",
 }: {
   branches: BranchReport[];
   variant?: "full" | "compact";
@@ -257,6 +297,9 @@ export function RevenuePerVehicleTable({
   renderGusCell?: GusCellRenderer;
   /** Forwarded to SectionTable — see there. */
   renderBranchCell?: (row: BranchReport) => ReactNode;
+  /** Adds Total Revenue (MTD) and BPU Total Revenue (MTD) to the Body & Paint-only mini table — see buildBpOnlyColumns. Defaults off (HQ's /branches view). */
+  bpOnlyRevenueTotals?: boolean;
+  totalRowLabel?: string;
 }) {
   const allColumns = buildColumns(renderGusCell);
   const columns = variant === "compact" ? allColumns.slice(0, 5) : allColumns;
@@ -264,7 +307,7 @@ export function RevenuePerVehicleTable({
   const bpOnlyBranches = branches.filter((b) => isBodyPaintOnly(b.branch));
 
   const rows = [...generalBranches].sort(regionSort);
-  const withTotal = rows.length > 0 ? [buildAllBranchesRow(generalBranches, bpOnlyBranches), ...rows] : rows;
+  const withTotal = rows.length > 0 ? [buildAllBranchesRow(generalBranches, bpOnlyBranches, totalRowLabel), ...rows] : rows;
   // "compact" is the VP's own variant — its tables scroll with the page
   // (not in their own capped-height box) and get a bit more breathing room;
   // the main dashboard's "full" variant is unchanged. See section-table.tsx.
@@ -288,7 +331,7 @@ export function RevenuePerVehicleTable({
           title="Revenue Per Vehicle — MTD (Body & Paint only)"
           subtitle="BPU stream only — ranked separately, not comparable to a mixed branch's"
           branches={[...bpOnlyBranches].sort((a, b) => a.branch.localeCompare(b.branch))}
-          columns={BP_ONLY_COLUMNS}
+          columns={buildBpOnlyColumns(bpOnlyRevenueTotals)}
           defaultOpen={defaultOpen}
           scroll={scroll}
           roomy={roomy}

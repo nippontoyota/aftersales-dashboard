@@ -4,9 +4,9 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { hashBuffer } from "@/lib/duplicate-detection";
 import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
-import { isBpFlavoredServiceInfo, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
+import { isBpFlavoredServiceInfo, JOB_ORDER_NO_COLUMN, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
-import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
+import { catchUpPartSaleForClosedRos, recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
 import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
 import { recomputeUniqueVinVas } from "@/lib/unique-vin-vas/recompute";
 import { recomputeTotalCarCareTreatments } from "@/lib/total-car-care/recompute";
@@ -139,6 +139,7 @@ export async function POST(request: Request) {
   // already swallows its own errors; this is a no-op before 2026-10-01).
   await recomputeVasRevenueReal(admin.branch, date);
   await recomputeCloseSaAnalytics(admin.branch, date);
+  await catchUpPartSaleForClosedRos(admin.branch, bpRawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
   await recomputeUniqueVinVas(admin.branch, date);
   await recomputeTotalCarCareTreatments(admin.branch, date);
 
