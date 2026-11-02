@@ -721,3 +721,47 @@ export async function updateCeLead(input: {
   }
 }
 
+export type CeServiceHistoryVisit = {
+  date: string;
+  branch: string;
+  jobOrderNo: string | null;
+  mileage: number | null;
+  jobLines: string[];
+};
+
+/** "What they did when they came" (2026-11-02, at the user's request): the
+ * Service timeline on a lead's detail page only ever had date/mileage/dealer
+ * per N/N1/N2 visit — the actual job lines only exist in the Service Info
+ * Report's raw rows (one row per job code on a repair order), uploaded
+ * separately from the N/N1/N2 chain and never retained anywhere else. Relies
+ * on raw_upload_rows_service_info_vin_idx (see schema.sql) — without it this
+ * is a full scan of ~900k Service Info rows per lead page load. Grouped by
+ * (date, branch, RO) since one visit spans several job-line rows; capped to
+ * the 15 most recent ROs on file, most recent first, so a high-mileage
+ * vehicle with years of history doesn't blow up the page. */
+export async function loadCeLeadServiceHistory(vin: string): Promise<CeServiceHistoryVisit[]> {
+  const { rows } = await pool.query<{ date: string; branch: string; ro: string | null; job_desc: string | null; mileage_raw: string | null }>(
+    `select date::text as date, branch, row_data->>'Job Order No' as ro, row_data->>'Job Desc' as job_desc,
+            coalesce(nullif(row_data->>'Mileage Out', ''), nullif(row_data->>'Mileage In', '')) as mileage_raw
+     from raw_upload_rows
+     where report_type in ('service_info', 'service_info_bp') and upper(trim(row_data->>'Vin no')) = $1
+     order by date desc, row_index`,
+    [vin],
+  );
+
+  const visits = new Map<string, CeServiceHistoryVisit>();
+  for (const row of rows) {
+    const key = `${row.date}#${row.branch}#${row.ro ?? ""}`;
+    const desc = (row.job_desc ?? "").trim();
+    let visit = visits.get(key);
+    if (!visit) {
+      const mileageNum = row.mileage_raw ? Number(row.mileage_raw.replace(/,/g, "")) : NaN;
+      visit = { date: row.date, branch: row.branch, jobOrderNo: row.ro || null, mileage: Number.isFinite(mileageNum) ? mileageNum : null, jobLines: [] };
+      visits.set(key, visit);
+    }
+    if (desc && !visit.jobLines.includes(desc)) visit.jobLines.push(desc);
+  }
+
+  return [...visits.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15);
+}
+

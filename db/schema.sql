@@ -1563,3 +1563,17 @@ alter table bp_referral_activity add constraint bp_referral_activity_activity_ty
 create index if not exists raw_upload_rows_part_sale_refdoc_idx
   on raw_upload_rows (branch, (upper(replace(row_data->>'RefDocNo', '-', ''))))
   where report_type = 'part_sale';
+
+-- CE lead "what they did when they came" (2026-11-02, at the user's
+-- request): the MRS catch-list's lead detail page shows a Service
+-- timeline (date/mileage/dealer per N/N1/N2 visit) but not what was
+-- actually done — that detail only exists in the Service Info Report's
+-- raw job lines (see src/lib/ce/service-info-history.ts). Scoped to the
+-- two Service Info report types only (~905k of 3.7M raw_upload_rows
+-- rows, 2026-11-02) rather than the whole table. Created with
+-- `concurrently` in production, same reasoning as the part_sale index
+-- above — omitted here since CONCURRENTLY can't run inside a
+-- transaction block, which is how this file is normally replayed.
+create index if not exists raw_upload_rows_service_info_vin_idx
+  on raw_upload_rows ((upper(trim(row_data->>'Vin no'))))
+  where report_type in ('service_info', 'service_info_bp');

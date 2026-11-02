@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentAdmin } from "@/lib/auth";
 import { callStatusLabel, formatCeDate, formatCeDateTime, indiaDate } from "@/lib/ce/rules";
-import { loadCeLead } from "@/lib/ce/store";
+import { loadCeLead, loadCeLeadServiceHistory } from "@/lib/ce/store";
 import { CeShell } from "../../ce-shell";
 import { UpdateForm } from "./update-form";
 import { ContactLink } from "../../contact-link";
@@ -22,6 +22,7 @@ export default async function CeLeadPage({ params }: { params: Promise<{ vin: st
   const data = await loadCeLead(decodeURIComponent(vin), indiaDate());
   if (!data) notFound();
   const { lead, activity } = data;
+  const serviceHistory = await loadCeLeadServiceHistory(lead.vin);
   const customerName = [lead.customerFirstName, lead.customerFamilyName].filter(Boolean).join(" ") || "Unnamed customer";
   const timeline = [
     { label: "Sale", date: lead.salesDate, dealer: lead.saleDealerCode, mileage: null },
@@ -48,6 +49,31 @@ export default async function CeLeadPage({ params }: { params: Promise<{ vin: st
             <section className="rounded-lg border border-border bg-surface p-5 shadow-card"><h2 className="text-sm font-semibold text-fg">Allocation and source</h2><dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3"><Field label="Allocated dealer" value={lead.allocatedDealer} /><Field label="Dealer zone" value={lead.dealerZone} /><Field label="AVF" value={number(lead.avf)} /><Field label="Primary source" value={lead.sourceFileName} /><Field label="Imported" value={formatCeDateTime(lead.importedAt)} /><Field label="DMS source" value={lead.dmsSourceFileName ?? "—"} /><Field label="DMS imported" value={lead.dmsImportedAt ? formatCeDateTime(lead.dmsImportedAt) : "—"} /><Field label="Last editor" value={lead.lastEditor ?? "—"} /></dl></section>
 
             <section className="rounded-lg border border-border bg-surface p-5 shadow-card"><h2 className="text-sm font-semibold text-fg">Service timeline</h2><ol className="mt-4 grid gap-3 sm:grid-cols-4">{timeline.map((item) => <li key={item.label} className="relative rounded-md border border-border bg-surface-2 p-3"><div className="text-[10px] font-bold uppercase tracking-wide text-fg-faint">{item.label}</div><div className="mt-1 text-sm font-medium text-fg">{item.date ? formatCeDate(item.date) : "—"}</div><div className="mt-1 text-xs text-fg-subtle">{item.dealer || "No dealer"}</div>{item.mileage !== null ? <div className="mt-2 text-xs tabular-nums text-fg-muted">{number(item.mileage)} km</div> : null}</li>)}</ol></section>
+
+            <section className="rounded-lg border border-border bg-surface p-5 shadow-card">
+              <h2 className="text-sm font-semibold text-fg">What they did when they came</h2>
+              <p className="mt-1 text-xs text-fg-faint">From the Service Info Report — the most recent {serviceHistory.length} visit{serviceHistory.length === 1 ? "" : "s"} on file.</p>
+              {serviceHistory.length ? (
+                <ol className="mt-4 space-y-3 border-l border-border pl-4">
+                  {serviceHistory.map((visit) => (
+                    <li key={`${visit.date}-${visit.branch}-${visit.jobOrderNo}`}>
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="text-sm font-medium text-fg">{formatCeDate(visit.date)}</span>
+                        <span className="text-xs text-fg-subtle">{visit.branch}{visit.jobOrderNo ? ` · RO ${visit.jobOrderNo}` : ""}</span>
+                        {visit.mileage !== null ? <span className="text-xs tabular-nums text-fg-muted">{number(visit.mileage)} km</span> : null}
+                      </div>
+                      <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                        {visit.jobLines.map((line) => (
+                          <li key={line} className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-fg-muted">{line}</li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="mt-3 text-xs text-fg-faint">No Service Info Report history on file for this VIN.</p>
+              )}
+            </section>
           </div>
 
           <aside className="space-y-4">
