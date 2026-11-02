@@ -344,10 +344,14 @@ export type CeMrsListRow = {
 // so filtering runs against the whole active table in one pass instead
 // of pulling ~150k rows into JS — this project has paid for that mistake
 // before, see project_cancellation_adjustment_precompute.md) and excludes
-// any VIN already on a known N-9 list. $1 today, $2 window days, $3 min
-// plausible km/day, $4 due-months, $5 due-km — kept as bound params
-// rather than inlined literals so rules.ts stays the single source of
-// truth for these numbers.
+// any VIN already on a known N-9 list. The rules.ts constants are
+// inlined as numeric literals (trusted, TypeScript-typed as `number`,
+// never user input — not a bound-param injection concern) rather than
+// passed as $N params: a $N that's bound but only referenced in one of
+// two conditionally-built WHERE clauses (see loadCeMrsGapList's "today"
+// vs "overdue" split) makes Postgres unable to infer its type at all —
+// "could not determine data type of parameter $N" — since type
+// inference runs off the parsed query text, not the supplied value.
 const MRS_DUE_DATE_CTE = `
   with mrs_base as (
     select l.vin, l.allocated_dealer, l.customer_first_name, l.customer_family_name,
@@ -355,10 +359,10 @@ const MRS_DUE_DATE_CTE = `
            case
              when l.n1_report_date is not null and l.n1_mileage is not null
                   and (l.n_report_date - l.n1_report_date) > 0
-                  and (l.n_mileage - l.n1_mileage)::numeric / (l.n_report_date - l.n1_report_date) >= $3
+                  and (l.n_mileage - l.n1_mileage)::numeric / (l.n_report_date - l.n1_report_date) >= ${CE_MIN_PLAUSIBLE_KM_PER_DAY}
                then (l.n_mileage - l.n1_mileage)::numeric / (l.n_report_date - l.n1_report_date)
              when l.sales_date is not null and (l.n_report_date - l.sales_date) > 0
-                  and l.n_mileage::numeric / (l.n_report_date - l.sales_date) >= $3
+                  and l.n_mileage::numeric / (l.n_report_date - l.sales_date) >= ${CE_MIN_PLAUSIBLE_KM_PER_DAY}
                then l.n_mileage::numeric / (l.n_report_date - l.sales_date)
              else null
            end as rate
@@ -367,8 +371,8 @@ const MRS_DUE_DATE_CTE = `
   ),
   mrs_due as (
     select *,
-      (n_report_date + $4 * interval '1 month')::date as months_due,
-      case when rate is not null then (n_report_date + ($5::numeric / rate) * interval '1 day')::date end as km_due
+      (n_report_date + ${CE_DUE_MONTHS} * interval '1 month')::date as months_due,
+      case when rate is not null then (n_report_date + (${CE_DUE_KM}::numeric / rate) * interval '1 day')::date end as km_due
     from mrs_base
   ),
   mrs_final as (
@@ -383,22 +387,31 @@ function addDaysIso(dateIso: string, days: number): string {
   return new Date(Date.parse(`${dateIso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** The daily MRS catch-list: active ce_leads due within a rolling window
- * around today (CE_MRS_WINDOW_DAYS), never on any N-9 list we've
- * imported — see project_mrs_n9_system.md for why this is deliberately
- * windowed rather than "ever due" (the proxy alone flags ~half of all
- * active leads once the whole reactivation backlog counts). */
+/** The daily MRS catch-list, split into two priorities (confirmed with
+ * the user 2026-11-02): "today" (due exactly today — the actual daily
+ * worklist) and "overdue" (due date already passed, within the
+ * CE_MRS_WINDOW_DAYS lookback — secondary, worked through if time
+ * allows). Leads due in the future are deliberately never shown here —
+ * not useful to know about yet, per the user. Never on any N-9 list
+ * we've imported — see project_mrs_n9_system.md for why "overdue" is
+ * bounded to a lookback rather than "ever overdue" (the proxy alone
+ * flags ~half of all active leads once the whole reactivation backlog
+ * counts). */
 export async function loadCeMrsGapList(options: {
   today: string;
+  section: "today" | "overdue";
   query?: string;
   dealers?: string[];
   statuses?: CeStatus[];
   page?: number;
   limit?: number;
 }) {
-  const values: unknown[] = [options.today, CE_MRS_WINDOW_DAYS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_DUE_MONTHS, CE_DUE_KM];
+  const values: unknown[] = [options.today];
+  const sectionClause = options.section === "today"
+    ? `f.due_date = $1::date`
+    : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day'`;
   const where = [
-    `f.due_date between $1::date - $2 * interval '1 day' and $1::date + $2 * interval '1 day'`,
+    sectionClause,
     `not exists (select 1 from n9_leads n where n.vin = f.vin)`,
   ];
   if (options.query) {
@@ -419,7 +432,7 @@ export async function loadCeMrsGapList(options: {
   const filterValues = [...values];
   values.push(limit, (page - 1) * limit);
 
-  const [list, countRow, dealers] = await Promise.all([
+  const [list, countRow, sectionCounts, dealers] = await Promise.all([
     pool.query(
       `${MRS_DUE_DATE_CTE}
        select f.vin, trim(concat_ws(' ', f.customer_first_name, f.customer_family_name)) customer_name,
@@ -435,6 +448,17 @@ export async function loadCeMrsGapList(options: {
       `${MRS_DUE_DATE_CTE}
        select count(*) from mrs_final f join ce_lead_workflow w using (vin) where ${clause}`,
       filterValues,
+    ),
+    // Unfiltered (no search/dealer/status) tab counts, same pattern as
+    // the AVF page's category tiles — just the two sections' raw sizes.
+    pool.query<{ today: string; overdue: string }>(
+      `${MRS_DUE_DATE_CTE}
+       select
+         count(*) filter (where f.due_date = $1::date) today,
+         count(*) filter (where f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day') overdue
+       from mrs_final f
+       where not exists (select 1 from n9_leads n where n.vin = f.vin)`,
+      [options.today],
     ),
     loadCeDealers(true),
   ]);
@@ -459,8 +483,9 @@ export async function loadCeMrsGapList(options: {
     page,
     pageCount: Math.max(1, Math.ceil(total / limit)),
     dealers,
-    windowStart: addDaysIso(options.today, -CE_MRS_WINDOW_DAYS),
-    windowEnd: addDaysIso(options.today, CE_MRS_WINDOW_DAYS),
+    todayCount: Number(sectionCounts.rows[0].today),
+    overdueCount: Number(sectionCounts.rows[0].overdue),
+    overdueWindowStart: addDaysIso(options.today, -CE_MRS_WINDOW_DAYS),
   };
 }
 

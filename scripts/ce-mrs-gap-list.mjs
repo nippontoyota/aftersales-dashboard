@@ -10,6 +10,11 @@ import { CE_DUE_KM, CE_DUE_MONTHS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_MRS_WINDOW_DA
 // so this runs the identical query through its own pg.Client instead.
 // Keep this in sync with loadCeMrsGapList's MRS_DUE_DATE_CTE if that
 // formula ever changes. See project_mrs_n9_system.md.
+//
+// Split into "today" (due exactly today) and "overdue" (due date already
+// passed, within CE_MRS_WINDOW_DAYS) — leads due in the future are
+// deliberately never shown (confirmed with the user 2026-11-02: not
+// useful to know about yet).
 
 const today = indiaDate();
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
@@ -44,17 +49,23 @@ const { rows } = await client.query(
             case when km_due is not null and km_due < months_due then km_due else months_due end as due_date
      from mrs_due
    )
-   select f.* from mrs_final f
-   where f.due_date between $1::date - $2 * interval '1 day' and $1::date + $2 * interval '1 day'
+   select f.*,
+     case when f.due_date = $1::date then 'today' else 'overdue' end as section
+   from mrs_final f
+   where f.due_date between $1::date - $2 * interval '1 day' and $1::date
      and not exists (select 1 from n9_leads n where n.vin = f.vin)
    order by f.due_date, f.vin`,
   [today, CE_MRS_WINDOW_DAYS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_DUE_MONTHS, CE_DUE_KM],
 );
 
-console.log(`window: today ${today} +/- ${CE_MRS_WINDOW_DAYS} days`);
-console.log("DAILY GAP LIST total:", rows.length);
-console.log("\nsample (first 20):");
-for (const r of rows.slice(0, 20)) {
+const todayRows = rows.filter((r) => r.section === "today");
+const overdueRows = rows.filter((r) => r.section === "overdue");
+console.log(`today ${today}, overdue lookback ${CE_MRS_WINDOW_DAYS} days`);
+console.log("TODAY (priority):", todayRows.length);
+console.log("OVERDUE (secondary):", overdueRows.length);
+
+console.log("\nsample TODAY (first 10):");
+for (const r of todayRows.slice(0, 10)) {
   console.log(
     ` ${r.vin} | due ${r.due_date.toISOString().slice(0, 10)} | last visit ${r.n_report_date.toISOString().slice(0, 10)} @ ${r.n_mileage}km | ` +
     `${r.customer_name || "Unnamed"} | ${r.contact_number ?? "no contact"} | ${r.allocated_dealer || ""}`,
