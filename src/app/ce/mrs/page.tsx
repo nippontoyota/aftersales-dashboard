@@ -56,7 +56,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
           <h1 className="mt-1 text-xl font-semibold tracking-tight text-fg">MRS catch list</h1>
           <p className="mt-1 text-sm text-fg-subtle">
             {section === "priority"
-              ? `Leads due ${formatCeDate(data.priorityDueDate)} (6 months or 10,000 km since last visit, whichever first) that TKM's own N-9 list never covered — call now, matching TKM's own N-7 call lead time, so the customer still has a week's notice.`
+              ? `Leads due ${formatCeDate(data.priorityDueDate)} (12 months or 10,000 km since last visit, whichever first) that TKM's own N-9 list never covered — call now, matching TKM's own N-7 call lead time, so the customer still has a week's notice.`
               : `Leads overdue since ${formatCeDate(data.overdueWindowStart)}–yesterday, never covered by TKM's N-9 — work through these if time allows.`}
           </p>
         </div>
