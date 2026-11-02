@@ -1577,3 +1577,38 @@ create index if not exists raw_upload_rows_part_sale_refdoc_idx
 create index if not exists raw_upload_rows_service_info_vin_idx
   on raw_upload_rows ((upper(trim(row_data->>'Vin no'))))
   where report_type in ('service_info', 'service_info_bp');
+
+-- CE head/agent lead assignment (2026-11-02, at the user's request): the
+-- single flat 'ce' role is split into 'ce_head' (the existing CE account —
+-- full company-wide visibility, can bulk-assign MRS catch-list leads) and
+-- 'ce_agent' (sees only leads assigned to them). reports_to links an agent
+-- to their head; null for everyone else, including ce_head itself. The role
+-- constraint keeps 'ce' in its allowed list rather than removing it — this
+-- file's own history never retires a role string, only adds to it — but no
+-- row should carry it after the migration UPDATE below runs.
+alter table admins add column if not exists reports_to text references admins(username);
+alter table admins drop constraint if exists admins_role_check;
+alter table admins add constraint admins_role_check
+  check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce', 'kl_cluster', 'ce_head', 'ce_agent'));
+alter table admins drop constraint if exists admins_role_scope_consistency;
+alter table admins add constraint admins_role_scope_consistency check (
+  (role = 'branch'      and branch is not null and region is null) or
+  (role = 'hq'          and branch is null     and region is null) or
+  (role = 'regional'    and branch is null     and region in ('North', 'Central', 'South')) or
+  (role = 'vp_service'  and branch is null     and region is null) or
+  (role = 'ceo'         and branch is null     and region is null) or
+  (role = 'accounts'    and branch is null     and region is null) or
+  (role = 'hq_viewer'   and branch is null     and region is null) or
+  (role = 'bp_manager'  and branch is not null and region is null) or
+  (role = 'bp_ho'       and branch is null     and region is null) or
+  (role = 'ce'          and branch is null     and region is null) or
+  (role = 'kl_cluster'  and branch is null     and region is null) or
+  (role = 'ce_head'     and branch is null     and region is null) or
+  (role = 'ce_agent'    and branch is null     and region is null)
+);
+-- Idempotent: only ever touches a row still carrying the retired 'ce' role,
+-- so re-running this file after the first apply is a no-op here.
+update admins set role = 'ce_head' where role = 'ce';
+
+alter table ce_lead_workflow add column if not exists assigned_to text references admins(username);
+create index if not exists ce_lead_workflow_assigned_to_idx on ce_lead_workflow (assigned_to) where assigned_to is not null;

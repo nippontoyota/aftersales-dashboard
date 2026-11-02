@@ -1,6 +1,7 @@
 import "server-only";
 import { pool } from "@/lib/db";
 import type { CeLeadInput, ParsedCeWorkbook } from "./parse";
+import { LEXUS_VIN_WMI_PREFIXES, type CeVehicleBrand } from "./vehicle-brand";
 import {
   CE_DUE_KM, CE_DUE_MONTHS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_MRS_PRIORITY_LEAD_DAYS, CE_MRS_WINDOW_DAYS,
   deriveCeCallUpdate, indiaDate,
@@ -65,6 +66,7 @@ export type CeLeadDetail = CeLeadInput & {
   vehicleModel: string | null;
   dmsSourceFileName: string | null;
   dmsImportedAt: string | null;
+  assignedTo: string | null;
 };
 
 export type CeActivity = {
@@ -233,12 +235,17 @@ export async function loadCeLeadPage(options: {
   statuses?: CeStatus[];
   dealers?: string[];
   followUps?: CeFollowUpFilter[];
+  assignedTo?: string;
   month?: number;
   year?: number;
   page?: number;
 }) {
   const values: unknown[] = [options.today, options.active];
   const where = ["l.active = $2"];
+  if (options.assignedTo) {
+    values.push(options.assignedTo);
+    where.push(`w.assigned_to = $${values.length}`);
+  }
   if (options.query) {
     values.push(`%${options.query}%`);
     where.push(`(l.vin ilike $${values.length} or concat_ws(' ', l.customer_first_name, l.customer_family_name) ilike $${values.length} or l.contact_number ilike $${values.length} or l.vehicle_model ilike $${values.length})`);
@@ -338,6 +345,7 @@ export type CeMrsListRow = {
   attemptCount: number;
   contactNumber: string | null;
   vehicleModel: string | null;
+  assignedTo: string | null;
 };
 
 // Computes the due-date proxy (rules.ts's ceDueDate, re-expressed in SQL
@@ -405,6 +413,10 @@ export async function loadCeMrsGapList(options: {
   query?: string;
   dealers?: string[];
   statuses?: CeStatus[];
+  brand?: CeVehicleBrand;
+  /** Scopes to one CE agent's own leads (ce_lead_workflow.assigned_to) —
+   * omit for a head/hq view of everyone's. */
+  assignedTo?: string;
   page?: number;
   limit?: number;
 }) {
@@ -416,6 +428,10 @@ export async function loadCeMrsGapList(options: {
     sectionClause,
     `not exists (select 1 from n9_leads n where n.vin = f.vin)`,
   ];
+  if (options.assignedTo) {
+    values.push(options.assignedTo);
+    where.push(`w.assigned_to = $${values.length}`);
+  }
   if (options.query) {
     values.push(`%${options.query}%`);
     where.push(`(f.vin ilike $${values.length} or concat_ws(' ', f.customer_first_name, f.customer_family_name) ilike $${values.length} or f.contact_number ilike $${values.length} or f.vehicle_model ilike $${values.length})`);
@@ -428,6 +444,11 @@ export async function loadCeMrsGapList(options: {
     values.push(options.statuses);
     where.push(`w.status = any($${values.length}::text[])`);
   }
+  if (options.brand) {
+    values.push(LEXUS_VIN_WMI_PREFIXES.map((prefix) => `${prefix}%`));
+    const lexusMatch = `left(f.vin, 3) like any($${values.length}::text[])`;
+    where.push(options.brand === "lexus" ? lexusMatch : `not (${lexusMatch})`);
+  }
   const clause = where.join(" and ");
   const page = Math.max(1, options.page ?? 1);
   const limit = options.limit ?? 50;
@@ -439,7 +460,7 @@ export async function loadCeMrsGapList(options: {
       `${MRS_DUE_DATE_CTE}
        select f.vin, trim(concat_ws(' ', f.customer_first_name, f.customer_family_name)) customer_name,
          f.allocated_dealer, f.n_report_date, f.n_mileage, f.due_date,
-         w.status, w.next_follow_up_date, w.attempt_count, f.contact_number, f.vehicle_model
+         w.status, w.next_follow_up_date, w.attempt_count, f.contact_number, f.vehicle_model, w.assigned_to
        from mrs_final f join ce_lead_workflow w using (vin)
        where ${clause}
        order by f.due_date, f.vin
@@ -477,6 +498,7 @@ export async function loadCeMrsGapList(options: {
     attemptCount: Number(row.attempt_count),
     contactNumber: row.contact_number,
     vehicleModel: row.vehicle_model,
+    assignedTo: row.assigned_to,
   }));
   const total = Number(countRow.rows[0].count);
   return {
@@ -609,7 +631,7 @@ export async function loadCeLead(vin: string, today: string): Promise<{ lead: Ce
   const [leadResult, activityResult] = await Promise.all([
     pool.query(
       `select l.*, w.status, w.next_follow_up_date, w.attempt_count, w.latest_call_status,
-        w.latest_outcome, w.last_editor, w.updated_at, i.source_file_name,
+        w.latest_outcome, w.last_editor, w.updated_at, w.assigned_to, i.source_file_name,
         d.source_file_name dms_source_file_name, d.uploaded_at dms_imported_at,
         ($2::date - l.n_report_date)::int age_days,
         case when ($2::date - l.n_report_date) <= 364 then 'hot' when ($2::date - l.n_report_date) <= 730 then 'warm' else 'cold' end category
@@ -659,6 +681,7 @@ export async function loadCeLead(vin: string, today: string): Promise<{ lead: Ce
       category: row.category,
       dmsSourceFileName: row.dms_source_file_name,
       dmsImportedAt: row.dms_imported_at ? new Date(row.dms_imported_at).toISOString() : null,
+      assignedTo: row.assigned_to,
     },
     activity: activityResult.rows.map((item) => ({
       id: String(item.id),
@@ -682,18 +705,24 @@ export async function updateCeLead(input: {
   nextFollowUpDate: string | null;
   note: string;
   username: string;
+  /** Set only for a ce_agent caller — asserts the lead is actually assigned
+   * to them (the UI already only offers the call form for an agent's own
+   * leads via loadCeLead's notFound() check, but a direct form POST could
+   * otherwise bypass that). Omit for ce_head/hq, who can edit any lead. */
+  requireAssignedTo?: string;
 }) {
   if (!input.note.trim()) throw new Error("What the customer said is required.");
   if (input.note.length > 2_000) throw new Error("Keep the customer response to 2,000 characters or fewer.");
   const client = await pool.connect();
   try {
     await client.query("begin");
-    const current = await client.query<{ active: boolean; status: CeStatus; attempt_count: number }>(
-      `select l.active, w.status, w.attempt_count from ce_leads l join ce_lead_workflow w using (vin) where l.vin = $1 for update of w`,
+    const current = await client.query<{ active: boolean; status: CeStatus; attempt_count: number; assigned_to: string | null }>(
+      `select l.active, w.status, w.attempt_count, w.assigned_to from ce_leads l join ce_lead_workflow w using (vin) where l.vin = $1 for update of w`,
       [input.vin],
     );
     if (!current.rows[0]) throw new Error("Lead not found.");
     if (!current.rows[0].active) throw new Error("Archived leads are read-only.");
+    if (input.requireAssignedTo && current.rows[0].assigned_to !== input.requireAssignedTo) throw new Error("This lead isn't assigned to you.");
     const next = deriveCeCallUpdate({
       currentAttemptCount: Number(current.rows[0].attempt_count),
       callStatus: input.callStatus,
@@ -763,5 +792,26 @@ export async function loadCeLeadServiceHistory(vin: string): Promise<CeServiceHi
   }
 
   return [...visits.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15);
+}
+
+/** The CE head's "Assign evenly" bulk action on /ce/mrs (2026-11-02, at the
+ * user's request): round-robins the given VINs across the given agent
+ * usernames in order — agent[0] gets vins[0], agent[1] gets vins[1], etc.,
+ * wrapping around. Caller (the server action) owns picking which VINs
+ * (checkbox-selected, not "everything currently filtered") and which agents
+ * (every ce_agent reporting to this head — see admin-store.ts's listCeAgents).
+ * Re-assigning an already-assigned lead is allowed — it simply overwrites
+ * assigned_to, no history kept (assignment isn't a workflow status, so it
+ * doesn't go through ce_lead_activity). */
+export async function assignCeLeadsEvenly(input: { vins: string[]; agents: string[] }): Promise<{ assignedCount: number }> {
+  if (input.vins.length === 0 || input.agents.length === 0) return { assignedCount: 0 };
+  const assignments = input.vins.map((vin, i) => ({ vin, assigned_to: input.agents[i % input.agents.length] }));
+  await pool.query(
+    `update ce_lead_workflow w set assigned_to = a.assigned_to
+     from jsonb_to_recordset($1::jsonb) as a(vin text, assigned_to text)
+     where w.vin = a.vin`,
+    [JSON.stringify(assignments)],
+  );
+  return { assignedCount: assignments.length };
 }
 

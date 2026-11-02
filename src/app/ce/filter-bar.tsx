@@ -87,3 +87,7 @@ export function MonthFilter({ value }: { value?: number }) {
 export function YearFilter({ value, years }: { value?: number; years: number[] }) {
   return <SelectFilter label="Latest service year" allLabel="All years" name="year" value={value ? String(value) : undefined} options={years.map((year) => ({ value: String(year), label: String(year) }))} />;
 }
+
+export function BrandFilter({ value }: { value?: string }) {
+  return <SelectFilter label="Brand" allLabel="All brands" name="brand" value={value} options={[{ value: "toyota", label: "Toyota" }, { value: "lexus", label: "Lexus" }]} />;
+}

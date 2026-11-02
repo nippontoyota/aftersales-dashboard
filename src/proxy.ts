@@ -53,15 +53,16 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
     const path = request.nextUrl.pathname;
-    const isCePath = path === "/ce" || path.startsWith("/ce/");
-    if (admin.role === "ce" && path !== "/" && !isCePath) {
+    const isCePath = path === "/ce" || path.startsWith("/ce/") || path.startsWith("/api/ce/");
+    const isCe = admin.role === "ce_head" || admin.role === "ce_agent";
+    if (isCe && path !== "/" && !isCePath) {
       if (path.startsWith("/api/")) return NextResponse.json({ error: "Not allowed." }, { status: 403 });
       const ceUrl = request.nextUrl.clone();
       ceUrl.pathname = "/ce";
       ceUrl.search = "";
       return NextResponse.redirect(ceUrl);
     }
-    if (admin.role !== "ce" && admin.role !== "hq" && isCePath) {
+    if (!isCe && admin.role !== "hq" && isCePath) {
       const homeUrl = request.nextUrl.clone();
       homeUrl.pathname = "/";
       homeUrl.search = "";

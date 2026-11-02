@@ -51,9 +51,18 @@ export type AdminAccount =
   // referrals, same shape as vp_service/ceo/accounts (no branch/region/
   // publish gate, no uploads).
   | { username: string; passwordHash: string; salt: string; role: "bp_ho"; canViewDashboard: true }
-  // Company-wide Customer Engagement workspace. It has no access to the
-  // operational dashboards and no branch/region scope.
-  | { username: string; passwordHash: string; salt: string; role: "ce"; canViewDashboard: false }
+  // Company-wide Customer Engagement workspace, split into a head/agent
+  // hierarchy (2026-11-02, at the user's request — was a single flat 'ce'
+  // role until then). Neither has access to the operational dashboards or
+  // any branch/region scope.
+  // CE head — full company-wide lead visibility, can bulk-assign MRS
+  // catch-list leads across the agents reporting to them (see reportsTo on
+  // ce_agent below; the head itself has no such column).
+  | { username: string; passwordHash: string; salt: string; role: "ce_head"; canViewDashboard: false }
+  // CE agent — sees only leads assigned to them (ce_lead_workflow.assigned_to),
+  // not the full company-wide list. reportsTo names the ce_head who manages
+  // them and is the only account that can assign leads to this agent.
+  | { username: string; passwordHash: string; salt: string; role: "ce_agent"; reportsTo: string; canViewDashboard: false }
   // Read-only, scoped to just KL01A + KL01B (see kl-branches-data.ts) — one
   // account for a single overseer (Biju S Pillai) who needs both branches
   // but not the whole South region. Never uploads, never sets targets, no
@@ -65,9 +74,10 @@ type AdminRow = {
   username: string;
   password_hash: string;
   salt: string;
-  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer" | "bp_manager" | "bp_ho" | "ce" | "kl_cluster";
+  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer" | "bp_manager" | "bp_ho" | "ce" | "kl_cluster" | "ce_head" | "ce_agent";
   branch: string | null;
   region: string | null;
+  reports_to: string | null;
 };
 
 function toAccount(row: AdminRow): AdminAccount {
@@ -80,7 +90,8 @@ function toAccount(row: AdminRow): AdminAccount {
   if (row.role === "hq_viewer") return { ...base, role: "hq_viewer" };
   if (row.role === "bp_manager") return { ...base, role: "bp_manager", branch: row.branch! };
   if (row.role === "bp_ho") return { ...base, role: "bp_ho" };
-  if (row.role === "ce") return { ...base, role: "ce", canViewDashboard: false };
+  if (row.role === "ce_head") return { ...base, role: "ce_head", canViewDashboard: false };
+  if (row.role === "ce_agent") return { ...base, role: "ce_agent", reportsTo: row.reports_to!, canViewDashboard: false };
   if (row.role === "kl_cluster") return { ...base, role: "kl_cluster" };
   if (row.role === "hq") return { ...base, role: "hq" };
   throw new Error(`Unsupported admin role: ${String(row.role)}`);
@@ -96,7 +107,8 @@ export function adminIdentityLabel(admin: AdminAccount): string {
   if (admin.role === "ceo") return "CEO";
   if (admin.role === "accounts") return "Accounts";
   if (admin.role === "bp_ho") return "BP HO";
-  if (admin.role === "ce") return "Customer Engagement";
+  if (admin.role === "ce_head") return "Customer Engagement (Head)";
+  if (admin.role === "ce_agent") return "Customer Engagement";
   if (admin.role === "kl_cluster") return "KL01A / KL01B overseer";
   if (admin.role === "bp_manager") return `${admin.branch} BP Manager`;
   return `${admin.branch} branch`;
@@ -112,10 +124,20 @@ export function newSalt(): string {
 
 export async function findAdmin(username: string): Promise<AdminAccount | null> {
   const { rows } = await pool.query<AdminRow>(
-    "select username, password_hash, salt, role, branch, region from admins where username = $1",
+    "select username, password_hash, salt, role, branch, region, reports_to from admins where username = $1",
     [username],
   );
   return rows[0] ? toAccount(rows[0]) : null;
+}
+
+/** Every CE agent reporting to this head, for the "Assign evenly" bulk
+ * action on /ce/mrs — see src/app/ce/actions.ts. */
+export async function listCeAgents(headUsername: string): Promise<string[]> {
+  const { rows } = await pool.query<{ username: string }>(
+    "select username from admins where role = 'ce_agent' and reports_to = $1 order by username",
+    [headUsername],
+  );
+  return rows.map((r) => r.username);
 }
 
 /** Every branch code with its own admin account — the real source of truth

@@ -22,7 +22,7 @@ function href(base: string, params: Record<string, string | string[] | undefined
 
 const toggle = <T extends string>(values: T[], value: T) => values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 
-export async function LeadsView({ active, editable, today, searchParams }: { active: boolean; editable: boolean; today: string; searchParams: Promise<Params> }) {
+export async function LeadsView({ active, editable, assignedTo, today, searchParams }: { active: boolean; editable: boolean; assignedTo?: string; today: string; searchParams: Promise<Params> }) {
   const raw = await searchParams;
   const query = one(raw.q)?.trim().slice(0, 100) || undefined;
   const categories = many(raw.category).filter((item): item is CeCategory => item === "hot" || item === "warm" || item === "cold");
@@ -34,7 +34,7 @@ export async function LeadsView({ active, editable, today, searchParams }: { act
   const yearValue = Number.parseInt(one(raw.year) ?? "", 10);
   const year = yearValue >= 1900 && yearValue <= 2100 ? yearValue : undefined;
   const page = Math.max(1, Number.parseInt(one(raw.page) ?? "1", 10) || 1);
-  const data = await loadCeLeadPage({ today, active, query, categories, statuses, dealers, followUps, month, year, page });
+  const data = await loadCeLeadPage({ today, active, query, categories, statuses, dealers, followUps, assignedTo, month, year, page });
   const base = active ? "/ce" : "/ce/archive";
   const shared = { q: query, category: categories, status: statuses, dealer: dealers, followUp: followUps, month: month ? String(month) : undefined, year: year ? String(year) : undefined };
   const hasFilters = Boolean(query || categories.length || statuses.length || dealers.length || followUps.length || month || year);

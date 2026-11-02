@@ -12,7 +12,8 @@
 //   node scripts/add-admin.mjs --username accounts --accounts --password "Something@2026"
 //   node scripts/add-admin.mjs --username bpmco01a --bp-manager --branch CO01A --password "Something@2026"
 //   node scripts/add-admin.mjs --username bpho --bp-ho --password "Something@2026"
-//   node scripts/add-admin.mjs --username CE --ce --password "Something@2026"
+//   node scripts/add-admin.mjs --username CE --ce-head --password "Something@2026"
+//   node scripts/add-admin.mjs --username ce-agent1 --ce-agent --reports-to CE --password "Something@2026"
 //   node scripts/add-admin.mjs --username biju --kl-cluster --password "Something@2026"
 import { randomBytes, scryptSync } from "node:crypto";
 import { Client } from "pg";
@@ -35,7 +36,9 @@ const isAccounts = args.includes("--accounts");
 const isHqViewer = args.includes("--hq-viewer");
 const isBpManager = args.includes("--bp-manager");
 const isBpHo = args.includes("--bp-ho");
-const isCe = args.includes("--ce");
+const isCeHead = args.includes("--ce-head");
+const isCeAgent = args.includes("--ce-agent");
+const reportsTo = getArg("reports-to");
 const isKlCluster = args.includes("--kl-cluster");
 
 const VALID_REGIONS = ["North", "Central", "South"];
@@ -43,15 +46,19 @@ const VALID_REGIONS = ["North", "Central", "South"];
 if (
   !username ||
   !password ||
-  (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts && !isHqViewer && !isBpManager && !isBpHo && !isCe && !isKlCluster)
+  (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts && !isHqViewer && !isBpManager && !isBpHo && !isCeHead && !isCeAgent && !isKlCluster)
 ) {
   console.error(
-    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --hq-viewer | --region <North|Central|South> | --vp | --ceo | --accounts | --bp-manager --branch <BRANCH> | --bp-ho | --ce | --kl-cluster)",
+    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --hq-viewer | --region <North|Central|South> | --vp | --ceo | --accounts | --bp-manager --branch <BRANCH> | --bp-ho | --ce-head | --ce-agent --reports-to <head-username> | --kl-cluster)",
   );
   process.exit(1);
 }
 if (isBpManager && !branch) {
   console.error("--bp-manager requires --branch <BRANCH>");
+  process.exit(1);
+}
+if (isCeAgent && !reportsTo) {
+  console.error("--ce-agent requires --reports-to <head-username>");
   process.exit(1);
 }
 if (region && !VALID_REGIONS.includes(region)) {
@@ -79,8 +86,10 @@ const role = isHqViewer
   ? "bp_ho"
   : isBpManager
   ? "bp_manager"
-  : isCe
-  ? "ce"
+  : isCeHead
+  ? "ce_head"
+  : isCeAgent
+  ? "ce_agent"
   : isKlCluster
   ? "kl_cluster"
   : region
@@ -91,14 +100,15 @@ const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: { r
 await client.connect();
 try {
   await client.query(
-    `insert into admins (username, password_hash, salt, role, branch, region)
-     values ($1, $2, $3, $4, $5, $6)
+    `insert into admins (username, password_hash, salt, role, branch, region, reports_to)
+     values ($1, $2, $3, $4, $5, $6, $7)
      on conflict (username) do update set
        password_hash = excluded.password_hash,
        salt = excluded.salt,
        role = excluded.role,
        branch = excluded.branch,
-       region = excluded.region`,
+       region = excluded.region,
+       reports_to = excluded.reports_to`,
     [
       username,
       passwordHash,
@@ -106,9 +116,10 @@ try {
       role,
       role === "branch" || role === "bp_manager" ? branch : null,
       role === "regional" ? region : null,
+      role === "ce_agent" ? reportsTo : null,
     ],
   );
-  const scope = role === "branch" || role === "bp_manager" ? `, ${branch}` : role === "regional" ? `, ${region}` : "";
+  const scope = role === "branch" || role === "bp_manager" ? `, ${branch}` : role === "regional" ? `, ${region}` : role === "ce_agent" ? `, reports to ${reportsTo}` : "";
   console.log(`Account ready: ${username}  (${role}${scope})  password: ${password}`);
 } finally {
   await client.end();
