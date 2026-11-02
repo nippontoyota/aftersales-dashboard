@@ -7,7 +7,7 @@ import { CeShell } from "../ce-shell";
 import { FilterBar, MultiSelectFilter } from "../filter-bar";
 import { ContactLink } from "../contact-link";
 
-type Section = "today" | "overdue";
+type Section = "priority" | "overdue";
 type Params = { section?: string | string[]; q?: string | string[]; dealer?: string | string[]; status?: string | string[]; page?: string | string[] };
 const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 const many = (value: string | string[] | undefined) => (Array.isArray(value) ? value : value ? [value] : []).slice(0, 100);
@@ -33,7 +33,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
   if (admin.role !== "ce" && admin.role !== "hq") redirect("/");
 
   const raw = await searchParams;
-  const section: Section = one(raw.section) === "overdue" ? "overdue" : "today";
+  const section: Section = one(raw.section) === "overdue" ? "overdue" : "priority";
   const query = one(raw.q)?.trim().slice(0, 100) || undefined;
   const dealers = many(raw.dealer);
   const statuses = many(raw.status).filter((item): item is CeStatus => CE_STATUSES.includes(item as CeStatus));
@@ -44,7 +44,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
   const hasFilters = Boolean(query || dealers.length || statuses.length);
 
   const tabs: { key: Section; label: string; count: number }[] = [
-    { key: "today", label: "Today", count: data.todayCount },
+    { key: "priority", label: "Priority", count: data.priorityCount },
     { key: "overdue", label: "Overdue", count: data.overdueCount },
   ];
 
@@ -55,8 +55,8 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-fg-faint">Maintenance Reminder System</p>
           <h1 className="mt-1 text-xl font-semibold tracking-tight text-fg">MRS catch list</h1>
           <p className="mt-1 text-sm text-fg-subtle">
-            {section === "today"
-              ? "Leads due today (6 months or 10,000 km since last visit, whichever first) that TKM's own N-9 list never covered — today's priority."
+            {section === "priority"
+              ? `Leads due ${formatCeDate(data.priorityDueDate)} (6 months or 10,000 km since last visit, whichever first) that TKM's own N-9 list never covered — call now, matching TKM's own N-7 call lead time, so the customer still has a week's notice.`
               : `Leads overdue since ${formatCeDate(data.overdueWindowStart)}–yesterday, never covered by TKM's N-9 — work through these if time allows.`}
           </p>
         </div>
@@ -121,7 +121,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
                 <article key={lead.vin} className="rounded-lg border border-border bg-surface p-4 shadow-card">
                   <div className="flex items-start justify-between gap-3">
                     <div><Link href={`/ce/leads/${encodeURIComponent(lead.vin)}`} className="font-medium text-fg hover:text-accent-text focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{lead.customerName}</Link><div className="mt-0.5 break-all font-mono text-[11px] text-fg-faint">{lead.vin}</div></div>
-                    {section === "overdue" ? <OverdueBadge dueDate={lead.dueDate} today={today} /> : <span className="rounded-full bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn">Due today</span>}
+                    {section === "overdue" ? <OverdueBadge dueDate={lead.dueDate} today={today} /> : <span className="rounded-full bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn">Priority</span>}
                   </div>
                   <div className="mt-2 text-xs text-fg-muted"><ContactLink value={lead.contactNumber} />{lead.vehicleModel ? <span> · {lead.vehicleModel}</span> : null}</div>
                   <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-3 text-xs text-fg-muted"><span>{lead.allocatedDealer || "No dealer"} · {lead.status} · due {formatCeDate(lead.dueDate)}</span><Link href={`/ce/leads/${encodeURIComponent(lead.vin)}`} className="font-medium text-accent-text">Open lead →</Link></div>

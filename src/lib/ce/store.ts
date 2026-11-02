@@ -2,7 +2,7 @@ import "server-only";
 import { pool } from "@/lib/db";
 import type { CeLeadInput, ParsedCeWorkbook } from "./parse";
 import {
-  CE_DUE_KM, CE_DUE_MONTHS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_MRS_WINDOW_DAYS,
+  CE_DUE_KM, CE_DUE_MONTHS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_MRS_PRIORITY_LEAD_DAYS, CE_MRS_WINDOW_DAYS,
   deriveCeCallUpdate, indiaDate,
   type CeAvfCategory, type CeCallOutcome, type CeCallStatus, type CeCategory, type CeFollowUpFilter, type CeStatus,
 } from "./rules";
@@ -388,18 +388,20 @@ function addDaysIso(dateIso: string, days: number): string {
 }
 
 /** The daily MRS catch-list, split into two priorities (confirmed with
- * the user 2026-11-02): "today" (due exactly today — the actual daily
- * worklist) and "overdue" (due date already passed, within the
- * CE_MRS_WINDOW_DAYS lookback — secondary, worked through if time
- * allows). Leads due in the future are deliberately never shown here —
- * not useful to know about yet, per the user. Never on any N-9 list
- * we've imported — see project_mrs_n9_system.md for why "overdue" is
- * bounded to a lookback rather than "ever overdue" (the proxy alone
- * flags ~half of all active leads once the whole reactivation backlog
- * counts). */
+ * the user 2026-11-02): "priority" (due CE_MRS_PRIORITY_LEAD_DAYS from
+ * now — not today; matches TKM's own N-7 call day, see that constant's
+ * comment in rules.ts — the actual daily worklist) and "overdue" (due
+ * date already passed, within the CE_MRS_WINDOW_DAYS lookback —
+ * secondary, worked through if time allows). Anything due sooner than
+ * the priority lead time, or due further out, is deliberately never
+ * shown here — not useful to know about yet, per the user. Never on any
+ * N-9 list we've imported — see project_mrs_n9_system.md for why
+ * "overdue" is bounded to a lookback rather than "ever overdue" (the
+ * proxy alone flags ~half of all active leads once the whole
+ * reactivation backlog counts). */
 export async function loadCeMrsGapList(options: {
   today: string;
-  section: "today" | "overdue";
+  section: "priority" | "overdue";
   query?: string;
   dealers?: string[];
   statuses?: CeStatus[];
@@ -407,8 +409,8 @@ export async function loadCeMrsGapList(options: {
   limit?: number;
 }) {
   const values: unknown[] = [options.today];
-  const sectionClause = options.section === "today"
-    ? `f.due_date = $1::date`
+  const sectionClause = options.section === "priority"
+    ? `f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day'`
     : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day'`;
   const where = [
     sectionClause,
@@ -451,10 +453,10 @@ export async function loadCeMrsGapList(options: {
     ),
     // Unfiltered (no search/dealer/status) tab counts, same pattern as
     // the AVF page's category tiles — just the two sections' raw sizes.
-    pool.query<{ today: string; overdue: string }>(
+    pool.query<{ priority: string; overdue: string }>(
       `${MRS_DUE_DATE_CTE}
        select
-         count(*) filter (where f.due_date = $1::date) today,
+         count(*) filter (where f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day') priority,
          count(*) filter (where f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day') overdue
        from mrs_final f
        where not exists (select 1 from n9_leads n where n.vin = f.vin)`,
@@ -483,8 +485,9 @@ export async function loadCeMrsGapList(options: {
     page,
     pageCount: Math.max(1, Math.ceil(total / limit)),
     dealers,
-    todayCount: Number(sectionCounts.rows[0].today),
+    priorityCount: Number(sectionCounts.rows[0].priority),
     overdueCount: Number(sectionCounts.rows[0].overdue),
+    priorityDueDate: addDaysIso(options.today, CE_MRS_PRIORITY_LEAD_DAYS),
     overdueWindowStart: addDaysIso(options.today, -CE_MRS_WINDOW_DAYS),
   };
 }

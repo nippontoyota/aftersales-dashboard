@@ -212,8 +212,21 @@ export const CE_DUE_KM = 10_000;
 // not "ever due" — a flat due-date proxy with no decay flags ~half of
 // all active ce_leads once every historical overdue lead counts, which
 // is a reactivation backlog, a different problem (see
-// project_mrs_n9_system.md). Confirmed with the user 2026-10-30.
+// project_mrs_n9_system.md). Confirmed with the user 2026-10-30. Still
+// governs the "overdue" lookback after the 2026-11-02 priority-tab
+// change below.
 export const CE_MRS_WINDOW_DAYS = 14;
+
+// The priority tab shows leads due this many days from now, not leads
+// due today — confirmed with the user 2026-11-02, deliberately matching
+// TKM's own N-7 call day (not their N-9 DM/SMS day: that's an automated
+// message, not a call, so N-7 — the day TKM's CAC team actually phones
+// the customer — is the truer parallel for calls we're making ourselves
+// to stand in for ones TKM's own pipeline would have made). Leads due
+// sooner than this (today through priority-1 days out) are deliberately
+// not shown anywhere on /ce/mrs, same as upcoming leads before this
+// change — "we don't need to know, it is not important."
+export const CE_MRS_PRIORITY_LEAD_DAYS = 7;
 
 // Below this, a vehicle is either barely driven or the mileage/date on
 // file is a placeholder (confirmed against real N-9 data: legitimate
