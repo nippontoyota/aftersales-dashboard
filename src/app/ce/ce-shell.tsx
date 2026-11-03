@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { AdminAccount } from "@/lib/admin-store";
 import { AppShell } from "@/components/app-shell";
 import { MidnightRefresh } from "./midnight-refresh";
-import { CeSidebarShell, sections, type CeSection } from "./sidebar-shell";
+import { CeSidebarShell } from "./sidebar-shell";
+import { sections, type CeSection } from "./nav-config";
 
 export function CeShell({ admin, current, children }: { admin: Extract<AdminAccount, { role: "ce_head" | "ce_agent" | "hq" }>; current: CeSection; children: React.ReactNode }) {
   if (admin.role === "hq") {

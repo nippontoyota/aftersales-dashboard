@@ -5,14 +5,7 @@ import Link from "next/link";
 import type { AdminAccount } from "@/lib/admin-store";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { logoutAction } from "@/lib/actions";
-
-export type CeSection = "leads" | "avf" | "mrs" | "archive";
-
-export const sections = [
-  { key: "leads", href: "/ce", label: "Leads overview", description: "Call queue and follow-ups" },
-  { key: "avf", href: "/ce/avf", label: "AVF analytics", description: "Mileage frequency bands" },
-  { key: "mrs", href: "/ce/mrs", label: "MRS catch list", description: "Due, missed by TKM's N-9" },
-] as const;
+import { sections, type CeSection } from "./nav-config";
 
 const icons: Record<(typeof sections)[number]["key"], () => React.ReactNode> = {
   leads: LeadsIcon,
