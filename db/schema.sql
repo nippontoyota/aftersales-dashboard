@@ -1145,11 +1145,13 @@ create table if not exists ce_lead_workflow (
   latest_outcome text,
   last_editor text references admins(username),
   updated_at timestamptz not null default now(),
-  constraint ce_lead_workflow_status_check check (status in ('New', 'Attempted', 'Connected', 'Follow-up', 'Appointment booked', 'Converted', 'Not interested', 'Unreachable'))
+  constraint ce_lead_workflow_status_check check (status in ('New', 'Attempted', 'Connected', 'Follow-up', 'Appointment booked', 'Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable'))
 );
 alter table ce_lead_workflow add column if not exists attempt_count smallint not null default 0 check (attempt_count between 0 and 5);
 alter table ce_lead_workflow add column if not exists latest_call_status text check (latest_call_status in ('connected', 'not_connected'));
 alter table ce_lead_workflow add column if not exists latest_outcome text;
+alter table ce_lead_workflow drop constraint if exists ce_lead_workflow_status_check;
+alter table ce_lead_workflow add constraint ce_lead_workflow_status_check check (status in ('New', 'Attempted', 'Connected', 'Follow-up', 'Appointment booked', 'Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable'));
 create index if not exists ce_lead_workflow_followup_idx on ce_lead_workflow (next_follow_up_date) where next_follow_up_date is not null;
 
 create table if not exists ce_lead_activity (

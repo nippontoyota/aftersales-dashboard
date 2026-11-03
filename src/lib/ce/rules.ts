@@ -5,6 +5,8 @@ export const CE_STATUSES = [
   "Follow-up",
   "Appointment booked",
   "Converted",
+  "Vehicle sold",
+  "Serviced elsewhere",
   "Not interested",
   "Unreachable",
 ] as const;
@@ -55,7 +57,7 @@ export type CeConnectedOutcome = (typeof CONNECTED_OUTCOMES)[number];
 export type CeNotConnectedOutcome = (typeof NOT_CONNECTED_OUTCOMES)[number];
 export type CeCallOutcome = CeConnectedOutcome | CeNotConnectedOutcome;
 
-export const TERMINAL_CE_STATUSES = new Set<CeStatus>(["Converted", "Not interested", "Unreachable"]);
+export const TERMINAL_CE_STATUSES = new Set<CeStatus>(["Converted", "Vehicle sold", "Serviced elsewhere", "Not interested", "Unreachable"]);
 
 const FOLLOW_UP_OUTCOMES = new Set<CeCallOutcome>([
   "Appointment booked",
@@ -148,6 +150,10 @@ export function deriveCeCallUpdate(input: {
     status = "Follow-up";
   } else if (outcome === "Already serviced with us") {
     status = "Converted";
+  } else if (outcome === "Vehicle sold") {
+    status = "Vehicle sold";
+  } else if (outcome === "Serviced elsewhere") {
+    status = "Serviced elsewhere";
   } else {
     status = "Not interested";
   }

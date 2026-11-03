@@ -263,9 +263,14 @@ export async function loadCeLeadPage(options: {
     where.push(`l.allocated_dealer = any($${values.length}::text[])`);
   }
   if (options.followUps?.length) {
+    // 'Appointment booked' excluded alongside the terminal statuses
+    // (2026-11-03, at the user's request): its next_follow_up_date is the
+    // appointment date, not a "call again" reminder — the customer is
+    // already booked in, so it shouldn't keep resurfacing in the call
+    // queue just because that date has arrived or passed.
     const followUps = {
-      due: "(w.next_follow_up_date <= $1::date and w.status not in ('Converted', 'Not interested', 'Unreachable'))",
-      upcoming: "(w.next_follow_up_date > $1::date and w.status not in ('Converted', 'Not interested', 'Unreachable'))",
+      due: "(w.next_follow_up_date <= $1::date and w.status not in ('Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable', 'Appointment booked'))",
+      upcoming: "(w.next_follow_up_date > $1::date and w.status not in ('Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable', 'Appointment booked'))",
       none: "w.next_follow_up_date is null",
     } as const;
     where.push(`(${options.followUps.map((filter) => followUps[filter]).join(" or ")})`);
@@ -548,9 +553,11 @@ export async function loadCeAvfPage(options: {
   if (options.followUps?.length) {
     filterValues.push(options.today);
     const today = `$${filterValues.length}::date`;
+    // Same "Appointment booked" exclusion as loadCeLeadPage above — see
+    // its comment for why.
     const followUps = {
-      due: `(w.next_follow_up_date <= ${today} and w.status not in ('Converted', 'Not interested', 'Unreachable'))`,
-      upcoming: `(w.next_follow_up_date > ${today} and w.status not in ('Converted', 'Not interested', 'Unreachable'))`,
+      due: `(w.next_follow_up_date <= ${today} and w.status not in ('Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable', 'Appointment booked'))`,
+      upcoming: `(w.next_follow_up_date > ${today} and w.status not in ('Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable', 'Appointment booked'))`,
       none: "w.next_follow_up_date is null",
     } as const;
     where.push(`(${options.followUps.map((filter) => followUps[filter]).join(" or ")})`);
