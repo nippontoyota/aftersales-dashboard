@@ -11,7 +11,8 @@ import { assignCeLeadsEvenlyAction } from "../actions";
 import { SelectAllCheckbox } from "../select-all-checkbox";
 
 type Section = "priority" | "overdue";
-type Params = { section?: string | string[]; q?: string | string[]; dealer?: string | string[]; status?: string | string[]; brand?: string | string[]; page?: string | string[]; assigned?: string | string[]; assignError?: string | string[] };
+type Stage = "new" | "followup";
+type Params = { section?: string | string[]; stage?: string | string[]; q?: string | string[]; dealer?: string | string[]; status?: string | string[]; brand?: string | string[]; page?: string | string[]; assigned?: string | string[]; assignError?: string | string[] };
 const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 const many = (value: string | string[] | undefined) => (Array.isArray(value) ? value : value ? [value] : []).slice(0, 100);
 const mileage = (value: number) => value.toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -64,6 +65,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
 
   const raw = await searchParams;
   const section: Section = one(raw.section) === "overdue" ? "overdue" : "priority";
+  const stage: Stage = one(raw.stage) === "followup" ? "followup" : "new";
   const query = one(raw.q)?.trim().slice(0, 100) || undefined;
   const dealers = many(raw.dealer);
   const statuses = many(raw.status).filter((item): item is CeStatus => CE_STATUSES.includes(item as CeStatus));
@@ -73,8 +75,8 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
   const assignedCount = Number.parseInt(one(raw.assigned) ?? "", 10);
   const assignError = one(raw.assignError);
   const today = indiaDate();
-  const data = await loadCeMrsGapList({ today, section, query, dealers, statuses, brand, assignedTo, page });
-  const shared = { section, q: query, dealer: dealers, status: statuses, brand };
+  const data = await loadCeMrsGapList({ today, section, stage, query, dealers, statuses, brand, assignedTo, page });
+  const shared = { section, stage, q: query, dealer: dealers, status: statuses, brand };
   const hasFilters = Boolean(query || dealers.length || statuses.length || brand);
   const backTo = href({ ...shared, page: data.page > 1 ? String(data.page) : undefined });
   const leadHref = (vin: string) => `/ce/leads/${encodeURIComponent(vin)}?from=${encodeURIComponent(backTo)}`;
@@ -83,6 +85,14 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
     { key: "priority", label: "Priority", count: data.priorityCount },
     { key: "overdue", label: "Overdue", count: data.overdueCount },
   ];
+  const stageTabs: { key: Stage; label: string; count: number }[] = [
+    { key: "new", label: "New", count: data.newCount },
+    { key: "followup", label: "Follow-ups", count: data.followUpCount },
+  ];
+  // Workflow dropdown is redundant on "New" (every row is already status
+  // New) and would let a stage/status combo contradict itself and return
+  // nothing — so it only shows on "Follow-ups", with "New" excluded.
+  const workflowFilterOptions = CE_STATUSES.filter((item) => item !== "New");
 
   return (
     <CeShell admin={admin} current="mrs">
@@ -101,7 +111,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
           {tabs.map((tab) => (
             <Link
               key={tab.key}
-              href={href({ section: tab.key, q: query, dealer: dealers, status: statuses, brand })}
+              href={href({ section: tab.key, stage, q: query, dealer: dealers, status: statuses, brand })}
               aria-current={section === tab.key ? "page" : undefined}
               className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${section === tab.key ? "border-accent text-accent-text" : "border-transparent text-fg-muted hover:text-fg"}`}
             >
@@ -110,15 +120,34 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
           ))}
         </div>
 
-        <FilterBar clearHref={`/ce/mrs?section=${section}`} active={hasFilters}>
+        <div className="mt-3 flex gap-2">
+          {stageTabs.map((tab) => (
+            <Link
+              key={tab.key}
+              href={href({ section, stage: tab.key, q: query, dealer: dealers, status: tab.key === "new" ? [] : statuses, brand })}
+              aria-current={stage === tab.key ? "page" : undefined}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium ${stage === tab.key ? "border-accent bg-accent-soft text-accent-text" : "border-border-strong text-fg-muted hover:bg-surface-2"}`}
+            >
+              {tab.label} <span className="tabular-nums text-fg-faint">({tab.count.toLocaleString("en-IN")})</span>
+            </Link>
+          ))}
+          <span className="self-center text-xs text-fg-faint">
+            {stage === "new" ? "Never contacted yet — work these first." : "Already attempted at least once."}
+          </span>
+        </div>
+
+        <FilterBar clearHref={`/ce/mrs?section=${section}&stage=${stage}`} active={hasFilters}>
           <label className="min-w-[220px] flex-1 self-start">
             <span className="sr-only">Search customer name or VIN</span>
             <input name="q" defaultValue={query} placeholder="Search name, VIN, contact, or model" className="h-9 w-full rounded-md border border-border-strong bg-surface px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" />
           </label>
           <input type="hidden" name="section" value={section} />
+          <input type="hidden" name="stage" value={stage} />
           <BrandFilter value={brand} />
           <MultiSelectFilter label="Allocated dealer" allLabel="All dealers" name="dealer" selected={dealers} options={data.dealers.map((dealer) => ({ value: dealer, label: dealer }))} />
-          <MultiSelectFilter label="Workflow" allLabel="All workflows" name="status" selected={statuses} options={CE_STATUSES.map((item) => ({ value: item, label: item }))} />
+          {stage === "followup" ? (
+            <MultiSelectFilter label="Workflow" allLabel="All workflows" name="status" selected={statuses} options={workflowFilterOptions.map((item) => ({ value: item, label: item }))} />
+          ) : null}
         </FilterBar>
 
         <div className="mt-3 flex items-center justify-between gap-3">

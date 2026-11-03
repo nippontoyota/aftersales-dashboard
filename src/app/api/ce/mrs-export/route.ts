@@ -22,6 +22,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const section = searchParams.get("section") === "overdue" ? "overdue" : "priority";
+  const stage = searchParams.get("stage") === "followup" ? "followup" : "new";
   const query = searchParams.get("q")?.trim().slice(0, 100) || undefined;
   const dealers = searchParams.getAll("dealer");
   const statuses = searchParams.getAll("status").filter((item): item is CeStatus => CE_STATUSES.includes(item as CeStatus));
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
   const assignedTo = admin.role === "ce_agent" ? admin.username : undefined;
   const today = indiaDate();
 
-  const data = await loadCeMrsGapList({ today, section, query, dealers, statuses, brand, assignedTo, page: 1, limit: EXPORT_ROW_CAP });
+  const data = await loadCeMrsGapList({ today, section, stage, query, dealers, statuses, brand, assignedTo, page: 1, limit: EXPORT_ROW_CAP });
 
   const header = ["Customer", "Contact", "VIN", "Model", "Allocated dealer", "Last visit date", "Last visit mileage (km)", "Due date", "Workflow"];
   const aoa: (string | number)[][] = [header];
@@ -50,7 +51,7 @@ export async function GET(request: Request) {
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="mrs-catch-list-${section}-${today}.xlsx"`,
+      "Content-Disposition": `attachment; filename="mrs-catch-list-${section}-${stage}-${today}.xlsx"`,
     },
   });
 }

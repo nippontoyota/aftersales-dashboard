@@ -415,6 +415,13 @@ function addDaysIso(dateIso: string, days: number): string {
 export async function loadCeMrsGapList(options: {
   today: string;
   section: "priority" | "overdue";
+  /** Splits each section into its own sub-section (added 2026-11-03 at
+   * the user's request): "new" is leads never yet contacted (status =
+   * 'New') — what a CE should work first — "followup" is everything
+   * already attempted at least once. Keeps the two from interleaving in
+   * one list, which otherwise forced scrolling past already-called rows
+   * to find the next fresh one. */
+  stage: "new" | "followup";
   query?: string;
   dealers?: string[];
   statuses?: CeStatus[];
@@ -429,8 +436,10 @@ export async function loadCeMrsGapList(options: {
   const sectionClause = options.section === "priority"
     ? `f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day'`
     : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day'`;
+  const stageClause = options.stage === "new" ? `w.status = 'New'` : `w.status <> 'New'`;
   const where = [
     sectionClause,
+    stageClause,
     `not exists (select 1 from n9_leads n where n.vin = f.vin)`,
   ];
   if (options.assignedTo) {
@@ -460,7 +469,14 @@ export async function loadCeMrsGapList(options: {
   const filterValues = [...values];
   values.push(limit, (page - 1) * limit);
 
-  const [list, countRow, sectionCounts, dealers] = await Promise.all([
+  const stageCountValues: unknown[] = [options.today];
+  let stageCountAssignedClause = "";
+  if (options.assignedTo) {
+    stageCountValues.push(options.assignedTo);
+    stageCountAssignedClause = `and w.assigned_to = $${stageCountValues.length}`;
+  }
+
+  const [list, countRow, sectionCounts, stageCounts, dealers] = await Promise.all([
     pool.query(
       `${MRS_DUE_DATE_CTE}
        select f.vin, trim(concat_ws(' ', f.customer_first_name, f.customer_family_name)) customer_name,
@@ -488,6 +504,19 @@ export async function loadCeMrsGapList(options: {
        where not exists (select 1 from n9_leads n where n.vin = f.vin)`,
       [options.today],
     ),
+    // New-vs-follow-up counts for the active section only (search/dealer/
+    // brand/workflow-filter ignored, same as sectionCounts above), scoped
+    // to the agent's own leads when assignedTo is set so the sub-tab
+    // badges match what that agent's table actually shows.
+    pool.query<{ new: string; followup: string }>(
+      `${MRS_DUE_DATE_CTE}
+       select
+         count(*) filter (where ${sectionClause} and w.status = 'New') new,
+         count(*) filter (where ${sectionClause} and w.status <> 'New') followup
+       from mrs_final f join ce_lead_workflow w using (vin)
+       where not exists (select 1 from n9_leads n where n.vin = f.vin) ${stageCountAssignedClause}`,
+      stageCountValues,
+    ),
     loadCeDealers(true),
   ]);
 
@@ -514,6 +543,8 @@ export async function loadCeMrsGapList(options: {
     dealers,
     priorityCount: Number(sectionCounts.rows[0].priority),
     overdueCount: Number(sectionCounts.rows[0].overdue),
+    newCount: Number(stageCounts.rows[0].new),
+    followUpCount: Number(stageCounts.rows[0].followup),
     priorityDueDate: addDaysIso(options.today, CE_MRS_PRIORITY_LEAD_DAYS),
     overdueWindowStart: addDaysIso(options.today, -CE_MRS_WINDOW_DAYS),
   };
