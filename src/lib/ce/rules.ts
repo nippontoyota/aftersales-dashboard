@@ -22,6 +22,58 @@ export function calculateCeAvf(nMileage: number, n1Mileage: number): number {
   return (nMileage - n1Mileage) / 10_000;
 }
 
+export type CeTimelineEntry = { label: "N" | "N-1" | "N-2"; date: string | null; dealer: string | null; mileage: number | null; source: "uio" | "service_info" };
+
+/**
+ * Merges the UIO/DMS-sourced N/N1/N2 anchors with this VIN's own GS
+ * (periodic-maintenance) Service Info visits, so a vehicle whose N-1/N-2
+ * TKM's own feed never recorded — but that we've serviced ourselves —
+ * still shows a real N-1/N-2 instead of "—", with AVF computed from
+ * whichever pair of dates actually wins out. Display-only: never written
+ * back to ce_leads, so the due-date/AVF figures used elsewhere (MRS,
+ * company-wide stats) keep using the stored chain, which the
+ * Service-Info-link backfill/hook already keep correct on their own
+ * terms. BP (Body & Paint) visits are deliberately excluded — this is
+ * the periodic-maintenance timeline only, per the user's 2026-11-03
+ * "we don't need to know bp uploads" scope.
+ */
+export function mergeCeServiceTimeline(input: {
+  nReportDate: string;
+  nMileage: number;
+  nDealerCode: string;
+  n1ReportDate: string | null;
+  n1Mileage: number | null;
+  n1DealerCode: string | null;
+  n2ReportDate: string | null;
+  n2Mileage: number | null;
+  n2DealerCode: string | null;
+  serviceInfoVisits: { date: string; branch: string; mileage: number | null }[];
+}): CeTimelineEntry[] {
+  type Candidate = { date: string; dealer: string | null; mileage: number | null; source: "uio" | "service_info" };
+  const candidates: Candidate[] = [{ date: input.nReportDate, dealer: input.nDealerCode, mileage: input.nMileage, source: "uio" }];
+  if (input.n1ReportDate) candidates.push({ date: input.n1ReportDate, dealer: input.n1DealerCode, mileage: input.n1Mileage, source: "uio" });
+  if (input.n2ReportDate) candidates.push({ date: input.n2ReportDate, dealer: input.n2DealerCode, mileage: input.n2Mileage, source: "uio" });
+  for (const visit of input.serviceInfoVisits) candidates.push({ date: visit.date, dealer: visit.branch, mileage: visit.mileage, source: "service_info" });
+
+  // One entry per date — prefer whichever candidate actually carries a
+  // mileage figure when the same visit shows up from both sources.
+  const byDate = new Map<string, Candidate>();
+  for (const candidate of candidates) {
+    const existing = byDate.get(candidate.date);
+    if (!existing || (existing.mileage === null && candidate.mileage !== null)) byDate.set(candidate.date, candidate);
+  }
+
+  const merged = [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+  const labels = ["N", "N-1", "N-2"] as const;
+  return labels.map((label, i) => ({
+    label,
+    date: merged[i]?.date ?? null,
+    dealer: merged[i]?.dealer ?? null,
+    mileage: merged[i]?.mileage ?? null,
+    source: merged[i]?.source ?? "uio",
+  }));
+}
+
 export function ceAvfCategory(avf: number | null): CeAvfCategory {
   if (avf === null) return "unavailable";
   if (avf < 1) return "red";

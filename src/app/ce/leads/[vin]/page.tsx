@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getCurrentAdmin } from "@/lib/auth";
-import { callStatusLabel, formatCeDate, formatCeDateTime, indiaDate } from "@/lib/ce/rules";
+import { calculateCeAvf, callStatusLabel, formatCeDate, formatCeDateTime, indiaDate, mergeCeServiceTimeline } from "@/lib/ce/rules";
 import { loadCeLead, loadCeLeadServiceHistory } from "@/lib/ce/store";
 import { CeShell } from "../../ce-shell";
 import { UpdateForm } from "./update-form";
@@ -36,11 +36,20 @@ export default async function CeLeadPage({ params, searchParams }: { params: Pro
   const { from } = await searchParams;
   const backHref = from && from.startsWith("/ce/mrs") ? from : lead.active ? "/ce" : "/ce/archive";
   const backLabel = from && from.startsWith("/ce/mrs") ? "MRS catch list" : lead.active ? "Active leads" : "Archive";
+  // Periodic-maintenance (GS) visits only — BP is out of scope for this
+  // timeline, per the user's 2026-11-03 instruction.
+  const periodicVisits = serviceHistory.filter((visit) => visit.reportType === "service_info").map((visit) => ({ date: visit.date, branch: visit.branch, mileage: visit.mileage }));
+  const merged = mergeCeServiceTimeline({
+    nReportDate: lead.nReportDate, nMileage: lead.nMileage, nDealerCode: lead.nDealerCode,
+    n1ReportDate: lead.n1ReportDate, n1Mileage: lead.n1Mileage, n1DealerCode: lead.n1DealerCode,
+    n2ReportDate: lead.n2ReportDate, n2Mileage: lead.n2Mileage, n2DealerCode: lead.n2DealerCode,
+    serviceInfoVisits: periodicVisits,
+  });
+  const [mergedN, mergedN1] = merged;
+  const mergedAvf = mergedN.mileage !== null && mergedN1.mileage !== null ? calculateCeAvf(mergedN.mileage, mergedN1.mileage) : null;
   const timeline = [
-    { label: "Sale", date: lead.salesDate, dealer: lead.saleDealerCode, mileage: null },
-    { label: "N-2", date: lead.n2ReportDate, dealer: lead.n2DealerCode, mileage: lead.n2Mileage },
-    { label: "N-1", date: lead.n1ReportDate, dealer: lead.n1DealerCode, mileage: lead.n1Mileage },
-    { label: "N", date: lead.nReportDate, dealer: lead.nDealerCode, mileage: lead.nMileage },
+    { label: "Sale", date: lead.salesDate, dealer: lead.saleDealerCode, mileage: null, source: "uio" as const },
+    ...merged.slice().reverse(),
   ];
 
   return (
@@ -60,7 +69,21 @@ export default async function CeLeadPage({ params, searchParams }: { params: Pro
 
             <section className="rounded-lg border border-border bg-surface p-5 shadow-card"><h2 className="text-sm font-semibold text-fg">Allocation and source</h2><dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3"><Field label="Allocated dealer" value={lead.allocatedDealer} /><Field label="Dealer zone" value={lead.dealerZone} /><Field label="AVF" value={number(lead.avf)} /><Field label="Primary source" value={lead.sourceFileName} /><Field label="Imported" value={formatCeDateTime(lead.importedAt)} /><Field label="DMS source" value={lead.dmsSourceFileName ?? "—"} /><Field label="DMS imported" value={lead.dmsImportedAt ? formatCeDateTime(lead.dmsImportedAt) : "—"} /><Field label="Last editor" value={lead.lastEditor ?? "—"} /></dl></section>
 
-            <section className="rounded-lg border border-border bg-surface p-5 shadow-card"><h2 className="text-sm font-semibold text-fg">Service timeline</h2><ol className="mt-4 grid gap-3 sm:grid-cols-4">{timeline.map((item) => <li key={item.label} className="relative rounded-md border border-border bg-surface-2 p-3"><div className="text-[10px] font-bold uppercase tracking-wide text-fg-faint">{item.label}</div><div className="mt-1 text-sm font-medium text-fg">{item.date ? formatCeDate(item.date) : "—"}</div><div className="mt-1 text-xs text-fg-subtle">{item.dealer || "No dealer"}</div>{item.mileage !== null ? <div className="mt-2 text-xs tabular-nums text-fg-muted">{number(item.mileage)} km</div> : null}</li>)}</ol></section>
+            <section className="rounded-lg border border-border bg-surface p-5 shadow-card">
+              <h2 className="text-sm font-semibold text-fg">Service timeline</h2>
+              <p className="mt-1 text-xs text-fg-faint">N/N-1/N-2 filled in from this VIN&apos;s own periodic-maintenance Service Info history wherever it&apos;s more complete than TKM&apos;s UIO/DMS feed.</p>
+              <ol className="mt-4 grid gap-3 sm:grid-cols-4">
+                {timeline.map((item) => (
+                  <li key={item.label} className="relative rounded-md border border-border bg-surface-2 p-3">
+                    <div className="flex items-center justify-between gap-1"><span className="text-[10px] font-bold uppercase tracking-wide text-fg-faint">{item.label}</span>{item.source === "service_info" ? <span className="rounded-full bg-accent-soft px-1.5 py-0.5 text-[9px] font-semibold text-accent-text">Service Info</span> : null}</div>
+                    <div className="mt-1 text-sm font-medium text-fg">{item.date ? formatCeDate(item.date) : "—"}</div>
+                    <div className="mt-1 text-xs text-fg-subtle">{item.dealer || "No dealer"}</div>
+                    {item.mileage !== null ? <div className="mt-2 text-xs tabular-nums text-fg-muted">{number(item.mileage)} km</div> : null}
+                  </li>
+                ))}
+              </ol>
+              {mergedAvf !== null ? <p className="mt-3 text-xs text-fg-subtle">AVF from this timeline: <span className="font-medium text-fg">{number(mergedAvf)}</span>{mergedAvf !== lead.avf ? <span className="text-fg-faint"> (stored AVF: {number(lead.avf)})</span> : null}</p> : null}
+            </section>
 
             <section className="rounded-lg border border-border bg-surface p-5 shadow-card">
               <h2 className="text-sm font-semibold text-fg">What they did when they came</h2>
