@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
 import { listCeAgents } from "@/lib/admin-store";
 import { indiaDate, isValidIsoDate, validateCeCallDetails } from "@/lib/ce/rules";
-import { assignCeLeadsEvenly, updateCeLead } from "@/lib/ce/store";
+import { assignCeLeadsEvenly, markCeMrsFollowUpAlreadyScheduled, updateCeLead } from "@/lib/ce/store";
 
 export type CeUpdateState = { error: string | null; success: boolean };
 
@@ -25,6 +25,30 @@ export async function updateCeLeadAction(vin: string, _state: CeUpdateState, for
   try {
     await updateCeLead({
       vin, callStatus, outcome, nextFollowUpDate: followUpDate, note, username: admin.username,
+      requireAssignedTo: admin.role === "ce_agent" ? admin.username : undefined,
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not update this lead.", success: false };
+  }
+  revalidatePath("/ce");
+  revalidatePath(`/ce/leads/${encodeURIComponent(vin)}`);
+  return { error: null, success: true };
+}
+
+/** The "not even going to try them" shortcut (2026-11-03) — a common
+ * button alongside the normal call-log form for a lead whose MRS
+ * follow-up is already scheduled some other way, so no call is being
+ * attempted at all: skips callStatus/outcome/date entirely and never
+ * touches the attempt counter. */
+export async function markCeMrsFollowUpAlreadyScheduledAction(vin: string, _state: CeUpdateState, formData: FormData): Promise<CeUpdateState> {
+  const admin = await getCurrentAdmin();
+  if (!admin || (admin.role !== "ce_head" && admin.role !== "ce_agent")) return { error: "Only a CE account can update leads.", success: false };
+  const note = String(formData.get("note") ?? "").trim();
+  if (!note) return { error: "A short note on how it was scheduled is required.", success: false };
+  if (note.length > 2_000) return { error: "Keep the note to 2,000 characters or fewer.", success: false };
+  try {
+    await markCeMrsFollowUpAlreadyScheduled({
+      vin, note, username: admin.username,
       requireAssignedTo: admin.role === "ce_agent" ? admin.username : undefined,
     });
   } catch (error) {

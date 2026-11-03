@@ -798,6 +798,53 @@ export async function updateCeLead(input: {
   }
 }
 
+const CE_MRS_FOLLOW_UP_SCHEDULED_STATUS: CeStatus = "MRS follow-up already scheduled";
+
+/** The "not even going to try them" shortcut (2026-11-03, at the user's
+ * request) — for a lead where someone already knows the MRS follow-up is
+ * scheduled some other way, so there's nothing for a call to accomplish.
+ * Unlike updateCeLead, this never touches attempt_count/latest_call_status/
+ * latest_outcome — no call happened, so none of those should move — and
+ * logs attempt_number/call_status/outcome as null in the activity row for
+ * the same reason. Closes the lead out immediately (next_follow_up_date
+ * null), same as the other resolved statuses it joins in
+ * CE_MRS_RESOLVED_STATUSES. */
+export async function markCeMrsFollowUpAlreadyScheduled(input: {
+  vin: string;
+  note: string;
+  username: string;
+  requireAssignedTo?: string;
+}) {
+  if (!input.note.trim()) throw new Error("A short note on how it was scheduled is required.");
+  if (input.note.length > 2_000) throw new Error("Keep the note to 2,000 characters or fewer.");
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const current = await client.query<{ active: boolean; status: CeStatus; assigned_to: string | null }>(
+      `select l.active, w.status, w.assigned_to from ce_leads l join ce_lead_workflow w using (vin) where l.vin = $1 for update of w`,
+      [input.vin],
+    );
+    if (!current.rows[0]) throw new Error("Lead not found.");
+    if (!current.rows[0].active) throw new Error("Archived leads are read-only.");
+    if (input.requireAssignedTo && current.rows[0].assigned_to !== input.requireAssignedTo) throw new Error("This lead isn't assigned to you.");
+    await client.query(
+      `update ce_lead_workflow set status = $2, next_follow_up_date = null, last_editor = $3, updated_at = now() where vin = $1`,
+      [input.vin, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS, input.username],
+    );
+    await client.query(
+      `insert into ce_lead_activity (vin, previous_status, status, next_follow_up_date, note, attempt_number, call_status, outcome, author)
+       values ($1, $2, $3, null, $4, null, null, null, $5)`,
+      [input.vin, current.rows[0].status, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS, input.note.trim(), input.username],
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export type CeServiceHistoryVisit = {
   date: string;
   branch: string;

@@ -9,6 +9,7 @@ export const CE_STATUSES = [
   "Serviced elsewhere",
   "Not interested",
   "Unreachable",
+  "MRS follow-up already scheduled",
 ] as const;
 
 export type CeStatus = (typeof CE_STATUSES)[number];
@@ -109,7 +110,7 @@ export type CeConnectedOutcome = (typeof CONNECTED_OUTCOMES)[number];
 export type CeNotConnectedOutcome = (typeof NOT_CONNECTED_OUTCOMES)[number];
 export type CeCallOutcome = CeConnectedOutcome | CeNotConnectedOutcome;
 
-export const TERMINAL_CE_STATUSES = new Set<CeStatus>(["Converted", "Vehicle sold", "Serviced elsewhere", "Not interested", "Unreachable"]);
+export const TERMINAL_CE_STATUSES = new Set<CeStatus>(["Converted", "Vehicle sold", "Serviced elsewhere", "Not interested", "Unreachable", "MRS follow-up already scheduled"]);
 
 /** TERMINAL_CE_STATUSES plus "Appointment booked" — every status where the
  * CE has already gotten what this catch-list is chasing (a contact, closed
