@@ -38,17 +38,14 @@ export async function updateCeLeadAction(vin: string, _state: CeUpdateState, for
 /** The "not even going to try them" shortcut (2026-11-03) — a common
  * button alongside the normal call-log form for a lead whose MRS
  * follow-up is already scheduled some other way, so no call is being
- * attempted at all: skips callStatus/outcome/date entirely and never
- * touches the attempt counter. */
-export async function markCeMrsFollowUpAlreadyScheduledAction(vin: string, _state: CeUpdateState, formData: FormData): Promise<CeUpdateState> {
+ * attempted at all: one click, no input, skips callStatus/outcome/date
+ * entirely and never touches the attempt counter. */
+export async function markCeMrsFollowUpAlreadyScheduledAction(vin: string): Promise<CeUpdateState> {
   const admin = await getCurrentAdmin();
   if (!admin || (admin.role !== "ce_head" && admin.role !== "ce_agent")) return { error: "Only a CE account can update leads.", success: false };
-  const note = String(formData.get("note") ?? "").trim();
-  if (!note) return { error: "A short note on how it was scheduled is required.", success: false };
-  if (note.length > 2_000) return { error: "Keep the note to 2,000 characters or fewer.", success: false };
   try {
     await markCeMrsFollowUpAlreadyScheduled({
-      vin, note, username: admin.username,
+      vin, username: admin.username,
       requireAssignedTo: admin.role === "ce_agent" ? admin.username : undefined,
     });
   } catch (error) {

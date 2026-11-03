@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import {
   CONNECTED_OUTCOMES,
   NOT_CONNECTED_OUTCOMES,
@@ -17,8 +17,8 @@ const initial: CeUpdateState = { error: null, success: false };
 export function UpdateForm({ vin, attemptCount, holidays }: { vin: string; attemptCount: number; holidays: string[] }) {
   const action = updateCeLeadAction.bind(null, vin);
   const [state, formAction, pending] = useActionState(action, initial);
-  const mrsAction = markCeMrsFollowUpAlreadyScheduledAction.bind(null, vin);
-  const [mrsState, mrsFormAction, mrsPending] = useActionState(mrsAction, initial);
+  const [mrsState, setMrsState] = useState<CeUpdateState>(initial);
+  const [mrsPending, startMrsTransition] = useTransition();
   const [callStatus, setCallStatus] = useState<CeCallStatus>("connected");
   const [outcome, setOutcome] = useState<CeCallOutcome | "">("");
   const [followUpDate, setFollowUpDate] = useState<string | null>(null);
@@ -41,8 +41,24 @@ export function UpdateForm({ vin, attemptCount, holidays }: { vin: string; attem
     setFollowUpDate(null);
   }
 
+  function markMrsFollowUpScheduled() {
+    startMrsTransition(async () => {
+      setMrsState(await markCeMrsFollowUpAlreadyScheduledAction(vin));
+    });
+  }
+
   return (
     <div className="mt-4 space-y-4">
+      <div className="rounded-md border border-dashed border-border-strong p-3">
+        <p className="text-xs font-medium text-fg-muted">Not calling this one?</p>
+        <p className="mt-0.5 text-[10px] text-fg-faint">Use this when the MRS follow-up is already scheduled some other way — no call attempt is logged, and it drops off the catch list right away.</p>
+        {mrsState.error ? <p role="alert" className="mt-2 text-xs text-bad">{mrsState.error}</p> : null}
+        {mrsState.success ? <p role="status" className="mt-2 text-xs text-good">Marked — no call attempt logged.</p> : null}
+        <button type="button" onClick={markMrsFollowUpScheduled} disabled={mrsPending} className="mt-2 h-9 w-full rounded-md border border-border-strong bg-surface px-4 text-xs font-medium text-fg hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60">
+          {mrsPending ? "Saving…" : "MRS follow-up already scheduled"}
+        </button>
+      </div>
+
       <form action={formAction} className="space-y-4">
       <div>
         <div className="flex items-center justify-between gap-3">
@@ -137,22 +153,6 @@ export function UpdateForm({ vin, attemptCount, holidays }: { vin: string; attem
         {pending ? "Saving…" : `Save F${nextAttempt} call`}
       </button>
     </form>
-
-      <div className="rounded-md border border-dashed border-border-strong p-3">
-        <p className="text-xs font-medium text-fg-muted">Not calling this one?</p>
-        <p className="mt-0.5 text-[10px] text-fg-faint">Use this when the MRS follow-up is already scheduled some other way — no call attempt is logged, and it drops off the catch list right away.</p>
-        <form action={mrsFormAction} className="mt-2 space-y-2">
-          <label>
-            <span className="sr-only">How was it scheduled?</span>
-            <input name="note" type="text" required maxLength={2000} placeholder="How was it scheduled?" className="h-9 w-full rounded-md border border-border-strong bg-surface px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" />
-          </label>
-          {mrsState.error ? <p role="alert" className="text-xs text-bad">{mrsState.error}</p> : null}
-          {mrsState.success ? <p role="status" className="text-xs text-good">Marked — no call attempt logged.</p> : null}
-          <button disabled={mrsPending} className="h-9 w-full rounded-md border border-border-strong bg-surface px-4 text-xs font-medium text-fg hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60">
-            {mrsPending ? "Saving…" : "MRS follow-up already scheduled"}
-          </button>
-        </form>
-      </div>
     </div>
   );
 }

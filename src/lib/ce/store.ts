@@ -799,24 +799,22 @@ export async function updateCeLead(input: {
 }
 
 const CE_MRS_FOLLOW_UP_SCHEDULED_STATUS: CeStatus = "MRS follow-up already scheduled";
+const CE_MRS_FOLLOW_UP_SCHEDULED_NOTE = "MRS follow-up already scheduled some other way — no call attempted.";
 
 /** The "not even going to try them" shortcut (2026-11-03, at the user's
  * request) — for a lead where someone already knows the MRS follow-up is
  * scheduled some other way, so there's nothing for a call to accomplish.
- * Unlike updateCeLead, this never touches attempt_count/latest_call_status/
- * latest_outcome — no call happened, so none of those should move — and
- * logs attempt_number/call_status/outcome as null in the activity row for
- * the same reason. Closes the lead out immediately (next_follow_up_date
- * null), same as the other resolved statuses it joins in
- * CE_MRS_RESOLVED_STATUSES. */
+ * One click, no input needed. Unlike updateCeLead, this never touches
+ * attempt_count/latest_call_status/latest_outcome — no call happened, so
+ * none of those should move — and logs attempt_number/call_status/outcome
+ * as null in the activity row for the same reason. Closes the lead out
+ * immediately (next_follow_up_date null), same as the other resolved
+ * statuses it joins in CE_MRS_RESOLVED_STATUSES. */
 export async function markCeMrsFollowUpAlreadyScheduled(input: {
   vin: string;
-  note: string;
   username: string;
   requireAssignedTo?: string;
 }) {
-  if (!input.note.trim()) throw new Error("A short note on how it was scheduled is required.");
-  if (input.note.length > 2_000) throw new Error("Keep the note to 2,000 characters or fewer.");
   const client = await pool.connect();
   try {
     await client.query("begin");
@@ -834,7 +832,7 @@ export async function markCeMrsFollowUpAlreadyScheduled(input: {
     await client.query(
       `insert into ce_lead_activity (vin, previous_status, status, next_follow_up_date, note, attempt_number, call_status, outcome, author)
        values ($1, $2, $3, null, $4, null, null, null, $5)`,
-      [input.vin, current.rows[0].status, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS, input.note.trim(), input.username],
+      [input.vin, current.rows[0].status, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS, CE_MRS_FOLLOW_UP_SCHEDULED_NOTE, input.username],
     );
     await client.query("commit");
   } catch (error) {
