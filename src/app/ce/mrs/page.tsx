@@ -11,7 +11,7 @@ import { assignCeLeadsEvenlyAction } from "../actions";
 import { SelectAllCheckbox } from "../select-all-checkbox";
 
 type Section = "priority" | "overdue";
-type Stage = "new" | "followup";
+type Stage = "new" | "followup" | "closed";
 type Params = { section?: string | string[]; stage?: string | string[]; q?: string | string[]; dealer?: string | string[]; status?: string | string[]; brand?: string | string[]; page?: string | string[]; assigned?: string | string[]; assignError?: string | string[] };
 const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 const many = (value: string | string[] | undefined) => (Array.isArray(value) ? value : value ? [value] : []).slice(0, 100);
@@ -59,13 +59,14 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/login");
   if (admin.role !== "ce_head" && admin.role !== "ce_agent" && admin.role !== "hq") redirect("/");
-  const canAssign = admin.role === "ce_head";
   const showAssignedTo = admin.role === "ce_head" || admin.role === "hq";
   const assignedTo = admin.role === "ce_agent" ? admin.username : undefined;
 
   const raw = await searchParams;
   const section: Section = one(raw.section) === "overdue" ? "overdue" : "priority";
-  const stage: Stage = one(raw.stage) === "followup" ? "followup" : "new";
+  const stageParam = one(raw.stage);
+  const stage: Stage = stageParam === "followup" ? "followup" : stageParam === "closed" ? "closed" : "new";
+  const canAssign = admin.role === "ce_head" && stage !== "closed";
   const query = one(raw.q)?.trim().slice(0, 100) || undefined;
   const dealers = many(raw.dealer);
   const statuses = many(raw.status).filter((item): item is CeStatus => CE_STATUSES.includes(item as CeStatus));
@@ -88,12 +89,18 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
   const stageTabs: { key: Stage; label: string; count: number }[] = [
     { key: "new", label: "New", count: data.newCount },
     { key: "followup", label: "Follow-ups", count: data.followUpCount },
+    { key: "closed", label: "Closed/completed", count: data.closedCount },
   ];
-  // Always-visible, same as the main /ce leads page — scoped to the
-  // statuses that can actually still appear here, since resolved ones
-  // (Appointment booked, Converted, Vehicle sold, Serviced elsewhere, Not
-  // interested, Unreachable) are hard-excluded from this list entirely.
-  const workflowFilterOptions = CE_STATUSES.filter((item) => !CE_MRS_RESOLVED_STATUSES.has(item));
+  // Always-visible, same as the main /ce leads page. New/Follow-ups are
+  // scoped to the statuses that can actually still appear there, since
+  // resolved ones (Appointment booked, Converted, Vehicle sold, Serviced
+  // elsewhere, Not interested, Unreachable) are hard-excluded from those
+  // two stages — Closed/completed is exactly those, kept visible here for
+  // tracking rather than disappearing outright (2026-11-03, at the user's
+  // request).
+  const workflowFilterOptions = stage === "closed"
+    ? CE_STATUSES.filter((item) => CE_MRS_RESOLVED_STATUSES.has(item))
+    : CE_STATUSES.filter((item) => !CE_MRS_RESOLVED_STATUSES.has(item));
 
   return (
     <CeShell admin={admin} current="mrs">
@@ -125,7 +132,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
           {stageTabs.map((tab) => (
             <Link
               key={tab.key}
-              href={href({ section, stage: tab.key, q: query, dealer: dealers, status: tab.key === "new" ? [] : statuses, brand })}
+              href={href({ section, stage: tab.key, q: query, dealer: dealers, status: tab.key === stage ? statuses : [], brand })}
               aria-current={stage === tab.key ? "page" : undefined}
               className={`rounded-full border px-3 py-1.5 text-xs font-medium ${stage === tab.key ? "border-accent bg-accent-soft text-accent-text" : "border-border-strong text-fg-muted hover:bg-surface-2"}`}
             >
@@ -133,7 +140,11 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
             </Link>
           ))}
           <span className="self-center text-xs text-fg-faint">
-            {stage === "new" ? "Never contacted yet — work these first." : "Already attempted at least once."}
+            {stage === "new"
+              ? "Never contacted yet — work these first."
+              : stage === "followup"
+                ? "Already attempted at least once."
+                : "Resolved already — kept here for tracking, not part of today's worklist."}
           </span>
         </div>
 

@@ -22,7 +22,8 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const section = searchParams.get("section") === "overdue" ? "overdue" : "priority";
-  const stage = searchParams.get("stage") === "followup" ? "followup" : "new";
+  const stageParam = searchParams.get("stage");
+  const stage = stageParam === "followup" ? "followup" : stageParam === "closed" ? "closed" : "new";
   const query = searchParams.get("q")?.trim().slice(0, 100) || undefined;
   const dealers = searchParams.getAll("dealer");
   const statuses = searchParams.getAll("status").filter((item): item is CeStatus => CE_STATUSES.includes(item as CeStatus));
