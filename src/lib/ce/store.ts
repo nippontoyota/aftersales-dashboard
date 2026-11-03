@@ -3,7 +3,7 @@ import { pool } from "@/lib/db";
 import type { CeLeadInput, ParsedCeWorkbook } from "./parse";
 import { LEXUS_VIN_WMI_PREFIXES, type CeVehicleBrand } from "./vehicle-brand";
 import {
-  CE_DUE_KM, CE_DUE_MONTHS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_MRS_PRIORITY_LEAD_DAYS, CE_MRS_WINDOW_DAYS,
+  CE_DUE_KM, CE_DUE_MONTHS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_MRS_PRIORITY_LEAD_DAYS, CE_MRS_RESOLVED_STATUSES, CE_MRS_WINDOW_DAYS,
   deriveCeCallUpdate, indiaDate,
   type CeAvfCategory, type CeCallOutcome, type CeCallStatus, type CeCategory, type CeFollowUpFilter, type CeStatus,
 } from "./rules";
@@ -437,9 +437,15 @@ export async function loadCeMrsGapList(options: {
     ? `f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day'`
     : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day'`;
   const stageClause = options.stage === "new" ? `w.status = 'New'` : `w.status <> 'New'`;
+  values.push([...CE_MRS_RESOLVED_STATUSES]);
+  const resolvedStatusParam = values.length;
   const where = [
     sectionClause,
     stageClause,
+    // Once a lead is resolved (an appointment's already booked, or it's
+    // closed out one way or another) there's nothing left for this catch
+    // list to chase — drop it instead of showing it as if still due.
+    `not (w.status = any($${resolvedStatusParam}::text[]))`,
     `not exists (select 1 from n9_leads n where n.vin = f.vin)`,
   ];
   if (options.assignedTo) {
@@ -469,7 +475,8 @@ export async function loadCeMrsGapList(options: {
   const filterValues = [...values];
   values.push(limit, (page - 1) * limit);
 
-  const stageCountValues: unknown[] = [options.today];
+  const resolvedStatusesArray = [...CE_MRS_RESOLVED_STATUSES];
+  const stageCountValues: unknown[] = [options.today, resolvedStatusesArray];
   let stageCountAssignedClause = "";
   if (options.assignedTo) {
     stageCountValues.push(options.assignedTo);
@@ -494,15 +501,17 @@ export async function loadCeMrsGapList(options: {
       filterValues,
     ),
     // Unfiltered (no search/dealer/status) tab counts, same pattern as
-    // the AVF page's category tiles — just the two sections' raw sizes.
+    // the AVF page's category tiles — just the two sections' raw sizes,
+    // still excluding resolved leads so the tab badges match what's
+    // actually listed underneath.
     pool.query<{ priority: string; overdue: string }>(
       `${MRS_DUE_DATE_CTE}
        select
          count(*) filter (where f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day') priority,
          count(*) filter (where f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day') overdue
-       from mrs_final f
-       where not exists (select 1 from n9_leads n where n.vin = f.vin)`,
-      [options.today],
+       from mrs_final f join ce_lead_workflow w using (vin)
+       where not exists (select 1 from n9_leads n where n.vin = f.vin) and not (w.status = any($2::text[]))`,
+      [options.today, resolvedStatusesArray],
     ),
     // New-vs-follow-up counts for the active section only (search/dealer/
     // brand/workflow-filter ignored, same as sectionCounts above), scoped
@@ -514,7 +523,8 @@ export async function loadCeMrsGapList(options: {
          count(*) filter (where ${sectionClause} and w.status = 'New') new,
          count(*) filter (where ${sectionClause} and w.status <> 'New') followup
        from mrs_final f join ce_lead_workflow w using (vin)
-       where not exists (select 1 from n9_leads n where n.vin = f.vin) ${stageCountAssignedClause}`,
+       where not exists (select 1 from n9_leads n where n.vin = f.vin)
+         and not (w.status = any($2::text[])) ${stageCountAssignedClause}`,
       stageCountValues,
     ),
     loadCeDealers(true),

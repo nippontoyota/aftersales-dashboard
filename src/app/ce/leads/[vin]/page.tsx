@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentAdmin } from "@/lib/auth";
 import { calculateCeAvf, callStatusLabel, formatCeDate, formatCeDateTime, indiaDate, mergeCeServiceTimeline } from "@/lib/ce/rules";
 import { loadCeLead, loadCeLeadServiceHistory } from "@/lib/ce/store";
+import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { CeShell } from "../../ce-shell";
 import { UpdateForm } from "./update-form";
 import { ContactLink } from "../../contact-link";
@@ -27,7 +28,11 @@ export default async function CeLeadPage({ params, searchParams }: { params: Pro
   // enforcement point (a direct URL to someone else's lead must 404, not
   // just be absent from the list).
   if (admin.role === "ce_agent" && lead.assignedTo !== admin.username) notFound();
-  const serviceHistory = await loadCeLeadServiceHistory(lead.vin);
+  const canEdit = (admin.role === "ce_head" || admin.role === "ce_agent") && lead.active;
+  const [serviceHistory, holidays] = await Promise.all([
+    loadCeLeadServiceHistory(lead.vin),
+    canEdit ? loadReportHolidaySet() : Promise.resolve(new Set<string>()),
+  ]);
   const customerName = [lead.customerFirstName, lead.customerFamilyName].filter(Boolean).join(" ") || "Unnamed customer";
   // Honor where the visitor actually came from (e.g. the MRS catch list's
   // Priority/Overdue tab and filters) instead of always bouncing back to the
@@ -112,7 +117,7 @@ export default async function CeLeadPage({ params, searchParams }: { params: Pro
           </div>
 
           <aside className="space-y-4">
-            <section className="rounded-lg border border-border bg-surface p-5 shadow-card"><h2 className="text-sm font-semibold text-fg">CE workflow</h2>{(admin.role === "ce_head" || admin.role === "ce_agent") && lead.active ? <UpdateForm key={lead.updatedAt} vin={lead.vin} attemptCount={lead.attemptCount} /> : <p className="mt-3 rounded-md bg-surface-2 p-3 text-xs text-fg-subtle">{lead.active ? "HQ has read-only access to CE workflow." : "Archived leads are read-only."}</p>}</section>
+            <section className="rounded-lg border border-border bg-surface p-5 shadow-card"><h2 className="text-sm font-semibold text-fg">CE workflow</h2>{canEdit ? <UpdateForm key={lead.updatedAt} vin={lead.vin} attemptCount={lead.attemptCount} holidays={[...holidays]} /> : <p className="mt-3 rounded-md bg-surface-2 p-3 text-xs text-fg-subtle">{lead.active ? "HQ has read-only access to CE workflow." : "Archived leads are read-only."}</p>}</section>
             <section className="rounded-lg border border-border bg-surface p-5 shadow-card"><h2 className="text-sm font-semibold text-fg">Activity</h2>{activity.length ? <ol className="mt-4 space-y-4 border-l border-border pl-4">{activity.map((item) => <li key={item.id}><div className="text-xs font-medium text-fg">{item.attemptNumber && item.callStatus && item.outcome ? `F${item.attemptNumber} · ${callStatusLabel(item.callStatus)} · ${item.outcome}` : item.previousStatus === item.status ? item.status : `${item.previousStatus} → ${item.status}`}</div><p className="mt-1 whitespace-pre-wrap text-sm text-fg-muted">{item.note}</p><div className="mt-1 text-[10px] text-fg-faint">{item.author} · {formatCeDateTime(item.createdAt)}{item.nextFollowUpDate ? ` · ${item.outcome === "Appointment booked" ? "appointment" : "follow-up"} ${formatCeDate(item.nextFollowUpDate)}` : ""}</div></li>)}</ol> : <p className="mt-3 text-xs text-fg-faint">No activity recorded yet.</p>}</section>
           </aside>
         </div>

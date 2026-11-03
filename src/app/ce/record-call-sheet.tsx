@@ -9,12 +9,14 @@ export function RecordCallSheet({
   customerName,
   contactNumber,
   attemptCount,
+  holidays,
   className,
 }: {
   vin: string;
   customerName: string;
   contactNumber: string | null;
   attemptCount: number;
+  holidays: string[];
   className: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -48,7 +50,7 @@ export function RecordCallSheet({
               <p className="mt-1 text-xs text-fg-subtle"><ContactLink value={contactNumber} /></p>
             </header>
             <div className="overflow-y-auto px-5 pb-6">
-              <UpdateForm vin={vin} attemptCount={attemptCount} />
+              <UpdateForm vin={vin} attemptCount={attemptCount} holidays={holidays} />
             </div>
           </div>
         </dialog>

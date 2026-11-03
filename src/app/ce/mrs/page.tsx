@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentAdmin } from "@/lib/auth";
-import { CE_STATUSES, dateAgeInDays, formatCeDate, indiaDate, type CeStatus } from "@/lib/ce/rules";
+import { CE_MRS_RESOLVED_STATUSES, CE_STATUSES, dateAgeInDays, formatCeDate, indiaDate, type CeStatus } from "@/lib/ce/rules";
 import { loadCeMrsGapList } from "@/lib/ce/store";
 import { CE_VEHICLE_BRANDS, type CeVehicleBrand } from "@/lib/ce/vehicle-brand";
 import { CeShell } from "../ce-shell";
@@ -89,10 +89,11 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
     { key: "new", label: "New", count: data.newCount },
     { key: "followup", label: "Follow-ups", count: data.followUpCount },
   ];
-  // Workflow dropdown is redundant on "New" (every row is already status
-  // New) and would let a stage/status combo contradict itself and return
-  // nothing — so it only shows on "Follow-ups", with "New" excluded.
-  const workflowFilterOptions = CE_STATUSES.filter((item) => item !== "New");
+  // Always-visible, same as the main /ce leads page — scoped to the
+  // statuses that can actually still appear here, since resolved ones
+  // (Appointment booked, Converted, Vehicle sold, Serviced elsewhere, Not
+  // interested, Unreachable) are hard-excluded from this list entirely.
+  const workflowFilterOptions = CE_STATUSES.filter((item) => !CE_MRS_RESOLVED_STATUSES.has(item));
 
   return (
     <CeShell admin={admin} current="mrs">
@@ -145,9 +146,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
           <input type="hidden" name="stage" value={stage} />
           <BrandFilter value={brand} />
           <MultiSelectFilter label="Allocated dealer" allLabel="All dealers" name="dealer" selected={dealers} options={data.dealers.map((dealer) => ({ value: dealer, label: dealer }))} />
-          {stage === "followup" ? (
-            <MultiSelectFilter label="Workflow" allLabel="All workflows" name="status" selected={statuses} options={workflowFilterOptions.map((item) => ({ value: item, label: item }))} />
-          ) : null}
+          <MultiSelectFilter label="Workflow" allLabel="All workflows" name="status" selected={statuses} options={workflowFilterOptions.map((item) => ({ value: item, label: item }))} />
         </FilterBar>
 
         <div className="mt-3 flex items-center justify-between gap-3">

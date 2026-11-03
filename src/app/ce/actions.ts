@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
 import { listCeAgents } from "@/lib/admin-store";
-import { indiaDate, parseCeDateInput, validateCeCallDetails } from "@/lib/ce/rules";
+import { indiaDate, isValidIsoDate, validateCeCallDetails } from "@/lib/ce/rules";
 import { assignCeLeadsEvenly, updateCeLead } from "@/lib/ce/store";
 
 export type CeUpdateState = { error: string | null; success: boolean };
@@ -16,8 +16,8 @@ export async function updateCeLeadAction(vin: string, _state: CeUpdateState, for
   const outcome = String(formData.get("outcome") ?? "");
   const note = String(formData.get("note") ?? "").trim();
   const followUpRaw = String(formData.get("nextFollowUpDate") ?? "").trim();
-  const followUpDate = followUpRaw ? parseCeDateInput(followUpRaw) : null;
-  if (followUpRaw && !followUpDate) return { error: "Enter the date as DD/MM/YYYY.", success: false };
+  const followUpDate = followUpRaw && isValidIsoDate(followUpRaw) ? followUpRaw : null;
+  if (followUpRaw && !followUpDate) return { error: "Choose a valid appointment or follow-up date.", success: false };
   const callError = validateCeCallDetails({ callStatus, outcome, followUpDate, today: indiaDate() });
   if (callError) return { error: callError, success: false };
   if (!note) return { error: "What the customer said is required.", success: false };

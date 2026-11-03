@@ -111,6 +111,15 @@ export type CeCallOutcome = CeConnectedOutcome | CeNotConnectedOutcome;
 
 export const TERMINAL_CE_STATUSES = new Set<CeStatus>(["Converted", "Vehicle sold", "Serviced elsewhere", "Not interested", "Unreachable"]);
 
+/** TERMINAL_CE_STATUSES plus "Appointment booked" — every status where the
+ * CE has already gotten what this catch-list is chasing (a contact, closed
+ * one way or another) and the lead needs no further prompting from it.
+ * Used to hard-exclude these from the MRS catch list (2026-11-03, at the
+ * user's request) — unlike the main leads page's "due"/"upcoming" filter,
+ * the MRS list has no other mode, so this is an unconditional exclusion,
+ * not just one followUps option among others. */
+export const CE_MRS_RESOLVED_STATUSES = new Set<CeStatus>([...TERMINAL_CE_STATUSES, "Appointment booked"]);
+
 const FOLLOW_UP_OUTCOMES = new Set<CeCallOutcome>([
   "Appointment booked",
   "Call back later",
@@ -132,13 +141,6 @@ export function isValidIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-export function parseCeDateInput(value: string): string | null {
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
-  if (!match) return null;
-  const iso = `${match[3]}-${match[2]}-${match[1]}`;
-  return isValidIsoDate(iso) ? iso : null;
 }
 
 export function formatCeDate(value: string): string {

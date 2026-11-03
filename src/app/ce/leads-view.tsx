@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CE_FOLLOW_UP_FILTERS, CE_STATUSES, formatCeDate, formatCeDateTime, type CeCategory, type CeFollowUpFilter, type CeStatus } from "@/lib/ce/rules";
 import { loadCeLeadPage } from "@/lib/ce/store";
+import { loadReportHolidaySet } from "@/lib/report-holidays/store";
 import { FilterBar, MonthFilter, MultiSelectFilter, YearFilter } from "./filter-bar";
 import { RecordCallSheet } from "./record-call-sheet";
 import { ContactLink } from "./contact-link";
@@ -34,7 +35,11 @@ export async function LeadsView({ active, editable, assignedTo, today, searchPar
   const yearValue = Number.parseInt(one(raw.year) ?? "", 10);
   const year = yearValue >= 1900 && yearValue <= 2100 ? yearValue : undefined;
   const page = Math.max(1, Number.parseInt(one(raw.page) ?? "1", 10) || 1);
-  const data = await loadCeLeadPage({ today, active, query, categories, statuses, dealers, followUps, assignedTo, month, year, page });
+  const [data, holidays] = await Promise.all([
+    loadCeLeadPage({ today, active, query, categories, statuses, dealers, followUps, assignedTo, month, year, page }),
+    active && editable ? loadReportHolidaySet() : Promise.resolve(new Set<string>()),
+  ]);
+  const holidayList = [...holidays];
   const base = active ? "/ce" : "/ce/archive";
   const shared = { q: query, category: categories, status: statuses, dealer: dealers, followUp: followUps, month: month ? String(month) : undefined, year: year ? String(year) : undefined };
   const hasFilters = Boolean(query || categories.length || statuses.length || dealers.length || followUps.length || month || year);
@@ -111,7 +116,7 @@ export async function LeadsView({ active, editable, assignedTo, today, searchPar
                   <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-semibold capitalize ${categoryTone[lead.category]}`}>{lead.category}</span></td>
                   <td className="px-3 py-3 whitespace-nowrap text-fg-muted">{lead.status}</td>
                   <td className="px-3 py-3 whitespace-nowrap text-fg-muted">{lead.nextFollowUpDate ? formatCeDate(lead.nextFollowUpDate) : "—"}</td>
-                  <td className="px-3 py-3">{active && editable ? <RecordCallSheet vin={lead.vin} customerName={lead.customerName} contactNumber={lead.contactNumber} attemptCount={lead.attemptCount} className="inline-flex h-8 items-center whitespace-nowrap rounded-md bg-accent px-3 text-xs font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" /> : <Link href={`/ce/leads/${encodeURIComponent(lead.vin)}`} className="inline-flex h-8 items-center whitespace-nowrap rounded-md border border-border-strong px-3 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">View lead</Link>}</td>
+                  <td className="px-3 py-3">{active && editable ? <RecordCallSheet vin={lead.vin} customerName={lead.customerName} contactNumber={lead.contactNumber} attemptCount={lead.attemptCount} holidays={holidayList} className="inline-flex h-8 items-center whitespace-nowrap rounded-md bg-accent px-3 text-xs font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" /> : <Link href={`/ce/leads/${encodeURIComponent(lead.vin)}`} className="inline-flex h-8 items-center whitespace-nowrap rounded-md border border-border-strong px-3 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">View lead</Link>}</td>
                 </tr>)}
               </tbody>
             </table>
@@ -121,7 +126,7 @@ export async function LeadsView({ active, editable, assignedTo, today, searchPar
               <div className="flex items-start justify-between gap-3"><div><Link href={`/ce/leads/${encodeURIComponent(lead.vin)}`} className="font-medium text-fg hover:text-accent-text focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{lead.customerName}</Link><div className="mt-0.5 break-all font-mono text-[11px] text-fg-faint">{lead.vin}</div></div><span className={`rounded-full px-2 py-1 text-[10px] font-semibold capitalize ${categoryTone[lead.category]}`}>{lead.category}</span></div>
               <div className="mt-2 text-xs text-fg-muted"><ContactLink value={lead.contactNumber} />{lead.vehicleModel ? <span> · {lead.vehicleModel}</span> : null}</div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-fg-muted"><span>{lead.allocatedDealer || "No dealer"}</span><span className="text-right">{number(lead.ageDays)} days</span><span>{lead.status}</span><span className="text-right">{lead.nextFollowUpDate ? `Due ${formatCeDate(lead.nextFollowUpDate)}` : "No follow-up"}</span></div>
-              <div className="mt-3 border-t border-border-subtle pt-3">{active && editable ? <RecordCallSheet vin={lead.vin} customerName={lead.customerName} contactNumber={lead.contactNumber} attemptCount={lead.attemptCount} className="h-9 w-full rounded-md bg-accent px-3 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" /> : <Link href={`/ce/leads/${encodeURIComponent(lead.vin)}`} className="flex h-9 w-full items-center justify-center rounded-md border border-border-strong px-3 text-sm font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">View lead</Link>}</div>
+              <div className="mt-3 border-t border-border-subtle pt-3">{active && editable ? <RecordCallSheet vin={lead.vin} customerName={lead.customerName} contactNumber={lead.contactNumber} attemptCount={lead.attemptCount} holidays={holidayList} className="h-9 w-full rounded-md bg-accent px-3 text-sm font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" /> : <Link href={`/ce/leads/${encodeURIComponent(lead.vin)}`} className="flex h-9 w-full items-center justify-center rounded-md border border-border-strong px-3 text-sm font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">View lead</Link>}</div>
             </article>)}
           </div>
         </>
