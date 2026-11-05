@@ -1,6 +1,7 @@
 import { computeHeroSummary, computeKpiSummary, filterBranchesByRegion, type HeroSummary, type KpiSummary } from "./aggregate";
 import { maskBranchRevenue } from "./branch-revenue-visibility";
 import { loadCancellationMonthSummaries, type CancellationMonthSummary } from "./cancellation/store";
+import { loadPendingUploadsSummary, type ReportTypeKey } from "./pending-uploads";
 import { REGIONS, type RegionName } from "./regions";
 import { buildReport, type BranchReport, type Report } from "./report";
 import { listSnapshotDates } from "./snapshot-store";
@@ -44,6 +45,12 @@ export type AccountsData = {
    * explain a partial/empty report as "this was a holiday" instead of a
    * false "still syncing" warning (2026-10-22). */
   holiday: { note: string | null } | null;
+  /** Per-branch "what's still missing" for `date`, from pending-uploads.ts —
+   * a branch absent from this map has uploaded everything. Powers the
+   * branchwise table's per-column "not yet uploaded" badge and feeds
+   * DraftWarning's missingBranches list (2026-11-05, so finance can see
+   * exactly which branches are behind without leaving /accounts). */
+  missingUploadsByBranch: Map<string, ReportTypeKey[]>;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -63,17 +70,32 @@ export async function loadAccountsData(requestedDate?: string): Promise<Accounts
   const month = date.slice(0, 7);
   const isHolidayDate = holidays.has(date);
 
-  const [reportRaw, allCancellationSummaries, published, scom205Count, holidayRecord] = await Promise.all([
+  const [reportRaw, allCancellationSummaries, published, scom205Count, holidayRecord, pendingUploads] = await Promise.all([
     buildReport(date),
     loadCancellationMonthSummaries(),
     isDatePublished(date),
     countScom205BranchesForDate(date),
     isHolidayDate ? loadReportHoliday(date) : Promise.resolve(null),
+    loadPendingUploadsSummary(date),
   ]);
   const holiday = holidayRecord ? { note: holidayRecord.note } : null;
+  const missingUploadsByBranch = new Map(pendingUploads.pending.map((p) => [p.branch, p.missing]));
 
   if (!reportRaw) {
-    return { date, dates, month, report: null, group: null, regions: [], cancellationsByBranch: new Map(), isPublished: published, uploadedBranchCount: 0, totalBranchCount: 18, holiday };
+    return {
+      date,
+      dates,
+      month,
+      report: null,
+      group: null,
+      regions: [],
+      cancellationsByBranch: new Map(),
+      isPublished: published,
+      uploadedBranchCount: 0,
+      totalBranchCount: 18,
+      holiday,
+      missingUploadsByBranch,
+    };
   }
 
   // Accounts sees revenue masked before Aug 2026 too (2026-09-26, at HQ's
@@ -110,5 +132,6 @@ export async function loadAccountsData(requestedDate?: string): Promise<Accounts
     uploadedBranchCount: scom205Count,
     totalBranchCount: 18 + (hasCo01c ? 1 : 0),
     holiday,
+    missingUploadsByBranch,
   };
 }

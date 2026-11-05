@@ -1,4 +1,5 @@
 import { formatNumber } from "@/lib/format";
+import type { BranchReport } from "@/lib/report";
 import { DAILY_REPORT_ROWS, type MetricDef, type RowDef } from "../dashboard/daily-report-rows";
 
 /**
@@ -56,3 +57,26 @@ const unitsServicedRow: MetricDef = {
 };
 
 export const UNITS_SERVICED_ROWS: RowDef[] = [{ kind: "group", label: "Units Serviced" }, unitsServicedRow];
+
+/**
+ * GUS-vs-BPU RO split — the breakdown behind `unitsServicedRow` above.
+ * Doesn't fit the MetricDef/branchCell shape: a stacked-bar cell needs both
+ * the GUS and BPU figures at once, not one display value, so this is its own
+ * small row shape rendered with a dedicated component rather than through
+ * branchCell. Reads the same `gusRoMtd`/`bpuRoMtd` fields `unitsServicedRow`
+ * already sums — never re-derives them (2026-11-05, accounts branchwise
+ * redesign).
+ */
+export type SplitRowDef = {
+  kind: "split";
+  label: string;
+  gus: (b: BranchReport) => number | null;
+  bpu: (b: BranchReport) => number | null;
+};
+
+export const gusVsBpuRoSplitRow: SplitRowDef = {
+  kind: "split",
+  label: "GUS vs BPU RO Split",
+  gus: (b) => b.gusRoMtd,
+  bpu: (b) => b.bpuRoMtd,
+};

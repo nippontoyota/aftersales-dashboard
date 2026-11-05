@@ -4,18 +4,12 @@ import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { loadAccountsData, type AccountsRegionRollup } from "@/lib/accounts-data";
-import { achievementRatio } from "@/lib/aggregate";
-import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
+import { formatCompactCurrency, formatNumber } from "@/lib/format";
+import { REGION_COLOR } from "@/lib/regions";
 import { requireAccountsAccess } from "./accounts-guard";
 import { AccountsHeader } from "./accounts-header";
 import { DraftWarning } from "@/components/draft-warning";
 import { tglossText } from "@/components/tgloss-text";
-
-const REGION_COLOR: Record<AccountsRegionRollup["region"], string> = {
-  Central: "var(--color-cat-central)",
-  South: "var(--color-cat-south)",
-  North: "var(--color-cat-north)",
-};
 
 export default async function AccountsOverviewPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const admin = await requireAccountsAccess();
@@ -87,11 +81,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         <Tile label="GUS Parts + Labour · MTD" value={formatCompactCurrency(gusMtd)} />
         <Tile label="BPU Parts + Labour · MTD" value={formatCompactCurrency(bpuMtd)} />
         <Tile label="External Sales · MTD" value={formatCompactCurrency(group.hero.externalSalesMtd)} />
-        <Tile
-          label={tglossText("TGLOSS · MTD")}
-          value={formatCompactCurrency(group.kpis.vasAchievementForTheMonth)}
-          sub={`${formatPercent(achievementRatio(group.kpis.vasAchievementForTheMonth, group.kpis.vasBillTarget))} of target`}
-        />
+        <Tile label={tglossText("TGLOSS · MTD")} value={formatCompactCurrency(group.kpis.vasAchievementForTheMonth)} />
         <Tile label="Scrap + Used Oil · MTD" value={formatCompactCurrency(scrapOilMtd)} />
         <Tile label="Total Units Serviced (RO) · MTD" value={formatNumber(unitsServicedMtd)} sub="GUS + BPU RO" />
         <Tile
