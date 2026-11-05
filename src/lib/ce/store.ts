@@ -3,7 +3,7 @@ import { pool } from "@/lib/db";
 import type { CeLeadInput, ParsedCeWorkbook } from "./parse";
 import { LEXUS_VIN_WMI_PREFIXES, type CeVehicleBrand } from "./vehicle-brand";
 import {
-  CE_DUE_KM, CE_DUE_MONTHS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_MRS_PRIORITY_LEAD_DAYS, CE_MRS_RESOLVED_STATUSES, CE_MRS_WINDOW_DAYS,
+  CE_DUE_KM, CE_DUE_MONTHS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS, CE_MRS_PRIORITY_LEAD_DAYS, CE_MRS_RESOLVED_STATUSES, CE_MRS_WINDOW_DAYS,
   deriveCeCallUpdate, indiaDate,
   type CeAvfCategory, type CeCallOutcome, type CeCallStatus, type CeCategory, type CeFollowUpFilter, type CeStatus,
 } from "./rules";
@@ -813,7 +813,6 @@ export async function updateCeLead(input: {
   }
 }
 
-const CE_MRS_FOLLOW_UP_SCHEDULED_STATUS: CeStatus = "MRS follow-up already scheduled";
 const CE_MRS_FOLLOW_UP_SCHEDULED_NOTE = "MRS follow-up already scheduled some other way — no call attempted.";
 
 /** The "not even going to try them" shortcut (2026-11-03, at the user's
@@ -856,6 +855,60 @@ export async function markCeMrsFollowUpAlreadyScheduled(input: {
   } finally {
     client.release();
   }
+}
+
+export type CeBulkLeadLookup = {
+  vin: string;
+  active: boolean;
+  customerName: string;
+  status: CeStatus;
+  attemptCount: number;
+  latestOutcome: string | null;
+  /** IST calendar date (YYYY-MM-DD) the workflow row was last touched —
+   * just what the bulk-upload duplicate-warning heuristic needs, not a
+   * full timestamp (see mrs-bulk-update.ts). */
+  updatedDateIst: string;
+  assignedTo: string | null;
+};
+
+/** One batched lookup for the whole sheet instead of one query per row
+ * (2026-11-05, for the MRS bulk-upload preview/apply routes) — a ~200-row
+ * sheet would otherwise mean ~200 round trips just to see what each lead
+ * currently looks like. */
+export async function loadCeLeadsForBulkUpdate(vins: string[]): Promise<Map<string, CeBulkLeadLookup>> {
+  if (vins.length === 0) return new Map();
+  const { rows } = await pool.query<{
+    vin: string;
+    active: boolean;
+    customer_first_name: string | null;
+    customer_family_name: string | null;
+    status: CeStatus;
+    attempt_count: number;
+    latest_outcome: string | null;
+    updated_date_ist: string;
+    assigned_to: string | null;
+  }>(
+    `select l.vin, l.active, l.customer_first_name, l.customer_family_name,
+            w.status, w.attempt_count, w.latest_outcome, w.assigned_to,
+            (w.updated_at at time zone 'Asia/Kolkata')::date::text as updated_date_ist
+     from ce_leads l join ce_lead_workflow w using (vin)
+     where l.vin = any($1::text[])`,
+    [vins],
+  );
+  const map = new Map<string, CeBulkLeadLookup>();
+  for (const row of rows) {
+    map.set(row.vin, {
+      vin: row.vin,
+      active: row.active,
+      customerName: [row.customer_first_name, row.customer_family_name].filter(Boolean).join(" ").trim() || "Unnamed customer",
+      attemptCount: Number(row.attempt_count),
+      status: row.status,
+      latestOutcome: row.latest_outcome,
+      updatedDateIst: row.updated_date_ist,
+      assignedTo: row.assigned_to,
+    });
+  }
+  return map;
 }
 
 export type CeServiceHistoryVisit = {

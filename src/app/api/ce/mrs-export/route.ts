@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { getCurrentAdmin } from "@/lib/auth";
-import { CE_STATUSES, formatCeDate, indiaDate, type CeStatus } from "@/lib/ce/rules";
+import { CE_MRS_BULK_OUTCOME_OPTIONS, CE_STATUSES, formatCeDate, indiaDate, type CeStatus } from "@/lib/ce/rules";
 import { loadCeMrsGapList } from "@/lib/ce/store";
 import { CE_VEHICLE_BRANDS, type CeVehicleBrand } from "@/lib/ce/vehicle-brand";
 
@@ -13,6 +13,18 @@ import { CE_VEHICLE_BRANDS, type CeVehicleBrand } from "@/lib/ce/vehicle-brand";
  * ~2,100 today) so one query covers the whole filtered list without a
  * second round trip for the true total. */
 const EXPORT_ROW_CAP = 20_000;
+
+const READONLY_HEADERS = ["Customer", "Contact", "VIN", "Model", "Allocated dealer", "Last visit date", "Last visit mileage (km)", "Due date", "Workflow"];
+const READONLY_WIDTHS = [24, 15, 20, 20, 16, 14, 20, 12, 18];
+// 2026-11-05, at the user's request: the CAC team's own calling system is
+// slow enough that clicking into each lead one at a time to log a result
+// is a real drag, so the same sheet they already use for reference also
+// gets fillable columns — call it, type the outcome here, reupload (see
+// /api/ce/mrs-bulk-update/{preview,apply}) instead of working the web UI
+// lead by lead. Call status is never asked separately — it's recoverable
+// from which outcome list a value belongs to (see resolveCeBulkOutcome).
+const FILLABLE_HEADERS = ["Outcome", "Follow-up / Appointment Date (DD/MM/YYYY)", "Note"];
+const FILLABLE_WIDTHS = [26, 30, 40];
 
 export async function GET(request: Request) {
   const admin = await getCurrentAdmin();
@@ -36,18 +48,46 @@ export async function GET(request: Request) {
 
   const data = await loadCeMrsGapList({ today, section, stage, query, dealers, statuses, brand, assignedTo, page: 1, limit: EXPORT_ROW_CAP });
 
-  const header = ["Customer", "Contact", "VIN", "Model", "Allocated dealer", "Last visit date", "Last visit mileage (km)", "Due date", "Workflow"];
-  const aoa: (string | number)[][] = [header];
+  const workbook = new ExcelJS.Workbook();
+  const sheetName = section === "priority" ? "Priority" : "Overdue";
+  const sheet = workbook.addWorksheet(sheetName);
+  sheet.columns = [...READONLY_WIDTHS, ...FILLABLE_WIDTHS].map((width) => ({ width }));
+  sheet.addRow([...READONLY_HEADERS, ...FILLABLE_HEADERS]);
+  sheet.getRow(1).font = { bold: true };
+
   for (const row of data.rows) {
-    aoa.push([row.customerName, row.contactNumber ?? "", row.vin, row.vehicleModel ?? "", row.allocatedDealer, formatCeDate(row.nReportDate), row.nMileage, formatCeDate(row.dueDate), row.status]);
+    sheet.addRow([row.customerName, row.contactNumber ?? "", row.vin, row.vehicleModel ?? "", row.allocatedDealer, formatCeDate(row.nReportDate), row.nMileage, formatCeDate(row.dueDate), row.status]);
   }
 
-  const sheet = XLSX.utils.aoa_to_sheet(aoa);
-  sheet["!cols"] = [{ wch: 24 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 18 }];
+  const lastRow = data.rows.length + 1;
+  const outcomeCol = READONLY_HEADERS.length + 1;
+  const dateCol = READONLY_HEADERS.length + 2;
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, section === "priority" ? "Priority" : "Overdue");
-  const buffer: Buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  // Data-validation dropdown needs a cell range, not an inline comma list —
+  // several outcome values ("Ringing, no answer") contain a literal comma,
+  // which an inline list formula would otherwise split on. A hidden helper
+  // sheet sidesteps that entirely.
+  const optionsSheet = workbook.addWorksheet("Outcomes");
+  optionsSheet.state = "veryHidden";
+  CE_MRS_BULK_OUTCOME_OPTIONS.forEach((option, index) => { optionsSheet.getCell(index + 1, 1).value = option; });
+
+  for (let r = 2; r <= lastRow; r++) {
+    sheet.getCell(r, outcomeCol).dataValidation = {
+      type: "list",
+      allowBlank: true,
+      formulae: [`Outcomes!$A$1:$A$${CE_MRS_BULK_OUTCOME_OPTIONS.length}`],
+      showErrorMessage: true,
+      errorStyle: "warning",
+      error: "Pick one of the dropdown values — typing something else will be rejected on reupload.",
+    };
+    // Kept as text so Excel never silently reinterprets a typed DD/MM/YYYY
+    // as a locale-dependent date serial — the reupload parser reads this
+    // format directly (and a real Excel date still works too, if typed via
+    // Excel's own date entry instead).
+    sheet.getCell(r, dateCol).numFmt = "@";
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {

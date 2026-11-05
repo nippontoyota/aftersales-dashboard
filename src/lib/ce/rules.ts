@@ -121,6 +121,52 @@ export const TERMINAL_CE_STATUSES = new Set<CeStatus>(["Converted", "Vehicle sol
  * not just one followUps option among others. */
 export const CE_MRS_RESOLVED_STATUSES = new Set<CeStatus>([...TERMINAL_CE_STATUSES, "Appointment booked"]);
 
+/** The status the "not even going to try them" shortcut sets (see
+ * markCeMrsFollowUpAlreadyScheduled in store.ts) — shared here so the
+ * bulk-upload path can recognize the same sentinel value in an Excel
+ * "Outcome" cell without duplicating the literal string. */
+export const CE_MRS_FOLLOW_UP_SCHEDULED_STATUS: CeStatus = "MRS follow-up already scheduled";
+
+/** Every value selectable in the MRS bulk-upload sheet's "Outcome"
+ * dropdown (2026-11-05) — every real call outcome plus the one shortcut
+ * that isn't a call outcome at all. Call status (connected/not) is never
+ * asked for separately in that sheet — it's fully recoverable from which
+ * of the two outcome lists a value came from, since the two never share a
+ * value (see resolveCeBulkOutcome below). */
+export const CE_MRS_BULK_OUTCOME_OPTIONS = [...CONNECTED_OUTCOMES, ...NOT_CONNECTED_OUTCOMES, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS] as const;
+
+export type CeMrsBulkOutcomeResolution =
+  | { kind: "call"; callStatus: CeCallStatus; outcome: CeCallOutcome }
+  | { kind: "mrs_follow_up_scheduled" }
+  | { kind: "unrecognized" };
+
+/** Classifies a value typed/picked into the bulk-upload sheet's Outcome
+ * column. Trims and matches case-insensitively — Excel's dropdown can't
+ * stop someone retyping over a cell, and a stray space or capitalization
+ * slip shouldn't turn into a silent reject when the intent is obvious. */
+export function resolveCeBulkOutcome(raw: string): CeMrsBulkOutcomeResolution {
+  const value = raw.trim();
+  const match = (list: readonly string[]) => list.find((item) => item.toLowerCase() === value.toLowerCase());
+  if (match([CE_MRS_FOLLOW_UP_SCHEDULED_STATUS])) return { kind: "mrs_follow_up_scheduled" };
+  const connected = match(CONNECTED_OUTCOMES);
+  if (connected) return { kind: "call", callStatus: "connected", outcome: connected as CeConnectedOutcome };
+  const notConnected = match(NOT_CONNECTED_OUTCOMES);
+  if (notConnected) return { kind: "call", callStatus: "not_connected", outcome: notConnected as CeNotConnectedOutcome };
+  return { kind: "unrecognized" };
+}
+
+/** Same rule the lead-detail page's calendar date-picker enforces by
+ * simply not letting you click the cell (see holiday-date-picker.tsx) —
+ * re-expressed as a plain check, because a typed Excel cell has no
+ * picker to stop a bad date from being entered in the first place. */
+export function invalidCeFollowUpDateReason(iso: string, holidays: ReadonlySet<string>, today: string): string | null {
+  if (!isValidIsoDate(iso)) return "not a recognizable date";
+  if (iso <= today) return "must be a future date";
+  if (new Date(`${iso}T00:00:00Z`).getUTCDay() === 0) return "falls on a Sunday — the branch is closed";
+  if (holidays.has(iso)) return "falls on an HQ-flagged holiday";
+  return null;
+}
+
 const FOLLOW_UP_OUTCOMES = new Set<CeCallOutcome>([
   "Appointment booked",
   "Call back later",

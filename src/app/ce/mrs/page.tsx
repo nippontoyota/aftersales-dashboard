@@ -9,6 +9,7 @@ import { BrandFilter, FilterBar, MultiSelectFilter } from "../filter-bar";
 import { ContactLink } from "../contact-link";
 import { assignCeLeadsEvenlyAction } from "../actions";
 import { SelectAllCheckbox } from "../select-all-checkbox";
+import { MrsBulkUpdateForm } from "./bulk-update-form";
 
 type Section = "priority" | "overdue";
 type Stage = "new" | "followup" | "closed";
@@ -61,6 +62,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
   if (admin.role !== "ce_head" && admin.role !== "ce_agent" && admin.role !== "hq") redirect("/");
   const showAssignedTo = admin.role === "ce_head" || admin.role === "hq";
   const assignedTo = admin.role === "ce_agent" ? admin.username : undefined;
+  const canEditCalls = admin.role === "ce_head" || admin.role === "ce_agent";
 
   const raw = await searchParams;
   const section: Section = one(raw.section) === "overdue" ? "overdue" : "priority";
@@ -162,12 +164,15 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
 
         <div className="mt-3 flex items-center justify-between gap-3">
           <div className="text-xs text-fg-faint">{data.total.toLocaleString("en-IN")} lead{data.total === 1 ? "" : "s"}</div>
-          <a
-            href={`/api/ce/mrs-export${searchString(shared)}`}
-            className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-border-strong px-3 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <DownloadIcon /> Download Excel
-          </a>
+          <div className="flex items-center gap-2">
+            {canEditCalls ? <MrsBulkUpdateForm /> : null}
+            <a
+              href={`/api/ce/mrs-export${searchString(shared)}`}
+              className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-border-strong px-3 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <DownloadIcon /> Download Excel
+            </a>
+          </div>
         </div>
 
         {Number.isFinite(assignedCount) ? (
