@@ -72,6 +72,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         date={data.date}
         basePath="/accounts"
         asOfLabel={uploadedAtLabel}
+        downloadHref={`/api/hq/revenue-stream-export?date=${data.date}`}
       />
 
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
