@@ -96,7 +96,7 @@ async function Branches({ searchParams }: { searchParams: Promise<{ date?: strin
         backLabel="Overview"
       />
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-border bg-surface shadow-card">
+      <div className="mt-6 max-h-[calc(100dvh-14rem)] overflow-auto rounded-xl border border-border bg-surface shadow-card">
         <table className="border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr className="[&>th]:sticky [&>th]:top-0 [&>th]:z-20 [&>th]:border-b [&>th]:border-border">
