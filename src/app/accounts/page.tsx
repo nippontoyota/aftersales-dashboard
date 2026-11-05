@@ -1,11 +1,9 @@
-import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { DashboardPageSkeleton } from "@/components/dashboard-page-skeleton";
 import { adminIdentityLabel } from "@/lib/admin-store";
-import { loadAccountsData, type AccountsRegionRollup } from "@/lib/accounts-data";
+import { loadAccountsData } from "@/lib/accounts-data";
 import { formatCompactCurrency, formatNumber } from "@/lib/format";
-import { REGION_COLOR } from "@/lib/regions";
 import { requireAccountsAccess } from "./accounts-guard";
 import { AccountsHeader } from "./accounts-header";
 import { DraftWarning } from "@/components/draft-warning";
@@ -47,7 +45,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
     );
   }
 
-  const { group, regions } = data;
+  const { group } = data;
   const uploadedAtLabel = new Date(data.report.uploadedAt).toLocaleString("en-IN", {
     day: "numeric",
     month: "short",
@@ -92,13 +90,7 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
         />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {regions.map((r) => (
-          <RegionCard key={r.region} region={r} date={data.date} />
-        ))}
-      </div>
-
-      <p className="mt-4 max-w-3xl text-[11px] leading-relaxed text-fg-faint">
+      <p className="mt-6 max-w-3xl text-[11px] leading-relaxed text-fg-faint">
         Total Revenue = GUS + BPU parts &amp; labour + External Sales + scrap/used oil (same figure CEO/VP see). Cancellations
         is a separate, gross figure — invoice_cancellations is control/audit data only, not wired into any revenue total.
       </p>
@@ -117,26 +109,5 @@ function Tile({ label, value, sub, accent, warn }: { label: ReactNode; value: st
       <div className={`mt-1.5 text-2xl font-semibold tabular-nums tracking-tight ${warn ? "text-warn" : "text-fg"}`}>{value}</div>
       {sub ? <div className="mt-0.5 text-[11px] text-fg-subtle">{sub}</div> : null}
     </div>
-  );
-}
-
-function RegionCard({ region, date }: { region: AccountsRegionRollup; date: string }) {
-  return (
-    <Link
-      href={`/accounts/branches?date=${date}&region=${region.region}`}
-      className="block rounded-xl border border-border bg-surface p-4 shadow-card transition hover:border-accent/40 hover:bg-surface-2/40"
-    >
-      <div className="flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-semibold text-fg">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: REGION_COLOR[region.region] }} />
-          {region.region}
-        </span>
-        <span className="text-[11px] text-fg-faint">{region.branches.length} branches</span>
-      </div>
-      <div className="mt-3 text-lg font-semibold tabular-nums text-fg">{formatCompactCurrency(region.hero.totalRevenueStreamMtd)}</div>
-      <div className="mt-1 text-[11px] text-fg-subtle">
-        Cancellations: {formatCompactCurrency(region.cancellations.beforeTaxTotal)} ({region.cancellations.count})
-      </div>
-    </Link>
   );
 }

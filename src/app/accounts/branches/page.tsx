@@ -19,7 +19,7 @@ import { tglossText } from "@/components/tgloss-text";
 export default async function AccountsBranchesPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const admin = await requireAccountsAccess();
   return (
-    <AppShell current="accounts" showDashboardLink accountsNav identity={adminIdentityLabel(admin)}>
+    <AppShell current="accounts-branches" showDashboardLink accountsNav identity={adminIdentityLabel(admin)}>
       <Suspense fallback={<DashboardPageSkeleton />}>
         <Branches searchParams={searchParams} />
       </Suspense>

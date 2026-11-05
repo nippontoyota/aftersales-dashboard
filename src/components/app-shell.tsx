@@ -44,12 +44,18 @@ const NAV_ITEMS = [
 
 /** The Accounts view (role `accounts`) gets its own single-item nav —
  * branch detail (/accounts/branches) isn't a nav item, reached only by
- * clicking a region on Overview. See src/app/accounts/*. (The VP Service
- * view and the CEO view, roles `vp_service` and `ceo`, used to have an
- * equivalent single-item nav here too — retired 2026-09-26 and 2026-10-01
- * respectively, in favour of their own bare shells with no sidebar/nav at
- * all; see src/app/vp/vp-shell.tsx and src/app/ceo/ceo-shell.tsx.) */
-const ACCOUNTS_NAV_ITEMS = [{ href: "/accounts", label: "Overview", key: "accounts" as const }];
+ * two own pages — Overview (company-wide KPIs) and Branches (the flat,
+ * company-wide branchwise table, 2026-11-05 — promoted to a real nav item
+ * once /accounts/branches stopped being a per-region drill-down reached only
+ * by clicking a region card). See src/app/accounts/*. (The VP Service view
+ * and the CEO view, roles `vp_service` and `ceo`, used to have an equivalent
+ * single-item nav here too — retired 2026-09-26 and 2026-10-01 respectively,
+ * in favour of their own bare shells with no sidebar/nav at all; see
+ * src/app/vp/vp-shell.tsx and src/app/ceo/ceo-shell.tsx.) */
+const ACCOUNTS_NAV_ITEMS = [
+  { href: "/accounts", label: "Overview", key: "accounts" as const },
+  { href: "/accounts/branches", label: "Branches", key: "accounts-branches" as const },
+];
 
 /** The Central regional manager's own nav (2026-09-26, replacing the single
  * combined "My Region" page) — three of his own pages (My Region, TKM
@@ -310,6 +316,7 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,
   accounts: DashboardIcon,
+  "accounts-branches": BranchesIcon,
   "central-tkm-targets": TkmTargetsIcon,
   "central-set-targets": SetTargetsIcon,
   "central-sa-analytics": BranchesIcon,
