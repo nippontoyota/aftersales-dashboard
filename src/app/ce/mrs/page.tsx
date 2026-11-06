@@ -35,9 +35,15 @@ function DownloadIcon() {
   return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-3.5 w-3.5" aria-hidden="true"><path d="M8 2v8m0 0 3-3m-3 3-3-3M2.5 11.5V13a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
-function OverdueBadge({ dueDate, today }: { dueDate: string; today: string }) {
+// "Overdue" (the section) now also covers leads that rolled off Priority
+// unresolved but aren't actually overdue yet (see loadCeMrsGapList's doc
+// comment, 2026-11-06) — this badge reads the sign of the day count so
+// each row still says what's actually true for it, not a blanket label.
+function DueBadge({ dueDate, today }: { dueDate: string; today: string }) {
   const days = dateAgeInDays(dueDate, today);
-  return <span className="rounded-full bg-bad-soft px-2 py-1 text-[10px] font-semibold text-bad">Overdue {days}d</span>;
+  if (days > 0) return <span className="rounded-full bg-bad-soft px-2 py-1 text-[10px] font-semibold text-bad">Overdue {days}d</span>;
+  if (days === 0) return <span className="rounded-full bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn">Due today</span>;
+  return <span className="rounded-full bg-info-soft px-2 py-1 text-[10px] font-semibold text-info">Due in {-days}d</span>;
 }
 
 /** Wraps the lead rows in the "Assign evenly" bulk-assign form for a CE
@@ -113,7 +119,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
           <p className="mt-1 text-sm text-fg-subtle">
             {section === "priority"
               ? `Leads due ${formatCeDate(data.priorityDueDate)} (12 months or 10,000 km since last visit, whichever first) that TKM's own N-9 list never covered — call now, matching TKM's own N-7 call lead time, so the customer still has a week's notice.`
-              : `Leads overdue since ${formatCeDate(data.overdueWindowStart)}–yesterday, never covered by TKM's N-9 — work through these if time allows.`}
+              : `Leads due ${formatCeDate(data.overdueWindowStart)} through ${formatCeDate(data.overdueWindowEnd)} — everything except today's one Priority date — never covered by TKM's N-9. Sorted soonest-due first, most overdue last (about to fall off this list) — work through these if time allows.`}
           </p>
         </div>
 
@@ -189,7 +195,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
               <table className="w-full min-w-[1100px] text-left text-xs">
                 <thead className="bg-surface-2 text-[10px] uppercase tracking-wide text-fg-faint"><tr>
                   {canAssign ? <th className="px-3 py-2.5 font-semibold"><SelectAllCheckbox className="h-3.5 w-3.5 accent-[var(--color-accent)]" /></th> : null}
-                  {["Customer", "Contact", "VIN", "Model", "Allocated dealer", "Last visit", "Due", ...(section === "overdue" ? ["Overdue by"] : []), "Workflow", ...(showAssignedTo ? ["Assigned to"] : []), "Action"].map((label) => (
+                  {["Customer", "Contact", "VIN", "Model", "Allocated dealer", "Last visit", "Due", ...(section === "overdue" ? ["Due status"] : []), "Workflow", ...(showAssignedTo ? ["Assigned to"] : []), "Action"].map((label) => (
                     <th key={label} className="px-3 py-2.5 font-semibold">{label}</th>
                   ))}
                 </tr></thead>
@@ -204,7 +210,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
                       <td className="px-3 py-3 text-fg-muted">{lead.allocatedDealer || "—"}</td>
                       <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{formatCeDate(lead.nReportDate)} · {mileage(lead.nMileage)} km</td>
                       <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{formatCeDate(lead.dueDate)}</td>
-                      {section === "overdue" ? <td className="px-3 py-3"><OverdueBadge dueDate={lead.dueDate} today={today} /></td> : null}
+                      {section === "overdue" ? <td className="px-3 py-3"><DueBadge dueDate={lead.dueDate} today={today} /></td> : null}
                       <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{lead.status}</td>
                       {showAssignedTo ? <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{lead.assignedTo ?? "—"}</td> : null}
                       <td className="px-3 py-3"><Link href={leadHref(lead.vin)} className="inline-flex h-8 items-center whitespace-nowrap rounded-md border border-border-strong px-3 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open lead</Link></td>
@@ -223,7 +229,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
                       {canAssign ? <input type="checkbox" name="vin" value={lead.vin} className="mt-1 h-3.5 w-3.5 accent-[var(--color-accent)]" /> : null}
                       <div><Link href={leadHref(lead.vin)} className="font-medium text-fg hover:text-accent-text focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{lead.customerName}</Link><div className="mt-0.5 break-all font-mono text-[11px] text-fg-faint">{lead.vin}</div></div>
                     </div>
-                    {section === "overdue" ? <OverdueBadge dueDate={lead.dueDate} today={today} /> : <span className="rounded-full bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn">Priority</span>}
+                    {section === "overdue" ? <DueBadge dueDate={lead.dueDate} today={today} /> : <span className="rounded-full bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn">Priority</span>}
                   </div>
                   <div className="mt-2 text-xs text-fg-muted"><ContactLink value={lead.contactNumber} />{lead.vehicleModel ? <span> · {lead.vehicleModel}</span> : null}</div>
                   <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-3 text-xs text-fg-muted"><span>{lead.allocatedDealer || "No dealer"} · {lead.status} · due {formatCeDate(lead.dueDate)}{showAssignedTo ? ` · ${lead.assignedTo ?? "unassigned"}` : ""}</span><Link href={leadHref(lead.vin)} className="font-medium text-accent-text">Open lead →</Link></div>

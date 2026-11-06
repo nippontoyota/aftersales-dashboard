@@ -403,15 +403,28 @@ function addDaysIso(dateIso: string, days: number): string {
 /** The daily MRS catch-list, split into two priorities (confirmed with
  * the user 2026-11-02): "priority" (due CE_MRS_PRIORITY_LEAD_DAYS from
  * now — not today; matches TKM's own N-7 call day, see that constant's
- * comment in rules.ts — the actual daily worklist) and "overdue" (due
- * date already passed, within the CE_MRS_WINDOW_DAYS lookback —
- * secondary, worked through if time allows). Anything due sooner than
- * the priority lead time, or due further out, is deliberately never
- * shown here — not useful to know about yet, per the user. Never on any
- * N-9 list we've imported — see project_mrs_n9_system.md for why
- * "overdue" is bounded to a lookback rather than "ever overdue" (the
- * proxy alone flags ~half of all active leads once the whole
- * reactivation backlog counts). */
+ * comment in rules.ts — the actual daily worklist) and "overdue" (every
+ * other due date within the CE_MRS_WINDOW_DAYS lookback — secondary,
+ * worked through if time allows).
+ *
+ * "overdue" originally meant strictly due_date <= yesterday, which left
+ * a silent 7-day gap: a lead shown once in Priority (due_date = today+7)
+ * and not resolved that day fell out of both sections entirely until its
+ * due date actually passed, since Overdue didn't pick it up until then —
+ * discovered 2026-11-06 when the CAC team cleared 150 of 200 Priority
+ * leads in a day and the other 50 "disappeared". Overdue's upper bound
+ * is now CE_MRS_PRIORITY_LEAD_DAYS-1 days out (today+6) instead of
+ * yesterday, so a lead rolls straight from Priority into Overdue the
+ * very next day with no blackout — Overdue now really means "every
+ * active lead except today's one Priority date", sorted soonest-due/
+ * least-stale first (see the main query's order by) through most
+ * overdue last, about to fall off the trailing edge.
+ *
+ * The trailing CE_MRS_WINDOW_DAYS cutoff itself is unchanged and still
+ * deliberate — see project_mrs_n9_system.md for why "overdue" stays
+ * bounded to a lookback rather than "ever overdue" (the proxy alone
+ * flags ~half of all active leads once the whole reactivation backlog
+ * counts); confirmed to leave as-is 2026-11-06. */
 export async function loadCeMrsGapList(options: {
   today: string;
   section: "priority" | "overdue";
@@ -440,7 +453,7 @@ export async function loadCeMrsGapList(options: {
   const values: unknown[] = [options.today];
   const sectionClause = options.section === "priority"
     ? `f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day'`
-    : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day'`;
+    : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS - 1} * interval '1 day'`;
   values.push([...CE_MRS_RESOLVED_STATUSES]);
   const resolvedStatusParam = values.length;
   const stageClause = options.stage === "new"
@@ -503,7 +516,7 @@ export async function loadCeMrsGapList(options: {
          w.status, w.next_follow_up_date, w.attempt_count, f.contact_number, f.vehicle_model, w.assigned_to
        from mrs_final f join ce_lead_workflow w using (vin)
        where ${clause}
-       order by f.due_date, f.vin
+       order by f.due_date desc, f.vin
        limit $${values.length - 1} offset $${values.length}`,
       values,
     ),
@@ -520,7 +533,7 @@ export async function loadCeMrsGapList(options: {
       `${MRS_DUE_DATE_CTE}
        select
          count(*) filter (where f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day') priority,
-         count(*) filter (where f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day') overdue
+         count(*) filter (where f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS - 1} * interval '1 day') overdue
        from mrs_final f join ce_lead_workflow w using (vin)
        where not exists (select 1 from n9_leads n where n.vin = f.vin) and not (w.status = any($2::text[]))`,
       [options.today, resolvedStatusesArray],
@@ -572,6 +585,7 @@ export async function loadCeMrsGapList(options: {
     closedCount: Number(stageCounts.rows[0].closed),
     priorityDueDate: addDaysIso(options.today, CE_MRS_PRIORITY_LEAD_DAYS),
     overdueWindowStart: addDaysIso(options.today, -CE_MRS_WINDOW_DAYS),
+    overdueWindowEnd: addDaysIso(options.today, CE_MRS_PRIORITY_LEAD_DAYS - 1),
   };
 }
 
