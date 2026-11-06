@@ -466,6 +466,12 @@ export type PayoutLedgerRow = {
   employeeBranch: string | null;
   validatedCount: number;
   completedCount: number;
+  /** Lifetime earned, before netting off bp_referral_payouts. */
+  amountEarned: number;
+  /** Already paid out (sum of bp_referral_payouts for this employee). */
+  amountPaid: number;
+  /** amountEarned - amountPaid. Only rows with amountOwed > 0 are returned —
+   * see loadPayoutLedger's doc comment. */
   amountOwed: number;
 };
 
@@ -474,16 +480,22 @@ const COMPLETED_PAYOUT = 200;
 
 /** ₹50 per validated (genuine + interested) referral, another ₹200 once
  * its RO is matched (see ro-matcher.ts) — grouped per referring employee,
- * for BP HO to action payment manually (see the CSV export route). Only
- * employees with at least one validated referral appear; nothing is owed
- * otherwise.
+ * for BP HO to action payment manually (see the CSV export route and
+ * markPayoutPaid below). Only employees with an outstanding balance appear
+ * — once a payout record covers what they earned, they drop off this list
+ * entirely (2026-11-06: this table used to list every employee who ever had
+ * a validated referral, forever, with no way to settle one — see
+ * bp_referral_payouts in schema.sql). Settled payouts are still visible via
+ * loadPayoutHistory.
  *
  * `branches`, when given, scopes this to a region (a regional manager's own
  * view, see bp-referrals/page.tsx) — filtered on assigned_branch (where the
  * work currently sits, same convention as loadBranchRollup below), NOT
  * referring_employee_branch, since the latter is free text off the WhatsApp
  * submission ("Kalamassery") rather than a resolved branch code and can't be
- * matched against REGIONS reliably. */
+ * matched against REGIONS reliably. Payout records aren't branch-scoped (only
+ * bp_ho/hq can create them, against the company-wide view), so the paid
+ * amount nets off the same regardless of which regional view is reading it. */
 export async function loadPayoutLedger(branches?: string[]): Promise<PayoutLedgerRow[]> {
   const { rows } = await pool.query<{
     referring_employee_id: string | null;
@@ -491,30 +503,108 @@ export async function loadPayoutLedger(branches?: string[]): Promise<PayoutLedge
     referring_employee_branch: string | null;
     validated_count: string;
     completed_count: string;
+    paid_amount: string;
   }>(
-    `select referring_employee_id, referring_employee_name, referring_employee_branch,
-            count(*) filter (where validated_at is not null) as validated_count,
-            count(*) filter (where ro_matched_at is not null) as completed_count
-     from bp_referrals
-     where validated_at is not null
-       and ($1::text[] is null or assigned_branch = any($1::text[]))
-     group by referring_employee_id, referring_employee_name, referring_employee_branch`,
+    `with earned as (
+       select referring_employee_id, referring_employee_name, referring_employee_branch,
+              count(*) filter (where validated_at is not null) as validated_count,
+              count(*) filter (where ro_matched_at is not null) as completed_count
+       from bp_referrals
+       where validated_at is not null
+         and ($1::text[] is null or assigned_branch = any($1::text[]))
+       group by referring_employee_id, referring_employee_name, referring_employee_branch
+     ),
+     paid as (
+       select employee_id, employee_name, employee_branch, sum(amount) as paid_amount
+       from bp_referral_payouts
+       group by employee_id, employee_name, employee_branch
+     )
+     select e.*, coalesce(p.paid_amount, 0) as paid_amount
+     from earned e
+     left join paid p
+       on p.employee_id is not distinct from e.referring_employee_id
+      and p.employee_name is not distinct from e.referring_employee_name
+      and p.employee_branch is not distinct from e.referring_employee_branch`,
     [branches ?? null],
   );
   return rows
     .map((r) => {
       const validatedCount = Number(r.validated_count);
       const completedCount = Number(r.completed_count);
+      const amountEarned = validatedCount * VALIDATED_PAYOUT + completedCount * COMPLETED_PAYOUT;
+      const amountPaid = Number(r.paid_amount);
       return {
         employeeId: r.referring_employee_id,
         employeeName: r.referring_employee_name,
         employeeBranch: r.referring_employee_branch,
         validatedCount,
         completedCount,
-        amountOwed: validatedCount * VALIDATED_PAYOUT + completedCount * COMPLETED_PAYOUT,
+        amountEarned,
+        amountPaid,
+        amountOwed: amountEarned - amountPaid,
       };
     })
+    .filter((r) => r.amountOwed > 0)
     .sort((a, b) => b.amountOwed - a.amountOwed);
+}
+
+export type PayoutHistoryRow = {
+  id: number;
+  employeeId: string | null;
+  employeeName: string | null;
+  employeeBranch: string | null;
+  amount: number;
+  paidAt: string;
+  paidBy: string | null;
+};
+
+/** Settled payout records, newest first — the flip side of loadPayoutLedger
+ * filtering out anyone fully paid. Company-wide; see that function's doc
+ * comment on why payout records aren't region-scoped. */
+export async function loadPayoutHistory(limit = 100): Promise<PayoutHistoryRow[]> {
+  const { rows } = await pool.query<{
+    id: number;
+    employee_id: string | null;
+    employee_name: string | null;
+    employee_branch: string | null;
+    amount: string;
+    paid_at: string;
+    paid_by: string | null;
+  }>(
+    `select id, employee_id, employee_name, employee_branch, amount, paid_at, paid_by
+     from bp_referral_payouts
+     order by paid_at desc
+     limit $1`,
+    [limit],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    employeeId: r.employee_id,
+    employeeName: r.employee_name,
+    employeeBranch: r.employee_branch,
+    amount: Number(r.amount),
+    paidAt: r.paid_at,
+    paidBy: r.paid_by,
+  }));
+}
+
+/** Records a payout run for one referring employee — BP HO/HQ marking an
+ * amount as settled (see bp-ho-actions.ts's markPayoutPaidAction). Append-
+ * only, same convention as bp_referral_activity: never updates or deletes a
+ * past record, so the payment trail stays intact even if a later ledger
+ * recompute changes what's still owed. */
+export async function markPayoutPaid(
+  employeeId: string | null,
+  employeeName: string | null,
+  employeeBranch: string | null,
+  amount: number,
+  paidBy: string,
+): Promise<void> {
+  await pool.query(
+    `insert into bp_referral_payouts (employee_id, employee_name, employee_branch, amount, paid_by)
+     values ($1, $2, $3, $4, $5)`,
+    [employeeId, employeeName, employeeBranch, amount, paidBy],
+  );
 }
 
 export type BranchRollupRow = {

@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
 import type { BpmQueueReferral } from "./bpm-queue-client";
-import type { PayoutLedgerRow, BranchRollupRow } from "@/lib/bp-referrals/store";
-import { AssignBranchForm, RescanButton } from "./bp-ho-controls";
+import type { PayoutLedgerRow, PayoutHistoryRow, BranchRollupRow } from "@/lib/bp-referrals/store";
+import { AssignBranchForm, MarkPaidButton, RescanButton } from "./bp-ho-controls";
 
 function fmt(ts: Date | string | null): string {
   if (!ts) return "—";
@@ -382,17 +382,23 @@ function KpiModal({
 export function BpHoAnalyticsClient({
   referrals,
   payoutLedger,
+  payoutHistory = [],
   branchRollup,
   branchCodes: allBranchCodes,
   canRescan = true,
 }: {
   referrals: BpmQueueReferral[];
   payoutLedger: PayoutLedgerRow[];
+  /** Settled payout records — omitted for a regional manager's own scoped
+   * view, same gate as canRescan (see below). */
+  payoutHistory?: PayoutHistoryRow[];
   branchRollup: BranchRollupRow[];
   branchCodes: string[];
-  /** Hides the "Re-check pending RO entries" button — a company-wide,
-   * write/admin action BP HO gets but a regional manager's own scoped view
-   * doesn't (2026-10-29, the user's call). Defaults to true (BP HO/HQ). */
+  /** Hides the "Re-check pending RO entries" button AND the Payout ledger's
+   * "Mark paid" action / Payment history section — all company-wide,
+   * write/admin actions BP HO gets but a regional manager's own scoped view
+   * doesn't (2026-10-29 / 2026-11-06, the user's call). Defaults to true
+   * (BP HO/HQ). */
   canRescan?: boolean;
 }) {
   const [fromDate, setFromDate] = useState("");
@@ -604,22 +610,28 @@ export function BpHoAnalyticsClient({
             {canRescan ? <RescanButton /> : null}
           </div>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
+        {/* Fixed-height scroll instead of letting this table grow the page
+         * forever (2026-11-06, at the user's request) — it used to list
+         * every employee who ever had a validated referral, with no way to
+         * settle one; see loadPayoutLedger's doc comment for the real fix
+         * (the "Mark paid" column below), this is just the visual cap. */}
+        <div className="max-h-96 overflow-auto rounded-xl border border-border bg-surface shadow-sm">
           <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-2">
+            <thead className="sticky top-0 z-10 bg-surface-2">
+              <tr className="border-b border-border">
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Employee</th>
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th>
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Validated (₹50)</th>
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Completed (₹200)</th>
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Owed</th>
+                {canRescan ? <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">&nbsp;</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {payoutLedger.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-fg-muted">
-                    No payouts yet.
+                  <td colSpan={canRescan ? 6 : 5} className="px-3 py-6 text-center text-sm text-fg-muted">
+                    Nothing outstanding.
                   </td>
                 </tr>
               ) : (
@@ -633,6 +645,16 @@ export function BpHoAnalyticsClient({
                     <td className="px-3 py-2 text-right tabular-nums text-fg">{row.validatedCount}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-fg">{row.completedCount}</td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums text-fg">{inr(row.amountOwed)}</td>
+                    {canRescan ? (
+                      <td className="px-3 py-2 text-right">
+                        <MarkPaidButton
+                          employeeId={row.employeeId}
+                          employeeName={row.employeeName}
+                          employeeBranch={row.employeeBranch}
+                          amount={row.amountOwed}
+                        />
+                      </td>
+                    ) : null}
                   </tr>
                 ))
               )}
@@ -640,6 +662,51 @@ export function BpHoAnalyticsClient({
           </table>
         </div>
       </div>
+
+      {/* Payment history — the settled side of the ledger above; BP HO/HQ
+       * only, same gate as the "Mark paid" action itself. */}
+      {canRescan ? (
+        <div className="mb-8">
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-fg">
+            <WalletIcon /> Payment history
+          </h2>
+          <div className="max-h-72 overflow-auto rounded-xl border border-border bg-surface shadow-sm">
+            <table className="min-w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-surface-2">
+                <tr className="border-b border-border">
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Employee</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Amount</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Paid</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {payoutHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-6 text-center text-sm text-fg-muted">
+                      No payments recorded yet.
+                    </td>
+                  </tr>
+                ) : (
+                  payoutHistory.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-fg">{row.employeeName || "—"}</div>
+                        {row.employeeId ? <div className="text-xs text-fg-faint">ID: {row.employeeId}</div> : null}
+                      </td>
+                      <td className="px-3 py-2 text-fg-muted">{row.employeeBranch || "—"}</td>
+                      <td className="px-3 py-2 text-right font-semibold tabular-nums text-fg">{inr(row.amount)}</td>
+                      <td className="px-3 py-2 text-fg-muted">{fmt(row.paidAt)}</td>
+                      <td className="px-3 py-2 text-fg-muted">{row.paidBy || "—"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       {/* Branch / region rollup */}
       <div className="mb-8">

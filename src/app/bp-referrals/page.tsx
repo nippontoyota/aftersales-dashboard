@@ -9,6 +9,7 @@ import {
   ensureAssignedBranches,
   loadAllReferrals,
   loadBranchRollup,
+  loadPayoutHistory,
   loadPayoutLedger,
   loadQueueForBranch,
   loadRegionRollup,
@@ -87,9 +88,10 @@ export default async function BpReferralsPage() {
   // Both need assigned_branch resolved first, same as a BPM's own queue.
   if (admin.role === "bp_ho" || admin.role === "hq") {
     await ensureAssignedBranches();
-    const [referrals, payoutLedger, branchRollup, branchCodes, navState] = await Promise.all([
+    const [referrals, payoutLedger, payoutHistory, branchRollup, branchCodes, navState] = await Promise.all([
       loadAllReferrals(),
       loadPayoutLedger(),
+      loadPayoutHistory(),
       loadBranchRollup(),
       listBranchCodes(),
       loadNavState(admin),
@@ -106,7 +108,13 @@ export default async function BpReferralsPage() {
         queriesBadge={navState.queriesBadge}
         identity={adminIdentityLabel(admin)}
       >
-        <BpHoAnalyticsClient referrals={referrals} payoutLedger={payoutLedger} branchRollup={branchRollup} branchCodes={branchCodes} />
+        <BpHoAnalyticsClient
+          referrals={referrals}
+          payoutLedger={payoutLedger}
+          payoutHistory={payoutHistory}
+          branchRollup={branchRollup}
+          branchCodes={branchCodes}
+        />
       </AppShell>
     );
   }

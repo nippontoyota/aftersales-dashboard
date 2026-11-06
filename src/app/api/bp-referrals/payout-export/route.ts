@@ -20,7 +20,16 @@ export async function GET() {
   }
 
   const ledger = await loadPayoutLedger(admin.role === "regional" ? [...REGIONS[admin.region]] : undefined);
-  const header = ["Employee ID", "Employee Name", "Branch", "Validated (₹50 each)", "Completed (₹200 each)", "Total Owed (₹)"];
+  const header = [
+    "Employee ID",
+    "Employee Name",
+    "Branch",
+    "Validated (₹50 each)",
+    "Completed (₹200 each)",
+    "Earned (₹)",
+    "Already Paid (₹)",
+    "Outstanding (₹)",
+  ];
   const lines = [header.map(csvCell).join(",")];
   for (const row of ledger) {
     lines.push(
@@ -30,6 +39,8 @@ export async function GET() {
         csvCell(row.employeeBranch),
         csvCell(row.validatedCount),
         csvCell(row.completedCount),
+        csvCell(row.amountEarned),
+        csvCell(row.amountPaid),
         csvCell(row.amountOwed),
       ].join(","),
     );

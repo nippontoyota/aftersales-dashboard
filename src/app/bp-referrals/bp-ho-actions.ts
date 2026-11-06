@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
 import { listBranchCodes } from "@/lib/admin-store";
-import { assignBranch } from "@/lib/bp-referrals/store";
+import { assignBranch, markPayoutPaid } from "@/lib/bp-referrals/store";
 import { rescanUnmatchedReferrals } from "@/lib/bp-referrals/ro-matcher";
 
 export type BpHoActionState = { error: string | null; ok: boolean };
@@ -49,4 +49,27 @@ export async function rescanUnmatchedReferralsAction(_prev: RescanState): Promis
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Re-scan failed.", matchedCount: null };
   }
+}
+
+export type MarkPaidState = { error: string | null; ok: boolean };
+
+/** BP HO/HQ settling a payout ledger row — records the payment so it nets
+ * off that employee's amountOwed on the next load, see
+ * loadPayoutLedger/markPayoutPaid in store.ts. The amount is whatever the
+ * ledger row currently shows as owed at submit time (passed through as a
+ * hidden field by the form, see PayoutLedger's "Mark paid" button), not
+ * re-derived here, so a payment always matches what BP HO saw on screen. */
+export async function markPayoutPaidAction(_prev: MarkPaidState, formData: FormData): Promise<MarkPaidState> {
+  const admin = requireBpHoAccess(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const employeeId = (formData.get("employeeId") as string) || null;
+  const employeeName = (formData.get("employeeName") as string) || null;
+  const employeeBranch = (formData.get("employeeBranch") as string) || null;
+  const amount = Number(formData.get("amount"));
+  if (!Number.isFinite(amount) || amount <= 0) return { error: "Bad amount.", ok: false };
+
+  await markPayoutPaid(employeeId, employeeName, employeeBranch, amount, admin.username);
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
 }

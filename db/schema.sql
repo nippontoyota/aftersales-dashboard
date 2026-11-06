@@ -1632,4 +1632,24 @@ alter table admins add constraint admins_role_scope_consistency check (
 update admins set role = 'ce_head' where role = 'ce';
 
 alter table ce_lead_workflow add column if not exists assigned_to text references admins(username);
+
+-- BP Referrals payout ledger (2026-11-06, at the user's request): a "mark as
+-- paid" record so the Payout ledger table stops growing forever. One row per
+-- payment run against a referring employee (not per referral — validation
+-- and completion payouts for the same employee are usually settled
+-- together), so loadPayoutLedger can net amountOwed = earned - sum(paid) and
+-- drop anyone fully settled off the main table. employee_id/name/branch
+-- mirror bp_referrals' own referring_employee_* grouping (free-text branch,
+-- same as there) so a payout record matches back to its ledger row.
+create table if not exists bp_referral_payouts (
+  id              serial       primary key,
+  employee_id     text,
+  employee_name   text,
+  employee_branch text,
+  amount          numeric      not null,
+  paid_at         timestamptz  not null default now(),
+  paid_by         text         references admins(username)
+);
+create index if not exists bp_referral_payouts_employee_idx
+  on bp_referral_payouts (employee_id, employee_name, employee_branch);
 create index if not exists ce_lead_workflow_assigned_to_idx on ce_lead_workflow (assigned_to) where assigned_to is not null;
