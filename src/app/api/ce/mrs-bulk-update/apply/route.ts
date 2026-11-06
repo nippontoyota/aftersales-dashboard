@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   }
   if (rows.length === 0) return NextResponse.json({ error: "No rows found in this sheet." }, { status: 422 });
 
-  const results = await applyMrsBulkRows(rows, admin.username, requireAssignedTo);
+  const results = await applyMrsBulkRows(rows, admin.username, requireAssignedTo, file.name);
   revalidatePath("/ce/mrs");
   revalidatePath("/ce");
 

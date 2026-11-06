@@ -857,6 +857,25 @@ export async function markCeMrsFollowUpAlreadyScheduled(input: {
   }
 }
 
+/** Persists one apply run's per-row results (2026-11-06, at the user's
+ * request) — so a row that failed (lead archived/reassigned between
+ * preview and apply, a note over 2,000 chars, etc.) can still be looked
+ * up after the upload dialog closes instead of existing only in that one
+ * browser response. One row per attempted sheet row, success or not. */
+export async function logCeMrsBulkApplyResults(results: { rowNumber: number; vin: string; success: boolean; message: string }[], username: string, fileName?: string): Promise<void> {
+  if (results.length === 0) return;
+  const values: unknown[] = [];
+  const tuples = results.map((r, i) => {
+    const base = i * 6;
+    values.push(username, fileName ?? null, r.rowNumber, r.vin, r.success, r.message);
+    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`;
+  });
+  await pool.query(
+    `insert into ce_mrs_bulk_apply_log (uploaded_by, file_name, row_number, vin, success, message) values ${tuples.join(", ")}`,
+    values,
+  );
+}
+
 export type CeBulkLeadLookup = {
   vin: string;
   active: boolean;

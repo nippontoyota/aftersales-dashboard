@@ -1172,6 +1172,25 @@ alter table ce_lead_activity add column if not exists call_status text check (ca
 alter table ce_lead_activity add column if not exists outcome text;
 create index if not exists ce_lead_activity_vin_idx on ce_lead_activity (vin, created_at desc, id desc);
 
+-- One row per result from the MRS "download, call offline, reupload" bulk
+-- apply (2026-11-06, at the user's request) — before this, apply's
+-- per-row success/failure list only ever existed in the browser response,
+-- so a row that failed (lead archived/reassigned between preview and
+-- apply, a note over 2,000 chars, etc.) was unrecoverable the moment the
+-- dialog closed. Logs every row the apply route attempted, not just
+-- failures, so a whole run's outcome stays auditable later.
+create table if not exists ce_mrs_bulk_apply_log (
+  id          bigserial    primary key,
+  uploaded_by text         not null references admins(username),
+  file_name   text,
+  row_number  integer      not null,
+  vin         text         not null,
+  success     boolean      not null,
+  message     text         not null,
+  created_at  timestamptz  not null default now()
+);
+create index if not exists ce_mrs_bulk_apply_log_run_idx on ce_mrs_bulk_apply_log (uploaded_by, created_at desc);
+
 -- 2026-10-15: every BP referral action — a not-connected attempt, the
 -- connected-call outcome, or a later follow-up — now requires the BPM to
 -- give a reason/remark (the user's explicit call, for accountability).

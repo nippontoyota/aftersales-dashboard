@@ -11,7 +11,7 @@ import {
   type CeCallStatus,
   type CeStatus,
 } from "./rules";
-import { loadCeLeadsForBulkUpdate, markCeMrsFollowUpAlreadyScheduled, updateCeLead, type CeBulkLeadLookup } from "./store";
+import { loadCeLeadsForBulkUpdate, logCeMrsBulkApplyResults, markCeMrsFollowUpAlreadyScheduled, updateCeLead, type CeBulkLeadLookup } from "./store";
 
 /** The "download, call offline, reupload" workflow (2026-11-05, at the
  * user's request) — the CAC team's own system is slow enough that opening
@@ -223,7 +223,7 @@ export type CeMrsBulkApplyResult = { rowNumber: number; vin: string; success: bo
  * already has its own transaction (inside updateCeLead /
  * markCeMrsFollowUpAlreadyScheduled) and a typo three rows from the end
  * shouldn't undo the 197 good ones ahead of it. */
-export async function applyMrsBulkRows(rows: CeMrsBulkRow[], username: string, requireAssignedTo?: string): Promise<CeMrsBulkApplyResult[]> {
+export async function applyMrsBulkRows(rows: CeMrsBulkRow[], username: string, requireAssignedTo?: string, fileName?: string): Promise<CeMrsBulkApplyResult[]> {
   const results: CeMrsBulkApplyResult[] = [];
   for (const row of rows) {
     if (row.empty || row.error) continue;
@@ -239,6 +239,13 @@ export async function applyMrsBulkRows(rows: CeMrsBulkRow[], username: string, r
     } catch (error) {
       results.push({ rowNumber: row.rowNumber, vin: row.vin, success: false, message: error instanceof Error ? error.message : "Could not update this lead." });
     }
+  }
+  // Best-effort — a logging failure shouldn't undo updates that already
+  // committed, so this never throws back into the route.
+  try {
+    await logCeMrsBulkApplyResults(results, username, fileName);
+  } catch (error) {
+    console.error("Could not log MRS bulk-apply results:", error);
   }
   return results;
 }
