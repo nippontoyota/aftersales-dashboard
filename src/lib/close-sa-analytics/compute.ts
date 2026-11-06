@@ -543,7 +543,20 @@ export function computeCloseSaAnalytics(
    * closes — this is recomputed fresh from the RO's full Part Sale history
    * every time this date is recomputed, so it never needs a separate
    * catch-up once the RO closes (see close-sa-analytics/recompute.ts). */
-  partSaleRowsForClosedRos: Record<string, unknown>[]
+  partSaleRowsForClosedRos: Record<string, unknown>[],
+  /** Every Part Sale row (any date, this branch's whole history) whose
+   * RefDocNo matches one of `partSaleRowsForClosedRos`'s own BillNo values —
+   * i.e. a cancellation of one of today's matched parts. Confirmed with the
+   * user 2026-11-06: a cancelled Part Sale line is a *second* row, never an
+   * edit to the original — RefDocNo on the cancellation row is the original
+   * bill's BillNo (not an RO), BillNo type `I`, qty/amount already negative
+   * in the source. Netted into the same SA as the original (via
+   * billNoToOriginalRo below, built from partSaleRowsForClosedRos — never
+   * roCloseSaMap, which only has RO keys, not bill numbers). Scoped to
+   * tyre/battery/Parts ₹ (matched) only, same as partSaleRowsForClosedRos —
+   * matched-RO count is deliberately left untouched by this (2026-11-06, at
+   * the user's request — revisit separately). */
+  partSaleCancellationRowsForClosedRos: Record<string, unknown>[]
 ): Map<string, CloseSaDailyMetrics> {
   const byCloseSa = new Map<string, CloseSaDailyMetrics>();
   const metricsFor = (name: string): CloseSaDailyMetrics => {
@@ -769,6 +782,10 @@ export function computeCloseSaAnalytics(
   // partSaleRowsForClosedRos's doc comment above. Extended to Parts ₹ and
   // its matched-RO count 2026-10-28, same request/reasoning as tyre/battery.
   const matchedRosBySa = new Map<string, Set<string>>();
+  // Original BillNo -> which SA/isBp it belongs to, for the cancellation
+  // loop below — a cancellation row's RefDocNo is this BillNo, not an RO, so
+  // it can never be looked up in roCloseSaMap.
+  const billNoToOriginalRo = new Map<string, { closeSaName: string; isBp: boolean }>();
   for (const row of partSaleRowsForClosedRos) {
     const refDoc = normalizeRo(row[PS_REF_DOC_NO_COLUMN]);
     if (!refDoc) continue;
@@ -787,8 +804,32 @@ export function computeCloseSaAnalytics(
     const qty = toQty(row[PS_SALE_QTY_COLUMN]);
     if (part.toUpperCase().startsWith(TYRE_PART_PREFIX)) m.tyreCount += qty;
     if (part.toUpperCase().startsWith(BATTERY_PART_PREFIX)) m.batteryCount += qty;
+
+    const billNo = normalizeRo(row[PS_BILL_NO_COLUMN]);
+    if (billNo) billNoToOriginalRo.set(billNo, { closeSaName, isBp: isBpRo(refDoc) });
   }
   for (const [name, set] of matchedRosBySa) metricsFor(name).partsMatchedRoCount = set.size;
+
+  // --- Cancellations of those same matched parts — see
+  // partSaleCancellationRowsForClosedRos's doc comment above. Qty/amount are
+  // already negative in the source, so adding them straight into the same
+  // SA's totals is the whole fix; matched-RO count deliberately untouched.
+  for (const row of partSaleCancellationRowsForClosedRos) {
+    const origBillNo = normalizeRo(row[PS_REF_DOC_NO_COLUMN]);
+    if (!origBillNo) continue;
+    const original = billNoToOriginalRo.get(origBillNo);
+    if (!original) continue;
+    const m = metricsFor(original.closeSaName);
+
+    const netAmnt = toQty(row[PS_NET_AMNT_COLUMN]);
+    m.partsRevenue += netAmnt;
+    if (original.isBp) m.bpPartsRevenue += netAmnt;
+
+    const part = normalizePart(row[PS_PART_NO_COLUMN]);
+    const qty = toQty(row[PS_SALE_QTY_COLUMN]);
+    if (part.toUpperCase().startsWith(TYRE_PART_PREFIX)) m.tyreCount += qty;
+    if (part.toUpperCase().startsWith(BATTERY_PART_PREFIX)) m.batteryCount += qty;
+  }
 
   return byCloseSa;
 }

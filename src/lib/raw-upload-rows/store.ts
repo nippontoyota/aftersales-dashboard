@@ -183,6 +183,39 @@ export async function loadRoCloseSaPairs(branch: string): Promise<{ ro: unknown;
   return rows;
 }
 
+/** Job Order No → the LATEST date this branch has ever filed a Service Info
+ * (GS or BP) row for it, any date — close-sa-analytics/recompute.ts uses
+ * this to keep an RO's MTD contribution (RO count, vehicle count, job-type
+ * counts, tyre/battery, Parts ₹, TGLOSS ₹, everything computed from
+ * roInfoByRo) to exactly one date: its true final close, not every date it
+ * happens to appear on. An RO legitimately gets re-invoiced on a later date
+ * before it's truly done (confirmed 2026-11-06, KY01A's BPJ2602986: same job
+ * lines, Invoice Date advancing from 10/17 to 10/30) — without this, both
+ * dates independently credit the RO's full contribution, double-counting it
+ * whenever a month's dates get summed. 1,345 ROs company-wide hit this
+ * Jul-Nov 2026 (1,173 of them one KL01A cluster around Aug 28-30 that looks
+ * like a straight duplicate upload, not a genuine re-invoice — flagged for
+ * its own look, not fixed by this). Same whole-history reasoning as
+ * loadRoCloseSaPairs above, same performance tradeoff (two-column
+ * projection, not full row_data). */
+export async function loadLatestServiceInfoDatePerRo(branch: string): Promise<Map<string, string>> {
+  // Normalized (upper + dash-stripped) the same way normalizeRo() does, so
+  // the map's keys line up with what the caller looks them up by — Service
+  // Info's own Job Order No hasn't been seen with a dash in practice, but
+  // matching the same normalization everywhere else in this module is what
+  // keeps that an assumption this query doesn't also have to rely on.
+  const { rows } = await pool.query<{ ro: string; latest_date: string }>(
+    `select upper(replace(row_data->>'Job Order No', '-', '')) as ro, max(date)::text as latest_date
+     from raw_upload_rows
+     where report_type in ('service_info', 'service_info_bp')
+       and branch = $1
+       and row_data->>'Job Order No' <> ''
+     group by 1`,
+    [branch]
+  );
+  return new Map(rows.map((r) => [r.ro, r.latest_date]));
+}
+
 /** Fast duplicate-upload check — returns the date of the first prior batch
  * whose content hash matches `contentHash`, or null if no duplicate exists.
  * Replaces the old loadAllRawUploadRowsBefore + JS hash-loop approach
