@@ -43,6 +43,13 @@ export type BpReferralRow = {
    * not_interested_reason (2026-10-27, the user's request). */
   lost_reason: string | null;
   last_contacted_at: Date | string | null;
+  /** BPE-prefixed proof that the vehicle has physically arrived — insurance-
+   * paid (IP) referrals only, see logFollowUpContact below. Its presence is
+   * what moves a referral from Follow-up into the "Vehicle received"
+   * section (see classify() in bpm-queue-client.tsx /
+   * bp-ho-analytics-client.tsx). */
+  bp_estimate_invoice_no: string | null;
+  bp_estimate_invoice_entered_at: Date | string | null;
   /** Most recent transfer's origin branch, if this referral has ever been
    * transferred — null otherwise. Joined in, not a real column. */
   transferred_from: string | null;
@@ -54,7 +61,8 @@ const SELECT_COLUMNS = `
   r.assigned_branch, r.call_status, r.genuine, r.estimate_amount, r.customer_interested, r.payment_type,
   r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.pending_ro_no, r.pending_ro_entered_at,
   r.closed_at, r.closed_reason, r.not_interested_reason, r.lost_reason,
-  r.last_contacted_at, lt.from_branch as transferred_from
+  r.last_contacted_at, r.bp_estimate_invoice_no, r.bp_estimate_invoice_entered_at,
+  lt.from_branch as transferred_from
 `;
 
 const LATEST_TRANSFER_JOIN = `
@@ -117,6 +125,14 @@ export function regionalLeadFor(branch: string): RegionName | null {
   return null;
 }
 
+/** Server-side check for whether the BPE estimate-invoice field is actually
+ * required on a "vehicle_received" follow-up submission — never trust the
+ * client's own payment_type, see logFollowUpContactAction. */
+export async function loadReferralPaymentType(id: number): Promise<"CP" | "IP" | null> {
+  const { rows } = await pool.query<{ payment_type: "CP" | "IP" | null }>(`select payment_type from bp_referrals where id = $1`, [id]);
+  return rows[0]?.payment_type ?? null;
+}
+
 async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
   const { rows } = await pool.query<{ assigned_branch: string | null }>(
     `select assigned_branch from bp_referrals where id = $1`,
@@ -133,10 +149,12 @@ async function logActivity(
   remark: string,
   performedBy: string,
   notConnectedReason?: string,
+  followUpStage?: string,
 ): Promise<void> {
   await pool.query(
-    `insert into bp_referral_activity (referral_id, activity_type, remark, performed_by, not_connected_reason) values ($1, $2, $3, $4, $5)`,
-    [referralId, activityType, remark, performedBy, notConnectedReason ?? null],
+    `insert into bp_referral_activity (referral_id, activity_type, remark, performed_by, not_connected_reason, follow_up_stage)
+     values ($1, $2, $3, $4, $5, $6)`,
+    [referralId, activityType, remark, performedBy, notConnectedReason ?? null, followUpStage ?? null],
   );
 }
 
@@ -184,6 +202,7 @@ export async function loadOverdueFollowUps(branch: string): Promise<BpReferralRo
     `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
      where r.assigned_branch = $1 and r.genuine = true and r.customer_interested = true
        and r.closed_at is null and r.ro_matched_at is null and r.pending_ro_no is null
+       and r.bp_estimate_invoice_no is null
        and r.last_contacted_at <= now() - interval '${FOLLOW_UP_OVERDUE_HOURS} hours'
      order by r.last_contacted_at asc`,
     [branch],
@@ -210,13 +229,47 @@ export async function loadUrgentUnconnected(branch: string): Promise<BpReferralR
   return rows;
 }
 
-/** BPM re-contacted the customer on an already-validated referral — resets
- * the follow-up clock without touching anything else recorded about the
- * call. */
-export async function logFollowUpContact(id: number, branch: string, performedBy: string, remark: string): Promise<void> {
+/** BPM re-contacted the customer, or logged a progress note, on an already-
+ * validated referral — resets the follow-up clock and, when followUpStage
+ * is given, records which stage this note is about (see
+ * followup-stages.ts). `estimateInvoiceNo`, when given, is the BPE-prefixed
+ * proof the vehicle's arrived — only ever sent by the UI for an insurance-
+ * paid (IP) referral logging the "vehicle_received" stage for the first
+ * time (2026-11-06, the user's pipeline) — and is what actually moves this
+ * referral into the "Vehicle received" section; once set it's never
+ * overwritten (the UI won't ask again once bp_estimate_invoice_no is on
+ * file). followUpStage itself is optional — the login popup's quick "spoke
+ * to them" form intentionally skips it, see bp-followup-popup-gate.tsx. */
+export async function logFollowUpContact(
+  id: number,
+  branch: string,
+  performedBy: string,
+  remark: string,
+  followUpStage?: string,
+  estimateInvoiceNo?: string,
+): Promise<void> {
   await assertOwnedByBranch(id, branch);
-  await pool.query(`update bp_referrals set last_contacted_at = now() where id = $1`, [id]);
-  await logActivity(id, "follow_up", remark, performedBy);
+  const { rows } = await pool.query<{
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+    validated_at: Date | string | null;
+  }>(`select closed_at, ro_matched_at, validated_at from bp_referrals where id = $1`, [id]);
+  const referral = rows[0];
+  if (!referral || !referral.validated_at || referral.closed_at || referral.ro_matched_at) {
+    throw new Error("This referral isn't open for a follow-up.");
+  }
+  if (estimateInvoiceNo) {
+    await pool.query(
+      `update bp_referrals set last_contacted_at = now(),
+         bp_estimate_invoice_no = coalesce(bp_estimate_invoice_no, $2),
+         bp_estimate_invoice_entered_at = coalesce(bp_estimate_invoice_entered_at, now())
+       where id = $1`,
+      [id, estimateInvoiceNo],
+    );
+  } else {
+    await pool.query(`update bp_referrals set last_contacted_at = now() where id = $1`, [id]);
+  }
+  await logActivity(id, "follow_up", remark, performedBy, undefined, followUpStage);
 }
 
 /** BPM closes out a validated (genuine + interested) referral as "Lost" —
@@ -250,6 +303,7 @@ export type ActivityRow = {
   activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost";
   remark: string;
   notConnectedReason: string | null;
+  followUpStage: string | null;
   performedBy: string;
   performedAt: Date | string;
 };
@@ -263,10 +317,11 @@ export async function loadActivityForReferral(referralId: number): Promise<Activ
     activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered";
     remark: string;
     not_connected_reason: string | null;
+    follow_up_stage: string | null;
     performed_by: string;
     performed_at: Date | string;
   }>(
-    `select id, activity_type, remark, not_connected_reason, performed_by, performed_at from bp_referral_activity
+    `select id, activity_type, remark, not_connected_reason, follow_up_stage, performed_by, performed_at from bp_referral_activity
      where referral_id = $1 order by performed_at desc`,
     [referralId],
   );
@@ -275,6 +330,7 @@ export async function loadActivityForReferral(referralId: number): Promise<Activ
     activityType: r.activity_type,
     remark: r.remark,
     notConnectedReason: r.not_connected_reason,
+    followUpStage: r.follow_up_stage,
     performedBy: r.performed_by,
     performedAt: r.performed_at,
   }));

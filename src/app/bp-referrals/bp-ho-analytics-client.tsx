@@ -30,13 +30,31 @@ function hoursSince(ts: Date | string | null): number {
 const UNCONNECTED_DROP_DAYS = 3;
 const FOLLOW_UP_OVERDUE_HOURS = 24;
 
-type Status = "pending" | "not_connected" | "followup" | "followup_overdue" | "completed" | "not_genuine" | "not_interested" | "lost" | "dropped";
+type Status =
+  | "pending"
+  | "not_connected"
+  | "followup"
+  | "followup_overdue"
+  | "vehicle_received"
+  | "repair_in_progress"
+  | "completed"
+  | "not_genuine"
+  | "not_interested"
+  | "lost"
+  | "dropped";
 
+/** Mirrors bpm-queue-client.tsx's own classify() — can't import it directly
+ * (that file is "use client" too, but this is a separate client bundle),
+ * kept in sync by hand. Same pipeline: Follow-up -> Vehicle received (BPE
+ * entered, insurance-paid only) -> Repair in progress (RO entered) ->
+ * Completed (RO confirmed, ₹200 triggered) — 2026-11-06, the user's call. */
 function classify(r: BpmQueueReferral): Status {
-  if (r.ro_matched_at || r.pending_ro_no) return "completed";
+  if (r.ro_matched_at) return "completed";
+  if (r.pending_ro_no) return "repair_in_progress";
   if (r.closed_reason === "not_genuine") return "not_genuine";
   if (r.closed_reason === "not_interested") return "not_interested";
   if (r.closed_reason === "lost") return "lost";
+  if (r.bp_estimate_invoice_no) return "vehicle_received";
   if (r.validated_at) return hoursSince(r.last_contacted_at) >= FOLLOW_UP_OVERDUE_HOURS ? "followup_overdue" : "followup";
   if (hoursSince(r.last_contacted_at ?? r.submitted_at) >= UNCONNECTED_DROP_DAYS * 24) return "dropped";
   if (r.call_status === "not_connected") return "not_connected";
@@ -48,6 +66,8 @@ const STATUS_LABEL: Record<Status, string> = {
   not_connected: "Not connected",
   followup: "Validated — follow up",
   followup_overdue: "Follow-up overdue",
+  vehicle_received: "Vehicle received",
+  repair_in_progress: "Repair in progress",
   completed: "Completed",
   not_genuine: "Not genuine",
   not_interested: "Not interested",
@@ -59,6 +79,8 @@ const STATUS_CLASS: Record<Status, string> = {
   not_connected: "bg-accent-soft text-accent-text",
   followup: "bg-warn-soft text-warn-text",
   followup_overdue: "bg-bad-soft text-bad",
+  vehicle_received: "bg-info-soft text-info",
+  repair_in_progress: "bg-accent-soft text-accent-text",
   completed: "bg-good-soft text-good-text",
   not_genuine: "bg-surface-2 text-fg-faint",
   not_interested: "bg-surface-2 text-fg-faint",
@@ -84,6 +106,8 @@ const PhoneOffIcon = () => iconBase(<><path d="M5 3h3l1.5 4-2 1.5a9 9 0 0 0 4 4l
 const ClockIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M10 6v4l3 2" strokeLinecap="round" strokeLinejoin="round" /></>);
 const AlarmIcon = () => iconBase(<><circle cx="10" cy="11" r="6.5" /><path d="M10 8v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M6 4.5 4 6.5M14 4.5l2 2" strokeLinecap="round" /></>);
 const CheckCircleIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M7 10l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" /></>);
+const CarIcon = () => iconBase(<><path d="M4 13V9.5L5.5 6h9L16 9.5V13" strokeLinecap="round" strokeLinejoin="round" /><path d="M3.5 13h13v2.5a.8.8 0 0 1-.8.8H14a.8.8 0 0 1-.8-.8V14.5h-6.4v1a.8.8 0 0 1-.8.8H4.3a.8.8 0 0 1-.8-.8V13z" strokeLinecap="round" strokeLinejoin="round" /><circle cx="6.5" cy="13" r="1" /><circle cx="13.5" cy="13" r="1" /></>);
+const WrenchIcon = () => iconBase(<path d="M13.5 4a3.5 3.5 0 0 0-4.6 3.9L4 12.8V16h3.2l4.9-4.9a3.5 3.5 0 0 0 3.9-4.6l-2.3 2.3-1.8-.6-.6-1.8L13.5 4z" strokeLinecap="round" strokeLinejoin="round" />);
 const XCircleIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M7.5 7.5l5 5M12.5 7.5l-5 5" strokeLinecap="round" /></>);
 const DashCircleIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M7 10h6" strokeLinecap="round" /></>);
 const WalletIcon = () => iconBase(<><rect x="3" y="5.5" width="14" height="10" rx="1.5" /><path d="M3 8.5h14" /><circle cx="14" cy="11.5" r="1" fill="currentColor" stroke="none" /></>);
@@ -420,6 +444,8 @@ export function BpHoAnalyticsClient({
       not_connected: 0,
       followup: 0,
       followup_overdue: 0,
+      vehicle_received: 0,
+      repair_in_progress: 0,
       completed: 0,
       not_genuine: 0,
       not_interested: 0,
@@ -495,6 +521,20 @@ export function BpHoAnalyticsClient({
           value={kpis.counts.followup + kpis.counts.followup_overdue}
           sub={kpis.counts.followup_overdue > 0 ? `${kpis.counts.followup_overdue} overdue` : undefined}
           onClick={() => openKpi("Follow-up", (r) => { const s = classify(r); return s === "followup" || s === "followup_overdue"; })}
+        />
+        <KpiCard
+          icon={<CarIcon />}
+          color="info"
+          label="Vehicle received"
+          value={kpis.counts.vehicle_received}
+          onClick={() => openKpi("Vehicle received", (r) => classify(r) === "vehicle_received")}
+        />
+        <KpiCard
+          icon={<WrenchIcon />}
+          color="accent"
+          label="Repair in progress"
+          value={kpis.counts.repair_in_progress}
+          onClick={() => openKpi("Repair in progress", (r) => classify(r) === "repair_in_progress")}
         />
         <KpiCard
           icon={<CheckCircleIcon />}

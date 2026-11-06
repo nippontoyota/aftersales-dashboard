@@ -16,6 +16,7 @@ import {
 } from "./bpm-actions";
 import type { ActivityRow } from "@/lib/bp-referrals/store";
 import { NotConnectedReasonFields } from "./not-connected-reason-fields";
+import { FOLLOW_UP_STAGES, followUpStageLabel } from "@/lib/bp-referrals/followup-stages";
 
 export type BpmQueueReferral = {
   id: number;
@@ -46,10 +47,12 @@ export type BpmQueueReferral = {
   not_interested_reason: string | null;
   lost_reason: string | null;
   last_contacted_at: Date | string | null;
+  bp_estimate_invoice_no: string | null;
+  bp_estimate_invoice_entered_at: Date | string | null;
   transferred_from: string | null;
 };
 
-type Tab = "active" | "followup" | "completed" | "closed" | "dropped";
+type Tab = "active" | "followup" | "vehicle_received" | "repair_in_progress" | "completed" | "closed" | "dropped";
 
 /** Mirrors the thresholds in lib/bp-referrals/store.ts — can't import them
  * directly (that module pulls in the server-only pg pool), so these are
@@ -75,9 +78,17 @@ function isFollowUpOverdue(r: BpmQueueReferral): boolean {
   return hoursSince(r.last_contacted_at) >= FOLLOW_UP_OVERDUE_HOURS;
 }
 
+/** The pipeline (2026-11-06, the user's call): Follow-up -> Vehicle received
+ * (BPE entered, insurance-paid only) -> Repair in progress (RO entered,
+ * either payment type — a customer-paid referral skips "vehicle_received"
+ * entirely, there's no estimate-invoice paperwork for it) -> Completed (RO
+ * confirmed, same moment the ₹200 payout triggers). All derived from
+ * existing columns, same as before — no separate "current stage" column. */
 function classify(r: BpmQueueReferral): Tab {
-  if (r.ro_matched_at || r.pending_ro_no) return "completed";
+  if (r.ro_matched_at) return "completed";
+  if (r.pending_ro_no) return "repair_in_progress";
   if (r.closed_at) return "closed";
+  if (r.bp_estimate_invoice_no) return "vehicle_received";
   if (r.validated_at) return "followup";
   const elapsedHours = hoursSince(r.last_contacted_at ?? r.submitted_at);
   if (elapsedHours >= UNCONNECTED_DROP_DAYS * 24) return "dropped";
@@ -115,6 +126,22 @@ function StatusBadge({ r }: { r: BpmQueueReferral }) {
       <span className="inline-flex items-center gap-1.5 rounded-full bg-bad-soft px-2 py-0.5 text-[11px] font-medium text-bad">
         <Dot className="bg-bad-solid" />
         Dropped
+      </span>
+    );
+  }
+  if (tab === "vehicle_received") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-info-soft px-2 py-0.5 text-[11px] font-medium text-info">
+        <Dot className="bg-info-solid" />
+        Vehicle received
+      </span>
+    );
+  }
+  if (tab === "repair_in_progress") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent-text">
+        <Dot className="bg-accent" />
+        Repair in progress
       </span>
     );
   }
@@ -169,7 +196,14 @@ function ActivityHistory({ referralId }: { referralId: number }) {
       {rows.map((a) => (
         <li key={a.id} className="rounded-md border border-border-subtle bg-surface-2/50 p-2.5 text-xs">
           <div className="flex items-center justify-between gap-2">
-            <span className="font-semibold text-fg">{ACTIVITY_LABEL[a.activityType]}</span>
+            <span className="flex items-center gap-1.5 font-semibold text-fg">
+              {ACTIVITY_LABEL[a.activityType]}
+              {a.followUpStage ? (
+                <span className="rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-medium text-accent-text">
+                  {followUpStageLabel(a.followUpStage) ?? a.followUpStage}
+                </span>
+              ) : null}
+            </span>
             <span className="text-fg-faint">{fmt(a.performedAt)}</span>
           </div>
           <p className="mt-1 whitespace-pre-wrap text-fg-muted">{a.remark}</p>
@@ -228,8 +262,30 @@ function NotConnectedButton({ id, onDone }: { id: number; onDone: () => void }) 
   );
 }
 
-function LogFollowUpButton({ id, onDone }: { id: number; onDone: () => void }) {
+/** The progress-note form — usable while a referral sits in Follow-up,
+ * Vehicle received, or Repair in progress (see DetailModal below). Picking
+ * "Vehicle received" on an insurance-paid (IP) referral that doesn't have
+ * one on file yet additionally asks for the BP Estimate Invoice number,
+ * BPE-prefixed same as the RO number is BPJ-prefixed — submitting that is
+ * what moves the referral into its own "Vehicle received" section
+ * (2026-11-06, the user's pipeline). A customer-paid (CP) referral, or one
+ * that already has its BPE number on file, can still pick "Vehicle
+ * received" as a plain note — it just won't ask for the number again. */
+function LogFollowUpButton({
+  id,
+  paymentType,
+  hasEstimateInvoice,
+  onDone,
+}: {
+  id: number;
+  paymentType: "CP" | "IP" | null;
+  hasEstimateInvoice: boolean;
+  onDone: () => void;
+}) {
   const [state, action, pending] = useActionState(logFollowUpContactAction, INIT);
+  const [stage, setStage] = useState("");
+  const needsEstimateInvoice = stage === "vehicle_received" && paymentType === "IP" && !hasEstimateInvoice;
+
   return (
     <form
       action={async (fd) => {
@@ -239,14 +295,50 @@ function LogFollowUpButton({ id, onDone }: { id: number; onDone: () => void }) {
       className="rounded-md border border-border-strong bg-surface-2/50 p-3"
     >
       <input type="hidden" name="id" value={id} />
-      <span className={eyebrow}>Follow-up remark (required)</span>
-      <textarea name="remark" required rows={2} placeholder="What did the customer say?" className={remarkField} />
+      <span className={eyebrow}>Stage (required)</span>
+      <select
+        name="followUpStage"
+        required
+        value={stage}
+        onChange={(e) => setStage(e.target.value)}
+        className={`${control} mt-1 w-full px-2`}
+      >
+        <option value="">Choose a stage…</option>
+        {FOLLOW_UP_STAGES.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+
+      {needsEstimateInvoice ? (
+        <div className="mt-2">
+          <span className={eyebrow}>BP Estimate Invoice No. (required — proof of vehicle receipt)</span>
+          <div className="mt-1 flex items-center gap-1.5">
+            <span className="flex h-8 shrink-0 items-center rounded-md border border-border-strong bg-surface-2 px-2 text-sm font-mono font-semibold text-fg-muted">
+              BPE
+            </span>
+            <input
+              name="estimateInvoiceDigits"
+              required
+              placeholder="e.g. 12345"
+              className="h-8 w-full rounded-md border border-border-strong bg-surface px-2 text-sm font-mono text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-2">
+        <span className={eyebrow}>Remark (required)</span>
+        <textarea name="remark" required rows={2} placeholder="What did the customer say?" className={remarkField} />
+      </div>
+
       <button
         type="submit"
         disabled={pending}
         className="mt-2 h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
       >
-        {pending ? "Saving…" : "Log follow-up — spoke to customer"}
+        {pending ? "Saving…" : "Log update"}
       </button>
       {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
     </form>
@@ -299,9 +391,20 @@ function CloseLostButton({ id, onDone }: { id: number; onDone: () => void }) {
 
 const ENTER_RO_INIT: EnterRoActionState = { error: null, status: null };
 
-/** BPM types the actual RO number in, right on the Follow-up row itself —
- * the ₹200 completion trigger (2026-10-26, moved inline from the detail
- * modal at the user's request so it doesn't take an extra click to reach).
+/** "BPJ" is a fixed, non-editable prefix — every real RO/Job Order number in
+ * this system carries it (2026-11-06, the user's call) — so the BPM only
+ * ever types the digits after it. Strips a prefix that's already there on
+ * re-entry, case-insensitively, in case older data was saved before this
+ * UI change. */
+function stripBpjPrefix(ro: string | null): string {
+  if (!ro) return "";
+  const trimmed = ro.trim();
+  return trimmed.toUpperCase().startsWith("BPJ") ? trimmed.slice(3) : trimmed;
+}
+
+/** BPM types the actual RO number in, right on the row itself — the ₹200
+ * completion trigger (2026-10-26, moved inline from the detail modal at
+ * the user's request so it doesn't take an extra click to reach).
  * Completes immediately if that RO's already in an upload with a matching
  * vehicle reg no; otherwise saves as pending and the next upload (or BP
  * HO's re-scan backstop) confirms it automatically. Stays open for
@@ -311,14 +414,24 @@ const ENTER_RO_INIT: EnterRoActionState = { error: null, status: null };
 function EnterRoInlineForm({ id, pendingRoNo }: { id: number; pendingRoNo: string | null }) {
   const [state, action, pending] = useActionState(enterRoNumberAction, ENTER_RO_INIT);
   return (
-    <form action={action} onClick={(e) => e.stopPropagation()} className="flex flex-wrap items-center gap-1.5">
+    <form
+      action={(fd) => {
+        fd.set("roNo", `BPJ${String(fd.get("roSuffix") ?? "").trim()}`);
+        return action(fd);
+      }}
+      onClick={(e) => e.stopPropagation()}
+      className="flex flex-wrap items-center gap-1.5"
+    >
       <input type="hidden" name="id" value={id} />
+      <span className="flex h-7 shrink-0 items-center rounded-md border border-border-strong bg-surface-2 px-1.5 text-xs font-mono font-semibold text-fg-muted">
+        BPJ
+      </span>
       <input
-        name="roNo"
+        name="roSuffix"
         required
-        defaultValue={pendingRoNo ?? ""}
-        placeholder="e.g. BPJ00123"
-        className="h-7 w-28 rounded-md border border-border-strong bg-surface px-2 text-xs font-mono text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        defaultValue={stripBpjPrefix(pendingRoNo)}
+        placeholder="e.g. 00123"
+        className="h-7 w-20 rounded-md border border-border-strong bg-surface px-2 text-xs font-mono text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       />
       <button
         type="submit"
@@ -616,6 +729,12 @@ function DetailModal({
                 <span className="text-fg">{r.handled_by}</span>
               </div>
             ) : null}
+            {r.bp_estimate_invoice_no ? (
+              <div className="flex justify-between">
+                <span className="text-fg-faint">BP Estimate Invoice</span>
+                <span className="font-mono text-fg">{r.bp_estimate_invoice_no}</span>
+              </div>
+            ) : null}
             {r.matched_ro_no ? (
               <div className="flex justify-between">
                 <span className="text-fg-faint">Matched RO</span>
@@ -627,7 +746,7 @@ function DetailModal({
                 <span className="font-mono text-fg">{r.pending_ro_no}</span>
               </div>
             ) : null}
-            {tab === "followup" ? (
+            {tab === "followup" || tab === "vehicle_received" || tab === "repair_in_progress" ? (
               <div className="flex justify-between">
                 <span className="text-fg-faint">Last contacted</span>
                 <span className="text-fg">{fmt(r.last_contacted_at)}</span>
@@ -650,10 +769,15 @@ function DetailModal({
           </div>
         ) : null}
 
-        {canAct && tab === "followup" ? (
+        {canAct && (tab === "followup" || tab === "vehicle_received" || tab === "repair_in_progress") ? (
           <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
-            <LogFollowUpButton id={r.id} onDone={onClose} />
-            <CloseLostButton id={r.id} onDone={onClose} />
+            <LogFollowUpButton
+              id={r.id}
+              paymentType={r.payment_type}
+              hasEstimateInvoice={!!r.bp_estimate_invoice_no}
+              onDone={onClose}
+            />
+            {tab === "followup" ? <CloseLostButton id={r.id} onDone={onClose} /> : null}
           </div>
         ) : null}
 
@@ -670,6 +794,8 @@ function DetailModal({
 const TAB_LABEL: Record<Tab, string> = {
   active: "To call",
   followup: "Follow-up",
+  vehicle_received: "Vehicle received",
+  repair_in_progress: "Repair in progress",
   completed: "Completed",
   closed: "Closed",
   dropped: "Dropped",
@@ -692,16 +818,27 @@ function QueueList({
   const [selected, setSelected] = useState<BpmQueueReferral | null>(null);
 
   const counts = useMemo(() => {
-    const c: Record<Tab, number> = { active: 0, followup: 0, completed: 0, closed: 0, dropped: 0 };
+    const c: Record<Tab, number> = {
+      active: 0,
+      followup: 0,
+      vehicle_received: 0,
+      repair_in_progress: 0,
+      completed: 0,
+      closed: 0,
+      dropped: 0,
+    };
     for (const r of referrals) c[classify(r)]++;
     return c;
   }, [referrals]);
 
   const filtered = referrals.filter((r) => classify(r) === tab);
-  // RO entry only ever applies on the Follow-up tab (genuine + interested,
-  // not yet RO-matched — see classify()), and only for a referral this
-  // viewer's own branch actually owns (same as every other action button).
-  const showRoColumn = tab === "followup";
+  // RO entry applies on Follow-up (a customer-paid referral can jump
+  // straight to an RO with no "vehicle_received" waypoint), Vehicle
+  // received, and Repair in progress itself (to fix a mistyped pending RO
+  // without reverting state) — not on any other tab (see classify()), and
+  // only for a referral this viewer's own branch actually owns (same as
+  // every other action button).
+  const showRoColumn = tab === "followup" || tab === "vehicle_received" || tab === "repair_in_progress";
   const columnCount = (showBranchColumn ? 5 : 4) + (showRoColumn ? 1 : 0);
 
   return (

@@ -8,6 +8,7 @@ import {
   enterRoNumber,
   loadActivityForReferral,
   loadOverdueFollowUps,
+  loadReferralPaymentType,
   loadUrgentUnconnected,
   logFollowUpContact,
   markNotConnected,
@@ -18,6 +19,7 @@ import {
   type CallOutcome,
 } from "@/lib/bp-referrals/store";
 import { NOT_CONNECTED_REASONS, notConnectedReasonLabel } from "@/lib/bp-referrals/not-connected-reasons";
+import { FOLLOW_UP_STAGES } from "@/lib/bp-referrals/followup-stages";
 
 export type BpmActionState = { error: string | null; ok: boolean };
 
@@ -146,9 +148,17 @@ export async function getMyUrgentUnconnectedAction(): Promise<BpReferralRow[]> {
   return loadUrgentUnconnected(admin.branch);
 }
 
-/** Inline "I just spoke to them again" action from the popup or the queue
- * page — resets the follow-up clock, remark required same as every other
- * action. */
+/** Inline "I just spoke to them again" / progress-note action from the
+ * popup or the queue page — resets the follow-up clock, remark required
+ * same as every other action. `stage` is optional (the login popup's quick
+ * form omits it, see bp-followup-popup-gate.tsx); when the full follow-up
+ * form sends "vehicle_received" for an insurance-paid (IP) referral, the
+ * BPE estimate invoice number is additionally required — re-checked here
+ * against the referral's own payment_type, never trusting what the client
+ * claims it is (2026-11-06, the user's pipeline: this is what moves a
+ * referral into "Vehicle received"). A customer-paid (CP) referral can
+ * still log "vehicle_received" as a plain note; it just doesn't ask for or
+ * accept a BPE number, since CP has no estimate-invoice paperwork step. */
 export async function logFollowUpContactAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
   const admin = requireBpManager(await getCurrentAdmin());
   if (!admin) return { error: "Not allowed.", ok: false };
@@ -158,8 +168,22 @@ export async function logFollowUpContactAction(_prev: BpmActionState, formData: 
   const remark = requiredRemark(formData);
   if (!remark) return { error: "A remark is required.", ok: false };
 
+  const stageRaw = String(formData.get("followUpStage") ?? "").trim();
+  const stage = stageRaw || undefined;
+  if (stage && !FOLLOW_UP_STAGES.some((s) => s.value === stage)) return { error: "Choose a valid stage.", ok: false };
+
+  let estimateInvoiceNo: string | undefined;
+  if (stage === "vehicle_received") {
+    const paymentType = await loadReferralPaymentType(id);
+    if (paymentType === "IP") {
+      const digits = String(formData.get("estimateInvoiceDigits") ?? "").trim();
+      if (!digits) return { error: "Enter the BP Estimate Invoice number.", ok: false };
+      estimateInvoiceNo = `BPE${digits}`;
+    }
+  }
+
   try {
-    await logFollowUpContact(id, admin.branch, admin.username, remark);
+    await logFollowUpContact(id, admin.branch, admin.username, remark, stage, estimateInvoiceNo);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't update that referral.", ok: false };
   }

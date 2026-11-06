@@ -1653,3 +1653,23 @@ create table if not exists bp_referral_payouts (
 create index if not exists bp_referral_payouts_employee_idx
   on bp_referral_payouts (employee_id, employee_name, employee_branch);
 create index if not exists ce_lead_workflow_assigned_to_idx on ce_lead_workflow (assigned_to) where assigned_to is not null;
+
+-- BP Referrals follow-up pipeline (2026-11-06, at the user's request): a
+-- structured "stage" per follow-up log entry (see followup-stages.ts),
+-- stored the same way not_connected_reason already is — alongside the
+-- free-text remark, not instead of it. follow_up_stage is nullable because
+-- the login-popup's quick "spoke to them" form (bp-followup-popup-gate.tsx)
+-- intentionally doesn't ask for one — only the full follow-up form in the
+-- queue/detail-modal UI requires picking a stage.
+alter table bp_referral_activity add column if not exists follow_up_stage text;
+
+-- The proof that a vehicle under an INSURANCE-PAID (IP) referral has
+-- physically arrived at the workshop: BP HO's own BPE-prefixed estimate/
+-- invoice reference (same prefix convention already used for Body & Paint
+-- RefDocNo elsewhere — see cancellations' reconcile.ts). Entering this is
+-- what moves a referral out of Follow-up into the new "Vehicle received"
+-- section (see classify() in bpm-queue-client.tsx / bp-ho-analytics-
+-- client.tsx) — customer-paid (CP) referrals have no such paperwork step
+-- and skip straight to "Repair in progress" once an RO is entered instead.
+alter table bp_referrals add column if not exists bp_estimate_invoice_no text;
+alter table bp_referrals add column if not exists bp_estimate_invoice_entered_at timestamptz;
