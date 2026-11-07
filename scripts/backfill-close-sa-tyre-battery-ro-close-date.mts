@@ -14,6 +14,23 @@ import { pool } from "../src/lib/db";
 
 const FROM_DATE = process.argv[2] ?? "2026-07-01";
 
+// Confirmed 2026-11-07: when pg's query_timeout fires, it destroys that
+// connection's socket as cleanup, and that socket close emits a *second*,
+// separate internal 'error' event that bypasses db.ts's own pool.on('error')
+// handler (that one catches an idle client dropping, not a busy one being
+// torn down mid-query) — an edge case in how pg's own timeout cleanup
+// interacts with its error routing, not something further pool config
+// fixes. For this one-off script specifically (never for the live app),
+// catching it here means one connection hiccup logs and moves on instead of
+// killing a 1000+ combo run — recomputeCloseSaAnalyticsForDates's own
+// delete-then-insert per date makes re-running any dropped date safe later.
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception (continuing):", err);
+});
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled rejection (continuing):", err);
+});
+
 async function main() {
   console.log(`Backfilling Close SA Analytics (RO-close-date tyre/battery) for Service Info dates >= ${FROM_DATE}...`);
 

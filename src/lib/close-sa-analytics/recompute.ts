@@ -29,12 +29,20 @@ async function recomputeCloseSaAnalyticsForDates(branch: string, dates: string[]
   let latestServiceInfoDateByRo: Map<string, string>;
   try {
     tier = tierForBranch(branch);
+    // loadRoCloseSaPairs returns rows ordered by date ascending — last
+    // write wins here so each RO lands on its TRUE latest Close SA Name
+    // (confirmed with the user 2026-11-07: 129 ROs company-wide genuinely
+    // have a different Close SA Name across their own re-uploads, a real
+    // reassignment/correction, not a formatting artifact), consistent with
+    // latestServiceInfoDateByRo below. Previously "first in arbitrary row
+    // order wins", which could silently misattribute Labour Sales/Part Sale
+    // lines to a stale SA from an earlier, superseded upload.
     const roCloseSaPairs = await loadRoCloseSaPairs(branch);
     roCloseSaMap = new Map<string, string>();
     for (const { ro, sa } of roCloseSaPairs) {
       const normalizedRo = normalizeRo(ro);
       const normalizedSa = normalizeCloseSaName(sa);
-      if (normalizedRo && normalizedSa && !roCloseSaMap.has(normalizedRo)) {
+      if (normalizedRo && normalizedSa) {
         roCloseSaMap.set(normalizedRo, normalizedSa);
       }
     }

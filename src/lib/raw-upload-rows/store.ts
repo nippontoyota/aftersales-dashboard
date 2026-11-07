@@ -171,13 +171,24 @@ export async function loadPartSaleRowsForRos(branch: string, normalizedRos: stri
  * row_data, which is what keeps that affordable: confirmed ~2.2s for
  * CO01B's 142k-row history (the largest branch), vs ~100s pulling full
  * row_data for the same scope — the two-column projection is the part that
- * actually matters for performance, not the date bound. */
+ * actually matters for performance, not the date bound.
+ *
+ * Ordered by date ascending (2026-11-07, at the user's request) — 129 ROs
+ * company-wide genuinely have a different Close SA Name across their own
+ * re-uploads (a real reassignment/correction, not a formatting artifact:
+ * e.g. one RO shows 3 different people across 3 uploads), and the caller
+ * dedupes "last one wins" over this order, so it lands on the SAME RO's
+ * TRUE latest Close SA Name that loadLatestServiceInfoDatePerRo/RO count
+ * already uses — before this, dedup was "first in arbitrary row order
+ * wins", which could silently attribute an RO's Labour Sales / Part Sale
+ * lines to a stale SA from an earlier, superseded upload. */
 export async function loadRoCloseSaPairs(branch: string): Promise<{ ro: unknown; sa: unknown }[]> {
   const { rows } = await pool.query<{ ro: unknown; sa: unknown }>(
     `select row_data->>'Job Order No' as ro, row_data->>'Close Service Advisor Name' as sa
      from raw_upload_rows
      where report_type in ('service_info', 'service_info_bp')
-       and branch = $1`,
+       and branch = $1
+     order by date asc`,
     [branch]
   );
   return rows;
