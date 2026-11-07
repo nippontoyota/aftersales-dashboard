@@ -797,7 +797,7 @@ const TAB_LABEL: Record<Tab, string> = {
   vehicle_received: "Vehicle received",
   repair_in_progress: "Repair in progress",
   completed: "Completed",
-  closed: "Closed",
+  closed: "Lost",
   dropped: "Dropped",
 };
 
