@@ -4,6 +4,39 @@ import { NORMALIZE_RO_SQL } from "./ro-normalize";
 
 export type DateRange = { start: string; end: string };
 
+function todayIST(): string {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const y = parts.find((p) => p.type === "year")!.value;
+  const m = parts.find((p) => p.type === "month")!.value;
+  const d = parts.find((p) => p.type === "day")!.value;
+  return `${y}-${m}-${d}`;
+}
+
+function isValidDateParam(v: string | null | undefined): v is string {
+  return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+/** The group report's default date range — the current calendar year to
+ * date (IST), matching how BP HO's own reference sheet was named by year —
+ * shared by the Excel export route and the in-app view so they never drift
+ * apart. `fromParam`/`toParam` win when they look like real dates. */
+export function resolveGroupReportRange(fromParam?: string | null, toParam?: string | null): { from: string; to: string } {
+  const today = todayIST();
+  const from = isValidDateParam(fromParam) ? fromParam : `${today.slice(0, 4)}-01-01`;
+  const to = isValidDateParam(toParam) ? toParam : today;
+  return { from, to };
+}
+
+/** `from`/`to` are both inclusive calendar dates (as picked in the UI) —
+ * loadGroupReportRows wants a half-open [start, end) window, so `to` needs
+ * bumping by one day. */
+export function inclusiveDateRange(from: string, to: string): DateRange {
+  const [y, m, d] = to.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + 1));
+  const end = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+  return { start: from, end };
+}
+
 /** One row per referral in range, enriched with the matched RO's real
  * financials off the DMS's own Cost & Sales - BP export (raw_upload_rows,
  * report_type 'ssrv089_bp') — Part/Labour/Paint-material Sale and Cost,

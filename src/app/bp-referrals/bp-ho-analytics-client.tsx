@@ -590,9 +590,14 @@ export function BpHoAnalyticsClient({
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-surface-2/50 px-4 py-3">
         <div>
           <div className={eyebrow}>Group report</div>
-          <p className="text-xs text-fg-muted">Multi-sheet Excel (raw log, Pivot, Summary, ROI) for a date range — the old tracker, generated from live data.</p>
+          <p className="text-xs text-fg-muted">Raw log, Pivot, Summary, ROI for a date range — the old tracker, generated from live data.</p>
         </div>
-        <GroupReportExport />
+        <div className="flex flex-wrap items-end gap-3">
+          <a href="/bp-referrals/group-report" className="h-8 rounded-md border border-border-strong px-3 text-xs font-semibold leading-8 text-fg hover:bg-surface-2">
+            View Report
+          </a>
+          <GroupReportExport />
+        </div>
       </div>
 
       {/* KPI strip — click a card to see the matching cases */}
