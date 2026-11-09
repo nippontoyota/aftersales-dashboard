@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
 import type { BpmQueueReferral } from "./bpm-queue-client";
@@ -403,15 +404,66 @@ function KpiModal({
   );
 }
 
+function monthLabel(month: string): string {
+  if (month === "all") return "All time";
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
+/** Last 12 months plus "All time" — the currently-selected month is always
+ * included even if it falls outside that window (e.g. an old ?month= link),
+ * so the <select> never silently shows the wrong value. */
+function monthOptions(selected: string): { value: string; label: string }[] {
+  const opts: { value: string; label: string }[] = [{ value: "all", label: "All time" }];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    opts.push({ value, label: monthLabel(value) });
+  }
+  if (!opts.some((o) => o.value === selected)) opts.push({ value: selected, label: monthLabel(selected) });
+  return opts;
+}
+
+/** Scopes the whole analytics view below (KPIs, branch breakdown, the
+ * referral list) to one month instead of all time (2026-11-09, the user's
+ * request) — just navigates to ?month=, which page.tsx re-reads server-side.
+ * Needs attention and the Payout ledger/history are unaffected on purpose
+ * (see BpHoAnalyticsClient's own doc comments). */
+function MonthPicker({ month }: { month: string }) {
+  const router = useRouter();
+  const opts = useMemo(() => monthOptions(month), [month]);
+  return (
+    <select
+      value={month}
+      onChange={(e) => router.push(`/bp-referrals?month=${e.target.value}`)}
+      className={`${control} px-2`}
+    >
+      {opts.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function BpHoAnalyticsClient({
   referrals,
+  liveReferrals,
   payoutLedger,
   payoutHistory = [],
   branchRollup,
   branchCodes: allBranchCodes,
   canRescan = true,
+  month,
 }: {
   referrals: BpmQueueReferral[];
+  /** Unscoped by month — Needs attention (overdue/dropped) always reads
+   * from this instead of `referrals`, since "what needs calling right now"
+   * shouldn't disappear just because the referral was submitted last month.
+   * Falls back to `referrals` if omitted. */
+  liveReferrals?: BpmQueueReferral[];
   payoutLedger: PayoutLedgerRow[];
   /** Settled payout records — omitted for a regional manager's own scoped
    * view, same gate as canRescan (see below). */
@@ -424,6 +476,9 @@ export function BpHoAnalyticsClient({
    * doesn't (2026-10-29 / 2026-11-06, the user's call). Defaults to true
    * (BP HO/HQ). */
   canRescan?: boolean;
+  /** "YYYY-MM" or "all" — which month `referrals`/`branchRollup` are scoped
+   * to (set server-side in page.tsx from ?month=). */
+  month: string;
 }) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -457,8 +512,9 @@ export function BpHoAnalyticsClient({
     return { total: referrals.length, counts, totalOwed };
   }, [classified, referrals.length, payoutLedger]);
 
-  const overdueFollowUps = useMemo(() => classified.filter((c) => c.status === "followup_overdue").map((c) => c.r), [classified]);
-  const dropped = useMemo(() => classified.filter((c) => c.status === "dropped").map((c) => c.r), [classified]);
+  const classifiedLive = useMemo(() => (liveReferrals ?? referrals).map((r) => ({ r, status: classify(r) })), [liveReferrals, referrals]);
+  const overdueFollowUps = useMemo(() => classifiedLive.filter((c) => c.status === "followup_overdue").map((c) => c.r), [classifiedLive]);
+  const dropped = useMemo(() => classifiedLive.filter((c) => c.status === "dropped").map((c) => c.r), [classifiedLive]);
 
   const filtered = useMemo(() => {
     return referrals.filter((r) => {
@@ -492,9 +548,17 @@ export function BpHoAnalyticsClient({
         />
       ) : null}
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-fg">BP Referrals</h1>
-        <p className="mt-1 text-sm text-fg-muted">Company-wide Body &amp; Paint referral analytics — {kpis.total} total referrals.</p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-fg">BP Referrals</h1>
+          <p className="mt-1 text-sm text-fg-muted">
+            Company-wide Body &amp; Paint referral analytics — {monthLabel(month)} — {kpis.total} referral{kpis.total === 1 ? "" : "s"}.
+          </p>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className={eyebrow}>Month</span>
+          <MonthPicker month={month} />
+        </div>
       </div>
 
       {/* KPI strip — click a card to see the matching cases */}
@@ -582,6 +646,7 @@ export function BpHoAnalyticsClient({
           <div className="flex items-center gap-2 border-b border-bad/20 bg-bad-soft/40 px-4 py-2.5">
             <AlarmIcon />
             <h2 className="text-sm font-bold text-bad">Follow-ups overdue (24h+)</h2>
+            <span className="text-xs font-normal text-fg-faint">(live, not month-scoped)</span>
             <span className="ml-auto text-xs font-semibold text-bad">{overdueFollowUps.length}</span>
           </div>
           <div className="max-h-72 overflow-y-auto divide-y divide-border">
@@ -607,6 +672,7 @@ export function BpHoAnalyticsClient({
           <div className="flex items-center gap-2 border-b border-bad/20 bg-bad-soft/40 px-4 py-2.5">
             <XCircleIcon />
             <h2 className="text-sm font-bold text-bad">Dropped (no contact in 3+ days)</h2>
+            <span className="text-xs font-normal text-fg-faint">(live, not month-scoped)</span>
             <span className="ml-auto text-xs font-semibold text-bad">{dropped.length}</span>
           </div>
           <div className="max-h-72 overflow-y-auto divide-y divide-border">
@@ -637,7 +703,7 @@ export function BpHoAnalyticsClient({
       <div className="mb-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-lg font-bold text-fg">
-            <WalletIcon /> Payout ledger
+            <WalletIcon /> Payout ledger <span className="text-xs font-normal text-fg-faint">(all-time balance, not month-scoped)</span>
           </h2>
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-fg">Total owed: {inr(kpis.totalOwed)}</span>
@@ -708,7 +774,7 @@ export function BpHoAnalyticsClient({
       {canRescan ? (
         <div className="mb-8">
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-fg">
-            <WalletIcon /> Payment history
+            <WalletIcon /> Payment history <span className="text-xs font-normal text-fg-faint">(all-time)</span>
           </h2>
           <div className="max-h-72 overflow-auto rounded-xl border border-border bg-surface shadow-sm">
             <table className="min-w-full text-sm">

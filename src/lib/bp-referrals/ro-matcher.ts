@@ -1,4 +1,5 @@
 import { pool } from "@/lib/db";
+import { normalizeRoNo, NORMALIZE_RO_SQL } from "./ro-normalize";
 
 const BPJ_PREFIX = "BPJ";
 
@@ -36,7 +37,7 @@ export async function matchBpReferralsFromCostSalesBpRows(rows: Record<string, u
     if (!jobOrderNo.toUpperCase().startsWith(BPJ_PREFIX)) continue;
     const vehRegNo = String(row["VehRegNo"] ?? "").trim();
     if (!vehRegNo) continue;
-    roToReg.set(jobOrderNo.toUpperCase(), normalizeReg(vehRegNo));
+    roToReg.set(normalizeRoNo(jobOrderNo), normalizeReg(vehRegNo));
   }
   if (roToReg.size === 0) return [];
 
@@ -49,7 +50,7 @@ export async function matchBpReferralsFromCostSalesBpRows(rows: Record<string, u
 
   const matched: MatchedBpReferral[] = [];
   for (const candidate of candidates) {
-    const uploadedReg = roToReg.get(String(candidate.pending_ro_no).toUpperCase());
+    const uploadedReg = roToReg.get(normalizeRoNo(String(candidate.pending_ro_no)));
     if (!uploadedReg) continue;
     if (uploadedReg !== normalizeReg(candidate.vehicle_reg_no ?? "")) continue;
     await pool.query(
@@ -81,7 +82,7 @@ export async function rescanUnmatchedReferrals(): Promise<MatchedBpReferral[]> {
        select distinct on (ro_no) ro_no, normalized_reg
        from (
          select
-           upper(row_data->>'JobOrder No') as ro_no,
+           ${NORMALIZE_RO_SQL(`upper(row_data->>'JobOrder No')`)} as ro_no,
            upper(regexp_replace(row_data->>'VehRegNo', '[\\s-]', '', 'g')) as normalized_reg
          from raw_upload_rows
          where report_type = 'ssrv089_bp'
@@ -93,7 +94,7 @@ export async function rescanUnmatchedReferrals(): Promise<MatchedBpReferral[]> {
      where r.genuine = true and r.customer_interested = true
        and r.closed_at is null and r.ro_matched_at is null
        and r.pending_ro_no is not null and r.pending_ro_no <> ''
-       and upper(r.pending_ro_no) = sub.ro_no
+       and ${NORMALIZE_RO_SQL("upper(r.pending_ro_no)")} = sub.ro_no
        and r.vehicle_reg_no is not null and r.vehicle_reg_no <> ''
        and upper(regexp_replace(r.vehicle_reg_no, '[\\s-]', '', 'g')) = sub.normalized_reg
      returning r.id, r.vehicle_reg_no, sub.ro_no`,

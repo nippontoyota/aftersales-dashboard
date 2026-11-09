@@ -6,6 +6,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { loadNavState } from "@/lib/dashboard-data";
 import { REGIONS } from "@/lib/regions";
 import {
+  currentMonthKey,
   ensureAssignedBranches,
   loadAllReferrals,
   loadBranchRollup,
@@ -14,14 +15,26 @@ import {
   loadQueueForBranch,
   loadRegionRollup,
   loadTransferredOutFromBranch,
+  monthToRange,
   regionalLeadFor,
 } from "@/lib/bp-referrals/store";
 import { BpHoAnalyticsClient } from "./bp-ho-analytics-client";
 import { BpmQueueClient } from "./bpm-queue-client";
 
-export default async function BpReferralsPage() {
+export default async function BpReferralsPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/login");
+
+  // Which month the BP HO/HQ/regional analytics view below is scoped to
+  // (2026-11-09, the user's request — that view used to show all-time
+  // totals with no way to narrow it). "all" keeps the old all-time
+  // behaviour; anything else defaults to the current month. Needs-attention
+  // (overdue/dropped) and the Payout ledger/history stay unscoped regardless
+  // — see loadAllReferrals' two calls below and loadPayoutLedger's doc
+  // comment.
+  const { month: monthParam } = await searchParams;
+  const month = monthParam === "all" || /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam ?? "") ? monthParam! : currentMonthKey();
+  const range = month === "all" ? undefined : monthToRange(month);
 
   if (admin.role === "bp_manager") {
     await ensureAssignedBranches();
@@ -54,10 +67,11 @@ export default async function BpReferralsPage() {
   if (admin.role === "regional") {
     await ensureAssignedBranches();
     const branches = [...REGIONS[admin.region]];
-    const [referrals, payoutLedger, branchRollup, navState] = await Promise.all([
+    const [referrals, liveReferrals, payoutLedger, branchRollup, navState] = await Promise.all([
+      loadRegionRollup(admin.region, range),
       loadRegionRollup(admin.region),
       loadPayoutLedger(branches),
-      loadBranchRollup(branches),
+      loadBranchRollup(branches, range),
       loadNavState(admin),
     ]);
     return (
@@ -74,7 +88,15 @@ export default async function BpReferralsPage() {
         queriesBadge={navState.queriesBadge}
         identity={adminIdentityLabel(admin)}
       >
-        <BpHoAnalyticsClient referrals={referrals} payoutLedger={payoutLedger} branchRollup={branchRollup} branchCodes={branches} canRescan={false} />
+        <BpHoAnalyticsClient
+          referrals={referrals}
+          liveReferrals={liveReferrals}
+          payoutLedger={payoutLedger}
+          branchRollup={branchRollup}
+          branchCodes={branches}
+          canRescan={false}
+          month={month}
+        />
       </AppShell>
     );
   }
@@ -88,11 +110,12 @@ export default async function BpReferralsPage() {
   // Both need assigned_branch resolved first, same as a BPM's own queue.
   if (admin.role === "bp_ho" || admin.role === "hq") {
     await ensureAssignedBranches();
-    const [referrals, payoutLedger, payoutHistory, branchRollup, branchCodes, navState] = await Promise.all([
+    const [referrals, liveReferrals, payoutLedger, payoutHistory, branchRollup, branchCodes, navState] = await Promise.all([
+      loadAllReferrals(range),
       loadAllReferrals(),
       loadPayoutLedger(),
       loadPayoutHistory(),
-      loadBranchRollup(),
+      loadBranchRollup(undefined, range),
       listBranchCodes(),
       loadNavState(admin),
     ]);
@@ -110,10 +133,12 @@ export default async function BpReferralsPage() {
       >
         <BpHoAnalyticsClient
           referrals={referrals}
+          liveReferrals={liveReferrals}
           payoutLedger={payoutLedger}
           payoutHistory={payoutHistory}
           branchRollup={branchRollup}
           branchCodes={branchCodes}
+          month={month}
         />
       </AppShell>
     );

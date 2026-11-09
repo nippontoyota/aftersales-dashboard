@@ -2,6 +2,30 @@ import { pool } from "@/lib/db";
 import { listBranchCodes } from "@/lib/admin-store";
 import { REGIONS, regionForBranch, type RegionName } from "@/lib/regions";
 import { resolveBranchCode } from "./branch-match";
+import { normalizeRoNo, NORMALIZE_RO_SQL } from "./ro-normalize";
+
+export type MonthRange = { start: string; end: string };
+
+/** "YYYY-MM" -> the submitted_at window it covers (end exclusive) — scopes
+ * the BP HO analytics view to one month instead of all time (2026-11-09,
+ * the user's request). The Payout ledger/history stay all-time on purpose
+ * (see loadPayoutLedger's doc comment): only referral-reporting queries
+ * take a range. */
+export function monthToRange(month: string): MonthRange {
+  const [year, mon] = month.split("-").map(Number);
+  const start = `${year}-${String(mon).padStart(2, "0")}-01`;
+  const end = mon === 12 ? `${year + 1}-01-01` : `${year}-${String(mon + 1).padStart(2, "0")}-01`;
+  return { start, end };
+}
+
+/** This month, in IST — the analytics view's default when no ?month= is
+ * given. */
+export function currentMonthKey(): string {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit" }).formatToParts(new Date());
+  const year = parts.find((p) => p.type === "year")!.value;
+  const month = parts.find((p) => p.type === "month")!.value;
+  return `${year}-${month}`;
+}
 
 export type BpReferralRow = {
   id: number;
@@ -106,12 +130,15 @@ export async function loadQueueForBranch(branch: string): Promise<BpReferralRow[
 
 /** Read-only, for the three regional-lead BPMs (CO01A/KL01B/TI01A) — every
  * referral across their whole region, own branch included. */
-export async function loadRegionRollup(region: RegionName): Promise<BpReferralRow[]> {
+export async function loadRegionRollup(region: RegionName, range?: MonthRange): Promise<BpReferralRow[]> {
   const branches = REGIONS[region].filter((b) => b !== "CO01C");
   const { rows } = await pool.query<BpReferralRow>(
     `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
-     where r.assigned_branch = any($1::text[]) order by r.submitted_at desc`,
-    [branches],
+     where r.assigned_branch = any($1::text[])
+       and ($2::date is null or r.submitted_at >= $2::date)
+       and ($3::date is null or r.submitted_at < $3::date)
+     order by r.submitted_at desc`,
+    [branches, range?.start ?? null, range?.end ?? null],
   );
   return rows;
 }
@@ -447,12 +474,12 @@ export async function enterRoNumber(id: number, branch: string, enteredBy: strin
     throw new Error("This referral has no vehicle registration number on record.");
   }
 
-  const normalizedRo = roNo.trim().toUpperCase();
+  const normalizedRo = normalizeRoNo(roNo);
   const normalizedReg = referral.vehicle_reg_no.trim().toUpperCase().replace(/[\s-]/g, "");
 
   const { rows: uploaded } = await pool.query<{ veh_reg_no: string | null }>(
     `select row_data->>'VehRegNo' as veh_reg_no from raw_upload_rows
-     where report_type = 'ssrv089_bp' and upper(coalesce(row_data->>'JobOrder No', '')) = $1
+     where report_type = 'ssrv089_bp' and ${NORMALIZE_RO_SQL(`upper(coalesce(row_data->>'JobOrder No', ''))`)} = $1
      limit 1`,
     [normalizedRo],
   );
@@ -506,9 +533,13 @@ export async function loadTransferredOutFromBranch(branch: string): Promise<BpRe
  * BPM's own queue this isn't scoped to a branch; ensureAssignedBranches()
  * is still the caller's job to run first (see page.tsx) so assigned_branch
  * is resolved before this reads it. */
-export async function loadAllReferrals(): Promise<BpReferralRow[]> {
+export async function loadAllReferrals(range?: MonthRange): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} order by r.submitted_at desc`,
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+     where ($1::date is null or r.submitted_at >= $1::date)
+       and ($2::date is null or r.submitted_at < $2::date)
+     order by r.submitted_at desc`,
+    [range?.start ?? null, range?.end ?? null],
   );
   return rows;
 }
@@ -551,7 +582,14 @@ const COMPLETED_PAYOUT = 200;
  * submission ("Kalamassery") rather than a resolved branch code and can't be
  * matched against REGIONS reliably. Payout records aren't branch-scoped (only
  * bp_ho/hq can create them, against the company-wide view), so the paid
- * amount nets off the same regardless of which regional view is reading it. */
+ * amount nets off the same regardless of which regional view is reading it.
+ *
+ * Deliberately NOT month-scoped, even though the rest of the BP HO analytics
+ * view went month-wise on 2026-11-09 — this is the real running balance BP
+ * HO pays against (Mark Paid settles whatever's owed, not one month's
+ * slice), and a payment can settle an earlier month's earnings, so slicing
+ * "owed" per month would misstate it. loadPayoutHistory below is the same
+ * call. */
 export async function loadPayoutLedger(branches?: string[]): Promise<PayoutLedgerRow[]> {
   const { rows } = await pool.query<{
     referring_employee_id: string | null;
@@ -679,7 +717,7 @@ export type BranchRollupRow = {
  * currently sits), not the referring employee's own branch. Company-wide by
  * default; `branches`, when given, scopes this to a region (a regional
  * manager's own view — see bp-referrals/page.tsx). */
-export async function loadBranchRollup(branches?: string[]): Promise<BranchRollupRow[]> {
+export async function loadBranchRollup(branches?: string[], range?: MonthRange): Promise<BranchRollupRow[]> {
   const { rows } = await pool.query<{
     assigned_branch: string | null;
     total: string;
@@ -701,9 +739,11 @@ export async function loadBranchRollup(branches?: string[]): Promise<BranchRollu
      from bp_referrals
      where assigned_branch is not null and assigned_branch <> ''
        and ($1::text[] is null or assigned_branch = any($1::text[]))
+       and ($2::date is null or submitted_at >= $2::date)
+       and ($3::date is null or submitted_at < $3::date)
      group by assigned_branch
      order by assigned_branch`,
-    [branches ?? null],
+    [branches ?? null, range?.start ?? null, range?.end ?? null],
   );
   return rows.map((r) => ({
     branch: r.assigned_branch ?? "",

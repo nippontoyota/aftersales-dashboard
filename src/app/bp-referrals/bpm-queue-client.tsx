@@ -416,7 +416,12 @@ function EnterRoInlineForm({ id, pendingRoNo }: { id: number; pendingRoNo: strin
   return (
     <form
       action={(fd) => {
-        fd.set("roNo", `BPJ${String(fd.get("roSuffix") ?? "").trim()}`);
+        // A BPM sometimes types the whole RO (sometimes with its own "BPJ")
+        // into this suffix-only field despite the fixed tag beside it —
+        // strip it here too, not just on redisplay (stripBpjPrefix above),
+        // so a resubmit doesn't double it up into "BPJBPJ..." (2026-11-09,
+        // found via a referral stuck on exactly that).
+        fd.set("roNo", `BPJ${stripBpjPrefix(String(fd.get("roSuffix") ?? ""))}`);
         return action(fd);
       }}
       onClick={(e) => e.stopPropagation()}
