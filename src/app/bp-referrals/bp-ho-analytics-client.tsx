@@ -448,6 +448,32 @@ function MonthPicker({ month }: { month: string }) {
   );
 }
 
+/** Date-range download of the multi-sheet "Group Accident Vehicle Referral"
+ * Excel report BP HO asked for (2026-11-09) — a plain GET form (no JS
+ * needed beyond the date defaults) straight to the API route, which does
+ * its own auth/branch scoping. Defaults to the current calendar year to
+ * date, matching how BP HO's own reference sheet was named by year. */
+function GroupReportExport() {
+  const today = new Date();
+  const [from, setFrom] = useState(`${today.getFullYear()}-01-01`);
+  const [to, setTo] = useState(today.toISOString().slice(0, 10));
+  return (
+    <form action="/api/bp-referrals/group-report" method="get" className="flex flex-wrap items-end gap-2">
+      <div className="flex flex-col gap-1">
+        <span className={eyebrow}>From</span>
+        <input type="date" name="from" value={from} onChange={(e) => setFrom(e.target.value)} className={`${control} px-2`} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className={eyebrow}>To</span>
+        <input type="date" name="to" value={to} onChange={(e) => setTo(e.target.value)} className={`${control} px-2`} />
+      </div>
+      <button type="submit" className="h-8 shrink-0 rounded-md bg-accent px-3 text-xs font-semibold text-on-accent hover:bg-accent-hover">
+        Export Group Report
+      </button>
+    </form>
+  );
+}
+
 export function BpHoAnalyticsClient({
   referrals,
   liveReferrals,
@@ -559,6 +585,14 @@ export function BpHoAnalyticsClient({
           <span className={eyebrow}>Month</span>
           <MonthPicker month={month} />
         </div>
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-surface-2/50 px-4 py-3">
+        <div>
+          <div className={eyebrow}>Group report</div>
+          <p className="text-xs text-fg-muted">Multi-sheet Excel (raw log, Pivot, Summary, ROI) for a date range — the old tracker, generated from live data.</p>
+        </div>
+        <GroupReportExport />
       </div>
 
       {/* KPI strip — click a card to see the matching cases */}
