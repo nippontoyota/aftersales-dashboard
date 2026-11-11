@@ -23,6 +23,7 @@ export type BpmQueueReferral = {
   referring_employee_id: string | null;
   referring_employee_name: string | null;
   referring_employee_branch: string | null;
+  referring_employee_dept: string | null;
   vehicle_image_url: string | null;
   customer_phone: string | null;
   submitted_at: Date | string | null;
@@ -635,6 +636,7 @@ function DetailModal({
             <h2 className="text-base font-bold text-fg">{r.referring_employee_name ?? "—"}</h2>
             <p className="text-xs text-fg-faint">
               ID: {r.referring_employee_id ?? "—"} · {r.referring_employee_branch || "—"}
+              {r.referring_employee_dept ? ` · ${r.referring_employee_dept}` : ""}
               {r.transferred_from ? ` · Transferred from ${branchName(r.transferred_from)}` : ""}
             </p>
           </div>
@@ -899,6 +901,7 @@ function QueueList({
                     <td className="px-3 py-2.5 font-medium text-fg">
                       {r.referring_employee_name ?? "—"}
                       {r.transferred_from ? <span className="ml-1.5 text-xs text-fg-faint">(from {branchName(r.transferred_from)})</span> : null}
+                      {r.referring_employee_dept ? <div className="text-xs font-normal text-fg-faint">{r.referring_employee_dept}</div> : null}
                     </td>
                     {showBranchColumn ? <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{branchName(r.assigned_branch ?? "")}</td> : null}
                     <td className="whitespace-nowrap px-3 py-2.5">

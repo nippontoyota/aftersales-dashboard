@@ -226,6 +226,7 @@ function ReferralTable({
                     <div className="text-xs text-fg-faint">
                       {r.referring_employee_id ? `ID: ${r.referring_employee_id}` : null}
                       {r.referring_employee_branch ? ` · ${r.referring_employee_branch}` : ""}
+                      {r.referring_employee_dept ? ` · ${r.referring_employee_dept}` : ""}
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">

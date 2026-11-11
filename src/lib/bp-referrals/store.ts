@@ -32,6 +32,7 @@ export type BpReferralRow = {
   referring_employee_id: string | null;
   referring_employee_name: string | null;
   referring_employee_branch: string | null;
+  referring_employee_dept: string | null;
   vehicle_image_url: string | null;
   customer_phone: string | null;
   submitted_at: Date | string | null;
@@ -80,7 +81,7 @@ export type BpReferralRow = {
 };
 
 const SELECT_COLUMNS = `
-  r.id, r.referring_employee_id, r.referring_employee_name, r.referring_employee_branch,
+  r.id, r.referring_employee_id, r.referring_employee_name, r.referring_employee_branch, r.referring_employee_dept,
   r.vehicle_image_url, r.customer_phone, r.submitted_at, r.vehicle_reg_no, r.vehicle_model, r.location, r.description,
   r.assigned_branch, r.call_status, r.genuine, r.estimate_amount, r.customer_interested, r.payment_type,
   r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.pending_ro_no, r.pending_ro_entered_at,

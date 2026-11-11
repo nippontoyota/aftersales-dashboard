@@ -1673,3 +1673,11 @@ alter table bp_referral_activity add column if not exists follow_up_stage text;
 -- and skip straight to "Repair in progress" once an RO is entered instead.
 alter table bp_referrals add column if not exists bp_estimate_invoice_no text;
 alter table bp_referrals add column if not exists bp_estimate_invoice_entered_at timestamptz;
+
+-- The referring employee's own department (Service/Sales/Accessory/etc.) —
+-- added directly in Supabase 2026-11-11, now sent by the WhatsApp intake
+-- bot as referring_employee_dept (confirmed against a live webhook log:
+-- {"referring_employee_dept": "IT", ...}). Needed for the Group Report's
+-- Dept.Contribution breakdown (see group-report.ts), which had no way to
+-- fill it in before this.
+alter table bp_referrals add column if not exists referring_employee_dept text;
