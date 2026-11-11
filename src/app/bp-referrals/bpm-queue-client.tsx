@@ -846,7 +846,7 @@ function QueueList({
   // only for a referral this viewer's own branch actually owns (same as
   // every other action button).
   const showRoColumn = tab === "followup" || tab === "vehicle_received" || tab === "repair_in_progress";
-  const columnCount = (showBranchColumn ? 5 : 4) + (showRoColumn ? 1 : 0);
+  const columnCount = (showBranchColumn ? 6 : 5) + (showRoColumn ? 1 : 0);
 
   return (
     <>
@@ -879,6 +879,7 @@ function QueueList({
             <tr className="border-b border-border bg-surface-2">
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Submitted</th>
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Employee</th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Department</th>
               {showBranchColumn ? <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th> : null}
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Reg No</th>
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Status</th>
@@ -901,8 +902,8 @@ function QueueList({
                     <td className="px-3 py-2.5 font-medium text-fg">
                       {r.referring_employee_name ?? "—"}
                       {r.transferred_from ? <span className="ml-1.5 text-xs text-fg-faint">(from {branchName(r.transferred_from)})</span> : null}
-                      {r.referring_employee_dept ? <div className="text-xs font-normal text-fg-faint">{r.referring_employee_dept}</div> : null}
                     </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{r.referring_employee_dept ?? "—"}</td>
                     {showBranchColumn ? <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{branchName(r.assigned_branch ?? "")}</td> : null}
                     <td className="whitespace-nowrap px-3 py-2.5">
                       <div className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</div>

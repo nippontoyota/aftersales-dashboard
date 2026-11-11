@@ -52,6 +52,7 @@ export type GroupReportRow = {
   employeeName: string | null;
   employeeId: string | null;
   employeeBranch: string | null;
+  employeeDept: string | null;
   vehicleRegNo: string | null;
   vehicleModel: string | null;
   roNo: string | null;
@@ -99,6 +100,7 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
     referring_employee_name: string | null;
     referring_employee_id: string | null;
     referring_employee_branch: string | null;
+    referring_employee_dept: string | null;
     assigned_branch: string | null;
     vehicle_reg_no: string | null;
     vehicle_model: string | null;
@@ -120,7 +122,7 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
   }>(
     `select
        r.id, r.submitted_at, r.referring_employee_name, r.referring_employee_id,
-       r.referring_employee_branch, r.assigned_branch, r.vehicle_reg_no, r.vehicle_model,
+       r.referring_employee_branch, r.referring_employee_dept, r.assigned_branch, r.vehicle_reg_no, r.vehicle_model,
        r.matched_ro_no, r.pending_ro_no, r.estimate_amount, r.validated_at, r.ro_matched_at,
        r.closed_reason, r.not_interested_reason, r.lost_reason,
        dms.total_sale, dms.part_sale, dms.part_cost, dms.pnt_mat_sale, dms.pnt_mat_cost,
@@ -155,6 +157,7 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
     employeeName: r.referring_employee_name,
     employeeId: r.referring_employee_id,
     employeeBranch: r.referring_employee_branch,
+    employeeDept: r.referring_employee_dept,
     vehicleRegNo: r.vehicle_reg_no,
     vehicleModel: r.vehicle_model,
     roNo: r.matched_ro_no ?? r.pending_ro_no,

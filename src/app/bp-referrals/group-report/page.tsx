@@ -268,6 +268,7 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
                 <tr className="border-b border-border">
                   <th className={th}>Date</th>
                   <th className={th}>Employee</th>
+                  <th className={th}>Department</th>
                   <th className={th}>Branch</th>
                   <th className={th}>Vehicle</th>
                   <th className={th}>RO</th>
@@ -279,12 +280,13 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
               </thead>
               <tbody className="divide-y divide-border">
                 {rows.length === 0 ? (
-                  <tr><td colSpan={9} className="px-3 py-6 text-center text-sm text-fg-muted">No referrals in this range.</td></tr>
+                  <tr><td colSpan={10} className="px-3 py-6 text-center text-sm text-fg-muted">No referrals in this range.</td></tr>
                 ) : (
                   rows.map((r: GroupReportRow) => (
                     <tr key={r.id}>
                       <td className="whitespace-nowrap px-3 py-2 text-fg-muted">{fmtDate(r.submittedAt)}</td>
                       <td className={td}>{r.employeeName ?? "—"}</td>
+                      <td className={td}>{r.employeeDept ?? "—"}</td>
                       <td className={td}>{r.employeeBranch ?? "—"}</td>
                       <td className="px-3 py-2 font-mono text-xs text-fg">{r.vehicleRegNo ?? "—"}</td>
                       <td className="px-3 py-2 font-mono text-xs text-fg">{r.roNo ?? "—"}</td>

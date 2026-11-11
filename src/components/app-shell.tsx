@@ -252,6 +252,15 @@ function ChatIcon() {
   );
 }
 
+function SignOutIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <path d="M8 3.5H4.5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1H8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12.5 13.5 16 10l-3.5-3.5M16 10H7.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 const SIDEBAR_STORAGE_KEY = "nt-sidebar-collapsed";
 const SIDEBAR_EVENT = "nt-sidebar-change";
 
@@ -487,14 +496,42 @@ export function AppShell({
         )}
       </div>
 
-      {!compact ? (
-        <div className="shrink-0 border-b border-border-subtle bg-accent-soft/50 px-4 py-2">
-          <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-fg-faint">Signed in as</div>
-          <div className="truncate text-sm font-bold text-accent-text">{identity}</div>
-        </div>
-      ) : null}
+      {/* Identity + sign out — always rendered, even in the collapsed icon
+       * rail (just as an icon-only button there), so signing out never
+       * requires expanding the sidebar first (2026-11-11, at the user's
+       * request — this used to live in the top-right header bar, which
+       * scrolled out of view along with the rest of the page). */}
+      <div className={`shrink-0 border-b border-border-subtle ${compact ? "flex justify-center py-2" : "bg-accent-soft/50 px-4 py-2"}`}>
+        {compact ? (
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              title="Sign out"
+              aria-label="Sign out"
+              className="rounded-md p-1.5 text-fg-faint hover:bg-surface-2 hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <SignOutIcon />
+            </button>
+          </form>
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-fg-faint">Signed in as</div>
+              <div className="truncate text-sm font-bold text-accent-text">{identity}</div>
+            </div>
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="shrink-0 rounded-md border border-border-strong bg-surface px-2 py-1 text-[11px] font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
 
-      <nav className={`flex-1 space-y-0.5 ${compact ? "p-2" : "p-3"}`}>{items.map((item) => navLink(item, compact))}</nav>
+      <nav className={`min-h-0 flex-1 overflow-y-auto space-y-0.5 ${compact ? "p-2" : "p-3"}`}>{items.map((item) => navLink(item, compact))}</nav>
 
       {utilityItems.length > 0 ? (
         <nav className={`space-y-0.5 border-t border-border-subtle ${compact ? "p-2" : "p-3"}`}>
@@ -505,7 +542,7 @@ export function AppShell({
   );
 
   return (
-    <div className="flex min-h-screen bg-canvas text-fg">
+    <div className="flex h-screen overflow-hidden bg-canvas text-fg">
       <AutoRefresh />
       <QueryPopupGate />
       <HolidayMergePopupGate />
@@ -533,7 +570,7 @@ export function AppShell({
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4 print:hidden">
           <div className="flex items-center gap-3">
             <button
@@ -550,17 +587,9 @@ export function AppShell({
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <form action={logoutAction}>
-              <button
-                type="submit"
-                className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                Sign out
-              </button>
-            </form>
           </div>
         </header>
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

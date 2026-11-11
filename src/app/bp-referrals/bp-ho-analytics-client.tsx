@@ -199,6 +199,7 @@ function ReferralTable({
           <tr className="border-b border-border bg-surface-2">
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Submitted</th>
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Employee</th>
+            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Department</th>
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th>
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Reg No</th>
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Status</th>
@@ -211,7 +212,7 @@ function ReferralTable({
         <tbody className="divide-y divide-border">
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={9} className="px-3 py-8 text-center text-sm text-fg-muted">
+              <td colSpan={10} className="px-3 py-8 text-center text-sm text-fg-muted">
                 Nothing here.
               </td>
             </tr>
@@ -226,9 +227,9 @@ function ReferralTable({
                     <div className="text-xs text-fg-faint">
                       {r.referring_employee_id ? `ID: ${r.referring_employee_id}` : null}
                       {r.referring_employee_branch ? ` · ${r.referring_employee_branch}` : ""}
-                      {r.referring_employee_dept ? ` · ${r.referring_employee_dept}` : ""}
                     </div>
                   </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{r.referring_employee_dept ?? "—"}</td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
                     {r.assigned_branch ? (
                       <>
@@ -877,7 +878,7 @@ export function BpHoAnalyticsClient({
             <tbody className="divide-y divide-border">
               {branchRollup.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-sm text-fg-muted">
+                  <td colSpan={10} className="px-3 py-6 text-center text-sm text-fg-muted">
                     No referrals yet.
                   </td>
                 </tr>

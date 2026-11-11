@@ -84,17 +84,17 @@ function styleDataRow(row: ExcelJS.Row, colCount: number, opts?: { total?: boole
 // ---- raw log column layout (also the lookup table every SUMIF/COUNTIF
 // formula on the other sheets is keyed against) ----
 const RAW_LOG_KEYS = [
-  "sl", "region", "date", "month", "emp", "empId", "branch", "veh", "model", "ro",
+  "sl", "region", "date", "month", "emp", "empId", "dept", "branch", "veh", "model", "ro",
   "estimate", "invoiced", "inc1", "inc2", "dlr", "converted", "partsRev", "partsCost", "labRev", "labCost", "remarks",
 ] as const;
 const RAW_LOG_HEADERS: Record<(typeof RAW_LOG_KEYS)[number], string> = {
   sl: "Sl.No", region: "Region", date: "Date of Info", month: "Month", emp: "Employee name", empId: "Emp ID",
-  branch: "Branch", veh: "Vehicle No", model: "Model", ro: "RO Number", estimate: "Estimate Amt (Rs.)",
+  dept: "Department", branch: "Branch", veh: "Vehicle No", model: "Model", ro: "RO Number", estimate: "Estimate Amt (Rs.)",
   invoiced: "Invoiced Amt (Rs.)", inc1: "Incentive 1", inc2: "Incentive 2", dlr: "Dlr Code", converted: "Converted",
   partsRev: "Parts Revenue", partsCost: "Parts Cost", labRev: "Labour Revenue", labCost: "Labour Cost", remarks: "Remarks",
 };
 const RAW_LOG_WIDTHS: Record<(typeof RAW_LOG_KEYS)[number], number> = {
-  sl: 7, region: 10, date: 13, month: 7, emp: 22, empId: 9, branch: 10, veh: 14, model: 14, ro: 15,
+  sl: 7, region: 10, date: 13, month: 7, emp: 22, empId: 9, dept: 14, branch: 10, veh: 14, model: 14, ro: 15,
   estimate: 15, invoiced: 15, inc1: 10, inc2: 10, dlr: 10, converted: 11, partsRev: 14, partsCost: 13,
   labRev: 14, labCost: 13, remarks: 30,
 };
@@ -156,6 +156,7 @@ export async function buildGroupReportWorkbook({ from, to, branches }: GroupRepo
       month: d ? MONTH_SHORT[d.getUTCMonth()] : "",
       emp: r.employeeName ?? "",
       empId: r.employeeId ?? "",
+      dept: r.employeeDept ?? "",
       branch: r.employeeBranch ?? "",
       veh: r.vehicleRegNo ?? "",
       model: r.vehicleModel ?? "",
