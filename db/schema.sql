@@ -1690,3 +1690,65 @@ alter table bp_referrals add column if not exists referring_employee_dept text;
 alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
 alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
   check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost', 'payment_type_change'));
+
+-- Conquest leads (2026-11-11, at the user's request): Toyota/Lexus owners
+-- found in external RTO vehicle-registration extracts who match neither
+-- ce_leads, our own Service Info/SSRV089 history, nor any N-9 list — never
+-- serviced by us at all, a cold-outreach prospect list, not a reminder for
+-- an existing customer. Deliberately a separate table from ce_leads rather
+-- than shoehorned into it: ce_leads' schema (sales_date, n_report_date,
+-- n_mileage etc., all NOT NULL) assumes a known service history to compute
+-- due dates/AVF from, which these vehicles don't have — faking that data
+-- to fit would corrupt MRS's due-date math and company-wide AVF stats.
+-- registration_no is the one field guaranteed present across every source
+-- file (some have no VIN at all); vin is filled in whenever a source had a
+-- chassis number. See scripts/import-conquest-leads.mjs.
+create table if not exists ce_conquest_leads (
+  id bigint generated always as identity primary key,
+  registration_no text not null,
+  vin text,
+  owner_name text,
+  owner_mobile text,
+  vehicle_model text,
+  vehicle_maker text,
+  registration_date date,
+  address text,
+  source_file text not null,
+  active boolean not null default true,
+  imported_at timestamptz not null default now()
+);
+create unique index if not exists ce_conquest_leads_regno_idx on ce_conquest_leads (registration_no);
+create unique index if not exists ce_conquest_leads_vin_idx on ce_conquest_leads (vin) where vin is not null;
+create index if not exists ce_conquest_leads_name_search_idx on ce_conquest_leads (lower(owner_name));
+
+-- Same shape as ce_lead_workflow, minus the MRS-only "MRS follow-up already
+-- scheduled" status (meaningless here — these were never on an MRS list).
+create table if not exists ce_conquest_workflow (
+  conquest_lead_id bigint primary key references ce_conquest_leads(id),
+  status text not null default 'New',
+  next_follow_up_date date,
+  attempt_count smallint not null default 0 check (attempt_count between 0 and 5),
+  latest_call_status text check (latest_call_status in ('connected', 'not_connected')),
+  latest_outcome text,
+  assigned_to text references admins(username),
+  last_editor text references admins(username),
+  updated_at timestamptz not null default now(),
+  constraint ce_conquest_workflow_status_check check (status in ('New', 'Attempted', 'Connected', 'Follow-up', 'Appointment booked', 'Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable'))
+);
+create index if not exists ce_conquest_workflow_followup_idx on ce_conquest_workflow (next_follow_up_date) where next_follow_up_date is not null;
+create index if not exists ce_conquest_workflow_assigned_idx on ce_conquest_workflow (assigned_to);
+
+create table if not exists ce_conquest_activity (
+  id bigint generated always as identity primary key,
+  conquest_lead_id bigint not null references ce_conquest_leads(id),
+  previous_status text not null,
+  status text not null,
+  next_follow_up_date date,
+  note text not null,
+  attempt_number smallint check (attempt_number between 1 and 5),
+  call_status text check (call_status in ('connected', 'not_connected')),
+  outcome text,
+  author text not null references admins(username),
+  created_at timestamptz not null default now()
+);
+create index if not exists ce_conquest_activity_lead_idx on ce_conquest_activity (conquest_lead_id, created_at desc, id desc);

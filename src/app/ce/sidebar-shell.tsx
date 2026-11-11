@@ -11,6 +11,7 @@ const icons: Record<(typeof sections)[number]["key"], () => React.ReactNode> = {
   leads: LeadsIcon,
   avf: AnalyticsIcon,
   mrs: MrsIcon,
+  conquest: ConquestIcon,
 };
 
 function navClass(active: boolean) {
@@ -143,6 +144,10 @@ function AnalyticsIcon() {
 
 function MrsIcon() {
   return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-5 w-5 shrink-0" aria-hidden="true"><path d="M10 5.5v4.5l3 2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="10" cy="10.5" r="6.5"/></svg>;
+}
+
+function ConquestIcon() {
+  return <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-5 w-5 shrink-0" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="M10 7v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M10 3v1.5M17 10h-1.5M10 17v-1.5M3 10h1.5" strokeLinecap="round" /></svg>;
 }
 
 function ArchiveIcon() {
