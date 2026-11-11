@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
 import {
+  changePaymentTypeAction,
   closeFollowUpAsLostAction,
   enterRoNumberAction,
   getReferralActivityAction,
@@ -174,6 +175,7 @@ const ACTIVITY_LABEL: Record<ActivityRow["activityType"], string> = {
   follow_up: "Follow-up",
   ro_entered: "RO entered",
   lost: "Lost",
+  payment_type_change: "Payment type changed",
 };
 
 function ActivityHistory({ referralId }: { referralId: number }) {
@@ -341,6 +343,94 @@ function LogFollowUpButton({
       >
         {pending ? "Saving…" : "Log update"}
       </button>
+      {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
+    </form>
+  );
+}
+
+/** Lets a BPM correct an already-chosen payment type (2026-11-11, at the
+ * user's request — this used to be a one-time pick made at call-outcome
+ * time with no way back). A toggle to the opposite of whatever's on file,
+ * not a free pick. Switching to IP when the vehicle's already past
+ * "Vehicle received" under CP (no BPE on file — CP skips that step, see
+ * LogFollowUpButton's doc comment) asks for the BPE number right here,
+ * since no future "vehicle_received" log is coming to ask for it; store.ts
+ * re-derives this itself and is what actually enforces it. */
+function ChangePaymentTypeButton({
+  id,
+  currentPaymentType,
+  alreadyReceived,
+  hasEstimateInvoice,
+  onDone,
+}: {
+  id: number;
+  currentPaymentType: "CP" | "IP" | null;
+  alreadyReceived: boolean;
+  hasEstimateInvoice: boolean;
+  onDone: () => void;
+}) {
+  const [state, action, pending] = useActionState(changePaymentTypeAction, INIT);
+  const [open, setOpen] = useState(false);
+  if (!currentPaymentType) return null;
+  const newPaymentType = currentPaymentType === "CP" ? "IP" : "CP";
+  const needsEstimateInvoice = newPaymentType === "IP" && alreadyReceived && !hasEstimateInvoice;
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-xs text-accent hover:underline">
+        Change to {newPaymentType === "CP" ? "Customer paid" : "Insurance paid"}
+      </button>
+    );
+  }
+
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      className="rounded-md border border-border-strong bg-surface-2/50 p-3"
+    >
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="paymentType" value={newPaymentType} />
+      <p className="text-xs text-fg-muted">
+        Switching to <span className="font-semibold text-fg">{newPaymentType === "CP" ? "Customer paid" : "Insurance paid"}</span>.
+      </p>
+
+      {needsEstimateInvoice ? (
+        <div className="mt-2">
+          <span className={eyebrow}>BP Estimate Invoice No. (required — the vehicle has already been received)</span>
+          <div className="mt-1 flex items-center gap-1.5">
+            <span className="flex h-8 shrink-0 items-center rounded-md border border-border-strong bg-surface-2 px-2 text-sm font-mono font-semibold text-fg-muted">
+              BPE
+            </span>
+            <input
+              name="estimateInvoiceDigits"
+              required
+              placeholder="e.g. 12345"
+              className="h-8 w-full rounded-md border border-border-strong bg-surface px-2 text-sm font-mono text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-2">
+        <span className={eyebrow}>Reason for the change (required)</span>
+        <textarea name="remark" required rows={2} placeholder="Why is this changing?" className={remarkField} />
+      </div>
+
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+        >
+          {pending ? "Saving…" : "Confirm"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-fg-muted hover:underline">
+          Cancel
+        </button>
+      </div>
       {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
     </form>
   );
@@ -725,9 +815,20 @@ function DetailModal({
               </div>
             ) : null}
             {r.payment_type ? (
-              <div className="flex justify-between">
+              <div className="flex items-center justify-between">
                 <span className="text-fg-faint">Payment type</span>
-                <span className="text-fg">{r.payment_type === "CP" ? "Customer paid" : "Insurance paid"}</span>
+                <span className="flex items-center gap-2">
+                  <span className="text-fg">{r.payment_type === "CP" ? "Customer paid" : "Insurance paid"}</span>
+                  {canAct && !r.closed_at && !r.ro_matched_at ? (
+                    <ChangePaymentTypeButton
+                      id={r.id}
+                      currentPaymentType={r.payment_type}
+                      alreadyReceived={!!r.pending_ro_no || !!r.bp_estimate_invoice_no}
+                      hasEstimateInvoice={!!r.bp_estimate_invoice_no}
+                      onDone={onClose}
+                    />
+                  ) : null}
+                </span>
               </div>
             ) : null}
             {r.handled_by ? (

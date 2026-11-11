@@ -2,7 +2,7 @@ import { pool } from "@/lib/db";
 import { listBranchCodes } from "@/lib/admin-store";
 import { REGIONS, regionForBranch, type RegionName } from "@/lib/regions";
 import { resolveBranchCode } from "./branch-match";
-import { normalizeRoNo, NORMALIZE_RO_SQL } from "./ro-normalize";
+import { normalizeRoNo, normalizeRegNo, NORMALIZE_RO_SQL } from "./ro-normalize";
 
 export type MonthRange = { start: string; end: string };
 
@@ -173,7 +173,7 @@ async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
 
 async function logActivity(
   referralId: number,
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost",
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change",
   remark: string,
   performedBy: string,
   notConnectedReason?: string,
@@ -326,9 +326,77 @@ export async function closeFollowUpAsLost(id: number, branch: string, performedB
   await logActivity(id, "lost", lostReason, performedBy);
 }
 
+/** BPM corrects an already-chosen payment type (2026-11-11, at the user's
+ * request) — this used to be a one-time pick made at call-outcome time
+ * (submitCallOutcome above) with no way back if it turned out wrong.
+ * Allowed any time the referral is still open for a follow-up at all (same
+ * window as logFollowUpContact — validated, not closed, not yet RO-
+ * matched); payment type no longer matters once the RO's confirmed.
+ *
+ * Switching to IP when the vehicle's already been received under CP (so no
+ * BPE was ever asked for — CP skips that step, see logFollowUpContact's doc
+ * comment) needs its BPE number backfilled right here, since no future
+ * "vehicle_received" log is coming to ask for it. Re-derives whether that
+ * applies itself from pending_ro_no/bp_estimate_invoice_no — never trusts
+ * what the client claims — and throws if estimateInvoiceNo is missing when
+ * it does. */
+export async function changePaymentType(
+  id: number,
+  branch: string,
+  performedBy: string,
+  newPaymentType: "CP" | "IP",
+  remark: string,
+  estimateInvoiceNo?: string,
+): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  const { rows } = await pool.query<{
+    payment_type: "CP" | "IP" | null;
+    validated_at: Date | string | null;
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+    pending_ro_no: string | null;
+    bp_estimate_invoice_no: string | null;
+  }>(
+    `select payment_type, validated_at, closed_at, ro_matched_at, pending_ro_no, bp_estimate_invoice_no
+     from bp_referrals where id = $1`,
+    [id],
+  );
+  const referral = rows[0];
+  if (!referral || !referral.validated_at || referral.closed_at || referral.ro_matched_at) {
+    throw new Error("This referral isn't open for a payment-type change.");
+  }
+  if (referral.payment_type === newPaymentType) {
+    throw new Error("That's already the current payment type.");
+  }
+
+  const alreadyReceived = !!referral.pending_ro_no || !!referral.bp_estimate_invoice_no;
+  const needsEstimateInvoice = newPaymentType === "IP" && alreadyReceived && !referral.bp_estimate_invoice_no;
+  if (needsEstimateInvoice && !estimateInvoiceNo) {
+    throw new Error("Enter the BP Estimate Invoice number.");
+  }
+
+  if (estimateInvoiceNo) {
+    await pool.query(
+      `update bp_referrals set payment_type = $2,
+         bp_estimate_invoice_no = coalesce(bp_estimate_invoice_no, $3),
+         bp_estimate_invoice_entered_at = coalesce(bp_estimate_invoice_entered_at, now())
+       where id = $1`,
+      [id, newPaymentType, estimateInvoiceNo],
+    );
+  } else {
+    await pool.query(`update bp_referrals set payment_type = $2 where id = $1`, [id, newPaymentType]);
+  }
+  await logActivity(
+    id,
+    "payment_type_change",
+    `Payment type changed to ${newPaymentType === "CP" ? "Customer paid" : "Insurance paid"} — ${remark}`,
+    performedBy,
+  );
+}
+
 export type ActivityRow = {
   id: number;
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost";
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change";
   remark: string;
   notConnectedReason: string | null;
   followUpStage: string | null;
@@ -342,7 +410,7 @@ export type ActivityRow = {
 export async function loadActivityForReferral(referralId: number): Promise<ActivityRow[]> {
   const { rows } = await pool.query<{
     id: number;
-    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered";
+    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change";
     remark: string;
     not_connected_reason: string | null;
     follow_up_stage: string | null;
@@ -476,17 +544,23 @@ export async function enterRoNumber(id: number, branch: string, enteredBy: strin
   }
 
   const normalizedRo = normalizeRoNo(roNo);
-  const normalizedReg = referral.vehicle_reg_no.trim().toUpperCase().replace(/[\s-]/g, "");
+  const normalizedReg = normalizeRegNo(referral.vehicle_reg_no);
 
+  // Scoped to this referral's own branch (2026-11-11 — "BPJ" job order
+  // numbers turned out to be a per-branch counter, not company-wide-unique;
+  // see ro-matcher.ts's doc comment for the full story). `branch` here is
+  // already asserted (above) to equal this referral's assigned_branch.
   const { rows: uploaded } = await pool.query<{ veh_reg_no: string | null }>(
     `select row_data->>'VehRegNo' as veh_reg_no from raw_upload_rows
-     where report_type = 'ssrv089_bp' and ${NORMALIZE_RO_SQL(`upper(coalesce(row_data->>'JobOrder No', ''))`)} = $1
+     where report_type = 'ssrv089_bp' and branch = $1
+       and ${NORMALIZE_RO_SQL(`upper(coalesce(row_data->>'JobOrder No', ''))`)} = $2
+     order by uploaded_at desc
      limit 1`,
-    [normalizedRo],
+    [branch, normalizedRo],
   );
 
   if (uploaded.length > 0) {
-    const uploadedReg = String(uploaded[0].veh_reg_no ?? "").toUpperCase().replace(/[\s-]/g, "");
+    const uploadedReg = normalizeRegNo(String(uploaded[0].veh_reg_no ?? ""));
     if (uploadedReg !== normalizedReg) {
       throw new Error("That RO is recorded against a different vehicle — check the number and try again.");
     }

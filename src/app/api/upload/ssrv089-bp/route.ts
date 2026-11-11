@@ -150,7 +150,7 @@ export async function POST(request: Request) {
   // (see ro-matcher.ts). Wrapped so a matcher bug can never break an
   // otherwise-successful daily upload.
   try {
-    await matchBpReferralsFromCostSalesBpRows(parsed.rawRows);
+    await matchBpReferralsFromCostSalesBpRows(parsed.rawRows, admin.branch);
   } catch (err) {
     console.error("BP referral RO matcher failed:", err);
   }

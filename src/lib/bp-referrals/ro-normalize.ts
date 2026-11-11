@@ -25,3 +25,18 @@ export function normalizeRoNo(ro: string): string {
  * column server-side instead of pulling rows into JS first — keep in sync
  * with normalizeRoNo above by hand. `expr` must already be upper-cased. */
 export const NORMALIZE_RO_SQL = (expr: string) => `replace(regexp_replace(${expr}, '[\\s-]', '', 'g'), 'BPJBPJ', 'BPJ')`;
+
+/** Vehicle reg no comparison, shared by every RO-matching path (store.ts's
+ * enterRoNumber, ro-matcher.ts's upload-time and rescan matchers) — same
+ * dash/space stripping as normalizeRoNo above, plus stripping leading zeros
+ * within each digit run (2026-11-11: the Cost & Sales - BP export sometimes
+ * drops them, e.g. "KL08BM0888" shows up as "KL8BM888", which a plain
+ * strip-and-uppercase compare never matched). Always do this comparison in
+ * JS, never SQL — see ro-matcher.ts's rescanUnmatchedReferrals for why. */
+export function normalizeRegNo(reg: string): string {
+  return reg
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]/g, "")
+    .replace(/\d+/g, (digits) => String(parseInt(digits, 10)));
+}

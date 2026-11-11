@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
 import { listBranchCodes } from "@/lib/admin-store";
 import {
+  changePaymentType,
   closeFollowUpAsLost,
   enterRoNumber,
   loadActivityForReferral,
@@ -186,6 +187,35 @@ export async function logFollowUpContactAction(_prev: BpmActionState, formData: 
     await logFollowUpContact(id, admin.branch, admin.username, remark, stage, estimateInvoiceNo);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't update that referral.", ok: false };
+  }
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
+}
+
+/** BPM corrects an already-chosen payment type (2026-11-11, at the user's
+ * request) — see changePaymentType in store.ts for the full rules; this is
+ * just the form-data plumbing, same shape as every other action here. The
+ * BPE digits are optional on the wire (the UI only shows that field when it
+ * thinks it's needed) — store.ts re-derives whether it's actually required
+ * and throws if it's missing. */
+export async function changePaymentTypeAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const newPaymentType = String(formData.get("paymentType") ?? "").trim();
+  if (newPaymentType !== "CP" && newPaymentType !== "IP") return { error: "Choose a payment type.", ok: false };
+  const remark = requiredRemark(formData);
+  if (!remark) return { error: "A remark is required.", ok: false };
+
+  const digits = String(formData.get("estimateInvoiceDigits") ?? "").trim();
+  const estimateInvoiceNo = digits ? `BPE${digits}` : undefined;
+
+  try {
+    await changePaymentType(id, admin.branch, admin.username, newPaymentType, remark, estimateInvoiceNo);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't change the payment type.", ok: false };
   }
   revalidatePath("/bp-referrals");
   return { error: null, ok: true };

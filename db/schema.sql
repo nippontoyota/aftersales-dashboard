@@ -1681,3 +1681,12 @@ alter table bp_referrals add column if not exists bp_estimate_invoice_entered_at
 -- Dept.Contribution breakdown (see group-report.ts), which had no way to
 -- fill it in before this.
 alter table bp_referrals add column if not exists referring_employee_dept text;
+
+-- BP Referrals: a BPM can correct an already-chosen payment type (CP <-> IP)
+-- any time before the RO is confirmed (2026-11-11, at the user's request —
+-- this used to be a one-time, unchangeable pick made at call-outcome time).
+-- Logged as its own activity type for the audit trail, same as every other
+-- action here. See changePaymentType in store.ts.
+alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
+alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
+  check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost', 'payment_type_change'));
