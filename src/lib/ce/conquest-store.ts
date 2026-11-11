@@ -43,7 +43,15 @@ export async function loadConquestLeadPage(options: {
   page?: number;
 }) {
   const values: unknown[] = [options.today];
-  const where = ["l.active"];
+  // $1 (today) is only otherwise referenced inside the followUps branch
+  // below — when that filter isn't active, $1 never appears in the query
+  // text at all, and Postgres can't infer a bound parameter's type from a
+  // query that never mentions it ("could not determine data type of
+  // parameter $1", confirmed in production 2026-11-11). This clause is
+  // always true (today is never null) — it exists purely to keep $1
+  // present and cast, the same fix this exact class of bug already got
+  // elsewhere in this codebase (see MRS_DUE_DATE_CTE's doc comment).
+  const where = ["l.active", "$1::date is not null"];
   if (options.assignedTo) {
     values.push(options.assignedTo);
     where.push(`w.assigned_to = $${values.length}`);
