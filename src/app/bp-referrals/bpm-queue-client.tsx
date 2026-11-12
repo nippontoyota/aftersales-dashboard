@@ -7,6 +7,7 @@ import {
   changePaymentTypeAction,
   closeFollowUpAsLostAction,
   enterRoNumberAction,
+  fillReferralDetailsAction,
   getReferralActivityAction,
   logFollowUpContactAction,
   markNotConnectedAction,
@@ -176,6 +177,7 @@ const ACTIVITY_LABEL: Record<ActivityRow["activityType"], string> = {
   ro_entered: "RO entered",
   lost: "Lost",
   payment_type_change: "Payment type changed",
+  details_filled: "Details added",
 };
 
 function ActivityHistory({ referralId }: { referralId: number }) {
@@ -696,6 +698,79 @@ function TransferControl({ id, ownBranch, branchCodes, onDone }: { id: number; o
   );
 }
 
+/** Lets a BPM fill in whichever of vehicle reg no / customer phone /
+ * vehicle model the referring employee left blank, once they've actually
+ * got it from the customer (2026-11-12, at the user's request — the
+ * WhatsApp intake bot saves these as optional, so any of the three can come
+ * through empty). Only ever shows an input for a field that's actually
+ * blank right now — a field already on file is never editable here, fill-
+ * only by design (see fillMissingReferralDetails in store.ts, which
+ * re-enforces this regardless of what the form sends). */
+function FillDetailsButton({
+  id,
+  missing,
+  onDone,
+}: {
+  id: number;
+  missing: { vehicleRegNo: boolean; customerPhone: boolean; vehicleModel: boolean };
+  onDone: () => void;
+}) {
+  const [state, action, pending] = useActionState(fillReferralDetailsAction, INIT);
+  const [open, setOpen] = useState(false);
+  if (!missing.vehicleRegNo && !missing.customerPhone && !missing.vehicleModel) return null;
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-xs text-accent hover:underline">
+        + Add missing details
+      </button>
+    );
+  }
+
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      className="space-y-2 rounded-md border border-border-strong bg-surface-2/50 p-3"
+    >
+      <input type="hidden" name="id" value={id} />
+      {missing.vehicleRegNo ? (
+        <div>
+          <span className={eyebrow}>Vehicle reg no</span>
+          <input name="vehicleRegNo" placeholder="e.g. KL07AB1234" className={`${control} mt-1 w-full px-2 font-mono`} />
+        </div>
+      ) : null}
+      {missing.customerPhone ? (
+        <div>
+          <span className={eyebrow}>Customer phone</span>
+          <input name="customerPhone" placeholder="e.g. 9876543210" className={`${control} mt-1 w-full px-2`} />
+        </div>
+      ) : null}
+      {missing.vehicleModel ? (
+        <div>
+          <span className={eyebrow}>Vehicle model</span>
+          <input name="vehicleModel" placeholder="e.g. Innova" className={`${control} mt-1 w-full px-2`} />
+        </div>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+        >
+          {pending ? "Saving…" : "Save"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-fg-muted hover:underline">
+          Cancel
+        </button>
+      </div>
+      {state.error ? <p className="text-xs text-bad">{state.error}</p> : null}
+    </form>
+  );
+}
+
 function DetailModal({
   referral,
   ownBranch,
@@ -761,6 +836,15 @@ function DetailModal({
             <dt className="text-fg-faint">Vehicle model</dt>
             <dd className="font-semibold text-fg">{r.vehicle_model ?? "—"}</dd>
           </div>
+          {canAct && !r.closed_at && !r.ro_matched_at && !r.pending_ro_no ? (
+            <div className="pt-1">
+              <FillDetailsButton
+                id={r.id}
+                missing={{ vehicleRegNo: !r.vehicle_reg_no, customerPhone: !r.customer_phone, vehicleModel: !r.vehicle_model }}
+                onDone={onClose}
+              />
+            </div>
+          ) : null}
           <div className="flex justify-between gap-3">
             <dt className="text-fg-faint">Submitted</dt>
             <dd className="text-fg-muted">{fmt(r.submitted_at)}</dd>

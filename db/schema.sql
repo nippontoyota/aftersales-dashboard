@@ -1691,6 +1691,18 @@ alter table bp_referral_activity drop constraint if exists bp_referral_activity_
 alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
   check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost', 'payment_type_change'));
 
+-- BP Referrals: the WhatsApp intake bot's webhook (see api/webhooks/bp-
+-- referral/route.ts) saves vehicle_reg_no/customer_phone/vehicle_model as
+-- whatever the referring employee happened to type — any of the three can
+-- come through blank. A BPM can now fill in a blank one once they've got it
+-- from the customer themselves (2026-11-12, at the user's request) — see
+-- fillMissingReferralDetails in store.ts. Fill-only (never overwrites an
+-- already-filled value) and needs no remark, so no new column, just its own
+-- activity type for the History tab.
+alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
+alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
+  check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost', 'payment_type_change', 'details_filled'));
+
 -- Conquest leads (2026-11-11, at the user's request): Toyota/Lexus owners
 -- found in external RTO vehicle-registration extracts who match neither
 -- ce_leads, our own Service Info/SSRV089 history, nor any N-9 list — never

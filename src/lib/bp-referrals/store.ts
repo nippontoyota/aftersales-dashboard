@@ -173,7 +173,7 @@ async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
 
 async function logActivity(
   referralId: number,
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change",
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled",
   remark: string,
   performedBy: string,
   notConnectedReason?: string,
@@ -394,9 +394,53 @@ export async function changePaymentType(
   );
 }
 
+/** BPM fills in a vehicle reg no / customer phone / vehicle model the
+ * referring employee left blank in the WhatsApp submission, once they've
+ * actually gotten it from the customer themselves (2026-11-12, at the
+ * user's request). Fill-only by design — never overwrites a value that's
+ * already on file, no matter what the caller passes, so the employee's own
+ * submission is never silently altered. Allowed through To call /
+ * Follow-up / Vehicle received; locks once an RO is entered (pending_ro_no
+ * set), since vehicle_reg_no is already load-bearing for RO-matching by
+ * then and shouldn't move under it. No remark — this is plain data
+ * completion, not a judgment call like the other actions here. */
+export async function fillMissingReferralDetails(
+  id: number,
+  branch: string,
+  performedBy: string,
+  updates: { vehicleRegNo?: string; customerPhone?: string; vehicleModel?: string },
+): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  const { rows } = await pool.query<{
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+    pending_ro_no: string | null;
+  }>(`select closed_at, ro_matched_at, pending_ro_no from bp_referrals where id = $1`, [id]);
+  const referral = rows[0];
+  if (!referral || referral.closed_at || referral.ro_matched_at || referral.pending_ro_no) {
+    throw new Error("This referral isn't open for adding details.");
+  }
+
+  const filled: string[] = [];
+  if (updates.vehicleRegNo) filled.push("vehicle reg no");
+  if (updates.customerPhone) filled.push("phone");
+  if (updates.vehicleModel) filled.push("vehicle model");
+  if (filled.length === 0) return;
+
+  await pool.query(
+    `update bp_referrals set
+       vehicle_reg_no = coalesce(vehicle_reg_no, nullif($2, '')),
+       customer_phone = coalesce(customer_phone, nullif($3, '')),
+       vehicle_model = coalesce(vehicle_model, nullif($4, ''))
+     where id = $1`,
+    [id, updates.vehicleRegNo ?? "", updates.customerPhone ?? "", updates.vehicleModel ?? ""],
+  );
+  await logActivity(id, "details_filled", `Details added: ${filled.join(", ")}`, performedBy);
+}
+
 export type ActivityRow = {
   id: number;
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change";
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled";
   remark: string;
   notConnectedReason: string | null;
   followUpStage: string | null;
@@ -410,7 +454,7 @@ export type ActivityRow = {
 export async function loadActivityForReferral(referralId: number): Promise<ActivityRow[]> {
   const { rows } = await pool.query<{
     id: number;
-    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change";
+    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled";
     remark: string;
     not_connected_reason: string | null;
     follow_up_stage: string | null;

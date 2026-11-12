@@ -7,6 +7,7 @@ import {
   changePaymentType,
   closeFollowUpAsLost,
   enterRoNumber,
+  fillMissingReferralDetails,
   loadActivityForReferral,
   loadOverdueFollowUps,
   loadReferralPaymentType,
@@ -187,6 +188,37 @@ export async function logFollowUpContactAction(_prev: BpmActionState, formData: 
     await logFollowUpContact(id, admin.branch, admin.username, remark, stage, estimateInvoiceNo);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't update that referral.", ok: false };
+  }
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
+}
+
+/** BPM fills in a vehicle reg no / customer phone / vehicle model the
+ * referring employee left blank (2026-11-12, at the user's request) — see
+ * fillMissingReferralDetails in store.ts for the fill-only rules. Every
+ * field here is optional on the wire; the UI only ever sends the ones it
+ * showed an input for (i.e. the ones that were actually blank), and
+ * store.ts re-enforces fill-only regardless of what's sent. */
+export async function fillReferralDetailsAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+
+  const vehicleRegNo = String(formData.get("vehicleRegNo") ?? "").trim();
+  const customerPhone = String(formData.get("customerPhone") ?? "").trim();
+  const vehicleModel = String(formData.get("vehicleModel") ?? "").trim();
+  if (!vehicleRegNo && !customerPhone && !vehicleModel) return { error: "Enter at least one detail.", ok: false };
+
+  try {
+    await fillMissingReferralDetails(id, admin.branch, admin.username, {
+      vehicleRegNo: vehicleRegNo || undefined,
+      customerPhone: customerPhone || undefined,
+      vehicleModel: vehicleModel || undefined,
+    });
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't save those details.", ok: false };
   }
   revalidatePath("/bp-referrals");
   return { error: null, ok: true };
