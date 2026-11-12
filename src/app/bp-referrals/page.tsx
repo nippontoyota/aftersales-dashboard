@@ -5,6 +5,11 @@ import { adminIdentityLabel, listBranchCodes } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadNavState } from "@/lib/dashboard-data";
 import { REGIONS } from "@/lib/regions";
+import { bpBayUtilization } from "@/lib/bay-capacity";
+import { buildReport } from "@/lib/report";
+import { loadReportHolidaySet } from "@/lib/report-holidays/store";
+import { latestNonHolidayDate, sundayOffWorkingDaysElapsedInMonth } from "@/lib/reporting-date";
+import { listSnapshotDates } from "@/lib/snapshot-store";
 import {
   currentMonthKey,
   ensureAssignedBranches,
@@ -39,12 +44,25 @@ export default async function BpReferralsPage({ searchParams }: { searchParams: 
   if (admin.role === "bp_manager") {
     await ensureAssignedBranches();
     const region = regionalLeadFor(admin.branch);
-    const [queue, branchCodes, regionRollup, transferredOut] = await Promise.all([
+    const [queue, branchCodes, regionRollup, transferredOut, allDates, holidays] = await Promise.all([
       loadQueueForBranch(admin.branch),
       listBranchCodes(),
       region ? loadRegionRollup(region) : Promise.resolve(null),
       loadTransferredOutFromBranch(admin.branch),
+      listSnapshotDates(),
+      loadReportHolidaySet(),
     ]);
+    // BP RO target vs. actual for this branch alone (2026-11-12, at the
+    // user's request — BPMs only ever saw referral-program numbers here,
+    // never their own branch's BP RO target). Reuses the latest uploaded,
+    // non-holiday date — same "what date to show" rule as the CEO/branch
+    // dashboards (reporting-date.ts's latestNonHolidayDate) — rather than
+    // wiring in this page's own date picker, which nothing else here needs.
+    const reportDate = latestNonHolidayDate(allDates, holidays);
+    const report = reportDate ? await buildReport(reportDate) : null;
+    const branchReport = report?.branches.find((b) => b.branch === admin.branch) ?? null;
+    const workingDaysElapsed = reportDate ? sundayOffWorkingDaysElapsedInMonth(reportDate, holidays) : 0;
+    const bpRoTarget = bpBayUtilization(admin.branch, branchReport?.bpuRoMtd ?? null, workingDaysElapsed);
     return (
       <BpShell identity={adminIdentityLabel(admin)}>
         <BpmQueueClient
@@ -54,6 +72,7 @@ export default async function BpReferralsPage({ searchParams }: { searchParams: 
           regionName={region}
           regionRollup={regionRollup}
           transferredOut={transferredOut}
+          bpRoTarget={bpRoTarget}
         />
       </BpShell>
     );

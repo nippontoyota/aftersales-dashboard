@@ -1,5 +1,6 @@
 import type { Report, BranchReport } from "./report";
 import { BODY_PAINT_ONLY_BRANCHES } from "./report";
+import { bpBayUtilization, gsBayUtilization } from "./bay-capacity";
 import { branchName } from "./branch-names";
 import { loadIncentiveSlabTargets, type IncentiveSlabTargets } from "./incentive-slabs/store";
 import { loadRegionRevenueTargets, type RegionRevenueTargets } from "./region-targets/store";
@@ -51,6 +52,13 @@ export type RegionBranchRow = {
   gs: RegionMetricBlock;
   bp: RegionMetricBlock;
   ext: RegionExtSalesBlock;
+  /** GS/BP repair-order COUNT targets (bays x per-bay/day productivity,
+   * same formula as the CEO dashboard's Bay Utilization) — distinct from
+   * `gs`/`bp` above, which are the ₹ revenue targets. `target` is null for
+   * a branch with no bays of that type (e.g. GS on a Body & Paint-only
+   * branch). */
+  gsRo: RegionMetricBlock;
+  bpRo: RegionMetricBlock;
   totalMonthlyTarget: number | null;
   totalAchieved: number | null;
   /** Scrap + used-oil bill revenue, MTD — always a number, never null (same
@@ -84,6 +92,8 @@ export type RegionRevenueView = {
     gs: RegionMetricBlock;
     bp: RegionMetricBlock;
     ext: RegionExtSalesBlock;
+    gsRo: RegionMetricBlock;
+    bpRo: RegionMetricBlock;
     totalMonthlyTarget: number | null;
     totalAchieved: number | null;
     scrapAndUsedOil: number;
@@ -127,6 +137,30 @@ export function metricBlock(target: number | null, achieved: number | null, elap
   }
 
   return { target, achieved, mtdTarget, mtdAchievementPct, gap, projectedEom, requiredPerWorkingDay, status };
+}
+
+/** GS/BP RO-count targets for one branch — reuses gsBayUtilization/
+ * bpBayUtilization's bays x per-bay/day-productivity formula (same one the
+ * CEO dashboard's Bay Utilization uses) for the `target`, then runs it
+ * through `metricBlock` so RO counts get the same MTD-target/gap/pace
+ * machinery as the ₹ revenue blocks above. `total` (not `elapsed`) is
+ * passed to the bay-utilization functions since their second time
+ * parameter is really "how many working days to project capacity for" —
+ * metricBlock reprorates that whole-month ideal down to MTD itself. Target
+ * comes out null wherever gsBayUtilization/bpBayUtilization would — no
+ * bays of that type, or no RO data yet this month. */
+export function roBlocksFor(
+  branch: string,
+  roMtd: { gus: number | null; bpu: number | null },
+  elapsed: number,
+  total: number,
+): { gsRo: RegionMetricBlock; bpRo: RegionMetricBlock } {
+  const gsTarget = gsBayUtilization(branch, roMtd.gus, total)?.idealRoMtd ?? null;
+  const bpTarget = bpBayUtilization(branch, roMtd.bpu, total)?.idealRoMtd ?? null;
+  return {
+    gsRo: metricBlock(gsTarget, roMtd.gus, elapsed, total),
+    bpRo: metricBlock(bpTarget, roMtd.bpu, elapsed, total),
+  };
 }
 
 export function sumOrNull(values: (number | null)[]): number | null {
@@ -196,6 +230,8 @@ export function buildRegionTotals(
   const bpTotals = totalsFor((r) => r.bp);
   const extTotalsBase = totalsFor((r) => r.ext);
   const extTotals: RegionExtSalesBlock = { ...extTotalsBase, sprExternalReference: sumOrNull(branches.map((r) => r.ext.sprExternalReference)) };
+  const gsRoTotals = totalsFor((r) => r.gsRo);
+  const bpRoTotals = totalsFor((r) => r.bpRo);
 
   const totalAchieved = sumOrNull([gsTotals.achieved, bpTotals.achieved, extTotals.achieved]);
   const scrapAndUsedOilTotal = branches.reduce((sum, r) => sum + r.scrapAndUsedOil, 0);
@@ -225,6 +261,8 @@ export function buildRegionTotals(
       gs: gsTotals,
       bp: bpTotals,
       ext: extTotals,
+      gsRo: gsRoTotals,
+      bpRo: bpRoTotals,
       totalMonthlyTarget: sumOrNull([gsTotals.target, bpTotals.target, extTotals.target]),
       totalAchieved,
       scrapAndUsedOil: scrapAndUsedOilTotal,
@@ -269,6 +307,7 @@ export async function loadRegionRevenueView(region: RegionName, date: string, re
     const bp = metricBlock(t?.bpTarget ?? null, achieved.bp, elapsed, total);
     const extBase = metricBlock(t?.extTarget ?? null, achieved.ext, elapsed, total);
     const ext: RegionExtSalesBlock = { ...extBase, sprExternalReference: achieved.sprExternal };
+    const { gsRo, bpRo } = roBlocksFor(branch, { gus: b?.gusRoMtd ?? null, bpu: b?.bpuRoMtd ?? null }, elapsed, total);
 
     const totalAchieved = sumOrNull([gs.achieved, bp.achieved, ext.achieved]);
     const totalRevenue = totalAchieved !== null ? totalAchieved + achieved.scrapAndUsedOil : null;
@@ -279,6 +318,8 @@ export async function loadRegionRevenueView(region: RegionName, date: string, re
       gs,
       bp,
       ext,
+      gsRo,
+      bpRo,
       totalMonthlyTarget: sumOrNull([gs.target, bp.target, ext.target]),
       totalAchieved,
       scrapAndUsedOil: achieved.scrapAndUsedOil,

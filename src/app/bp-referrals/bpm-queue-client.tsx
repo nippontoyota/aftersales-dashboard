@@ -3,6 +3,9 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
+import { achievementTone } from "@/lib/aggregate";
+import { formatNumber, formatPercent } from "@/lib/format";
+import type { BayUtilization } from "@/lib/bay-capacity";
 import {
   changePaymentTypeAction,
   closeFollowUpAsLostAction,
@@ -1124,6 +1127,7 @@ export function BpmQueueClient({
   regionName,
   regionRollup,
   transferredOut,
+  bpRoTarget,
 }: {
   ownBranch: string;
   queue: BpmQueueReferral[];
@@ -1131,6 +1135,13 @@ export function BpmQueueClient({
   regionName: string | null;
   regionRollup: BpmQueueReferral[] | null;
   transferredOut: BpmQueueReferral[];
+  /** This branch's BP repair-order target (bays x per-bay/day productivity,
+   * same formula as the CEO dashboard's Bay Utilization) vs. actual BPU ROs
+   * so far this month — null when the branch has no BP bays or no data yet.
+   * 2026-11-12, at the user's request: BP managers only ever saw the
+   * referral-program numbers on this page, never their own branch's BP RO
+   * target. */
+  bpRoTarget: BayUtilization | null;
 }) {
   const [view, setView] = useState<"own" | "region" | "transferred_out">("own");
 
@@ -1167,6 +1178,27 @@ export function BpmQueueClient({
           </button>
         </div>
       </div>
+
+      {bpRoTarget ? (
+        <div className="mb-6 rounded-lg border border-border bg-surface p-3 shadow-sm">
+          <div className={eyebrow}>BP RO target — MTD</div>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-lg font-semibold tabular-nums text-fg">{formatNumber(bpRoTarget.actualRoMtd)}</span>
+            <span className="text-xs text-fg-faint">/ {formatNumber(bpRoTarget.idealRoMtd)} ROs target</span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2">
+            <div
+              className={`h-full rounded-full ${
+                { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" }[
+                  achievementTone(bpRoTarget.utilizationPct)
+                ]
+              }`}
+              style={{ width: `${Math.min(100, Math.round(bpRoTarget.utilizationPct * 100))}%` }}
+            />
+          </div>
+          <div className="mt-1 text-[11px] text-fg-faint">{formatPercent(bpRoTarget.utilizationPct)} of pace-adjusted target ({bpRoTarget.bays} bays)</div>
+        </div>
+      ) : null}
 
       {view === "own" ? (
         <QueueList referrals={queue} ownBranch={ownBranch} branchCodes={branchCodes} readOnly={false} showBranchColumn={false} />

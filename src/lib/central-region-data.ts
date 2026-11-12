@@ -7,6 +7,7 @@ import {
   branchAchieved,
   buildRegionTotals,
   metricBlock,
+  roBlocksFor,
   sumOrNull,
   totalRevenueStream,
   type RegionBranchRow,
@@ -93,6 +94,11 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
     const bp = metricBlock(t?.bpTarget ?? null, achieved.bp, elapsed, total);
     const extBase = metricBlock(t?.extTarget ?? null, achieved.ext, elapsed, total);
     const ext: CentralExtSalesBlock = { ...extBase, sprExternalReference: achieved.sprExternal };
+    const co01e = byBranch.get("CO01E");
+    const roMtd = includesCo01e
+      ? { gus: sumOrNull([b?.gusRoMtd ?? null, co01e?.gusRoMtd ?? null]), bpu: sumOrNull([b?.bpuRoMtd ?? null, co01e?.bpuRoMtd ?? null]) }
+      : { gus: b?.gusRoMtd ?? null, bpu: b?.bpuRoMtd ?? null };
+    const { gsRo, bpRo } = roBlocksFor(branch, roMtd, elapsed, total);
 
     const totalAchieved = sumOrNull([gs.achieved, bp.achieved, ext.achieved]);
     const totalRevenue = totalAchieved !== null ? totalAchieved + achieved.scrapAndUsedOil : null;
@@ -110,6 +116,8 @@ export async function loadCentralRegionView(date: string, report: Report): Promi
       gs,
       bp,
       ext,
+      gsRo,
+      bpRo,
       totalMonthlyTarget: sumOrNull([gs.target, bp.target, ext.target]),
       totalAchieved,
       scrapAndUsedOil: achieved.scrapAndUsedOil,

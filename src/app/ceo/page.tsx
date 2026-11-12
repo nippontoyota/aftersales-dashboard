@@ -300,8 +300,8 @@ async function Overview({ searchParams }: { searchParams: Promise<{ date?: strin
           {tglossText(
             `Bay Utilization = actual GUS/BPU repair orders this month ÷ ideal capacity for the same number of elapsed working ` +
               `days (${data.workingDaysElapsed} so far this month) — pace-adjusted, not a flat monthly-target %. GS ideal capacity ` +
-              `is bays × 5.85 jobs/bay/day; BP ideal capacity comes from each branch's 2025 job-mix-weighted cycle-time model. ` +
-              `GUS-for-the-Month Target = GS bays × 5.85 jobs/bay/day × every working day in the month (not just elapsed) — ` +
+              `is bays × 6.3 jobs/bay/day; BP ideal capacity is bays × 1.04 BPU/bay/day, same formula. ` +
+              `GUS-for-the-Month Target = GS bays × 6.3 jobs/bay/day × every working day in the month (not just elapsed) — ` +
               `same formula as Bay Utilization's ideal capacity, just for the whole month instead of pace-to-date. ` +
               `Revenue = GUS + BPU parts & labour + External Sales + scrap/used oil. Revenue Target (and the Target lines above) ` +
               `derive from each branch's own Incentive Slab 3 target × 30/32, split 9.5:20.5 into a Labour bucket and a ` +

@@ -54,38 +54,17 @@ export const BP_BAYS: Readonly<Record<string, number>> = {
   TR01C: 12,
 };
 
-/** GUS jobs per GS bay per working day — flat across every branch, per the workbook. */
-export const GS_STANDARD_PRODUCTIVITY_PER_BAY_PER_DAY = 5.85;
+/** GUS jobs per GS bay per working day — flat across every branch, per the workbook.
+ * Raised from 5.85 to 6.3, 2026-11-12 (user-confirmed revised target). */
+export const GS_STANDARD_PRODUCTIVITY_PER_BAY_PER_DAY = 6.3;
 
-/**
- * Annual ideal BPU capacity per branch (bays x job-severity-mix-weighted
- * ideal cycle time x working hours) — taken straight from the workbook's
- * "2025 ideal BPU" column rather than re-derived here, since the underlying
- * job-mix (General/Small/Light/Medium/Heavy) isn't in the daily pipeline.
- */
-export const BP_IDEAL_ANNUAL: Readonly<Record<string, number>> = {
-  CO01A: 4161.6,
-  CO01B: 979.2,
-  CO01E: 5630.4,
-  IR01A: 1224,
-  KL01A: 979.2,
-  KL01B: 4161.6,
-  KT01A: 2203.2,
-  KT01B: 2692.8,
-  KY01A: 2937.6,
-  MV01A: 1713.6,
-  PH01A: 1224,
-  TI01A: 5140.8,
-  TI01B: 979.2,
-  TI01C: 1224,
-  TL01A: 1224,
-  TR01A: 734.4,
-  TR01B: 3427.2,
-  TR01C: 2937.6,
-};
-
-/** Working days in a full year, per the same workbook — denominator for BP_IDEAL_ANNUAL. */
-export const ANNUAL_WORKING_DAYS = 272;
+/** BPU per BP bay per working day — flat across every branch, same as GS above.
+ * Raised from 0.9 to 1.04, 2026-11-12 (user-confirmed revised target). Previously
+ * this was baked into a hardcoded per-branch annual table (bays x 0.9 x 272 working
+ * days, confirmed to match every branch's workbook figure exactly) — replaced with
+ * this flat rate so a future target change is a one-line edit, not 17 recalculated
+ * numbers. */
+export const BP_STANDARD_PRODUCTIVITY_PER_BAY_PER_DAY = 1.04;
 
 export type BayUtilization = {
   actualRoMtd: number;
@@ -104,13 +83,12 @@ export function gsBayUtilization(branch: string, gusRoMtd: number | null, workin
   return { actualRoMtd: gusRoMtd, bays, idealRoMtd, utilizationPct: idealRoMtd > 0 ? gusRoMtd / idealRoMtd : 0 };
 }
 
-/** BP bay utilization: actual BPU ROs so far this month vs. that branch's
- * ideal annual BPU capacity, prorated down to the same elapsed working days. */
+/** BP bay utilization: actual BPU ROs so far this month vs. ideal capacity
+ * for the same number of elapsed working days. */
 export function bpBayUtilization(branch: string, bpuRoMtd: number | null, workingDaysElapsed: number): BayUtilization | null {
   const bays = BP_BAYS[branch];
-  const idealAnnual = BP_IDEAL_ANNUAL[branch];
-  if (!bays || !idealAnnual || bpuRoMtd === null || workingDaysElapsed <= 0) return null;
-  const idealRoMtd = (idealAnnual / ANNUAL_WORKING_DAYS) * workingDaysElapsed;
+  if (!bays || bpuRoMtd === null || workingDaysElapsed <= 0) return null;
+  const idealRoMtd = bays * BP_STANDARD_PRODUCTIVITY_PER_BAY_PER_DAY * workingDaysElapsed;
   return { actualRoMtd: bpuRoMtd, bays, idealRoMtd, utilizationPct: idealRoMtd > 0 ? bpuRoMtd / idealRoMtd : 0 };
 }
 
