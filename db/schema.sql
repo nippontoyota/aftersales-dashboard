@@ -1764,3 +1764,18 @@ create table if not exists ce_conquest_activity (
   created_at timestamptz not null default now()
 );
 create index if not exists ce_conquest_activity_lead_idx on ce_conquest_activity (conquest_lead_id, created_at desc, id desc);
+
+-- Conquest's "download, call offline, reupload" bulk-apply log (2026-11-13,
+-- at the user's request) — same shape and purpose as ce_mrs_bulk_apply_log,
+-- lead_id in place of vin since not every conquest lead has one.
+create table if not exists ce_conquest_bulk_apply_log (
+  id          bigserial    primary key,
+  uploaded_by text         not null references admins(username),
+  file_name   text,
+  row_number  integer      not null,
+  lead_id     bigint       not null,
+  success     boolean      not null,
+  message     text         not null,
+  created_at  timestamptz  not null default now()
+);
+create index if not exists ce_conquest_bulk_apply_log_run_idx on ce_conquest_bulk_apply_log (uploaded_by, created_at desc);

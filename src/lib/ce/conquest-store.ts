@@ -41,6 +41,7 @@ export async function loadConquestLeadPage(options: {
   pmMonths?: number[];
   assignedTo?: string;
   page?: number;
+  limit?: number;
 }) {
   const values: unknown[] = [options.today];
   // $1 (today) is only otherwise referenced inside the followUps branch
@@ -78,7 +79,7 @@ export async function loadConquestLeadPage(options: {
   }
   const clause = where.join(" and ");
   const page = Math.max(1, options.page ?? 1);
-  const limit = 50;
+  const limit = options.limit ?? 50;
   const filterValues = [...values];
   values.push(limit, (page - 1) * limit);
 
@@ -255,4 +256,71 @@ export async function assignConquestLeadsEvenly(input: { ids: string[]; agents: 
     [JSON.stringify(assignments)],
   );
   return { assignedCount: assignments.length };
+}
+
+export type CeConquestBulkLeadLookup = {
+  id: string;
+  active: boolean;
+  customerName: string;
+  status: CeStatus;
+  attemptCount: number;
+  latestOutcome: string | null;
+  /** IST calendar date (YYYY-MM-DD) the workflow row was last touched —
+   * just what the bulk-upload duplicate-warning heuristic needs, not a
+   * full timestamp (see conquest-bulk-update.ts). */
+  updatedDateIst: string;
+  assignedTo: string | null;
+};
+
+/** Mirrors loadCeLeadsForBulkUpdate — one batched lookup for the whole
+ * sheet instead of one query per row (2026-11-13, for Conquest's own
+ * bulk-upload preview/apply routes). */
+export async function loadConquestLeadsForBulkUpdate(ids: string[]): Promise<Map<string, CeConquestBulkLeadLookup>> {
+  if (ids.length === 0) return new Map();
+  const { rows } = await pool.query<{
+    id: string;
+    active: boolean;
+    owner_name: string | null;
+    status: CeStatus;
+    attempt_count: number;
+    latest_outcome: string | null;
+    updated_date_ist: string;
+    assigned_to: string | null;
+  }>(
+    `select l.id, l.active, l.owner_name,
+            w.status, w.attempt_count, w.latest_outcome, w.assigned_to,
+            (w.updated_at at time zone 'Asia/Kolkata')::date::text as updated_date_ist
+     from ce_conquest_leads l join ce_conquest_workflow w on w.conquest_lead_id = l.id
+     where l.id = any($1::bigint[])`,
+    [ids],
+  );
+  const map = new Map<string, CeConquestBulkLeadLookup>();
+  for (const row of rows) {
+    map.set(String(row.id), {
+      id: String(row.id),
+      active: row.active,
+      customerName: row.owner_name || "Unnamed owner",
+      status: row.status,
+      attemptCount: Number(row.attempt_count),
+      latestOutcome: row.latest_outcome,
+      updatedDateIst: row.updated_date_ist,
+      assignedTo: row.assigned_to,
+    });
+  }
+  return map;
+}
+
+/** Mirrors logCeMrsBulkApplyResults — same shape, lead_id in place of vin. */
+export async function logCeConquestBulkApplyResults(results: { rowNumber: number; id: string; success: boolean; message: string }[], username: string, fileName?: string): Promise<void> {
+  if (results.length === 0) return;
+  const values: unknown[] = [];
+  const tuples = results.map((r, i) => {
+    const base = i * 6;
+    values.push(username, fileName ?? null, r.rowNumber, r.id, r.success, r.message);
+    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`;
+  });
+  await pool.query(
+    `insert into ce_conquest_bulk_apply_log (uploaded_by, file_name, row_number, lead_id, success, message) values ${tuples.join(", ")}`,
+    values,
+  );
 }

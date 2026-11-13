@@ -12,7 +12,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return <div><dt className="text-[10px] font-semibold uppercase tracking-wide text-fg-faint">{label}</dt><dd className="mt-1 text-sm text-fg">{value || "—"}</dd></div>;
 }
 
-export default async function CeConquestLeadPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CeConquestLeadPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ from?: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/login");
   if (admin.role !== "ce_head" && admin.role !== "ce_agent" && admin.role !== "hq") redirect("/");
@@ -24,11 +24,19 @@ export default async function CeConquestLeadPage({ params }: { params: Promise<{
 
   const canEdit = admin.role === "ce_head" || admin.role === "ce_agent";
   const holidays = canEdit ? [...(await loadReportHolidaySet())] : [];
+  // Honors wherever the visitor actually came from (the list's search/
+  // status/PM-month filters and page) instead of always bouncing back to
+  // the default view — only trusts an internal /ce/conquest path, never an
+  // arbitrary redirect target (2026-11-13, at the user's request — opening
+  // a lead from December and coming back used to drop you on the current
+  // month instead).
+  const { from } = await searchParams;
+  const backHref = from && from.startsWith("/ce/conquest") ? from : "/ce/conquest";
 
   return (
     <CeShell admin={admin} current="conquest">
       <main className="mx-auto w-full max-w-5xl p-4 sm:p-6">
-        <Link href="/ce/conquest" className="text-xs font-medium text-fg-subtle hover:text-accent-text">← Conquest leads</Link>
+        <Link href={backHref} className="text-xs font-medium text-fg-subtle hover:text-accent-text">← Conquest leads</Link>
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
           <div><h1 className="text-2xl font-semibold tracking-tight text-fg">{lead.ownerName || "Unnamed owner"}</h1><p className="mt-1 font-mono text-xs text-fg-subtle">{lead.registrationNo}</p></div>
           <span className="rounded-full bg-surface-3 px-2.5 py-1 text-xs font-semibold text-fg-muted">{lead.status}</span>

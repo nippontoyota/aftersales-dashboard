@@ -8,6 +8,7 @@ import { FilterBar, MultiSelectFilter } from "../filter-bar";
 import { ContactLink } from "../contact-link";
 import { SelectAllCheckbox } from "../select-all-checkbox";
 import { assignConquestLeadsEvenlyAction } from "./actions";
+import { ConquestBulkUpdateForm } from "./bulk-update-form";
 
 // "MRS follow-up already scheduled" never applies here — these leads were
 // never on an MRS list in the first place.
@@ -26,6 +27,19 @@ function href(params: Record<string, string | string[] | undefined>) {
     else if (value) search.set(key, value);
   }
   return `/ce/conquest${search.size ? `?${search}` : ""}`;
+}
+
+function searchString(params: Record<string, string | string[] | undefined>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (Array.isArray(value)) value.forEach((item) => search.append(key, item));
+    else if (value) search.set(key, value);
+  }
+  return search.size ? `?${search}` : "";
+}
+
+function DownloadIcon() {
+  return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-3.5 w-3.5" aria-hidden="true"><path d="M8 2v8m0 0 3-3m-3 3-3-3M2.5 11.5V13a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
 /** Wraps the lead rows in the "Assign evenly" bulk-assign form for a CE
@@ -48,6 +62,7 @@ export default async function CeConquestPage({ searchParams }: { searchParams: P
   if (!admin) redirect("/login");
   if (admin.role !== "ce_head" && admin.role !== "ce_agent" && admin.role !== "hq") redirect("/");
   const canAssign = admin.role === "ce_head";
+  const canEditCalls = admin.role === "ce_head" || admin.role === "ce_agent";
   const showAssignedTo = admin.role === "ce_head" || admin.role === "hq";
   const assignedTo = admin.role === "ce_agent" ? admin.username : undefined;
 
@@ -70,6 +85,11 @@ export default async function CeConquestPage({ searchParams }: { searchParams: P
   const shared = { q: query, status: statuses, followUp: followUps, pmMonth: String(selectedMonth) };
   const hasFilters = Boolean(query || statuses.length || followUps.length);
   const backTo = href({ ...shared, page: data.page > 1 ? String(data.page) : undefined });
+  // So a lead opened from, say, the December PM-month tab comes back to
+  // December instead of the detail page's back link falling to /ce/conquest
+  // plain, which re-defaults to the current month (2026-11-13, at the
+  // user's request) — same from= pattern the MRS catch list already uses.
+  const leadHref = (id: string) => `/ce/conquest/${id}?from=${encodeURIComponent(backTo)}`;
 
   return (
     <CeShell admin={admin} current="conquest">
@@ -122,7 +142,18 @@ export default async function CeConquestPage({ searchParams }: { searchParams: P
           <MultiSelectFilter label="Follow-up" allLabel="All follow-ups" name="followUp" selected={followUps} options={[{ value: "due", label: "Due" }, { value: "upcoming", label: "Upcoming" }, { value: "none", label: "No follow-up set" }]} />
         </FilterBar>
 
-        <div className="mt-3 text-xs text-fg-faint">{data.total.toLocaleString("en-IN")} of {data.totalCount.toLocaleString("en-IN")} lead{data.totalCount === 1 ? "" : "s"}</div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="text-xs text-fg-faint">{data.total.toLocaleString("en-IN")} of {data.totalCount.toLocaleString("en-IN")} lead{data.totalCount === 1 ? "" : "s"}</div>
+          <div className="flex items-center gap-2">
+            {canEditCalls ? <ConquestBulkUpdateForm /> : null}
+            <a
+              href={`/api/ce/conquest-export${searchString(shared)}`}
+              className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-border-strong px-3 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <DownloadIcon /> Download Excel
+            </a>
+          </div>
+        </div>
 
         {Number.isFinite(assignedCount) ? (
           <div className="mt-3 rounded-md border border-good-soft bg-good-soft px-3 py-2 text-xs font-medium text-good">Assigned {assignedCount} lead{assignedCount === 1 ? "" : "s"} evenly across your team.</div>
@@ -146,7 +177,7 @@ export default async function CeConquestPage({ searchParams }: { searchParams: P
                   {data.rows.map((lead) => (
                     <tr key={lead.id} className="hover:bg-surface-2/60">
                       {canAssign ? <td className="px-3 py-3"><input type="checkbox" name="id" value={lead.id} className="h-3.5 w-3.5 accent-[var(--color-accent)]" /></td> : null}
-                      <td className="px-3 py-3 font-medium"><Link href={`/ce/conquest/${lead.id}`} className="text-accent-text underline decoration-transparent underline-offset-2 hover:decoration-current focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{lead.ownerName || "Unnamed owner"}</Link></td>
+                      <td className="px-3 py-3 font-medium"><Link href={leadHref(lead.id)} className="text-accent-text underline decoration-transparent underline-offset-2 hover:decoration-current focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{lead.ownerName || "Unnamed owner"}</Link></td>
                       <td className="px-3 py-3 text-fg-muted"><ContactLink value={lead.ownerMobile} /></td>
                       <td className="px-3 py-3 font-mono text-[11px] text-fg-muted">{lead.registrationNo}</td>
                       <td className="px-3 py-3 font-mono text-[11px] text-fg-muted">{lead.vin || "—"}</td>
@@ -154,7 +185,7 @@ export default async function CeConquestPage({ searchParams }: { searchParams: P
                       <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{lead.registrationDate ? formatCeDate(lead.registrationDate) : "—"}</td>
                       <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{lead.status}</td>
                       {showAssignedTo ? <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{lead.assignedTo ?? "—"}</td> : null}
-                      <td className="px-3 py-3"><Link href={`/ce/conquest/${lead.id}`} className="inline-flex h-8 items-center whitespace-nowrap rounded-md border border-border-strong px-3 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open lead</Link></td>
+                      <td className="px-3 py-3"><Link href={leadHref(lead.id)} className="inline-flex h-8 items-center whitespace-nowrap rounded-md border border-border-strong px-3 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Open lead</Link></td>
                     </tr>
                   ))}
                 </tbody>
@@ -168,12 +199,12 @@ export default async function CeConquestPage({ searchParams }: { searchParams: P
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-2">
                       {canAssign ? <input type="checkbox" name="id" value={lead.id} className="mt-1 h-3.5 w-3.5 accent-[var(--color-accent)]" /> : null}
-                      <div><Link href={`/ce/conquest/${lead.id}`} className="font-medium text-fg hover:text-accent-text focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{lead.ownerName || "Unnamed owner"}</Link><div className="mt-0.5 font-mono text-[11px] text-fg-faint">{lead.registrationNo}</div></div>
+                      <div><Link href={leadHref(lead.id)} className="font-medium text-fg hover:text-accent-text focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{lead.ownerName || "Unnamed owner"}</Link><div className="mt-0.5 font-mono text-[11px] text-fg-faint">{lead.registrationNo}</div></div>
                     </div>
                     <span className="rounded-full bg-surface-2 px-2 py-1 text-[10px] font-semibold text-fg-muted">{lead.status}</span>
                   </div>
                   <div className="mt-2 text-xs text-fg-muted"><ContactLink value={lead.ownerMobile} />{lead.vehicleModel ? <span> · {lead.vehicleModel}</span> : null}</div>
-                  <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-3 text-xs text-fg-muted"><span>{lead.registrationDate ? formatCeDate(lead.registrationDate) : "No reg. date"}{showAssignedTo ? ` · ${lead.assignedTo ?? "unassigned"}` : ""}</span><Link href={`/ce/conquest/${lead.id}`} className="font-medium text-accent-text">Open lead →</Link></div>
+                  <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-3 text-xs text-fg-muted"><span>{lead.registrationDate ? formatCeDate(lead.registrationDate) : "No reg. date"}{showAssignedTo ? ` · ${lead.assignedTo ?? "unassigned"}` : ""}</span><Link href={leadHref(lead.id)} className="font-medium text-accent-text">Open lead →</Link></div>
                 </article>
               ))}
             </div>

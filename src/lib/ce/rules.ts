@@ -135,6 +135,15 @@ export const CE_MRS_FOLLOW_UP_SCHEDULED_STATUS: CeStatus = "MRS follow-up alread
  * value (see resolveCeBulkOutcome below). */
 export const CE_MRS_BULK_OUTCOME_OPTIONS = [...CONNECTED_OUTCOMES, ...NOT_CONNECTED_OUTCOMES, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS] as const;
 
+/** Same idea for Conquest's own bulk-upload sheet (2026-11-13) — every real
+ * call outcome, minus the MRS-only shortcut, which doesn't apply here (a
+ * conquest lead was never on an MRS list, so "MRS follow-up already
+ * scheduled" isn't even a valid status for ce_conquest_workflow). Reuses
+ * resolveCeBulkOutcome below for classification — its "mrs_follow_up_
+ * scheduled" branch is simply never a legal choice for Conquest, same as
+ * any other unrecognized value. */
+export const CE_CONQUEST_BULK_OUTCOME_OPTIONS = [...CONNECTED_OUTCOMES, ...NOT_CONNECTED_OUTCOMES] as const;
+
 export type CeMrsBulkOutcomeResolution =
   | { kind: "call"; callStatus: CeCallStatus; outcome: CeCallOutcome }
   | { kind: "mrs_follow_up_scheduled" }
