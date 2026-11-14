@@ -16,13 +16,15 @@ function isValidDateParam(v: string | null | undefined): v is string {
   return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
 }
 
-/** The group report's default date range — the current calendar year to
- * date (IST), matching how BP HO's own reference sheet was named by year —
- * shared by the Excel export route and the in-app view so they never drift
- * apart. `fromParam`/`toParam` win when they look like real dates. */
+/** The group report's default date range — the current calendar month to
+ * date (IST), 2026-11-14 at the user's request (was the whole calendar year
+ * to date — BP HO now looks at this one month at a time, same reasoning as
+ * the BPHO analytics view's own month default) — shared by the Excel export
+ * route and the in-app view so they never drift apart. `fromParam`/
+ * `toParam` win when they look like real dates. */
 export function resolveGroupReportRange(fromParam?: string | null, toParam?: string | null): { from: string; to: string } {
   const today = todayIST();
-  const from = isValidDateParam(fromParam) ? fromParam : `${today.slice(0, 4)}-01-01`;
+  const from = isValidDateParam(fromParam) ? fromParam : `${today.slice(0, 7)}-01`;
   const to = isValidDateParam(toParam) ? toParam : today;
   return { from, to };
 }
