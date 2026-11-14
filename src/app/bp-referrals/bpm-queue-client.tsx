@@ -5,7 +5,6 @@ import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
 import { achievementTone } from "@/lib/aggregate";
 import { formatNumber, formatPercent } from "@/lib/format";
-import type { BayUtilization } from "@/lib/bay-capacity";
 import {
   changePaymentTypeAction,
   closeFollowUpAsLostAction,
@@ -1120,6 +1119,11 @@ function QueueList({
   );
 }
 
+/** This branch's BPU achievement vs. its fixed month-end target — same
+ * metric as the "BPU" card on the branch dashboard's Targets — MTD panel.
+ * null when the branch has no BPU target set for the month. */
+type BpuProgress = { mtd: number | null; target: number | null; ratio: number | null; paceRatio: number | null };
+
 export function BpmQueueClient({
   ownBranch,
   queue,
@@ -1127,7 +1131,7 @@ export function BpmQueueClient({
   regionName,
   regionRollup,
   transferredOut,
-  bpRoTarget,
+  bpuProgress,
 }: {
   ownBranch: string;
   queue: BpmQueueReferral[];
@@ -1135,13 +1139,11 @@ export function BpmQueueClient({
   regionName: string | null;
   regionRollup: BpmQueueReferral[] | null;
   transferredOut: BpmQueueReferral[];
-  /** This branch's BP repair-order target (bays x per-bay/day productivity,
-   * same formula as the CEO dashboard's Bay Utilization) vs. actual BPU ROs
-   * so far this month — null when the branch has no BP bays or no data yet.
-   * 2026-11-12, at the user's request: BP managers only ever saw the
-   * referral-program numbers on this page, never their own branch's BP RO
-   * target. */
-  bpRoTarget: BayUtilization | null;
+  /** 2026-11-12, at the user's request: BP managers only ever saw the
+   * referral-program numbers on this page, never their own branch's BPU
+   * progress. 2026-11-14, swapped from the bay-utilization BP RO target to
+   * this fixed-month-end BPU metric, to match the branch dashboard. */
+  bpuProgress: BpuProgress | null;
 }) {
   const [view, setView] = useState<"own" | "region" | "transferred_out">("own");
 
@@ -1179,24 +1181,33 @@ export function BpmQueueClient({
         </div>
       </div>
 
-      {bpRoTarget ? (
+      {bpuProgress && bpuProgress.mtd !== null ? (
         <div className="mb-6 rounded-lg border border-border bg-surface p-3 shadow-sm">
-          <div className={eyebrow}>BP RO target — MTD</div>
+          <div className={eyebrow}>BPU — MTD</div>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-lg font-semibold tabular-nums text-fg">{formatNumber(bpRoTarget.actualRoMtd)}</span>
-            <span className="text-xs text-fg-faint">/ {formatNumber(bpRoTarget.idealRoMtd)} ROs target</span>
+            <span className="text-lg font-semibold tabular-nums text-fg">{formatNumber(bpuProgress.mtd)}</span>
+            {bpuProgress.target !== null ? (
+              <span className="text-xs text-fg-faint">/ Target {formatNumber(bpuProgress.target)}</span>
+            ) : null}
           </div>
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2">
             <div
               className={`h-full rounded-full ${
                 { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" }[
-                  achievementTone(bpRoTarget.utilizationPct)
+                  achievementTone(bpuProgress.paceRatio)
                 ]
               }`}
-              style={{ width: `${Math.min(100, Math.round(bpRoTarget.utilizationPct * 100))}%` }}
+              style={{ width: `${bpuProgress.ratio === null ? 0 : Math.min(100, Math.round(bpuProgress.ratio * 100))}%` }}
             />
           </div>
-          <div className="mt-1 text-[11px] text-fg-faint">{formatPercent(bpRoTarget.utilizationPct)} of pace-adjusted target ({bpRoTarget.bays} bays)</div>
+          <div className="mt-1 text-[11px] text-fg-faint">
+            {bpuProgress.ratio === null ? "no target" : `${formatPercent(bpuProgress.ratio)} of target`}
+            {bpuProgress.paceRatio !== null
+              ? bpuProgress.paceRatio >= 1
+                ? " — on / ahead of pace"
+                : ` — ${formatPercent(1 - bpuProgress.paceRatio)} behind pace`
+              : null}
+          </div>
         </div>
       ) : null}
 

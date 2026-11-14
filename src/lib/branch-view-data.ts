@@ -1,4 +1,4 @@
-import { bpBayUtilization, gsBayUtilization } from "./bay-capacity";
+import { gsBayUtilization } from "./bay-capacity";
 import { buildReport, BODY_PAINT_ONLY_BRANCHES, type BranchReport, type Report } from "./report";
 import { REGIONS, regionForBranch, type RegionName } from "./regions";
 import { listSnapshotDates, loadSnapshotsForMonthUpTo, type Snapshot } from "./snapshot-store";
@@ -60,7 +60,7 @@ export type BranchView = {
   ranks: Record<BranchMetricKey, BranchRank>;
 
   /** TGLOSS + the four TKM target metrics (BPU, Offtake, Parts Retail, PM+OC),
-   * plus GS/BP RO-count-vs-bay-capacity targets. */
+   * plus the GS RO-count-vs-bay-capacity target. */
   targetStats: TargetStat[];
 
   workingDays: { elapsed: number; total: number };
@@ -270,51 +270,35 @@ function buildView(branch: string, shared: Shared): BranchView | null {
     };
   });
 
-  // ---- GS/BP RO-count targets (bays × per-bay/day productivity) — same
-  // formula as the CEO dashboard's Bay Utilization, surfaced here so a
-  // branch can see its own ROs-so-far vs. target pace. Already an MTD
-  // (pace-adjusted) target, like TGLOSS above, so mtdTarget: true and no
-  // separate paceRatio. Ranked across every branch with that bay type (not
-  // `rankable`, which excludes Body & Paint-only branches for the
-  // revenue-per-car/VAS ranks above — those branches still have real BP bays
-  // and belong in the BP RO ranking).
+  // ---- GS RO-count target (bays × per-bay/day productivity) — same formula
+  // as the CEO dashboard's Bay Utilization, surfaced here so a branch can see
+  // its own ROs-so-far vs. target pace. Already an MTD (pace-adjusted)
+  // target, like TGLOSS above, so mtdTarget: true and no separate paceRatio.
+  // Ranked across every branch with a GS bay (not `rankable`, which excludes
+  // Body & Paint-only branches for the revenue-per-car/VAS ranks above).
   const bayUtils = all.map((b) => ({
     branch: b.branch,
     gs: gsBayUtilization(b.branch, b.gusRoMtd, workingDays.elapsed),
-    bp: bpBayUtilization(b.branch, b.bpuRoMtd, workingDays.elapsed),
   }));
-  const rankByUtilization = (pick: (u: { gs: ReturnType<typeof gsBayUtilization>; bp: ReturnType<typeof bpBayUtilization> }) => ReturnType<typeof gsBayUtilization>): BranchRank => {
+  const rankByGsUtilization = (): BranchRank => {
     const ranked = bayUtils
-      .map((u) => ({ branch: u.branch, g: pick(u)?.utilizationPct ?? null }))
+      .map((u) => ({ branch: u.branch, g: u.gs?.utilizationPct ?? null }))
       .filter((x): x is { branch: string; g: number } => x.g !== null)
       .sort((a, b) => b.g - a.g);
     const idx = ranked.findIndex((x) => x.branch === branch);
     return idx === -1 ? null : { rank: idx + 1, of: ranked.length };
   };
   const ownGsUtil = gsBayUtilization(branch, branchReport.gusRoMtd, workingDays.elapsed);
-  const ownBpUtil = bpBayUtilization(branch, branchReport.bpuRoMtd, workingDays.elapsed);
-  targetStats.push(
-    {
-      key: "gsRo",
-      label: "GS ROs",
-      mtd: ownGsUtil?.actualRoMtd ?? null,
-      target: ownGsUtil?.idealRoMtd ?? null,
-      ratio: ownGsUtil?.utilizationPct ?? null,
-      paceRatio: null,
-      mtdTarget: true,
-      rank: rankByUtilization((u) => u.gs),
-    },
-    {
-      key: "bpRo",
-      label: "BP ROs",
-      mtd: ownBpUtil?.actualRoMtd ?? null,
-      target: ownBpUtil?.idealRoMtd ?? null,
-      ratio: ownBpUtil?.utilizationPct ?? null,
-      paceRatio: null,
-      mtdTarget: true,
-      rank: rankByUtilization((u) => u.bp),
-    },
-  );
+  targetStats.push({
+    key: "gsRo",
+    label: "GS ROs",
+    mtd: ownGsUtil?.actualRoMtd ?? null,
+    target: ownGsUtil?.idealRoMtd ?? null,
+    ratio: ownGsUtil?.utilizationPct ?? null,
+    paceRatio: null,
+    mtdTarget: true,
+    rank: rankByGsUtilization(),
+  });
 
   // ---- last month ----
   const lastMonth = prevMonthEndDate
