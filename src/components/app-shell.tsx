@@ -364,7 +364,9 @@ export function AppShell({
    * full read-only HQ suite (same scope as hq_viewer) instead of its own
    * bare BpShell, so one account covers both without switching. Only gates
    * the "BP Referrals" nav item itself, never the HQ-only utility tools
-   * (Data/Upload Sheet/CE Leads) — those stay `isHq`-only. */
+   * (Data/Upload Sheet/CE Leads) — those stay `isHq`-only. A plain branch
+   * account's own read-only view of the same page (2026-11-16) widens this
+   * same gate to `isBranch` too, below. */
   isBpHo?: boolean;
   /** When false, the company-wide tabs (TKM Targets, Alerts, Branches,
    * Reports) are hidden — a branch admin whose latest date isn't published
@@ -423,7 +425,7 @@ export function AppShell({
           (!item.requiresDashboard || showDashboardLink) &&
           (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload) &&
-          (!item.hqOnly || isHq || isBpHo) &&
+          (!item.hqOnly || isHq || isBpHo || isBranch) &&
           (!item.branchOnly || isBranch) &&
           (!item.branchOrHqOnly || isBranch || isHq),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));

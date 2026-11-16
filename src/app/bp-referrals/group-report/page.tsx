@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { BpShell } from "@/components/bp-shell";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadNavState } from "@/lib/dashboard-data";
@@ -78,12 +79,16 @@ function monthOptions(count: number, selected: string): string[] {
 export default async function GroupReportPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/login");
-  if (admin.role !== "bp_ho" && admin.role !== "hq" && admin.role !== "regional") redirect("/dashboard");
+  if (admin.role !== "bp_ho" && admin.role !== "hq" && admin.role !== "regional" && admin.role !== "bp_manager") redirect("/dashboard");
 
   const params = await searchParams;
   const { from, to } = resolveGroupReportRange(params.from, params.to);
-  const branches = admin.role === "regional" ? [...REGIONS[admin.region]] : undefined;
-  const navState = await loadNavState(admin);
+  // BP manager (2026-11-16, at the user's request): own branch only, same
+  // scoping mechanism a regional admin's own region already uses below —
+  // and BpShell below, not AppShell, matching their main /bp-referrals
+  // queue page's own bare shell (no sidebar/nav for this role at all).
+  const branches = admin.role === "regional" ? [...REGIONS[admin.region]] : admin.role === "bp_manager" ? [admin.branch] : undefined;
+  const navState = admin.role === "bp_manager" ? null : await loadNavState(admin);
 
   const rows = await loadGroupReportRows(inclusiveDateRange(from, to), branches);
   const pivot = buildPivot(rows);
@@ -100,22 +105,7 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
   const currentYear = Number(new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", year: "numeric" }));
   const yearLinks = [currentYear, currentYear - 1, currentYear - 2];
 
-  return (
-    <AppShell
-      current="bp-referrals"
-      showDashboardLink={true}
-      isHq={admin.role === "hq"}
-      isBpHo={admin.role === "bp_ho"}
-      isRegional={admin.role === "regional"}
-      centralNav={admin.role === "regional" && admin.region === "Central"}
-      regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
-      companyTabs={navState.companyTabs}
-      canUpload={navState.canUpload}
-      slimNav={admin.role === "regional" ? navState.slimNav : undefined}
-      dashboardLabel={navState.dashboardLabel}
-      queriesBadge={navState.queriesBadge}
-      identity={adminIdentityLabel(admin)}
-    >
+  const content = (
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -372,6 +362,29 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
           </div>
         </div>
       </div>
+  );
+
+  if (admin.role === "bp_manager") {
+    return <BpShell identity={adminIdentityLabel(admin)}>{content}</BpShell>;
+  }
+
+  return (
+    <AppShell
+      current="bp-referrals"
+      showDashboardLink={true}
+      isHq={admin.role === "hq"}
+      isBpHo={admin.role === "bp_ho"}
+      isRegional={admin.role === "regional"}
+      centralNav={admin.role === "regional" && admin.region === "Central"}
+      regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
+      companyTabs={navState!.companyTabs}
+      canUpload={navState!.canUpload}
+      slimNav={admin.role === "regional" ? navState!.slimNav : undefined}
+      dashboardLabel={navState!.dashboardLabel}
+      queriesBadge={navState!.queriesBadge}
+      identity={adminIdentityLabel(admin)}
+    >
+      {content}
     </AppShell>
   );
 }

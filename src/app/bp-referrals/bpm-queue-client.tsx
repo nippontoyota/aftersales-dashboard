@@ -1132,6 +1132,7 @@ export function BpmQueueClient({
   regionRollup,
   transferredOut,
   bpuProgress,
+  readOnly = false,
 }: {
   ownBranch: string;
   queue: BpmQueueReferral[];
@@ -1144,6 +1145,14 @@ export function BpmQueueClient({
    * progress. 2026-11-14, swapped from the bay-utilization BP RO target to
    * this fixed-month-end BPU metric, to match the branch dashboard. */
   bpuProgress: BpuProgress | null;
+  /** True for the plain "branch" account's own read-only view of this same
+   * page (2026-11-16, at the user's request) — every call/follow-up/RO/
+   * payment-type/transfer control disappears (same canAct gating QueueList
+   * already applies to the region/transferred-out tabs), and the Group
+   * Report link is hidden too (that one's bp_manager-only, per the user's
+   * explicit ask). Defaults to false so the existing bp_manager call site
+   * doesn't need updating. */
+  readOnly?: boolean;
 }) {
   const [view, setView] = useState<"own" | "region" | "transferred_out">("own");
 
@@ -1152,32 +1161,45 @@ export function BpmQueueClient({
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-fg">BP Referrals — {branchName(ownBranch)}</h1>
-          <p className="mt-1 text-sm text-fg-muted">{queue.length} total referral{queue.length === 1 ? "" : "s"} assigned to your branch.</p>
+          <p className="mt-1 text-sm text-fg-muted">
+            {queue.length} total referral{queue.length === 1 ? "" : "s"} assigned to your branch
+            {readOnly ? " (read-only)" : ""}.
+          </p>
         </div>
-        <div className="flex gap-1.5 rounded-lg border border-border bg-surface p-1 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setView("own")}
-            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "own" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
-          >
-            My branch
-          </button>
-          {regionName && regionRollup ? (
+        <div className="flex items-center gap-2">
+          {!readOnly ? (
+            <a
+              href="/bp-referrals/group-report"
+              className="h-8 rounded-md border border-border-strong px-3 text-xs font-semibold leading-8 text-fg hover:bg-surface-2"
+            >
+              Group Report →
+            </a>
+          ) : null}
+          <div className="flex gap-1.5 rounded-lg border border-border bg-surface p-1 shadow-sm">
             <button
               type="button"
-              onClick={() => setView("region")}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "region" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
+              onClick={() => setView("own")}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "own" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
             >
-              {regionName} region
+              My branch
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setView("transferred_out")}
-            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "transferred_out" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
-          >
-            Transferred out{transferredOut.length ? ` (${transferredOut.length})` : ""}
-          </button>
+            {regionName && regionRollup ? (
+              <button
+                type="button"
+                onClick={() => setView("region")}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "region" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
+              >
+                {regionName} region
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setView("transferred_out")}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${view === "transferred_out" ? "bg-accent-soft text-accent-text" : "text-fg-muted"}`}
+            >
+              Transferred out{transferredOut.length ? ` (${transferredOut.length})` : ""}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1212,7 +1234,7 @@ export function BpmQueueClient({
       ) : null}
 
       {view === "own" ? (
-        <QueueList referrals={queue} ownBranch={ownBranch} branchCodes={branchCodes} readOnly={false} showBranchColumn={false} />
+        <QueueList referrals={queue} ownBranch={ownBranch} branchCodes={branchCodes} readOnly={readOnly} showBranchColumn={false} />
       ) : view === "region" ? (
         <QueueList referrals={regionRollup ?? []} ownBranch={ownBranch} branchCodes={branchCodes} readOnly={true} showBranchColumn={true} />
       ) : (

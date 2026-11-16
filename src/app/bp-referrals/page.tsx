@@ -40,7 +40,13 @@ export default async function BpReferralsPage({ searchParams }: { searchParams: 
   const month = monthParam === "all" || /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam ?? "") ? monthParam! : currentMonthKey();
   const range = month === "all" ? undefined : monthToRange(month);
 
-  if (admin.role === "bp_manager") {
+  // A plain branch account's own read-only view of this same page
+  // (2026-11-16, at the user's request) — same data, same component as a
+  // BPM's own queue below, just with every action control hidden
+  // (BpmQueueClient's readOnly prop) and inside the normal AppShell instead
+  // of BpShell, since "branch" accounts use the regular sidebar/nav
+  // everywhere else.
+  if (admin.role === "bp_manager" || admin.role === "branch") {
     await ensureAssignedBranches();
     const region = regionalLeadFor(admin.branch);
     const [queue, branchCodes, regionRollup, transferredOut, allDates, holidays] = await Promise.all([
@@ -75,19 +81,39 @@ export default async function BpReferralsPage({ searchParams }: { searchParams: 
       ratio: bpuRatio,
       paceRatio: bpuRatio === null || elapsedFraction === null || elapsedFraction === 0 ? null : bpuRatio / elapsedFraction,
     };
-    return (
-      <BpShell identity={adminIdentityLabel(admin)}>
-        <BpmQueueClient
-          ownBranch={admin.branch}
-          queue={queue}
-          branchCodes={branchCodes}
-          regionName={region}
-          regionRollup={regionRollup}
-          transferredOut={transferredOut}
-          bpuProgress={bpuProgress}
-        />
-      </BpShell>
+    const queueClient = (
+      <BpmQueueClient
+        ownBranch={admin.branch}
+        queue={queue}
+        branchCodes={branchCodes}
+        regionName={region}
+        regionRollup={regionRollup}
+        transferredOut={transferredOut}
+        bpuProgress={bpuProgress}
+        readOnly={admin.role === "branch"}
+      />
     );
+
+    if (admin.role === "branch") {
+      const navState = await loadNavState(admin);
+      return (
+        <AppShell
+          current="bp-referrals"
+          showDashboardLink={true}
+          isBranch={true}
+          companyTabs={navState.companyTabs}
+          canUpload={navState.canUpload}
+          slimNav={navState.slimNav}
+          dashboardLabel={navState.dashboardLabel}
+          queriesBadge={navState.queriesBadge}
+          identity={adminIdentityLabel(admin)}
+        >
+          {queueClient}
+        </AppShell>
+      );
+    }
+
+    return <BpShell identity={adminIdentityLabel(admin)}>{queueClient}</BpShell>;
   }
 
   // A regional manager's own scoped view (2026-10-29, the user's request) —

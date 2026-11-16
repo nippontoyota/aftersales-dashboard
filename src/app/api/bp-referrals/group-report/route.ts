@@ -9,13 +9,14 @@ import { buildGroupReportWorkbook } from "@/lib/bp-referrals/group-report-xlsx";
  * branch-scoping as the payout CSV export. */
 export async function GET(request: Request) {
   const admin = await getCurrentAdmin();
-  if (!admin || (admin.role !== "bp_ho" && admin.role !== "hq" && admin.role !== "regional")) {
+  if (!admin || (admin.role !== "bp_ho" && admin.role !== "hq" && admin.role !== "regional" && admin.role !== "bp_manager")) {
     return NextResponse.json({ error: "Not allowed." }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);
   const { from, to } = resolveGroupReportRange(searchParams.get("from"), searchParams.get("to"));
-  const branches = admin.role === "regional" ? [...REGIONS[admin.region]] : undefined;
+  // BP manager (2026-11-16): own branch only, same as the page itself.
+  const branches = admin.role === "regional" ? [...REGIONS[admin.region]] : admin.role === "bp_manager" ? [admin.branch] : undefined;
 
   const workbook = await buildGroupReportWorkbook({ from, to, branches });
   const buffer = await workbook.xlsx.writeBuffer();
