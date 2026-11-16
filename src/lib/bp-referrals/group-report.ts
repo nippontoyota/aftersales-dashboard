@@ -43,8 +43,14 @@ export function inclusiveDateRange(from: string, to: string): DateRange {
  * financials off the DMS's own Cost & Sales - BP export (raw_upload_rows,
  * report_type 'ssrv089_bp') — Part/Labour/Paint-material Sale and Cost,
  * joined on matched_ro_no the same tolerant way ro-matcher.ts itself
- * matches (see ro-normalize.ts). Unmatched referrals (no ro_matched_at)
- * simply get null financials — this is also how "converted" is defined
+ * matches (see ro-normalize.ts), and scoped to the referral's own
+ * assigned_branch for the same reason ro-matcher.ts's matching is
+ * (2026-11-16, fixing a real bug this caused: "BPJ" job order numbers are a
+ * per-branch counter, not company-wide-unique, so without the branch filter
+ * this could — and did — silently pull a completely unrelated vehicle's
+ * invoice from a different branch that happened to reuse the same RO
+ * string). Unmatched referrals (no ro_matched_at) simply get null
+ * financials — this is also how "converted" is defined
  * below, so a converted-only sum just means "only rows with financials". */
 export type GroupReportRow = {
   id: number;
@@ -142,7 +148,9 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
        from raw_upload_rows
        where report_type = 'ssrv089_bp'
          and r.matched_ro_no is not null and r.matched_ro_no <> ''
+         and branch = r.assigned_branch
          and ${NORMALIZE_RO_SQL(`upper(coalesce(row_data->>'JobOrder No', ''))`)} = ${NORMALIZE_RO_SQL("upper(r.matched_ro_no)")}
+       order by uploaded_at desc
        limit 1
      ) dms on true
      where r.submitted_at >= $1::date and r.submitted_at < $2::date
