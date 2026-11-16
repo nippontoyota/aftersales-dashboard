@@ -93,6 +93,9 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
 
   const content = (
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+        <a href="/bp-referrals" className="mb-3 inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg hover:underline">
+          ← Back to BP Referrals
+        </a>
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-fg">Group Report</h1>
