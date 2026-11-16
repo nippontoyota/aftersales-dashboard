@@ -127,6 +127,7 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
     pnt_mat_cost: string | null;
     labour_sale: string | null;
     labour_cost: string | null;
+    dms_vehicle_model: string | null;
   }>(
     `select
        r.id, r.submitted_at, r.referring_employee_name, r.referring_employee_id,
@@ -134,7 +135,7 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
        r.matched_ro_no, r.pending_ro_no, r.estimate_amount, r.validated_at, r.ro_matched_at,
        r.closed_reason, r.not_interested_reason, r.lost_reason,
        dms.total_sale, dms.part_sale, dms.part_cost, dms.pnt_mat_sale, dms.pnt_mat_cost,
-       dms.labour_sale, dms.labour_cost
+       dms.labour_sale, dms.labour_cost, cl.vehicle_model as dms_vehicle_model
      from bp_referrals r
      left join lateral (
        select
@@ -144,7 +145,8 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
          row_data->>'Pnt Mat Sale' as pnt_mat_sale,
          row_data->>'Pnt Mat Cost' as pnt_mat_cost,
          row_data->>'Labour Sale' as labour_sale,
-         row_data->>'Labour Cost' as labour_cost
+         row_data->>'Labour Cost' as labour_cost,
+         row_data->>'VinNo' as vin_no
        from raw_upload_rows
        where report_type = 'ssrv089_bp'
          and r.matched_ro_no is not null and r.matched_ro_no <> ''
@@ -153,6 +155,7 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
        order by uploaded_at desc
        limit 1
      ) dms on true
+     left join ce_leads cl on cl.vin = upper(trim(dms.vin_no))
      where r.submitted_at >= $1::date and r.submitted_at < $2::date
        and ($3::text[] is null or r.assigned_branch = any($3::text[]))
      order by r.submitted_at`,
@@ -169,7 +172,12 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
     employeeBranch: r.referring_employee_branch,
     employeeDept: r.referring_employee_dept,
     vehicleRegNo: r.vehicle_reg_no,
-    vehicleModel: r.vehicle_model,
+    // Falls back to the VIN-derived model (matched RO's own DMS row ->
+    // ce_leads, the N-9 vehicle master already used by the MRS feature)
+    // whenever the referring employee didn't supply one — only ever
+    // possible once the RO's matched, since that's the only place this app
+    // ever sees this vehicle's VIN (2026-11-16, at the user's request).
+    vehicleModel: r.vehicle_model ?? r.dms_vehicle_model,
     roNo: r.matched_ro_no ?? r.pending_ro_no,
     estimateAmount: toAmount(r.estimate_amount),
     converted: r.ro_matched_at !== null,
