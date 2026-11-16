@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentAdmin } from "@/lib/auth";
-import { CE_MRS_RESOLVED_STATUSES, CE_STATUSES, dateAgeInDays, formatCeDate, indiaDate, type CeStatus } from "@/lib/ce/rules";
+import { CE_MRS_PRIORITY_LEAD_DAYS, CE_MRS_RESOLVED_STATUSES, CE_STATUSES, dateAgeInDays, formatCeDate, indiaDate, type CeStatus } from "@/lib/ce/rules";
 import { loadCeMrsGapList } from "@/lib/ce/store";
 import { CE_VEHICLE_BRANDS, type CeVehicleBrand } from "@/lib/ce/vehicle-brand";
 import { CeShell } from "../ce-shell";
@@ -44,6 +44,20 @@ function DueBadge({ dueDate, today }: { dueDate: string; today: string }) {
   if (days > 0) return <span className="rounded-full bg-bad-soft px-2 py-1 text-[10px] font-semibold text-bad">Overdue {days}d</span>;
   if (days === 0) return <span className="rounded-full bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn">Due today</span>;
   return <span className="rounded-full bg-info-soft px-2 py-1 text-[10px] font-semibold text-info">Due in {-days}d</span>;
+}
+
+// A Priority-section lead whose MRS due_date isn't actually at the
+// CE_MRS_PRIORITY_LEAD_DAYS mark only landed here because its own
+// next_follow_up_date is due — flagged so the agent knows why it's in
+// today's worklist instead of assuming it's the usual N-7 call
+// (2026-11-16, at the user's request).
+function isFollowUpDrivenPriority(lead: { dueDate: string; nextFollowUpDate: string | null }, today: string): boolean {
+  if (!lead.nextFollowUpDate || lead.nextFollowUpDate > today) return false;
+  return dateAgeInDays(lead.dueDate, today) !== -CE_MRS_PRIORITY_LEAD_DAYS;
+}
+
+function FollowUpDueBadge() {
+  return <span className="rounded-full bg-accent-soft px-2 py-1 text-[10px] font-semibold text-accent-text">Follow-up due</span>;
 }
 
 /** Wraps the lead rows in the "Assign evenly" bulk-assign form for a CE
@@ -209,7 +223,7 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
                       <td className="px-3 py-3 text-fg-muted">{lead.vehicleModel || "—"}</td>
                       <td className="px-3 py-3 text-fg-muted">{lead.allocatedDealer || "—"}</td>
                       <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{formatCeDate(lead.nReportDate)} · {mileage(lead.nMileage)} km</td>
-                      <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{formatCeDate(lead.dueDate)}</td>
+                      <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{formatCeDate(lead.dueDate)}{section === "priority" && isFollowUpDrivenPriority(lead, today) ? <div className="mt-1"><FollowUpDueBadge /></div> : null}</td>
                       {section === "overdue" ? <td className="px-3 py-3"><DueBadge dueDate={lead.dueDate} today={today} /></td> : null}
                       <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{lead.status}</td>
                       {showAssignedTo ? <td className="whitespace-nowrap px-3 py-3 text-fg-muted">{lead.assignedTo ?? "—"}</td> : null}
@@ -229,7 +243,14 @@ export default async function CeMrsPage({ searchParams }: { searchParams: Promis
                       {canAssign ? <input type="checkbox" name="vin" value={lead.vin} className="mt-1 h-3.5 w-3.5 accent-[var(--color-accent)]" /> : null}
                       <div><Link href={leadHref(lead.vin)} className="font-medium text-fg hover:text-accent-text focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{lead.customerName}</Link><div className="mt-0.5 break-all font-mono text-[11px] text-fg-faint">{lead.vin}</div></div>
                     </div>
-                    {section === "overdue" ? <DueBadge dueDate={lead.dueDate} today={today} /> : <span className="rounded-full bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn">Priority</span>}
+                    {section === "overdue" ? (
+                      <DueBadge dueDate={lead.dueDate} today={today} />
+                    ) : (
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="rounded-full bg-warn-soft px-2 py-1 text-[10px] font-semibold text-warn">Priority</span>
+                        {isFollowUpDrivenPriority(lead, today) ? <FollowUpDueBadge /> : null}
+                      </div>
+                    )}
                   </div>
                   <div className="mt-2 text-xs text-fg-muted"><ContactLink value={lead.contactNumber} />{lead.vehicleModel ? <span> · {lead.vehicleModel}</span> : null}</div>
                   <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-3 text-xs text-fg-muted"><span>{lead.allocatedDealer || "No dealer"} · {lead.status} · due {formatCeDate(lead.dueDate)}{showAssignedTo ? ` · ${lead.assignedTo ?? "unassigned"}` : ""}</span><Link href={leadHref(lead.vin)} className="font-medium text-accent-text">Open lead →</Link></div>

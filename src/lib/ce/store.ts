@@ -451,9 +451,19 @@ export async function loadCeMrsGapList(options: {
   limit?: number;
 }) {
   const values: unknown[] = [options.today];
+  // A lead an agent promised to call back on (next_follow_up_date) belongs
+  // in today's Priority worklist regardless of where its MRS due_date
+  // falls — otherwise it can sit outside both tabs' windows entirely and
+  // never resurface unless someone remembers to switch on the Follow-up
+  // filter (confirmed with the user 2026-11-16). "<= today" rather than
+  // "= today" so a follow-up that was never actioned stays surfaced
+  // instead of quietly expiring. Overdue then excludes these so a lead
+  // doesn't show in both tabs at once — same mutual-exclusivity the
+  // Priority/Overdue split has always had.
+  const FOLLOW_UP_DUE_CLAUSE = "w.next_follow_up_date <= $1::date";
   const sectionClause = options.section === "priority"
-    ? `f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day'`
-    : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS - 1} * interval '1 day'`;
+    ? `(f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day' or ${FOLLOW_UP_DUE_CLAUSE})`
+    : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS - 1} * interval '1 day' and not (${FOLLOW_UP_DUE_CLAUSE})`;
   values.push([...CE_MRS_RESOLVED_STATUSES]);
   const resolvedStatusParam = values.length;
   const stageClause = options.stage === "new"
@@ -532,8 +542,8 @@ export async function loadCeMrsGapList(options: {
     pool.query<{ priority: string; overdue: string }>(
       `${MRS_DUE_DATE_CTE}
        select
-         count(*) filter (where f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day') priority,
-         count(*) filter (where f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS - 1} * interval '1 day') overdue
+         count(*) filter (where f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day' or ${FOLLOW_UP_DUE_CLAUSE}) priority,
+         count(*) filter (where f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS - 1} * interval '1 day' and not (${FOLLOW_UP_DUE_CLAUSE})) overdue
        from mrs_final f join ce_lead_workflow w using (vin)
        where not exists (select 1 from n9_leads n where n.vin = f.vin) and not (w.status = any($2::text[]))`,
       [options.today, resolvedStatusesArray],
