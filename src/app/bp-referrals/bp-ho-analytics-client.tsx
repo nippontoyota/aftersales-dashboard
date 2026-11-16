@@ -194,25 +194,25 @@ function ReferralTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
-      <table className="min-w-full text-sm">
+      <table className="min-w-full">
         <thead>
           <tr className="border-b border-border bg-surface-2">
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Submitted</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Employee</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Department</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Reg No</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Status</th>
-            <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Estimate</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Payment</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Matched RO</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Photo</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Submitted</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Employee</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Department</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Branch</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Reg No</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Status</th>
+            <th className="px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Estimate</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Payment</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Matched RO</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Photo</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody className="divide-y divide-border text-xs">
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={10} className="px-3 py-8 text-center text-sm text-fg-muted">
+              <td colSpan={10} className="px-2 py-8 text-center text-sm text-fg-muted">
                 Nothing here.
               </td>
             </tr>
@@ -221,47 +221,47 @@ function ReferralTable({
               const status = classify(r);
               return (
                 <tr key={r.id} className="transition-colors hover:bg-surface-2/50">
-                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{fmt(r.submitted_at)}</td>
-                  <td className="px-3 py-2.5">
+                  <td className="whitespace-nowrap px-2 py-1.5 text-fg-muted">{fmt(r.submitted_at)}</td>
+                  <td className="px-2 py-1.5">
                     <div className="font-medium text-fg">{r.referring_employee_name ?? "—"}</div>
-                    <div className="text-xs text-fg-faint">
+                    <div className="text-[11px] text-fg-faint">
                       {r.referring_employee_id ? `ID: ${r.referring_employee_id}` : null}
                       {r.referring_employee_branch ? ` · ${r.referring_employee_branch}` : ""}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{r.referring_employee_dept ?? "—"}</td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
+                  <td className="whitespace-nowrap px-2 py-1.5 text-fg-muted">{r.referring_employee_dept ?? "—"}</td>
+                  <td className="whitespace-nowrap px-2 py-1.5 text-fg-muted">
                     {r.assigned_branch ? (
                       <>
                         {branchName(r.assigned_branch)} ({r.assigned_branch})
-                        {r.transferred_from ? <div className="text-xs text-fg-faint">from {branchName(r.transferred_from)}</div> : null}
+                        {r.transferred_from ? <div className="text-[11px] text-fg-faint">from {branchName(r.transferred_from)}</div> : null}
                       </>
                     ) : (
                       <AssignBranchForm referralId={r.id} branchCodes={allBranchCodes} />
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5">
+                  <td className="whitespace-nowrap px-2 py-1.5">
                     <div className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</div>
-                    {r.vehicle_model ? <div className="text-xs text-fg-faint">{r.vehicle_model}</div> : null}
+                    {r.vehicle_model ? <div className="text-[11px] text-fg-faint">{r.vehicle_model}</div> : null}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5">
+                  <td className="whitespace-nowrap px-2 py-1.5">
                     <StatusBadge status={status} />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-fg">
+                  <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg">
                     {r.estimate_amount != null ? inr(Number(r.estimate_amount)) : "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
+                  <td className="whitespace-nowrap px-2 py-1.5 text-fg-muted">
                     {r.payment_type === "CP" ? "Customer paid" : r.payment_type === "IP" ? "Insurance paid" : "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg">
+                  <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs text-fg">
                     {r.matched_ro_no ?? (r.pending_ro_no ? <span className="text-fg-faint">{r.pending_ro_no} (pending)</span> : "—")}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-2 py-1.5">
                     {r.vehicle_image_url ? (
                       <button
                         type="button"
                         onClick={() => onPhotoClick(r.id)}
-                        className="group relative h-12 w-16 overflow-hidden rounded border border-border hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        className="group relative h-10 w-14 overflow-hidden rounded border border-border hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         aria-label="View vehicle photo"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -272,7 +272,7 @@ function ReferralTable({
                         />
                       </button>
                     ) : (
-                      <span className="flex h-12 w-16 items-center justify-center rounded border border-border bg-surface-2 text-[10px] text-fg-faint">
+                      <span className="flex h-10 w-14 items-center justify-center rounded border border-border bg-surface-2 text-[10px] text-fg-faint">
                         No photo
                       </span>
                     )}
@@ -513,6 +513,12 @@ export function BpHoAnalyticsClient({
   const [branchFilter, setBranchFilter] = useState("");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [activeSlideOver, setActiveSlideOver] = useState<{ title: string; predicate: (r: BpmQueueReferral) => boolean } | null>(null);
+  // "All referrals" pagination (2026-11-16, at the user's request — this
+  // list used to render every matching referral at once, the single
+  // biggest driver of page-level scroll here since every other section
+  // already has its own capped-height scroll box). Page resets whenever
+  // the filters below change it out from under the current page.
+  const [allReferralsPage, setAllReferralsPage] = useState(0);
 
   const filterBranchCodes = useMemo(
     () => [...new Set(referrals.map((r) => r.assigned_branch).filter((b): b is string => !!b))].sort(),
@@ -560,6 +566,19 @@ export function BpHoAnalyticsClient({
   }, [referrals, fromDate, toDate, branchFilter]);
 
   const hasFilters = fromDate || toDate || branchFilter;
+
+  // Clamped rather than reset via an effect — if a filter change shrinks
+  // the result set, this alone keeps the visible page in range; if it
+  // later grows again, the viewer just lands back on whatever page they
+  // were on before, which only matters if they're deliberately paging
+  // while adjusting filters (rare, and harmless either way).
+  const ALL_REFERRALS_PAGE_SIZE = 50;
+  const allReferralsPageCount = Math.max(1, Math.ceil(filtered.length / ALL_REFERRALS_PAGE_SIZE));
+  const clampedAllReferralsPage = Math.min(allReferralsPage, allReferralsPageCount - 1);
+  const pagedReferrals = filtered.slice(
+    clampedAllReferralsPage * ALL_REFERRALS_PAGE_SIZE,
+    (clampedAllReferralsPage + 1) * ALL_REFERRALS_PAGE_SIZE,
+  );
 
   const openKpi = (title: string, predicate: (r: BpmQueueReferral) => boolean) => setActiveSlideOver({ title, predicate });
 
@@ -913,9 +932,9 @@ export function BpHoAnalyticsClient({
             fromDate={fromDate}
             toDate={toDate}
             branchFilter={branchFilter}
-            setFromDate={setFromDate}
-            setToDate={setToDate}
-            setBranchFilter={setBranchFilter}
+            setFromDate={(v) => { setFromDate(v); setAllReferralsPage(0); }}
+            setToDate={(v) => { setToDate(v); setAllReferralsPage(0); }}
+            setBranchFilter={(v) => { setBranchFilter(v); setAllReferralsPage(0); }}
             branchCodes={filterBranchCodes}
           />
           {hasFilters ? (
@@ -925,6 +944,7 @@ export function BpHoAnalyticsClient({
                 setFromDate("");
                 setToDate("");
                 setBranchFilter("");
+                setAllReferralsPage(0);
               }}
               className="h-8 rounded-md px-3 text-sm text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
@@ -937,7 +957,29 @@ export function BpHoAnalyticsClient({
           </span>
         </div>
 
-        <ReferralTable rows={filtered} onPhotoClick={(id) => setLightboxUrl(`/api/bp-referrals/photo/${id}`)} allBranchCodes={allBranchCodes} />
+        <ReferralTable rows={pagedReferrals} onPhotoClick={(id) => setLightboxUrl(`/api/bp-referrals/photo/${id}`)} allBranchCodes={allBranchCodes} />
+
+        {allReferralsPageCount > 1 ? (
+          <div className="mt-2 flex items-center justify-end gap-2 text-xs text-fg-muted">
+            <button
+              type="button"
+              disabled={clampedAllReferralsPage === 0}
+              onClick={() => setAllReferralsPage((p) => Math.max(0, p - 1))}
+              className="rounded-md border border-border-strong px-2 py-1 font-medium text-fg hover:bg-surface-2 disabled:opacity-40"
+            >
+              Prev
+            </button>
+            <span>Page {clampedAllReferralsPage + 1} of {allReferralsPageCount}</span>
+            <button
+              type="button"
+              disabled={clampedAllReferralsPage >= allReferralsPageCount - 1}
+              onClick={() => setAllReferralsPage((p) => Math.min(allReferralsPageCount - 1, p + 1))}
+              className="rounded-md border border-border-strong px-2 py-1 font-medium text-fg hover:bg-surface-2 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
