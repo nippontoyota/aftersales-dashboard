@@ -98,7 +98,7 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
         </a>
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-fg">Group Report</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-fg">{admin.role === "branch" ? "Report" : "Group Report"}</h1>
             <p className="mt-1 text-sm text-fg-muted">
               Group Accident Vehicle Referral report — {rows.length} referral{rows.length === 1 ? "" : "s"}, {from} to {to}.
             </p>

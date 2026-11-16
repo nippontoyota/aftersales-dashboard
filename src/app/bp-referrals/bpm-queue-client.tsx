@@ -1171,7 +1171,7 @@ export function BpmQueueClient({
             href="/bp-referrals/group-report"
             className="h-8 rounded-md border border-border-strong px-3 text-xs font-semibold leading-8 text-fg hover:bg-surface-2"
           >
-            Group Report →
+            {readOnly ? "Report" : "Group Report"} →
           </a>
           <div className="flex gap-1.5 rounded-lg border border-border bg-surface p-1 shadow-sm">
             <button
