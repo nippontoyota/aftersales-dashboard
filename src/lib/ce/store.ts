@@ -460,7 +460,17 @@ export async function loadCeMrsGapList(options: {
   // instead of quietly expiring. Overdue then excludes these so a lead
   // doesn't show in both tabs at once — same mutual-exclusivity the
   // Priority/Overdue split has always had.
-  const FOLLOW_UP_DUE_CLAUSE = "w.next_follow_up_date <= $1::date";
+  //
+  // The explicit "is not null" guard is load-bearing, not decoration: SQL
+  // comparisons against a null column evaluate to unknown rather than
+  // false, so a bare "next_follow_up_date <= $1" is unknown (not false)
+  // for every lead with no follow-up date set yet. Overdue's "not (...)"
+  // around this clause then turned that "unknown" into "drop the row"
+  // instead of "keep it", which silently excluded ~1,983 of 2,787 Overdue
+  // leads in production (every one with no follow-up date, not just the
+  // 107 actually due) before this guard was added — caught 2026-11-16
+  // when the user noticed Overdue's count had collapsed.
+  const FOLLOW_UP_DUE_CLAUSE = "(w.next_follow_up_date is not null and w.next_follow_up_date <= $1::date)";
   const sectionClause = options.section === "priority"
     ? `(f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day' or ${FOLLOW_UP_DUE_CLAUSE})`
     : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS - 1} * interval '1 day' and not (${FOLLOW_UP_DUE_CLAUSE})`;
