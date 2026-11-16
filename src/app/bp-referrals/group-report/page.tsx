@@ -79,15 +79,23 @@ function monthOptions(count: number, selected: string): string[] {
 export default async function GroupReportPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/login");
-  if (admin.role !== "bp_ho" && admin.role !== "hq" && admin.role !== "regional" && admin.role !== "bp_manager") redirect("/dashboard");
+  if (
+    admin.role !== "bp_ho" &&
+    admin.role !== "hq" &&
+    admin.role !== "regional" &&
+    admin.role !== "bp_manager" &&
+    admin.role !== "branch"
+  ) {
+    redirect("/dashboard");
+  }
 
   const params = await searchParams;
   const { from, to } = resolveGroupReportRange(params.from, params.to);
-  // BP manager (2026-11-16, at the user's request): own branch only, same
-  // scoping mechanism a regional admin's own region already uses below —
-  // and BpShell below, not AppShell, matching their main /bp-referrals
-  // queue page's own bare shell (no sidebar/nav for this role at all).
-  const branches = admin.role === "regional" ? [...REGIONS[admin.region]] : admin.role === "bp_manager" ? [admin.branch] : undefined;
+  // BP manager/branch (2026-11-16, at the user's request): own branch only,
+  // same scoping mechanism a regional admin's own region already uses
+  // below. BpShell below for bp_manager (matching their main /bp-referrals
+  // queue page's own bare shell), AppShell for branch (matching theirs).
+  const branches = admin.role === "regional" ? [...REGIONS[admin.region]] : admin.role === "bp_manager" || admin.role === "branch" ? [admin.branch] : undefined;
   const navState = admin.role === "bp_manager" ? null : await loadNavState(admin);
 
   const rows = await loadGroupReportRows(inclusiveDateRange(from, to), branches);
@@ -375,11 +383,12 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
       isHq={admin.role === "hq"}
       isBpHo={admin.role === "bp_ho"}
       isRegional={admin.role === "regional"}
+      isBranch={admin.role === "branch"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       companyTabs={navState!.companyTabs}
       canUpload={navState!.canUpload}
-      slimNav={admin.role === "regional" ? navState!.slimNav : undefined}
+      slimNav={admin.role === "regional" || admin.role === "branch" ? navState!.slimNav : undefined}
       dashboardLabel={navState!.dashboardLabel}
       queriesBadge={navState!.queriesBadge}
       identity={adminIdentityLabel(admin)}

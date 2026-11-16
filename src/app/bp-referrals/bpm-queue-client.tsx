@@ -1148,10 +1148,10 @@ export function BpmQueueClient({
   /** True for the plain "branch" account's own read-only view of this same
    * page (2026-11-16, at the user's request) — every call/follow-up/RO/
    * payment-type/transfer control disappears (same canAct gating QueueList
-   * already applies to the region/transferred-out tabs), and the Group
-   * Report link is hidden too (that one's bp_manager-only, per the user's
-   * explicit ask). Defaults to false so the existing bp_manager call site
-   * doesn't need updating. */
+   * already applies to the region/transferred-out tabs). The Group Report
+   * link stays either way — a branch account gets that too, same as a BPM
+   * (2026-11-16, widened the same day). Defaults to false so the existing
+   * bp_manager call site doesn't need updating. */
   readOnly?: boolean;
 }) {
   const [view, setView] = useState<"own" | "region" | "transferred_out">("own");
@@ -1167,14 +1167,12 @@ export function BpmQueueClient({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {!readOnly ? (
-            <a
-              href="/bp-referrals/group-report"
-              className="h-8 rounded-md border border-border-strong px-3 text-xs font-semibold leading-8 text-fg hover:bg-surface-2"
-            >
-              Group Report →
-            </a>
-          ) : null}
+          <a
+            href="/bp-referrals/group-report"
+            className="h-8 rounded-md border border-border-strong px-3 text-xs font-semibold leading-8 text-fg hover:bg-surface-2"
+          >
+            Group Report →
+          </a>
           <div className="flex gap-1.5 rounded-lg border border-border bg-surface p-1 shadow-sm">
             <button
               type="button"
