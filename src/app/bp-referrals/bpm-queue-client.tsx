@@ -440,6 +440,12 @@ function ChangePaymentTypeButton({
   );
 }
 
+/** Shown on Follow-up and, since 2026-11-17 (the user's real case — an
+ * insurance-paid car physically arrived, then the customer backed out
+ * before any work started), Vehicle received too. Not Repair in progress:
+ * once an RO's entered the job's considered genuinely underway, and
+ * closeFollowUpAsLost in store.ts already enforces that itself regardless
+ * of what this component shows. */
 function CloseLostButton({ id, onDone }: { id: number; onDone: () => void }) {
   const [state, action, pending] = useActionState(closeFollowUpAsLostAction, INIT);
   const [open, setOpen] = useState(false);
@@ -971,7 +977,7 @@ function DetailModal({
               hasEstimateInvoice={!!r.bp_estimate_invoice_no}
               onDone={onClose}
             />
-            {tab === "followup" ? <CloseLostButton id={r.id} onDone={onClose} /> : null}
+            {tab === "followup" || tab === "vehicle_received" ? <CloseLostButton id={r.id} onDone={onClose} /> : null}
           </div>
         ) : null}
 
