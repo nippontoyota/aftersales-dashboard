@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { parseLabourSalesWorkbook } from "@/lib/labour-sales/parse";
@@ -87,11 +87,17 @@ export async function POST(request: Request) {
 
   // Outside the save above — a recompute failure shouldn't block an
   // otherwise-successful upload. One call per date this upload touched
-  // (vas-revenue-real/recompute.ts is a no-op before 2026-10-01).
-  for (const day of parsed.days) {
-    await recomputeVasRevenueReal(admin.branch, day.date);
-    await recomputeCloseSaAnalytics(admin.branch, day.date);
-  }
+  // (vas-revenue-real/recompute.ts is a no-op before 2026-10-01). Deferred
+  // via after() rather than awaited (2026-11-18) — see part-sale's route
+  // for why: a high-volume branch's recompute can push past Vercel's
+  // response window, dropping the connection right as success would've
+  // been reported even though the save above already committed fine.
+  after(async () => {
+    for (const day of parsed.days) {
+      await recomputeVasRevenueReal(admin.branch, day.date);
+      await recomputeCloseSaAnalytics(admin.branch, day.date);
+    }
+  });
 
   const totals = parsed.days.reduce(
     (acc, d) => ({

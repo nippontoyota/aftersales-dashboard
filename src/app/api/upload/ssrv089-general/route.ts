@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { recomputeAfterSsrv089Upload } from "@/lib/cancellation/adjustment-recompute";
@@ -112,8 +112,12 @@ export async function POST(request: Request) {
   }
 
   // Outside the upload transaction — a recompute failure shouldn't roll back
-  // an otherwise-successful upload (see adjustment-recompute.ts).
-  await recomputeAfterSsrv089Upload(admin.branch, date);
+  // an otherwise-successful upload (see adjustment-recompute.ts). Deferred
+  // via after() rather than awaited (2026-11-18) — see part-sale's route
+  // for why: a high-volume branch's recompute can push past Vercel's
+  // response window, dropping the connection right as success would've
+  // been reported even though the save above already committed fine.
+  after(() => recomputeAfterSsrv089Upload(admin.branch, date));
 
   return NextResponse.json({ success: true, date, branch: admin.branch, totals });
 }

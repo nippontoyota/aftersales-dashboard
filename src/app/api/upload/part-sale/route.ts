@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
@@ -109,8 +109,16 @@ export async function POST(request: Request) {
 
   // Outside the save above — a recompute failure shouldn't block an
   // otherwise-successful upload (see close-sa-analytics/recompute.ts, which
-  // already swallows its own errors).
-  await recomputeCloseSaAnalytics(admin.branch, date);
+  // already swallows its own errors). Deferred via after() rather than
+  // awaited (2026-11-18): this recompute reloads the branch's whole
+  // Service Info history (~2.2s for the largest branch, per its own doc
+  // comment), and a high-volume branch could push past Vercel's response
+  // window right as it's about to report success — the client then sees a
+  // connection reset even though the save above already committed fine,
+  // and a retry trips the once-per-date guard as a false "already
+  // uploaded" alarm. after() still runs this reliably (via Vercel's
+  // waitUntil) but no longer makes the client's response wait on it.
+  after(() => recomputeCloseSaAnalytics(admin.branch, date));
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }

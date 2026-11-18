@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { hashBuffer } from "@/lib/duplicate-detection";
@@ -137,11 +137,18 @@ export async function POST(request: Request) {
   // Outside the saves above — a recompute failure shouldn't block an
   // otherwise-successful upload (see vas-revenue-real/recompute.ts, which
   // already swallows its own errors; this is a no-op before 2026-10-01).
-  await recomputeVasRevenueReal(admin.branch, date);
-  await recomputeCloseSaAnalytics(admin.branch, date);
-  await catchUpPartSaleForClosedRos(admin.branch, bpRawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
-  await recomputeUniqueVinVas(admin.branch, date);
-  await recomputeTotalCarCareTreatments(admin.branch, date);
+  // Deferred via after() rather than awaited (2026-11-18) — see part-sale's
+  // route for why: a high-volume branch's recompute chain can push past
+  // Vercel's response window, dropping the connection right as success
+  // would've been reported even though the saves above already committed
+  // fine.
+  after(async () => {
+    await recomputeVasRevenueReal(admin.branch, date);
+    await recomputeCloseSaAnalytics(admin.branch, date);
+    await catchUpPartSaleForClosedRos(admin.branch, bpRawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
+    await recomputeUniqueVinVas(admin.branch, date);
+    await recomputeTotalCarCareTreatments(admin.branch, date);
+  });
 
   return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name, bpCounts });
 }

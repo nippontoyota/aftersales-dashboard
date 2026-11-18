@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { recomputeAfterSsrv089BpUpload } from "@/lib/cancellation/adjustment-recompute";
 import { hashBuffer } from "@/lib/duplicate-detection";
@@ -142,18 +142,24 @@ export async function POST(request: Request) {
   });
 
   // Outside the save above — a recompute failure shouldn't block an
-  // otherwise-successful upload (see adjustment-recompute.ts).
-  await recomputeAfterSsrv089BpUpload(admin.branch);
+  // otherwise-successful upload (see adjustment-recompute.ts). Deferred via
+  // after() rather than awaited (2026-11-18) — see part-sale's route for
+  // why: a high-volume branch's recompute can push past Vercel's response
+  // window, dropping the connection right as success would've been
+  // reported even though the save above already committed fine.
+  after(async () => {
+    await recomputeAfterSsrv089BpUpload(admin.branch);
 
-  // BP Referrals' RO matcher (2026-10-14) — scans this file's BPJ-prefixed
-  // ROs for a vehicle reg no match against validated referrals, company-wide
-  // (see ro-matcher.ts). Wrapped so a matcher bug can never break an
-  // otherwise-successful daily upload.
-  try {
-    await matchBpReferralsFromCostSalesBpRows(parsed.rawRows, admin.branch);
-  } catch (err) {
-    console.error("BP referral RO matcher failed:", err);
-  }
+    // BP Referrals' RO matcher (2026-10-14) — scans this file's
+    // BPJ-prefixed ROs for a vehicle reg no match against validated
+    // referrals, company-wide (see ro-matcher.ts). Wrapped so a matcher bug
+    // can never break an otherwise-successful daily upload.
+    try {
+      await matchBpReferralsFromCostSalesBpRows(parsed.rawRows, admin.branch);
+    } catch (err) {
+      console.error("BP referral RO matcher failed:", err);
+    }
+  });
 
   return NextResponse.json({
     success: true,
