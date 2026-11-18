@@ -78,6 +78,15 @@ export type BpReferralRow = {
   /** Most recent transfer's origin branch, if this referral has ever been
    * transferred — null otherwise. Joined in, not a real column. */
   transferred_from: string | null;
+  /** The earlier referral this one is a possible duplicate of, if any —
+   * same vehicle, submitted first — null when there isn't one. See
+   * DUPLICATE_CHECK_JOIN's doc comment for the exact rules. Joined in, not
+   * a real column. */
+  duplicate_of_id: number | null;
+  duplicate_of_employee_name: string | null;
+  duplicate_of_branch: string | null;
+  duplicate_of_description: string | null;
+  duplicate_of_submitted_at: Date | string | null;
 };
 
 const SELECT_COLUMNS = `
@@ -87,7 +96,10 @@ const SELECT_COLUMNS = `
   r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.pending_ro_no, r.pending_ro_entered_at,
   r.closed_at, r.closed_reason, r.not_interested_reason, r.lost_reason,
   r.last_contacted_at, r.bp_estimate_invoice_no, r.bp_estimate_invoice_entered_at,
-  lt.from_branch as transferred_from
+  lt.from_branch as transferred_from,
+  dup.id as duplicate_of_id, dup.referring_employee_name as duplicate_of_employee_name,
+  dup.assigned_branch as duplicate_of_branch, dup.description as duplicate_of_description,
+  dup.submitted_at as duplicate_of_submitted_at
 `;
 
 const LATEST_TRANSFER_JOIN = `
@@ -95,6 +107,35 @@ const LATEST_TRANSFER_JOIN = `
     select from_branch from bp_referral_transfers t
     where t.referral_id = r.id order by t.transferred_at desc limit 1
   ) lt on true
+`;
+
+/** The earlier referral (if any) this one is a possible duplicate of — same
+ * vehicle, submitted first (2026-11-18, at the user's request: one branch's
+ * employee refers a car, then someone else later refers the same car).
+ * "Not genuine" priors don't count as a real first claim; otherwise an
+ * earlier referral keeps blocking forever once it actually completed (car
+ * came in and got repaired), or for 60 days from its own submission while
+ * it's still open/dropped/not-interested/lost — past that it's considered
+ * stale and a new referral for the same car is a fresh case. Deliberately
+ * doesn't try to compare the free-text damage description itself (two
+ * different-wording descriptions of the same damage, or two genuinely
+ * different incidents on the same car, are impossible to tell apart
+ * reliably from text alone) — both descriptions are surfaced to the BPM
+ * instead, who makes that call themselves, same as the Genuine decision
+ * already works. */
+const DUPLICATE_CHECK_JOIN = `
+  left join lateral (
+    select d.id, d.referring_employee_name, d.assigned_branch, d.description, d.submitted_at
+    from bp_referrals d
+    where d.id <> r.id
+      and d.vehicle_reg_no is not null and d.vehicle_reg_no <> ''
+      and upper(regexp_replace(d.vehicle_reg_no, '[\\s-]', '', 'g')) = upper(regexp_replace(r.vehicle_reg_no, '[\\s-]', '', 'g'))
+      and d.submitted_at < r.submitted_at
+      and coalesce(d.closed_reason, '') <> 'not_genuine'
+      and (d.ro_matched_at is not null or d.submitted_at >= now() - interval '60 days')
+    order by d.submitted_at asc
+    limit 1
+  ) dup on r.vehicle_reg_no is not null and r.vehicle_reg_no <> ''
 `;
 
 /** Resolves and persists assigned_branch for any referral the external
@@ -122,7 +163,7 @@ export async function ensureAssignedBranches(): Promise<void> {
 
 export async function loadQueueForBranch(branch: string): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
      where r.assigned_branch = $1 order by r.submitted_at desc`,
     [branch],
   );
@@ -134,7 +175,7 @@ export async function loadQueueForBranch(branch: string): Promise<BpReferralRow[
 export async function loadRegionRollup(region: RegionName, range?: MonthRange): Promise<BpReferralRow[]> {
   const branches = REGIONS[region].filter((b) => b !== "CO01C");
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
      where r.assigned_branch = any($1::text[])
        and ($2::date is null or r.submitted_at >= $2::date)
        and ($3::date is null or r.submitted_at < $3::date)
@@ -173,7 +214,7 @@ async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
 
 async function logActivity(
   referralId: number,
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled",
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected",
   remark: string,
   performedBy: string,
   notConnectedReason?: string,
@@ -227,7 +268,7 @@ export const UNCONNECTED_DROP_DAYS = 3;
  * BPM re-contacts the customer. */
 export async function loadOverdueFollowUps(branch: string): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
      where r.assigned_branch = $1 and r.genuine = true and r.customer_interested = true
        and r.closed_at is null and r.ro_matched_at is null and r.pending_ro_no is null
        and r.bp_estimate_invoice_no is null
@@ -246,7 +287,7 @@ export async function loadOverdueFollowUps(branch: string): Promise<BpReferralRo
  * UI treats that as its own bucket, no longer "needs a reminder"). */
 export async function loadUrgentUnconnected(branch: string): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
      where r.assigned_branch = $1 and r.call_status in ('pending', 'not_connected')
        and r.closed_at is null and r.validated_at is null
        and coalesce(r.last_contacted_at, r.submitted_at) <= now() - interval '${UNCONNECTED_REMINDER_HOURS} hours'
@@ -438,9 +479,40 @@ export async function fillMissingReferralDetails(
   await logActivity(id, "details_filled", `Details added: ${filled.join(", ")}`, performedBy);
 }
 
+/** BPM corrects a mistyped vehicle reg no (2026-11-18, at the user's
+ * request) — unlike fillMissingReferralDetails above, this overwrites
+ * whatever's already on file; the whole point is fixing a typo, not
+ * preserving the employee's original submission. Allowed any time before
+ * the RO is actually matched — not just before one's entered, unlike the
+ * fill-only window above — because a wrong reg no is often exactly what
+ * causes enterRoNumber to reject an RO as "recorded against a different
+ * vehicle" in the first place, so the BPM needs to be able to fix it and
+ * retry even with a pending RO already on file. Logs the before/after to
+ * History; no reason required, same as fillMissingReferralDetails. */
+export async function correctVehicleRegNo(id: number, branch: string, performedBy: string, newRegNo: string): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  const trimmed = newRegNo.trim();
+  if (!trimmed) throw new Error("Enter a vehicle registration number.");
+
+  const { rows } = await pool.query<{
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+    vehicle_reg_no: string | null;
+  }>(`select closed_at, ro_matched_at, vehicle_reg_no from bp_referrals where id = $1`, [id]);
+  const referral = rows[0];
+  if (!referral || referral.closed_at || referral.ro_matched_at) {
+    throw new Error("This referral isn't open for a reg no correction.");
+  }
+
+  const oldRegNo = referral.vehicle_reg_no;
+  if (oldRegNo === trimmed) return;
+  await pool.query(`update bp_referrals set vehicle_reg_no = $2 where id = $1`, [id, trimmed]);
+  await logActivity(id, "reg_no_corrected", `Vehicle reg corrected: ${oldRegNo ?? "—"} → ${trimmed}`, performedBy);
+}
+
 export type ActivityRow = {
   id: number;
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled";
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected";
   remark: string;
   notConnectedReason: string | null;
   followUpStage: string | null;
@@ -454,7 +526,7 @@ export type ActivityRow = {
 export async function loadActivityForReferral(referralId: number): Promise<ActivityRow[]> {
   const { rows } = await pool.query<{
     id: number;
-    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled";
+    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected";
     remark: string;
     not_connected_reason: string | null;
     follow_up_stage: string | null;
@@ -635,7 +707,7 @@ export async function enterRoNumber(id: number, branch: string, enteredBy: strin
  * anything that's since made its way back to this same branch. */
 export async function loadTransferredOutFromBranch(branch: string): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
      join (
        select distinct on (referral_id) referral_id, from_branch
        from bp_referral_transfers
@@ -654,7 +726,7 @@ export async function loadTransferredOutFromBranch(branch: string): Promise<BpRe
  * is resolved before this reads it. */
 export async function loadAllReferrals(range?: MonthRange): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
      where ($1::date is null or r.submitted_at >= $1::date)
        and ($2::date is null or r.submitted_at < $2::date)
      order by r.submitted_at desc`,

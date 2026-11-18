@@ -8,6 +8,7 @@ import { formatNumber, formatPercent } from "@/lib/format";
 import {
   changePaymentTypeAction,
   closeFollowUpAsLostAction,
+  correctVehicleRegNoAction,
   enterRoNumberAction,
   fillReferralDetailsAction,
   getReferralActivityAction,
@@ -55,9 +56,23 @@ export type BpmQueueReferral = {
   bp_estimate_invoice_no: string | null;
   bp_estimate_invoice_entered_at: Date | string | null;
   transferred_from: string | null;
+  duplicate_of_id: number | null;
+  duplicate_of_employee_name: string | null;
+  duplicate_of_branch: string | null;
+  duplicate_of_description: string | null;
+  duplicate_of_submitted_at: Date | string | null;
 };
 
-type Tab = "active" | "followup" | "vehicle_received" | "repair_in_progress" | "completed" | "closed" | "dropped";
+type Tab =
+  | "active"
+  | "followup"
+  | "vehicle_received"
+  | "repair_in_progress"
+  | "completed"
+  | "not_genuine"
+  | "not_interested"
+  | "lost"
+  | "dropped";
 
 /** Mirrors the thresholds in lib/bp-referrals/store.ts — can't import them
  * directly (that module pulls in the server-only pg pool), so these are
@@ -92,7 +107,15 @@ function isFollowUpOverdue(r: BpmQueueReferral): boolean {
 function classify(r: BpmQueueReferral): Tab {
   if (r.ro_matched_at) return "completed";
   if (r.pending_ro_no) return "repair_in_progress";
-  if (r.closed_at) return "closed";
+  if (r.closed_at) {
+    // Previously one combined "closed" bucket labeled "Lost" — split out
+    // 2026-11-18 at the user's request, matching the BPHO/HQ dashboard's
+    // own KPI terminology, which already treats these as three distinct
+    // things.
+    if (r.closed_reason === "not_genuine") return "not_genuine";
+    if (r.closed_reason === "not_interested") return "not_interested";
+    return "lost";
+  }
   if (r.bp_estimate_invoice_no) return "vehicle_received";
   if (r.validated_at) return "followup";
   const elapsedHours = hoursSince(r.last_contacted_at ?? r.submitted_at);
@@ -117,8 +140,8 @@ function StatusBadge({ r }: { r: BpmQueueReferral }) {
       </span>
     );
   }
-  if (tab === "closed") {
-    const label = r.closed_reason === "not_genuine" ? "Not genuine" : r.closed_reason === "lost" ? "Lost" : "Not interested";
+  if (tab === "not_genuine" || tab === "not_interested" || tab === "lost") {
+    const label = tab === "not_genuine" ? "Not genuine" : tab === "not_interested" ? "Not interested" : "Lost";
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-fg-faint">
         <Dot className="bg-fg-faint" />
@@ -180,6 +203,7 @@ const ACTIVITY_LABEL: Record<ActivityRow["activityType"], string> = {
   lost: "Lost",
   payment_type_change: "Payment type changed",
   details_filled: "Details added",
+  reg_no_corrected: "Reg no corrected",
 };
 
 function ActivityHistory({ referralId }: { referralId: number }) {
@@ -779,6 +803,59 @@ function FillDetailsButton({
   );
 }
 
+/** Lets a BPM correct a mistyped vehicle reg no (2026-11-18, at the user's
+ * request) — unlike FillDetailsButton above, shown regardless of whether a
+ * reg no is already on file, since the whole point is fixing a wrong one,
+ * not just filling a blank. Available any time up to RO match (not just
+ * before one's entered) — see correctVehicleRegNo in store.ts for why. */
+function CorrectRegNoButton({ id, currentRegNo, onDone }: { id: number; currentRegNo: string | null; onDone: () => void }) {
+  const [state, action, pending] = useActionState(correctVehicleRegNoAction, INIT);
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-xs text-accent hover:underline">
+        Correct vehicle reg no
+      </button>
+    );
+  }
+
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      className="space-y-2 rounded-md border border-border-strong bg-surface-2/50 p-3"
+    >
+      <input type="hidden" name="id" value={id} />
+      <div>
+        <span className={eyebrow}>Correct vehicle reg no</span>
+        <input
+          name="vehicleRegNo"
+          required
+          defaultValue={currentRegNo ?? ""}
+          placeholder="e.g. KL07AB1234"
+          className={`${control} mt-1 w-full px-2 font-mono`}
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+        >
+          {pending ? "Saving…" : "Save"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-fg-muted hover:underline">
+          Cancel
+        </button>
+      </div>
+      {state.error ? <p className="text-xs text-bad">{state.error}</p> : null}
+    </form>
+  );
+}
+
 function DetailModal({
   referral,
   ownBranch,
@@ -831,6 +908,18 @@ function DetailModal({
           </div>
         ) : null}
 
+        {r.duplicate_of_id ? (
+          <div className="mt-3 rounded-md border border-warn/30 bg-warn-soft/60 px-3 py-2 text-xs text-warn">
+            <p className="font-semibold">Possible duplicate — check before marking genuine</p>
+            <p className="mt-0.5">
+              Same vehicle already referred by <span className="font-medium">{r.duplicate_of_employee_name ?? "—"}</span>
+              {r.duplicate_of_branch ? ` (${branchName(r.duplicate_of_branch)})` : ""} on {fmt(r.duplicate_of_submitted_at)}.
+            </p>
+            {r.duplicate_of_description ? <p className="mt-1 italic">Their description: &ldquo;{r.duplicate_of_description}&rdquo;</p> : null}
+            {r.description ? <p className="mt-1 italic">This one&rsquo;s description: &ldquo;{r.description}&rdquo;</p> : null}
+          </div>
+        ) : null}
+
         <dl className="mt-4 space-y-2 text-sm">
           <div className="flex justify-between gap-3">
             <dt className="text-fg-faint">Customer phone</dt>
@@ -844,13 +933,16 @@ function DetailModal({
             <dt className="text-fg-faint">Vehicle model</dt>
             <dd className="font-semibold text-fg">{r.vehicle_model ?? "—"}</dd>
           </div>
-          {canAct && !r.closed_at && !r.ro_matched_at && !r.pending_ro_no ? (
-            <div className="pt-1">
-              <FillDetailsButton
-                id={r.id}
-                missing={{ vehicleRegNo: !r.vehicle_reg_no, customerPhone: !r.customer_phone, vehicleModel: !r.vehicle_model }}
-                onDone={onClose}
-              />
+          {canAct && !r.closed_at && !r.ro_matched_at ? (
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <CorrectRegNoButton id={r.id} currentRegNo={r.vehicle_reg_no} onDone={onClose} />
+              {!r.pending_ro_no ? (
+                <FillDetailsButton
+                  id={r.id}
+                  missing={{ vehicleRegNo: !r.vehicle_reg_no, customerPhone: !r.customer_phone, vehicleModel: !r.vehicle_model }}
+                  onDone={onClose}
+                />
+              ) : null}
             </div>
           ) : null}
           <div className="flex justify-between gap-3">
@@ -997,7 +1089,9 @@ const TAB_LABEL: Record<Tab, string> = {
   vehicle_received: "Vehicle received",
   repair_in_progress: "Repair in progress",
   completed: "Completed",
-  closed: "Lost",
+  not_genuine: "Not genuine",
+  not_interested: "Not interested",
+  lost: "Lost",
   dropped: "Dropped",
 };
 
@@ -1024,7 +1118,9 @@ function QueueList({
       vehicle_received: 0,
       repair_in_progress: 0,
       completed: 0,
-      closed: 0,
+      not_genuine: 0,
+      not_interested: 0,
+      lost: 0,
       dropped: 0,
     };
     for (const r of referrals) c[classify(r)]++;
@@ -1099,7 +1195,17 @@ function QueueList({
                     <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{r.referring_employee_dept ?? "—"}</td>
                     {showBranchColumn ? <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{branchName(r.assigned_branch ?? "")}</td> : null}
                     <td className="whitespace-nowrap px-3 py-2.5">
-                      <div className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</span>
+                        {r.duplicate_of_id ? (
+                          <span
+                            title={`Possible duplicate — already referred by ${r.duplicate_of_employee_name ?? "someone"}${r.duplicate_of_branch ? ` (${branchName(r.duplicate_of_branch)})` : ""}`}
+                            className="rounded-full bg-warn-soft px-1.5 py-0.5 text-[10px] font-semibold text-warn"
+                          >
+                            Dup?
+                          </span>
+                        ) : null}
+                      </div>
                       {r.vehicle_model ? <div className="text-xs text-fg-faint">{r.vehicle_model}</div> : null}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5">

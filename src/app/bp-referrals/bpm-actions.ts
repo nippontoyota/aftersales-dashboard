@@ -6,6 +6,7 @@ import { listBranchCodes } from "@/lib/admin-store";
 import {
   changePaymentType,
   closeFollowUpAsLost,
+  correctVehicleRegNo,
   enterRoNumber,
   fillMissingReferralDetails,
   loadActivityForReferral,
@@ -219,6 +220,28 @@ export async function fillReferralDetailsAction(_prev: BpmActionState, formData:
     });
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't save those details.", ok: false };
+  }
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
+}
+
+/** BPM corrects a mistyped vehicle reg no (2026-11-18, at the user's
+ * request) — see correctVehicleRegNo in store.ts for the overwrite-allowed
+ * rules; this is just the form-data plumbing, same shape as every other
+ * action here. */
+export async function correctVehicleRegNoAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const vehicleRegNo = String(formData.get("vehicleRegNo") ?? "").trim();
+  if (!vehicleRegNo) return { error: "Enter a vehicle registration number.", ok: false };
+
+  try {
+    await correctVehicleRegNo(id, admin.branch, admin.username, vehicleRegNo);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't save that correction.", ok: false };
   }
   revalidatePath("/bp-referrals");
   return { error: null, ok: true };

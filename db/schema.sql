@@ -1779,3 +1779,11 @@ create table if not exists ce_conquest_bulk_apply_log (
   created_at  timestamptz  not null default now()
 );
 create index if not exists ce_conquest_bulk_apply_log_run_idx on ce_conquest_bulk_apply_log (uploaded_by, created_at desc);
+
+-- BP Referrals: a BPM can correct a mistyped vehicle reg no (2026-11-18, at
+-- the user's request) — unlike the fill-only "details added" action, this
+-- overwrites whatever's already on file. Logged as its own activity type
+-- for the audit trail. See correctVehicleRegNo in store.ts.
+alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
+alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
+  check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost', 'payment_type_change', 'details_filled', 'reg_no_corrected'));
