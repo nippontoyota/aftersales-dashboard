@@ -30,7 +30,8 @@ export async function saveCloseSaAnalyticsForDate(
            em60_count, em60_on_time_count,
            mech_care_count, brake_cleaning_labour_count, tgloss_pitched_ro_count, pm_ro_count,
            same_day_delivery_count, bp_labour_revenue, bp_parts_revenue, bp_tgloss_revenue,
-           bp_repair_type_counts, bp_work_order_count, bp_otd_eligible_count, bp_otd_on_time_count
+           bp_repair_type_counts, bp_work_order_count, bp_otd_eligible_count, bp_otd_on_time_count,
+           gs_otd_eligible_count, gs_otd_on_time_count
          ) values (
            $1, $2, $3, $4, $5::jsonb, $6::jsonb,
            $7, $8, $9, $10,
@@ -44,7 +45,8 @@ export async function saveCloseSaAnalyticsForDate(
            $38, $39,
            $40, $41, $42, $43,
            $44, $45, $46, $47,
-           $48::jsonb, $49, $50, $51
+           $48::jsonb, $49, $50, $51,
+           $52, $53
          )`,
         [
           date,
@@ -98,6 +100,8 @@ export async function saveCloseSaAnalyticsForDate(
           m.bpWorkOrderCount,
           m.bpOtdEligibleCount,
           m.bpOtdOnTimeCount,
+          m.otdEligibleCount,
+          m.otdOnTimeCount,
         ]
       );
     }
@@ -175,6 +179,8 @@ function rowFromDb(r: Record<string, unknown>): CloseSaAnalyticsRow {
     bpWorkOrderCount: Number(r.bp_work_order_count),
     bpOtdEligibleCount: Number(r.bp_otd_eligible_count),
     bpOtdOnTimeCount: Number(r.bp_otd_on_time_count),
+    otdEligibleCount: Number(r.gs_otd_eligible_count),
+    otdOnTimeCount: Number(r.gs_otd_on_time_count),
   };
 }
 

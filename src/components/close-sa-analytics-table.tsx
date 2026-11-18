@@ -12,6 +12,7 @@ import {
   bpTglossGentani,
   em60OtdPct,
   emToPmPct,
+  gsOtdPct,
   sameDayDeliveryPct,
   tglossGentaniVsPitched,
   tglossPitchRatePct,
@@ -47,6 +48,7 @@ type SortKey =
   | "batteryCount"
   | "em60Count"
   | "em60OtdRate"
+  | "gsOtdRate"
   | "sameDayDeliveryRate"
   | "bpOtdRate"
   | "bpSmbUtilizationRate";
@@ -76,6 +78,8 @@ function getSortValue(t: CloseSaPeriodTotals, key: SortKey): string | number {
       // No EM60 ROs at all → -1, below every real rate (0-1) — sorts to the
       // bottom on a descending click, same as every other "no data" row.
       return em60OtdPct(t) ?? -1;
+    case "gsOtdRate":
+      return gsOtdPct(t) ?? -1;
     case "sameDayDeliveryRate":
       return sameDayDeliveryPct(t) ?? -1;
     case "bpOtdRate":
@@ -143,6 +147,21 @@ function em60OtdCell(totals: CloseSaPeriodTotals) {
   return (
     <div className="whitespace-nowrap text-right text-sm tabular-nums text-fg">
       {totals.em60OnTimeCount}/{totals.em60Count}
+      <span className="ml-1 text-[11px] font-normal text-fg-faint">({Math.round(pct * 100)}%)</span>
+    </div>
+  );
+}
+
+/** GS OTD: Invoice Date/Time ≤ Promise Delivery Date/Time ÷ ROs where both
+ * parsed — "—" when neither side was ever on file for this SA's ROs.
+ * Distinct from EM60 OTD (EM60-only, 60-minute target) and BP OTD (SMS-based
+ * handover, early-arrival window, its own table). */
+function gsOtdCell(totals: CloseSaPeriodTotals) {
+  if (totals.otdEligibleCount === 0) return <div className="whitespace-nowrap text-right text-sm text-fg-faint">—</div>;
+  const pct = gsOtdPct(totals)!;
+  return (
+    <div className="whitespace-nowrap text-right text-sm tabular-nums text-fg" title="Invoice Date/Time at or before Promise Delivery Date/Time">
+      {totals.otdOnTimeCount}/{totals.otdEligibleCount}
       <span className="ml-1 text-[11px] font-normal text-fg-faint">({Math.round(pct * 100)}%)</span>
     </div>
   );
@@ -234,7 +253,7 @@ function columnCount(variant: SaVariant): number {
     case "bp":
       return 10; // Close SA, ROs, Vehicles, Labour/Parts/TGLOSS/Tyre/Battery, OTD, SMB Utilization %
     case "default":
-      return 11; // everything
+      return 12; // everything, + GS OTD (2026-11-18)
   }
 }
 
@@ -258,6 +277,7 @@ function SaRow({ totals, showBranch, variant }: { totals: CloseSaPeriodTotals; s
   const generalJobDescs = splitJobDescsByTgloss ? topJobDescs.filter(([desc]) => !desc.startsWith("TGLOSS")) : [];
   const tglossJobDescs = splitJobDescsByTgloss ? topJobDescs.filter(([desc]) => desc.startsWith("TGLOSS")) : [];
 
+  const showGsOtd = variant === "default";
   const showSameDayDelivery = variant !== "bp";
   const showMoneyCols = variant !== "pdi"; // Labour ₹/Parts ₹/TGLOSS ₹/Tyre
   const showBattery = variant === "default" || variant === "bp";
@@ -313,6 +333,11 @@ function SaRow({ totals, showBranch, variant }: { totals: CloseSaPeriodTotals; s
         {showBattery ? (
           <td className="px-3 py-2 align-top" title={`${totals.partsMatchedRoCount}/${totals.roCount} ROs matched — same Part Sale coverage as Parts ₹`}>
             {cell(formatNumber(totals.batteryCount))}
+          </td>
+        ) : null}
+        {showGsOtd ? (
+          <td className="px-3 py-2 align-top" title="Invoice Date/Time at or before Promise Delivery Date/Time">
+            {gsOtdCell(totals)}
           </td>
         ) : null}
         {showSameDayDelivery ? (
@@ -480,6 +505,7 @@ export function CloseSaAnalyticsTable({
     );
   }
 
+  const showGsOtd = variant === "default";
   const showSameDayDelivery = variant !== "bp";
   const showMoneyCols = variant !== "pdi";
   const showBattery = variant === "default" || variant === "bp";
@@ -509,6 +535,7 @@ export function CloseSaAnalyticsTable({
                 </>
               ) : null}
               {showBattery ? <SortableHeader label="Battery" sortKey="batteryCount" sort={sort} onClick={handleHeaderClick} /> : null}
+              {showGsOtd ? <SortableHeader label="OTD" sortKey="gsOtdRate" sort={sort} onClick={handleHeaderClick} /> : null}
               {showSameDayDelivery ? <SortableHeader label="Same Day Delivery" sortKey="sameDayDeliveryRate" sort={sort} onClick={handleHeaderClick} /> : null}
               {showBpOtdSmbCols ? (
                 <>

@@ -1787,3 +1787,11 @@ create index if not exists ce_conquest_bulk_apply_log_run_idx on ce_conquest_bul
 alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
 alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
   check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost', 'payment_type_change', 'details_filled', 'reg_no_corrected'));
+
+-- SA Analytics GS OTD (2026-11-18, at the user's request) — Invoice
+-- Date/Time <= Promise Delivery Date/Time, any GS RO where both parsed.
+-- Distinct from bp_otd_eligible_count/bp_otd_on_time_count (SMS-based
+-- handover, early-arrival window) and em60_count/em60_on_time_count
+-- (EM60-only, 60-minute target) — see close-sa-analytics/compute.ts.
+alter table close_sa_analytics_daily add column if not exists gs_otd_eligible_count integer not null default 0;
+alter table close_sa_analytics_daily add column if not exists gs_otd_on_time_count integer not null default 0;
