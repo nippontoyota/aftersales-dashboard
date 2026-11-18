@@ -27,6 +27,7 @@ export default async function RegionTkmTargetsPage({ searchParams }: { searchPar
       regionalRmNav
       dashboardLabel={nav.dashboardLabel}
       queriesBadge={nav.queriesBadge}
+      cancellationsBadge={nav.cancellationsBadge}
       identity={identity}
     >
       <Suspense fallback={<DashboardPageSkeleton heroCards={4} />}>

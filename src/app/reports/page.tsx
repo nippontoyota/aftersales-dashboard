@@ -26,7 +26,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const identity = adminIdentityLabel(admin);
 
   return (
-    <AppShell current="reports" showDashboardLink isHq={admin.role === "hq"} isBpHo={admin.role === "bp_ho"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} queriesBadge={nav.queriesBadge} identity={identity}>
+    <AppShell current="reports" showDashboardLink isHq={admin.role === "hq"} isBpHo={admin.role === "bp_ho"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} queriesBadge={nav.queriesBadge} cancellationsBadge={nav.cancellationsBadge} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton />}>
         <ReportsContent searchParams={searchParams} admin={admin} />
       </Suspense>

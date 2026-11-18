@@ -169,6 +169,7 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
       slimNav={admin.role === "regional" || admin.role === "branch" ? navState!.slimNav : undefined}
       dashboardLabel={navState!.dashboardLabel}
       queriesBadge={navState!.queriesBadge}
+      cancellationsBadge={navState!.cancellationsBadge}
       identity={adminIdentityLabel(admin)}
     >
       {content}

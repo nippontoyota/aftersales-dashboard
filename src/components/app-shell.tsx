@@ -349,6 +349,7 @@ export function AppShell({
   isRegional = false,
   isBranch = false,
   queriesBadge = 0,
+  cancellationsBadge = 0,
   dashboardLabel = "Executive Overview",
   identity,
   children,
@@ -401,6 +402,13 @@ export function AppShell({
   /** Count shown as a small badge on the Queries nav item — threads awaiting
    * this viewer's attention. 0 (default) renders no badge. */
   queriesBadge?: number;
+  /** Count shown as a small badge on the Cancellations nav item — flagged
+   * cancellations awaiting this viewer's own justification action (branch:
+   * not yet submitted; regional: awaiting their co-sign; HQ: overdue past
+   * the 3-day grace period), so it surfaces even off the Cancellations page
+   * itself. See lib/cancellation/pending-justifications.ts. 0 (default)
+   * renders no badge. */
+  cancellationsBadge?: number;
   /** Label for the /dashboard nav item — "Daily Report" / "Regional Report"
    * for a pre-publish raw view, "Executive Overview" otherwise. */
   dashboardLabel?: string;
@@ -434,7 +442,7 @@ export function AppShell({
   const navLink = (item: { href: string; label: string; key: NavKey }, compact: boolean) => {
     const Icon = ICONS[item.key];
     const active = current === item.key;
-    const badge = item.key === "queries" ? queriesBadge : 0;
+    const badge = item.key === "queries" ? queriesBadge : item.key === "cancellations" ? cancellationsBadge : 0;
     return (
       <Link
         key={item.key}

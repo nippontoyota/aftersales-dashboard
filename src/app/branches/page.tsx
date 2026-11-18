@@ -33,7 +33,7 @@ export default async function BranchesPage({ searchParams }: { searchParams: Pro
   const identity = adminIdentityLabel(admin);
 
   return (
-    <AppShell current="branches" showDashboardLink isHq={admin.role === "hq"} isBpHo={admin.role === "bp_ho"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} queriesBadge={nav.queriesBadge} identity={identity}>
+    <AppShell current="branches" showDashboardLink isHq={admin.role === "hq"} isBpHo={admin.role === "bp_ho"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} queriesBadge={nav.queriesBadge} cancellationsBadge={nav.cancellationsBadge} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton />}>
         <BranchesContent searchParams={searchParams} admin={admin} />
       </Suspense>

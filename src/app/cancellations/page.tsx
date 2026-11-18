@@ -107,6 +107,7 @@ export default async function CancellationsPage({
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       queriesBadge={nav.queriesBadge}
+      cancellationsBadge={nav.cancellationsBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
     >

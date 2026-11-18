@@ -27,6 +27,7 @@ export default async function ReferralsPage() {
       slimNav={nav.slimNav}
       isBranch={admin.role === "branch"}
       queriesBadge={nav.queriesBadge}
+      cancellationsBadge={nav.cancellationsBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={adminIdentityLabel(admin)}
     >

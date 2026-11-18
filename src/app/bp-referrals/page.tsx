@@ -106,6 +106,7 @@ export default async function BpReferralsPage({ searchParams }: { searchParams: 
           slimNav={navState.slimNav}
           dashboardLabel={navState.dashboardLabel}
           queriesBadge={navState.queriesBadge}
+          cancellationsBadge={navState.cancellationsBadge}
           identity={adminIdentityLabel(admin)}
         >
           {queueClient}
@@ -143,6 +144,7 @@ export default async function BpReferralsPage({ searchParams }: { searchParams: 
         slimNav={navState.slimNav}
         dashboardLabel={navState.dashboardLabel}
         queriesBadge={navState.queriesBadge}
+        cancellationsBadge={navState.cancellationsBadge}
         identity={adminIdentityLabel(admin)}
       >
         <BpHoAnalyticsClient
@@ -186,6 +188,7 @@ export default async function BpReferralsPage({ searchParams }: { searchParams: 
         companyTabs={navState.companyTabs}
         canUpload={navState.canUpload}
         queriesBadge={navState.queriesBadge}
+        cancellationsBadge={navState.cancellationsBadge}
         identity={adminIdentityLabel(admin)}
       >
         <BpHoAnalyticsClient

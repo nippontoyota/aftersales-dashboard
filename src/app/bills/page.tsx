@@ -64,6 +64,7 @@ export default async function BillsPage({
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       queriesBadge={nav.queriesBadge}
+      cancellationsBadge={nav.cancellationsBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
     >
