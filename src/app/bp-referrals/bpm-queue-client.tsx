@@ -964,6 +964,7 @@ function DetailModal({
           <img
             src={`/api/bp-referrals/photo/${r.id}`}
             alt="Vehicle"
+            loading="lazy"
             className="mt-3 max-h-56 w-full rounded-md border border-border object-contain"
           />
         ) : null}

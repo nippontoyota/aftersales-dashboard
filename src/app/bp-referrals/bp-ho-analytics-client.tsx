@@ -268,6 +268,7 @@ function ReferralTable({
                         <img
                           src={`/api/bp-referrals/photo/${r.id}`}
                           alt="Vehicle"
+                          loading="lazy"
                           className="h-full w-full object-cover transition-opacity group-hover:opacity-80"
                         />
                       </button>

@@ -43,6 +43,14 @@ function getPool(): Pool {
       connectionTimeoutMillis: 15_000,
       statement_timeout: 60_000,
       query_timeout: 65_000,
+      // Confirmed 2026-11-19: Supabase's pooler caps total client connections
+      // at 200 project-wide. pg's own default `max` is 10 per Pool, and each
+      // serverless instance gets its own Pool (globalThis is per-isolate) —
+      // a burst of concurrent requests (e.g. a referrals table rendering 50
+      // photo thumbnails at once) can spin up enough instances to blow past
+      // that cap even though any single request here only ever needs one
+      // connection at a time. Capping `max` low bounds the worst case.
+      max: 3,
     });
     // pg's Pool emits 'error' on an idle client when its connection drops
     // server-side (confirmed 2026-11-07: a long-running backfill script hit
