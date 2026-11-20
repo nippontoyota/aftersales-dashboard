@@ -238,12 +238,31 @@ export async function computeCrossMonthReplacementsFresh(branches?: string[]): P
   }>(
     `
     with canc as (
-      select doc_no, branch, ref_doc_no, month as cancel_month,
-             coalesce(cancel_at, cancel_date::timestamptz) as cancel_moment,
-             coalesce(to_char(issue_date, 'YYYY-MM'), month) as revenue_month,
-             replace(doc_no, '-', '') as doc_key
-      from invoice_cancellations
-      where ref_doc_no is not null and ref_doc_no <> '' and ($2::text[] is null or branch = any($2::text[]))
+      select c.doc_no, c.branch, c.ref_doc_no,
+             -- A regional-approved "RO cancelled, rebilled as X" justification
+             -- (see justifications.ts) overrides ref_doc_no as the RO the
+             -- REPLACEMENT is searched for below — ref_doc_no itself stays
+             -- the real original RO (needed as-is to find the cancelled
+             -- invoice's own dead row further down). Same reasoning as
+             -- reconcile.ts's own link_ro: the manual equivalent of an
+             -- automatically-detected same-RO rebill, kept behind regional
+             -- approval so a branch can't unilaterally link any RO it wants.
+             coalesce(
+               case when j.branch_resolution = 'ro_cancelled' and j.regional_decision = 'approved'
+                    then replace(upper(j.branch_new_ro), '-', '') end,
+               c.ref_doc_no
+             ) as match_ro,
+             c.month as cancel_month,
+             coalesce(c.cancel_at, c.cancel_date::timestamptz) as cancel_moment,
+             coalesce(to_char(c.issue_date, 'YYYY-MM'), c.month) as revenue_month,
+             replace(c.doc_no, '-', '') as doc_key
+      from invoice_cancellations c
+      left join cancellation_justifications j on j.doc_no = c.doc_no
+      where (
+              c.ref_doc_no is not null and c.ref_doc_no <> ''
+              or (j.branch_resolution = 'ro_cancelled' and j.regional_decision = 'approved' and j.branch_new_ro is not null and j.branch_new_ro <> '')
+            )
+            and ($2::text[] is null or c.branch = any($2::text[]))
     ),
     -- The branch's freshest Monthly-KPI (scom205) read per month — same
     -- logic as reconcile.ts's own last_kpi CTE. Used only to decide
@@ -293,7 +312,7 @@ export async function computeCrossMonthReplacementsFresh(branches?: string[]): P
            (c.cancel_month = c.revenue_month and lk.branch is not null
               and c.cancel_moment <= greatest(lk.last_uploaded, lk.last_date::timestamptz)) as skip_adjustment
     from canc c
-    join ssrv_dedup s on s.branch = c.branch and s.ro = c.ref_doc_no and s.inv <> c.doc_key and s.inv <> ''
+    join ssrv_dedup s on s.branch = c.branch and s.ro = c.match_ro and s.inv <> c.doc_key and s.inv <> ''
     -- A candidate replacement that was itself later cancelled never actually
     -- stuck — it's an intermediate invoice in a cancel→reissue→cancel chain,
     -- not where the job's revenue landed. Matching it anyway double-subtracts

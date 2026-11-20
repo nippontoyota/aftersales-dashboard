@@ -17,8 +17,8 @@ const MONTHS_CHECKED = 2;
  * couple of months, so a case doesn't go unnoticed just because nobody
  * happened to open /cancellations. What counts as "needs action" differs by
  * role, mirroring justification-box.tsx's own per-role rendering:
- *   - branch: no justification submitted yet (their move)
- *   - regional: branch has submitted, awaiting their co-sign (their move)
+ *   - branch: no justification submitted yet, or regional rejected it (their move)
+ *   - regional: branch has submitted, awaiting their approve/reject (their move)
  *   - HQ/HQ viewer/BP HO: overdue (past the 3-day grace period) — HQ has no
  *     required action otherwise, so only the escalated ones surface here,
  *     same as the "escalated to HQ" wording already used on the page.
@@ -43,7 +43,10 @@ export async function countPendingJustifications(admin: AdminAccount): Promise<n
       const justifications = await loadJustifications(flagged.map((r) => r.docNo));
 
       if (admin.role === "branch") {
-        return flagged.filter((r) => justificationStatus(justifications.get(r.docNo)) === "none").length;
+        return flagged.filter((r) => {
+          const s = justificationStatus(justifications.get(r.docNo));
+          return s === "none" || s === "rejected";
+        }).length;
       }
       if (admin.role === "regional") {
         return flagged.filter((r) => justificationStatus(justifications.get(r.docNo)) === "branch_submitted").length;

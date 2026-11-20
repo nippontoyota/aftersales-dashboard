@@ -817,6 +817,28 @@ create table if not exists cancellation_justifications (
 create index if not exists cancellation_justifications_branch_idx
   on cancellation_justifications (branch);
 
+-- 2026-11-20: the branch's reason is now a required dropdown rather than
+-- free text alone — 'ro_cancelled' (genuinely rebilled, under a NEW RO
+-- entered in branch_new_ro — reconcile.ts/cross-month-replacement.ts treat
+-- it as evidence of a fix once regional approves it, same as an
+-- automatically-detected same-RO rebill) or 'still_not_closed' (no rebill
+-- yet — stays "stale", branch_note explains why). branch_note is kept as a
+-- free-text remark alongside the dropdown either way.
+--
+-- The regional step changed from an unconditional co-sign to an explicit
+-- approve/reject call: regional_decision null means still pending review.
+-- 'rejected' lets the branch edit and resubmit (submitBranchJustification
+-- clears regional_* on every branch edit) rather than being a dead end.
+-- Only 'approved' + branch_resolution = 'ro_cancelled' makes the RO link
+-- take effect in reconcile.ts/cross-month-replacement.ts — kept behind
+-- regional sign-off on purpose, so a branch can't unilaterally reclassify
+-- its own cancellation as "replaced" by naming any RO.
+alter table cancellation_justifications add column if not exists branch_resolution text
+  check (branch_resolution in ('ro_cancelled','still_not_closed'));
+alter table cancellation_justifications add column if not exists branch_new_ro text;
+alter table cancellation_justifications add column if not exists regional_decision text
+  check (regional_decision in ('approved','rejected'));
+
 -- Backup-before-delete audit trail (2026-10-06), added after TI01B's
 -- September SSRV089-GS (1-13) and Part Sale (1-14) snapshots + raw rows were
 -- found deleted with no trace anywhere — no committed script did it, so it

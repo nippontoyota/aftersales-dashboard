@@ -238,6 +238,8 @@ export default async function CancellationsPage({
                       viewerRole={viewerRole}
                       status={status}
                       branchNote={justification?.branchNote ?? null}
+                      branchResolution={justification?.branchResolution ?? null}
+                      branchNewRo={justification?.branchNewRo ?? null}
                       regionalNote={justification?.regionalNote ?? null}
                       overdue={overdue}
                     />
