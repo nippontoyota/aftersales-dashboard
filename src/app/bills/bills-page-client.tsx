@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type BillCategory = "scrap" | "used_oil";
@@ -41,12 +41,20 @@ export function BillsPageClient({
   months,
   initialMonth,
   showBranchColumn = false,
+  branchOptions = [],
+  selectedBranch,
 }: {
   months: BillMonthTotal[];
   initialMonth: string | undefined;
   /** Shown whenever the viewer's scope spans more than one branch (regional
-   * managers, HQ) — pointless for a branch admin's own single-branch view. */
+   * managers, HQ) — pointless for a branch admin's own single-branch view,
+   * and dropped once a branch filter narrows the view to one branch anyway. */
   showBranchColumn?: boolean;
+  /** Branches the viewer is allowed to filter down to — empty for a branch
+   * admin (their scope is already a single branch), so no filter is shown. */
+  branchOptions?: string[];
+  /** The currently-applied `?branch=` filter, if any. */
+  selectedBranch?: string;
 }) {
   const router = useRouter();
   const [selectedMonth, setSelectedMonth] = useState(initialMonth ?? months[0]?.month ?? "");
@@ -57,12 +65,39 @@ export function BillsPageClient({
 
   const currentMonthData = months.find((m) => m.month === selectedMonth);
 
+  // A branch filter can shift which month the server falls back to (the
+  // newly-scoped branch may have no bills in the month that was selected
+  // before) — resync local state when that happens rather than showing a
+  // stuck selector with no matching data.
+  useEffect(() => {
+    if (initialMonth && initialMonth !== selectedMonth) {
+      setSelectedMonth(initialMonth);
+      setExpanded(false);
+      setBills([]);
+      setLoaded(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMonth]);
+
+  function navigate(month: string, branch: string | undefined) {
+    const params = new URLSearchParams({ month });
+    if (branch) params.set("branch", branch);
+    router.push(`/bills?${params.toString()}`, { scroll: false });
+  }
+
   function handleMonthChange(month: string) {
     setSelectedMonth(month);
     setExpanded(false);
     setBills([]);
     setLoaded(null);
-    router.push(`/bills?month=${month}`, { scroll: false });
+    navigate(month, selectedBranch);
+  }
+
+  function handleBranchChange(branch: string) {
+    setExpanded(false);
+    setBills([]);
+    setLoaded(null);
+    navigate(selectedMonth, branch === "All" ? undefined : branch);
   }
 
   async function toggleExpand() {
@@ -74,7 +109,9 @@ export function BillsPageClient({
     if (loaded === selectedMonth) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/bills?month=${selectedMonth}`);
+      const params = new URLSearchParams({ month: selectedMonth });
+      if (selectedBranch) params.set("branch", selectedBranch);
+      const res = await fetch(`/api/bills?${params.toString()}`);
       const data = await res.json();
       setBills(data.bills ?? []);
       setLoaded(selectedMonth);
@@ -87,8 +124,8 @@ export function BillsPageClient({
 
   return (
     <div className="mt-6 space-y-6">
-      {/* Month selector */}
-      <div className="flex items-center gap-3">
+      {/* Month / branch selectors */}
+      <div className="flex flex-wrap items-center gap-3">
         <label htmlFor="bills-month-select" className="text-sm font-medium text-fg-muted">
           Month
         </label>
@@ -104,6 +141,27 @@ export function BillsPageClient({
             </option>
           ))}
         </select>
+
+        {branchOptions.length > 0 ? (
+          <>
+            <label htmlFor="bills-branch-select" className="text-sm font-medium text-fg-muted">
+              Branch
+            </label>
+            <select
+              id="bills-branch-select"
+              value={selectedBranch ?? "All"}
+              onChange={(e) => handleBranchChange(e.target.value)}
+              className="h-9 rounded-md border border-border-strong bg-surface px-3 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-accent"
+            >
+              <option value="All">All branches</option>
+              {branchOptions.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : null}
       </div>
 
       {/* Summary tiles */}

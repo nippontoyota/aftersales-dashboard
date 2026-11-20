@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const month = searchParams.get("month");
-  const branch: BillBranchScope =
+  const baseScope: BillBranchScope =
     admin.role === "branch"
       ? admin.branch
       : admin.role === "regional"
@@ -20,6 +20,16 @@ export async function GET(request: Request) {
         : admin.role === "kl_cluster"
           ? KL_BRANCHES
           : undefined;
+
+  // ?branch= narrows further within the viewer's own scope — ignored for a
+  // branch admin (already a single branch) and only honoured when it falls
+  // inside the broader scope (a regional manager can't reach outside their
+  // region this way).
+  const requestedBranch = searchParams.get("branch");
+  const branch: BillBranchScope =
+    admin.role !== "branch" && requestedBranch && (Array.isArray(baseScope) ? baseScope.includes(requestedBranch) : true)
+      ? requestedBranch
+      : baseScope;
 
   if (month) {
     if (!/^\d{4}-\d{2}$/.test(month)) {
