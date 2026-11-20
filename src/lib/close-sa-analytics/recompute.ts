@@ -1,4 +1,5 @@
 import { tierForBranch } from "../branch-tier";
+import { pool } from "../db";
 import { BILL_NO_COLUMN } from "../part-sale/parse";
 import {
   loadLatestServiceInfoDatePerRo,
@@ -12,6 +13,35 @@ import { computeCloseSaAnalytics, normalizeCloseSaName, normalizeRo } from "./co
 import { saveCloseSaAnalyticsForDate } from "./store";
 
 /**
+ * Serializes recomputeCloseSaAnalyticsForDates per branch across however
+ * many concurrent serverless invocations are running it (2026-11-20, after
+ * deferring recompute work via after() let two uploads for the same branch
+ * — e.g. Service Info and Service Info (BP) landing close together — each
+ * trigger their own background recompute at the same time instead of one
+ * waiting for the other). An in-process lock can't do this: concurrent
+ * requests routinely land on separate server instances with no shared
+ * memory, which is exactly how the race surfaced (duplicate-key errors on
+ * close_sa_analytics_daily, 2026-11-19). A Postgres advisory lock lives in
+ * the database itself, so it's shared correctly no matter which instance
+ * holds it — acquiring blocks until any other recompute for this branch
+ * releases, rather than racing it. hashtext() collapses the branch code to
+ * an int4; collisions are harmless here (worst case, two different
+ * branches briefly serialize against each other instead of running fully
+ * in parallel — never wrong, just occasionally one step more cautious than
+ * strictly necessary).
+ */
+async function withBranchRecomputeLock<T>(branch: string, work: () => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("select pg_advisory_lock(hashtext($1)::bigint)", [branch]);
+    return await work();
+  } finally {
+    await client.query("select pg_advisory_unlock(hashtext($1)::bigint)", [branch]).catch(() => {});
+    client.release();
+  }
+}
+
+/**
  * Recomputes close_sa_analytics_daily for one branch across however many
  * dates are given, loading the branch's RO→Close SA map (loadRoCloseSaPairs
  * — the branch's whole Service Info history) only once rather than once per
@@ -23,7 +53,10 @@ import { saveCloseSaAnalyticsForDate } from "./store";
  */
 async function recomputeCloseSaAnalyticsForDates(branch: string, dates: string[]): Promise<void> {
   if (dates.length === 0) return;
+  await withBranchRecomputeLock(branch, () => recomputeCloseSaAnalyticsForDatesLocked(branch, dates));
+}
 
+async function recomputeCloseSaAnalyticsForDatesLocked(branch: string, dates: string[]): Promise<void> {
   let tier: ReturnType<typeof tierForBranch>;
   let roCloseSaMap: Map<string, string>;
   let latestServiceInfoDateByRo: Map<string, string>;
