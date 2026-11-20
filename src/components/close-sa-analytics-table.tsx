@@ -271,9 +271,10 @@ function columnCount(variant: SaVariant): number {
 function SaRow({ totals, showBranch, variant }: { totals: CloseSaPeriodTotals; showBranch: boolean; variant: SaVariant }) {
   const [expanded, setExpanded] = useState(false);
   const topJobDescs = Object.entries(totals.jobDescCounts).sort((a, b) => b[1] - a[1]);
-  // GS only (2026-10-26, at the user's request): split into general work vs
-  // TGLOSS-only, side by side, instead of one mixed list.
-  const splitJobDescsByTgloss = variant === "default";
+  // GS and BP (2026-10-26, extended to BP 2026-11-20, both at the user's
+  // request): split into general work vs TGLOSS-only, side by side, instead
+  // of one mixed list.
+  const splitJobDescsByTgloss = variant === "default" || variant === "bp";
   const generalJobDescs = splitJobDescsByTgloss ? topJobDescs.filter(([desc]) => !desc.startsWith("TGLOSS")) : [];
   const tglossJobDescs = splitJobDescsByTgloss ? topJobDescs.filter(([desc]) => desc.startsWith("TGLOSS")) : [];
 
