@@ -1,5 +1,5 @@
 import { tierForBranch } from "../branch-tier";
-import { pool } from "../db";
+import { withAdvisoryLock } from "../db-lock";
 import { BILL_NO_COLUMN } from "../part-sale/parse";
 import {
   loadLatestServiceInfoDatePerRo,
@@ -13,55 +13,6 @@ import { computeCloseSaAnalytics, normalizeCloseSaName, normalizeRo } from "./co
 import { saveCloseSaAnalyticsForDate } from "./store";
 
 /**
- * Serializes recomputeCloseSaAnalyticsForDates per branch across however
- * many concurrent serverless invocations are running it (2026-11-20, after
- * deferring recompute work via after() let two uploads for the same branch
- * — e.g. Service Info and Service Info (BP) landing close together — each
- * trigger their own background recompute at the same time instead of one
- * waiting for the other). An in-process lock can't do this: concurrent
- * requests routinely land on separate server instances with no shared
- * memory, which is exactly how the race surfaced (duplicate-key errors on
- * close_sa_analytics_daily, 2026-11-19). A Postgres advisory lock lives in
- * the database itself, so it's shared correctly no matter which instance
- * holds it. hashtext() collapses the branch code to an int4; collisions
- * are harmless here (worst case, two different branches briefly serialize
- * against each other instead of running fully in parallel).
- *
- * pg_try_advisory_lock (non-blocking), polled, NOT plain pg_advisory_lock
- * (blocking) — confirmed 2026-11-21, the blocking version made things
- * worse: every waiting recompute held its own pool connection idle for the
- * whole wait, which pushed the pool toward exhaustion harder than the
- * original race ever did ("Query read timeout" / "timeout exceeded when
- * trying to connect" spreading across unrelated routes). Polling releases
- * the connection between attempts instead of holding one hostage. A
- * maxWaitMs safety valve gives up waiting and just runs anyway rather than
- * queuing forever under sustained load — tolerable because recompute
- * reloads full state fresh every time, so losing a race here just means
- * this attempt's output isn't used; a later successful run still ends up
- * correct.
- */
-async function withBranchRecomputeLock<T>(branch: string, work: () => Promise<T>): Promise<T> {
-  const key = "select pg_try_advisory_lock(hashtext($1)::bigint) as locked";
-  const maxWaitMs = 20_000;
-  const pollIntervalMs = 500;
-  const deadline = Date.now() + maxWaitMs;
-
-  while (true) {
-    const client = await pool.connect();
-    let gotLock = false;
-    try {
-      gotLock = (await client.query(key, [branch])).rows[0].locked;
-      if (gotLock) return await work();
-    } finally {
-      if (gotLock) await client.query("select pg_advisory_unlock(hashtext($1)::bigint)", [branch]).catch(() => {});
-      client.release();
-    }
-    if (Date.now() > deadline) return work();
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-  }
-}
-
-/**
  * Recomputes close_sa_analytics_daily for one branch across however many
  * dates are given, loading the branch's RO→Close SA map (loadRoCloseSaPairs
  * — the branch's whole Service Info history) only once rather than once per
@@ -73,7 +24,7 @@ async function withBranchRecomputeLock<T>(branch: string, work: () => Promise<T>
  */
 async function recomputeCloseSaAnalyticsForDates(branch: string, dates: string[]): Promise<void> {
   if (dates.length === 0) return;
-  await withBranchRecomputeLock(branch, () => recomputeCloseSaAnalyticsForDatesLocked(branch, dates));
+  await withAdvisoryLock("close-sa-analytics", branch, () => recomputeCloseSaAnalyticsForDatesLocked(branch, dates));
 }
 
 async function recomputeCloseSaAnalyticsForDatesLocked(branch: string, dates: string[]): Promise<void> {

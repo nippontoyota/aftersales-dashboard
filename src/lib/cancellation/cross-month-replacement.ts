@@ -1,4 +1,5 @@
 import { pool } from "../db";
+import { withAdvisoryLock } from "../db-lock";
 
 /**
  * A cancelled invoice's job (RO) sometimes gets re-invoiced under a new
@@ -365,8 +366,31 @@ export async function computeCrossMonthReplacementsFresh(branches?: string[]): P
 /** Recomputes cross_month_replacements and replaces every row — scoped to
  * `branches` when given (the normal per-upload path, cheap), or every
  * branch in the table when omitted (an explicit full recompute only; see
- * computeCrossMonthReplacementsFresh's doc comment on why that's slow). */
+ * computeCrossMonthReplacementsFresh's doc comment on why that's slow).
+ *
+ * Locked per branch-set (2026-11-21): recomputeAfterSsrv089Upload and
+ * recomputeAfterSsrv089BpUpload both call this for the same single branch,
+ * and both got deferred via after() in their upload routes — landing close
+ * together (normal for the daily automation, which uploads GS and BP cost-
+ * sales back to back) made them race, surfacing as a raw duplicate-key
+ * error on cross_month_replacements (TI01A, 2026-11-21), the same bug class
+ * already fixed for close_sa_analytics_daily. See db-lock.ts for why a
+ * non-blocking, polled Postgres advisory lock rather than an in-process one
+ * or a blocking pg_advisory_lock. Keyed by the exact branches list (sorted,
+ * joined) — a concurrent call for a different branch-set doesn't contend,
+ * which covers the actual observed race (the same single branch) without
+ * serializing unrelated work. The full-table recompute (branches omitted)
+ * is an explicit, rare, manual-only path — not worth locking. */
 export async function recomputeCrossMonthReplacements(branches?: string[]): Promise<void> {
+  if (branches) {
+    const lockKey = [...branches].sort().join(",");
+    await withAdvisoryLock("cross-month-replacements", lockKey, () => recomputeCrossMonthReplacementsLocked(branches));
+    return;
+  }
+  await recomputeCrossMonthReplacementsLocked(branches);
+}
+
+async function recomputeCrossMonthReplacementsLocked(branches?: string[]): Promise<void> {
   const fresh = await computeCrossMonthReplacementsFresh(branches);
 
   const client = await pool.connect();
