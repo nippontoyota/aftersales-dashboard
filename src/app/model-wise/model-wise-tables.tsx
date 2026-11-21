@@ -1,9 +1,19 @@
 import { Fragment } from "react";
-import { branchName } from "@/lib/branch-names";
 import { formatCompactCurrency, formatCompact } from "@/lib/format";
 import { VEHICLE_BRANDS, type VehicleBrand } from "@/lib/model-wise/brand";
 
 const BRAND_LABEL: Record<VehicleBrand, string> = { toyota: "Toyota", alliance: "Alliance", lexus: "Lexus" };
+
+// Fixed per-column-type widths, shared across all three brand blocks — each
+// brand block's "ROs"/"Parts"/etc. column is otherwise sized to its own
+// content, which left Toyota's wider (longer numbers) than Lexus's (mostly
+// single/double-digit), making the three blocks visibly uneven column to
+// column. A shared width keeps every brand's same-named column identical.
+const COL_ROS = "w-14";
+const COL_AMOUNT = "w-20";
+const COL_PER_CAR = "w-[5.5rem]";
+const COL_COUNT = "w-14";
+const COL_REVENUE = "w-20";
 
 function perCar(amount: number, ros: number): number | null {
   return ros > 0 ? amount / ros : null;
@@ -44,19 +54,19 @@ export function PartsLabourBrandTable({ title, rows, total }: { title: string; r
           <tr>
             {VEHICLE_BRANDS.map((brand) => (
               <Fragment key={brand}>
-                <th className="sticky top-[29px] z-20 border-b border-l-2 border-border-strong bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint">
+                <th className={`sticky top-[29px] z-20 border-b border-l-2 border-border-strong bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_ROS}`}>
                   ROs
                 </th>
-                <th className="sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint">
+                <th className={`sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_AMOUNT}`}>
                   Parts
                 </th>
-                <th className="sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint">
+                <th className={`sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_AMOUNT}`}>
                   Labour
                 </th>
-                <th className="sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint">
+                <th className={`sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_PER_CAR}`}>
                   Parts/car
                 </th>
-                <th className="sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint">
+                <th className={`sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_PER_CAR}`}>
                   Labour/car
                 </th>
               </Fragment>
@@ -66,27 +76,24 @@ export function PartsLabourBrandTable({ title, rows, total }: { title: string; r
         <tbody>
           {rows.map((row) => (
             <tr key={row.branch} className="border-t border-border-subtle hover:bg-surface-2/40">
-              <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border-subtle bg-surface py-1.5 pl-4 pr-3 text-fg-muted">
-                <span className="font-medium text-fg">{row.branch}</span>
-                <span className="ml-1.5 text-fg-faint">— {branchName(row.branch)}</span>
-              </td>
+              <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border-subtle bg-surface py-1.5 pl-4 pr-3 font-medium text-fg">{row.branch}</td>
               {VEHICLE_BRANDS.map((brand) => {
                 const f = row.byBrand[brand];
                 return (
                   <Fragment key={brand}>
-                    <td className="whitespace-nowrap border-l-2 border-border-strong px-2 py-1.5 text-right tabular-nums text-fg">
+                    <td className={`whitespace-nowrap border-l-2 border-border-strong px-2 py-1.5 text-right tabular-nums text-fg ${COL_ROS}`}>
                       {formatCompact(f.ros)}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg">
+                    <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg ${COL_AMOUNT}`}>
                       {formatCompactCurrency(f.parts)}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg">
+                    <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg ${COL_AMOUNT}`}>
                       {formatCompactCurrency(f.labour)}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg-muted">
+                    <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg-muted ${COL_PER_CAR}`}>
                       {formatCompactCurrency(perCar(f.parts, f.ros))}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg-muted">
+                    <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg-muted ${COL_PER_CAR}`}>
                       {formatCompactCurrency(perCar(f.labour, f.ros))}
                     </td>
                   </Fragment>
@@ -100,19 +107,19 @@ export function PartsLabourBrandTable({ title, rows, total }: { title: string; r
               const f = total[brand];
               return (
                 <Fragment key={brand}>
-                  <td className="whitespace-nowrap border-l-2 border-border-strong px-2 py-1.5 text-right tabular-nums">
+                  <td className={`whitespace-nowrap border-l-2 border-border-strong px-2 py-1.5 text-right tabular-nums ${COL_ROS}`}>
                     {formatCompact(f.ros)}
                   </td>
-                  <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                  <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${COL_AMOUNT}`}>
                     {formatCompactCurrency(f.parts)}
                   </td>
-                  <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                  <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${COL_AMOUNT}`}>
                     {formatCompactCurrency(f.labour)}
                   </td>
-                  <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                  <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${COL_PER_CAR}`}>
                     {formatCompactCurrency(perCar(f.parts, f.ros))}
                   </td>
-                  <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                  <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${COL_PER_CAR}`}>
                     {formatCompactCurrency(perCar(f.labour, f.ros))}
                   </td>
                 </Fragment>
@@ -146,12 +153,9 @@ export function TglossBrandTable({ rows, total }: { rows: TglossRow[]; total: Re
         <tbody>
           {rows.map((row) => (
             <tr key={row.branch} className="border-t border-border-subtle hover:bg-surface-2/40">
-              <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border-subtle bg-surface py-1.5 pl-4 pr-3 text-fg-muted">
-                <span className="font-medium text-fg">{row.branch}</span>
-                <span className="ml-1.5 text-fg-faint">— {branchName(row.branch)}</span>
-              </td>
+              <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border-subtle bg-surface py-1.5 pl-4 pr-3 font-medium text-fg">{row.branch}</td>
               {VEHICLE_BRANDS.map((brand) => (
-                <td key={brand} className="whitespace-nowrap border-l-2 border-border-strong px-3 py-1.5 text-right tabular-nums text-fg">
+                <td key={brand} className={`whitespace-nowrap border-l-2 border-border-strong px-3 py-1.5 text-right tabular-nums text-fg ${COL_AMOUNT}`}>
                   {formatCompactCurrency(row.byBrand[brand])}
                 </td>
               ))}
@@ -160,7 +164,7 @@ export function TglossBrandTable({ rows, total }: { rows: TglossRow[]; total: Re
           <tr className="border-t border-border bg-accent-soft/50 font-semibold">
             <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border-subtle bg-accent-soft/50 py-1.5 pl-4 pr-3 text-fg">Company Total</td>
             {VEHICLE_BRANDS.map((brand) => (
-              <td key={brand} className="whitespace-nowrap border-l-2 border-border-strong px-3 py-1.5 text-right tabular-nums">
+              <td key={brand} className={`whitespace-nowrap border-l-2 border-border-strong px-3 py-1.5 text-right tabular-nums ${COL_AMOUNT}`}>
                 {formatCompactCurrency(total[brand])}
               </td>
             ))}
@@ -195,10 +199,10 @@ export function ItemBrandTable({ title, rows, total }: { title: string; rows: It
           <tr>
             {VEHICLE_BRANDS.map((brand) => (
               <Fragment key={brand}>
-                <th className="sticky top-[29px] z-20 border-b border-l-2 border-border-strong bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint">
+                <th className={`sticky top-[29px] z-20 border-b border-l-2 border-border-strong bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_COUNT}`}>
                   Count
                 </th>
-                <th className="sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint">
+                <th className={`sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_REVENUE}`}>
                   Revenue
                 </th>
               </Fragment>
@@ -208,18 +212,15 @@ export function ItemBrandTable({ title, rows, total }: { title: string; rows: It
         <tbody>
           {rows.map((row) => (
             <tr key={row.branch} className="border-t border-border-subtle hover:bg-surface-2/40">
-              <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border-subtle bg-surface py-1.5 pl-4 pr-3 text-fg-muted">
-                <span className="font-medium text-fg">{row.branch}</span>
-                <span className="ml-1.5 text-fg-faint">— {branchName(row.branch)}</span>
-              </td>
+              <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border-subtle bg-surface py-1.5 pl-4 pr-3 font-medium text-fg">{row.branch}</td>
               {VEHICLE_BRANDS.map((brand) => {
                 const f = row.byBrand[brand];
                 return (
                   <Fragment key={brand}>
-                    <td className="whitespace-nowrap border-l-2 border-border-strong px-2 py-1.5 text-right tabular-nums text-fg">
+                    <td className={`whitespace-nowrap border-l-2 border-border-strong px-2 py-1.5 text-right tabular-nums text-fg ${COL_COUNT}`}>
                       {formatCompact(f.count)}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg">
+                    <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg ${COL_REVENUE}`}>
                       {formatCompactCurrency(f.revenue)}
                     </td>
                   </Fragment>
@@ -233,10 +234,10 @@ export function ItemBrandTable({ title, rows, total }: { title: string; rows: It
               const f = total[brand];
               return (
                 <Fragment key={brand}>
-                  <td className="whitespace-nowrap border-l-2 border-border-strong px-2 py-1.5 text-right tabular-nums">
+                  <td className={`whitespace-nowrap border-l-2 border-border-strong px-2 py-1.5 text-right tabular-nums ${COL_COUNT}`}>
                     {formatCompact(f.count)}
                   </td>
-                  <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                  <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${COL_REVENUE}`}>
                     {formatCompactCurrency(f.revenue)}
                   </td>
                 </Fragment>

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getCurrentAdmin } from "@/lib/auth";
-import { branchName } from "@/lib/branch-names";
 import { loadModelWiseReport } from "@/lib/model-wise/load";
 import { VEHICLE_BRANDS, type VehicleBrand } from "@/lib/model-wise/brand";
 import type { ModelWiseBranchResult } from "@/lib/model-wise/compute";
@@ -61,7 +60,7 @@ function branchWiseSheet(
   const rows: (string | number)[][] = [[title], [subtitle], [], header1, header2];
 
   for (const b of branches) {
-    const row: (string | number)[] = [`${b.branch} — ${branchName(b.branch)}`];
+    const row: (string | number)[] = [b.branch];
     const branchRos = ros(b);
     const branchFigures = figures(b);
     for (const brand of VEHICLE_BRANDS) {
@@ -156,7 +155,7 @@ export async function GET(request: Request) {
     report.company.gus
   );
   const gusSheet = XLSX.utils.aoa_to_sheet(gusSheetRows);
-  gusSheet["!cols"] = [{ wch: 24 }, ...Array(15).fill({ wch: 13 })];
+  gusSheet["!cols"] = [{ wch: 10 }, ...Array(15).fill({ wch: 13 })];
   XLSX.utils.book_append_sheet(workbook, gusSheet, "Branch-wise GUS");
 
   // --- Branch-wise BP ---
@@ -170,7 +169,7 @@ export async function GET(request: Request) {
     report.company.bp
   );
   const bpSheet = XLSX.utils.aoa_to_sheet(bpSheetRows);
-  bpSheet["!cols"] = [{ wch: 24 }, ...Array(15).fill({ wch: 13 })];
+  bpSheet["!cols"] = [{ wch: 10 }, ...Array(15).fill({ wch: 13 })];
   XLSX.utils.book_append_sheet(workbook, bpSheet, "Branch-wise BP");
 
   // --- Branch-wise Combined ---
@@ -184,7 +183,7 @@ export async function GET(request: Request) {
     companyCombined
   );
   const combinedSheet = XLSX.utils.aoa_to_sheet(combinedSheetRows);
-  combinedSheet["!cols"] = [{ wch: 24 }, ...Array(15).fill({ wch: 13 })];
+  combinedSheet["!cols"] = [{ wch: 10 }, ...Array(15).fill({ wch: 13 })];
   XLSX.utils.book_append_sheet(workbook, combinedSheet, "Branch-wise Combined");
 
   // --- TGLOSS ---
@@ -192,11 +191,11 @@ export async function GET(request: Request) {
     [`TGLOSS Revenue by Brand — ${date}`],
     [],
     ["Branch", "Toyota (Rs)", "Alliance (Rs)", "Lexus (Rs)"],
-    ...report.branches.map((b) => [`${b.branch} — ${branchName(b.branch)}`, whole(b.tgloss.toyota), whole(b.tgloss.alliance), whole(b.tgloss.lexus)]),
+    ...report.branches.map((b) => [b.branch, whole(b.tgloss.toyota), whole(b.tgloss.alliance), whole(b.tgloss.lexus)]),
     ["Company Total", whole(report.company.tgloss.toyota), whole(report.company.tgloss.alliance), whole(report.company.tgloss.lexus)],
   ];
   const tglossSheet = XLSX.utils.aoa_to_sheet(tglossRows);
-  tglossSheet["!cols"] = [{ wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+  tglossSheet["!cols"] = [{ wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(workbook, tglossSheet, "TGLOSS");
 
   // --- Injector Cleaner / Engine Flush / Tyre / Battery ---
@@ -215,7 +214,7 @@ export async function GET(request: Request) {
     for (const brand of VEHICLE_BRANDS) header.push(`${BRAND_LABEL[brand]} Count`, `${BRAND_LABEL[brand]} Revenue (Rs)`);
     itemRows.push(header);
     for (const b of report.branches) {
-      const row: (string | number)[] = [`${b.branch} — ${branchName(b.branch)}`];
+      const row: (string | number)[] = [b.branch];
       for (const brand of VEHICLE_BRANDS) row.push(b.items[brand][countKey], whole(b.items[brand][revenueKey]));
       itemRows.push(row);
     }
@@ -226,7 +225,7 @@ export async function GET(request: Request) {
     itemRows.push([]);
   }
   const itemSheet = XLSX.utils.aoa_to_sheet(itemRows);
-  itemSheet["!cols"] = [{ wch: 24 }, ...Array(6).fill({ wch: 15 })];
+  itemSheet["!cols"] = [{ wch: 10 }, ...Array(6).fill({ wch: 15 })];
   XLSX.utils.book_append_sheet(workbook, itemSheet, "Items");
 
   const buffer: Buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
