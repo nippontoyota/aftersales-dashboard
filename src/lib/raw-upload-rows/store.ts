@@ -116,6 +116,26 @@ export async function loadRawUploadRows(reportType: RawUploadReportType, date: s
   return rows.map((r) => r.row_data);
 }
 
+/** Every raw row on file for one report type/branch across a whole date
+ * range (inclusive) — model-wise/compute.ts's brand split needs a full
+ * month of Service Info / SSRV089 / Part Sale rows at once (not one day at
+ * a time, like loadRawUploadRows above), to build its RO→brand map and sum
+ * Parts/Labour/TGLOSS/item revenue over the month. */
+export async function loadRawUploadRowsForRange(
+  reportType: RawUploadReportType,
+  branch: string,
+  fromDate: string,
+  toDate: string
+): Promise<unknown[]> {
+  const { rows } = await pool.query<{ row_data: unknown }>(
+    `select row_data from raw_upload_rows
+     where report_type = $1 and branch = $2 and date >= $3 and date <= $4
+     order by date, row_index`,
+    [reportType, branch, fromDate, toDate]
+  );
+  return rows.map((r) => r.row_data);
+}
+
 /** Distinct dates (any date, this branch's whole Part Sale history) whose
  * RefDocNo — dash-stripped, uppercased, same normalization as
  * close-sa-analytics/compute.ts's normalizeRo — matches one of the given

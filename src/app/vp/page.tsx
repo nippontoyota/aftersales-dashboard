@@ -135,7 +135,14 @@ async function Overview({
           showPrint
           downloadHref={`/api/hq/revenue-stream-export?date=${data.date}`}
           asOfLabel={uploadedAtLabel}
-        />
+        >
+          <a
+            href={`/model-wise?date=${data.date}`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 print:hidden"
+          >
+            Model-wise
+          </a>
+        </VpHeader>
       </div>
 
       <div className="mt-5">

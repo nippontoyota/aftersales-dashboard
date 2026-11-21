@@ -27,6 +27,11 @@ const NAV_ITEMS = [
   { href: "/queries", label: "Queries", key: "queries" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: true, alwaysVisible: false },
   { href: "/branches", label: "Branch Performance", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false, alwaysVisible: false },
   { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false, alwaysVisible: false },
+  // Model-wise (Toyota/Alliance/Lexus revenue split) — hq, regional (own
+  // region) and branch (own branch) all see this, so regionalVisible: true
+  // unlike Branch Performance/Reports above (2026-11-21, at the user's
+  // explicit request).
+  { href: "/model-wise", label: "Model-wise", key: "model-wise" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: true, alwaysVisible: false },
   // alwaysVisible: true — branch admins see their own bills and cancellations
   // regardless of whether the latest date is published (these pages are about
   // their own uploads, not the company-wide dashboard state).
@@ -68,6 +73,7 @@ const CENTRAL_NAV_ITEMS = [
   { href: "/dashboard", label: "My Region", key: "dashboard" as const },
   { href: "/dashboard/central/tkm-targets", label: "TKM Targets", key: "central-tkm-targets" as const },
   { href: "/dashboard/central/sa-analytics", label: "SA Analytics", key: "central-sa-analytics" as const },
+  { href: "/model-wise", label: "Model-wise", key: "model-wise" as const },
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
@@ -82,6 +88,7 @@ const REGIONAL_RM_NAV_ITEMS = [
   { href: "/dashboard", label: "My Region", key: "dashboard" as const },
   { href: "/dashboard/region/tkm-targets", label: "TKM Targets", key: "region-tkm-targets" as const },
   { href: "/dashboard/region/sa-analytics", label: "SA Analytics", key: "region-sa-analytics" as const },
+  { href: "/model-wise", label: "Model-wise", key: "model-wise" as const },
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
@@ -252,6 +259,17 @@ function ChatIcon() {
   );
 }
 
+function ModelWiseIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <path d="M3 12.5 4.3 8a1.5 1.5 0 0 1 1.44-1h8.52a1.5 1.5 0 0 1 1.44 1l1.3 4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="2.5" y="12.5" width="15" height="3.5" rx="1" />
+      <circle cx="6" cy="16" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="14" cy="16" r="1.3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function SignOutIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
@@ -332,6 +350,7 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   "region-tkm-targets": TkmTargetsIcon,
   "region-set-targets": SetTargetsIcon,
   "region-sa-analytics": BranchesIcon,
+  "model-wise": ModelWiseIcon,
   ce: ChatIcon,
 };
 
