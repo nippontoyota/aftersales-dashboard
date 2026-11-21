@@ -12,7 +12,9 @@ import { VEHICLE_BRANDS, type VehicleBrand } from "@/lib/model-wise/brand";
 import type { ModelWiseBranchResult } from "@/lib/model-wise/compute";
 import { ModelWiseHeader } from "./model-wise-header";
 import { modelWiseScopeBranches, requireModelWiseAccess } from "./model-wise-guard";
-import { ItemBrandTable, PartsLabourBrandTable, TglossBrandTable, type ItemRow, type PartsLabourRow, type TglossRow } from "./model-wise-tables";
+import { MultiItemBrandTable, PartsLabourBrandTable, TglossBrandTable, type ItemFiguresLite, type MultiItemRow, type PartsLabourRow, type TglossRow } from "./model-wise-tables";
+
+type ItemKey = "injectorCleaner" | "engineFlush" | "tyre" | "battery";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -137,12 +139,37 @@ async function ModelWiseContent({
 
   const tglossRows: TglossRow[] = report.branches.map((b) => ({ branch: b.branch, byBrand: b.tgloss }));
 
-  const itemSections: { key: "injectorCleaner" | "engineFlush" | "tyre" | "battery"; title: string }[] = [
+  const ITEM_SECTIONS: { key: ItemKey; title: string }[] = [
     { key: "injectorCleaner", title: "Injector Cleaner" },
     { key: "engineFlush", title: "Engine Flush" },
     { key: "tyre", title: "Tyre" },
     { key: "battery", title: "Battery" },
   ];
+
+  function itemFiguresFor(items: ModelWiseBranchResult["items"], brand: VehicleBrand, key: ItemKey): ItemFiguresLite {
+    return { count: items[brand][`${key}Count` as const], revenue: items[brand][`${key}Revenue` as const] };
+  }
+
+  function byItemFor(items: ModelWiseBranchResult["items"], keys: ItemKey[]): Record<ItemKey, Record<VehicleBrand, ItemFiguresLite>> {
+    return Object.fromEntries(
+      keys.map((key) => [key, Object.fromEntries(VEHICLE_BRANDS.map((brand) => [brand, itemFiguresFor(items, brand, key)])) as Record<VehicleBrand, ItemFiguresLite>])
+    ) as Record<ItemKey, Record<VehicleBrand, ItemFiguresLite>>;
+  }
+
+  function buildItemRows(
+    branches: ModelWiseBranchResult[],
+    companyItems: ModelWiseBranchResult["items"],
+    keys: ItemKey[]
+  ): { rows: MultiItemRow<ItemKey>[]; total: Record<ItemKey, Record<VehicleBrand, ItemFiguresLite>> } {
+    const rows: MultiItemRow<ItemKey>[] = branches.map((b) => ({ branch: b.branch, byItem: byItemFor(b.items, keys) }));
+    const total = byItemFor(companyItems, keys);
+    return { rows, total };
+  }
+
+  const cleanerFlushSections = ITEM_SECTIONS.filter((s) => s.key === "injectorCleaner" || s.key === "engineFlush");
+  const tyreBatterySections = ITEM_SECTIONS.filter((s) => s.key === "tyre" || s.key === "battery");
+  const cleanerFlush = buildItemRows(report.branches, report.company.items, cleanerFlushSections.map((s) => s.key));
+  const tyreBattery = buildItemRows(report.branches, report.company.items, tyreBatterySections.map((s) => s.key));
 
   return (
     <div className="mx-auto max-w-[1600px] px-6 py-8">
@@ -176,28 +203,13 @@ async function ModelWiseContent({
         </section>
 
         <section>
-          <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">Injector Cleaner · Engine Flush · Tyre · Battery</h2>
-          <div className="space-y-5">
-            {itemSections.map((section) => {
-              const countKey = `${section.key}Count` as const;
-              const revenueKey = `${section.key}Revenue` as const;
-              const rows: ItemRow[] = report.branches.map((b) => ({
-                branch: b.branch,
-                byBrand: emptyBrandRecord(() => ({ count: 0, revenue: 0 })),
-              }));
-              for (const row of rows) {
-                const branch = report.branches.find((b) => b.branch === row.branch)!;
-                for (const brand of VEHICLE_BRANDS) {
-                  row.byBrand[brand] = { count: branch.items[brand][countKey], revenue: branch.items[brand][revenueKey] };
-                }
-              }
-              const total = emptyBrandRecord(() => ({ count: 0, revenue: 0 }));
-              for (const brand of VEHICLE_BRANDS) {
-                total[brand] = { count: report.company.items[brand][countKey], revenue: report.company.items[brand][revenueKey] };
-              }
-              return <ItemBrandTable key={section.key} title={section.title} rows={rows} total={total} />;
-            })}
-          </div>
+          <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">Injector Cleaner · Engine Flush</h2>
+          <MultiItemBrandTable sections={cleanerFlushSections} rows={cleanerFlush.rows} total={cleanerFlush.total} />
+        </section>
+
+        <section>
+          <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">Tyre · Battery</h2>
+          <MultiItemBrandTable sections={tyreBatterySections} rows={tyreBattery.rows} total={tyreBattery.total} />
         </section>
       </div>
 

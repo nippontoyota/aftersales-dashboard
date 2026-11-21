@@ -176,73 +176,110 @@ export function TglossBrandTable({ rows, total }: { rows: TglossRow[]; total: Re
 }
 
 export type ItemFiguresLite = { count: number; revenue: number };
-export type ItemRow = { branch: string; byBrand: Record<VehicleBrand, ItemFiguresLite> };
 
-export function ItemBrandTable({ title, rows, total }: { title: string; rows: ItemRow[]; total: Record<VehicleBrand, ItemFiguresLite> }) {
+/** One or more items (Injector Cleaner/Engine Flush/Tyre/Battery) in a
+ * single table, each with its own Toyota/Alliance/Lexus × Count/Revenue
+ * column group — a 3-level header (Item → Brand → Count/Revenue). Fitting
+ * all four items in one table (24 data columns) made every column too
+ * narrow to read comfortably even with horizontal scroll, so the page
+ * splits them into two 2-item tables instead; this component doesn't care
+ * how many sections it's given, so either grouping works. */
+export type MultiItemRow<ItemKey extends string> = { branch: string; byItem: Record<ItemKey, Record<VehicleBrand, ItemFiguresLite>> };
+
+export function MultiItemBrandTable<ItemKey extends string>({
+  sections,
+  rows,
+  total,
+}: {
+  sections: { key: ItemKey; title: string }[];
+  rows: MultiItemRow<ItemKey>[];
+  total: Record<ItemKey, Record<VehicleBrand, ItemFiguresLite>>;
+}) {
   return (
     <div className="overflow-auto rounded-xl border border-border bg-surface shadow-card">
       <table className="w-full border-separate border-spacing-0 text-[12.5px]">
         <thead>
           <tr>
             <th
-              rowSpan={2}
+              rowSpan={3}
               className="sticky left-0 top-0 z-30 border-b border-r border-border bg-surface py-2 pl-4 pr-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-faint"
             >
-              {title}
+              Branch
             </th>
-            {VEHICLE_BRANDS.map((brand) => (
-              <th key={brand} colSpan={2} className="sticky top-0 z-20 border-b border-l-2 border-border-strong bg-surface-2/70 py-1.5 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle">
-                {BRAND_LABEL[brand]}
+            {sections.map((section) => (
+              <th
+                key={section.key}
+                colSpan={VEHICLE_BRANDS.length * 2}
+                className="sticky top-0 z-20 border-b border-l-2 border-border-strong bg-surface-3/80 py-1.5 text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-fg"
+              >
+                {section.title}
               </th>
             ))}
           </tr>
           <tr>
-            {VEHICLE_BRANDS.map((brand) => (
-              <Fragment key={brand}>
-                <th className={`sticky top-[29px] z-20 border-b border-l-2 border-border-strong bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_COUNT}`}>
-                  Count
+            {sections.map((section) =>
+              VEHICLE_BRANDS.map((brand, i) => (
+                <th
+                  key={`${section.key}-${brand}`}
+                  colSpan={2}
+                  className={`sticky top-[29px] z-20 border-b bg-surface-2/70 py-1.5 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-fg-subtle ${
+                    i === 0 ? "border-l-2 border-border-strong" : "border-border"
+                  }`}
+                >
+                  {BRAND_LABEL[brand]}
                 </th>
-                <th className={`sticky top-[29px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_REVENUE}`}>
-                  Revenue
-                </th>
-              </Fragment>
-            ))}
+              )),
+            )}
+          </tr>
+          <tr>
+            {sections.map((section) =>
+              VEHICLE_BRANDS.map((brand) => (
+                <Fragment key={`${section.key}-${brand}`}>
+                  <th className={`sticky top-[58px] z-20 border-b border-l-2 border-border-strong bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_COUNT}`}>
+                    Count
+                  </th>
+                  <th className={`sticky top-[58px] z-20 border-b border-border bg-surface py-1.5 px-2 text-right text-[10.5px] font-medium text-fg-faint ${COL_REVENUE}`}>
+                    Revenue
+                  </th>
+                </Fragment>
+              )),
+            )}
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.branch} className="border-t border-border-subtle hover:bg-surface-2/40">
               <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border-subtle bg-surface py-1.5 pl-4 pr-3 font-medium text-fg">{row.branch}</td>
-              {VEHICLE_BRANDS.map((brand) => {
-                const f = row.byBrand[brand];
-                return (
-                  <Fragment key={brand}>
-                    <td className={`whitespace-nowrap border-l-2 border-border-strong px-2 py-1.5 text-right tabular-nums text-fg ${COL_COUNT}`}>
-                      {formatCompact(f.count)}
-                    </td>
-                    <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg ${COL_REVENUE}`}>
-                      {formatCompactCurrency(f.revenue)}
-                    </td>
-                  </Fragment>
-                );
-              })}
+              {sections.map((section) =>
+                VEHICLE_BRANDS.map((brand, i) => {
+                  const f = row.byItem[section.key][brand];
+                  return (
+                    <Fragment key={`${section.key}-${brand}`}>
+                      <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg ${COL_COUNT} ${i === 0 ? "border-l-2 border-border-strong" : ""}`}>
+                        {formatCompact(f.count)}
+                      </td>
+                      <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg ${COL_REVENUE}`}>{formatCompactCurrency(f.revenue)}</td>
+                    </Fragment>
+                  );
+                }),
+              )}
             </tr>
           ))}
           <tr className="border-t border-border bg-accent-soft/50 font-semibold">
             <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border-subtle bg-accent-soft/50 py-1.5 pl-4 pr-3 text-fg">Company Total</td>
-            {VEHICLE_BRANDS.map((brand) => {
-              const f = total[brand];
-              return (
-                <Fragment key={brand}>
-                  <td className={`whitespace-nowrap border-l-2 border-border-strong px-2 py-1.5 text-right tabular-nums ${COL_COUNT}`}>
-                    {formatCompact(f.count)}
-                  </td>
-                  <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${COL_REVENUE}`}>
-                    {formatCompactCurrency(f.revenue)}
-                  </td>
-                </Fragment>
-              );
-            })}
+            {sections.map((section) =>
+              VEHICLE_BRANDS.map((brand, i) => {
+                const f = total[section.key][brand];
+                return (
+                  <Fragment key={`${section.key}-${brand}`}>
+                    <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${COL_COUNT} ${i === 0 ? "border-l-2 border-border-strong" : ""}`}>
+                      {formatCompact(f.count)}
+                    </td>
+                    <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${COL_REVENUE}`}>{formatCompactCurrency(f.revenue)}</td>
+                  </Fragment>
+                );
+              }),
+            )}
           </tr>
         </tbody>
       </table>
