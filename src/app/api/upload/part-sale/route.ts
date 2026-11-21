@@ -6,7 +6,7 @@ import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { loadPartSaleSnapshot, savePartSaleSnapshot } from "@/lib/part-sale/store";
 import { checkBillOverlap, checkSaleDateSanity } from "@/lib/part-sale/upload-validation";
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
-import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
+import { markPendingRecompute } from "@/lib/pending-recomputes/store";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -107,18 +107,13 @@ export async function POST(request: Request) {
     dbClient.release();
   }
 
-  // Outside the save above — a recompute failure shouldn't block an
-  // otherwise-successful upload (see close-sa-analytics/recompute.ts, which
-  // already swallows its own errors). Deferred via after() rather than
-  // awaited (2026-11-18): this recompute reloads the branch's whole
-  // Service Info history (~2.2s for the largest branch, per its own doc
-  // comment), and a high-volume branch could push past Vercel's response
-  // window right as it's about to report success — the client then sees a
-  // connection reset even though the save above already committed fine,
-  // and a retry trips the once-per-date guard as a false "already
-  // uploaded" alarm. after() still runs this reliably (via Vercel's
-  // waitUntil) but no longer makes the client's response wait on it.
-  after(() => recomputeCloseSaAnalytics(admin.branch, date));
+  // Outside the save above — marks this (branch, date) pending rather than
+  // recomputing inline (2026-11-21, at the user's request, superseding the
+  // after()-deferred recompute from 2026-11-18): an HQ admin action runs
+  // the actual recompute later, in one controlled batch, instead of it
+  // competing for DB connections during the automation's own upload burst
+  // — see pending-recomputes/process.ts.
+  after(() => markPendingRecompute(admin.branch, date));
 
   return NextResponse.json({ success: true, date, branch: admin.branch, counts });
 }

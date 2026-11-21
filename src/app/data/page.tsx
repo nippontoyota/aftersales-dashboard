@@ -13,9 +13,17 @@ import { IncentiveSlabsUploadForm } from "./incentive-slabs-upload-form";
 import { UioUploadForm } from "./uio-upload-form";
 import { RevenueStreamDownload } from "./revenue-stream-download";
 import { loadLatestCeImport } from "@/lib/ce/store";
+import { countPendingRecomputes } from "@/lib/pending-recomputes/store";
+import { runPendingRecomputesAction } from "@/lib/pending-recomputes/actions";
 
 const longDate = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+// Governs this page's Server Actions too (see maxDuration's own docs) —
+// runPendingRecomputesAction can process many (branch, date) pairs in one
+// click, each a genuine multi-query recompute, well past the framework's
+// plain default.
+export const maxDuration = 300;
 
 export default async function DataPage() {
   const admin = await getCurrentAdmin();
@@ -24,11 +32,12 @@ export default async function DataPage() {
     redirect("/upload");
   }
 
-  const [allStaff, holidays, holidaySet, latestCeImport] = await Promise.all([
+  const [allStaff, holidays, holidaySet, latestCeImport, pendingRecomputeCount] = await Promise.all([
     listAllAccessoriesStaff(),
     listReportHolidays(),
     loadReportHolidaySet(),
     loadLatestCeImport(),
+    countPendingRecomputes(),
   ]);
   const currentReportDate = reportingDate(holidaySet);
   const currentMonth = currentReportDate.slice(0, 7);
@@ -47,7 +56,38 @@ export default async function DataPage() {
   return (
     <AppShell current="data" showDashboardLink={admin.canViewDashboard} isHq identity="HQ admin">
       <div className="mx-auto w-full max-w-3xl p-6">
-        <h1 className="text-xl font-semibold tracking-tight text-fg">Customer Engagement Leads</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-fg">SA Analytics Recompute</h1>
+        <p className="mt-1 text-sm text-fg-subtle">
+          Every Service Info, Labour Sales, Part Sale and Cost &amp; Sales upload marks its branch/date as needing a
+          fresh SA Analytics recompute instead of recomputing right away — keeps the daily automation&apos;s own
+          upload burst from competing with itself for database connections. Run this once uploads for the day are
+          done.
+        </p>
+        <div className="mt-4 rounded-lg border border-border bg-surface p-4 shadow-card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-fg-muted">
+              {pendingRecomputeCount === 0 ? (
+                <span>Nothing pending — everything&apos;s already recomputed.</span>
+              ) : (
+                <span>
+                  <span className="font-semibold text-fg">{pendingRecomputeCount}</span>{" "}
+                  branch/date pair{pendingRecomputeCount === 1 ? "" : "s"} pending recompute.
+                </span>
+              )}
+            </div>
+            <form action={runPendingRecomputesAction}>
+              <button
+                type="submit"
+                disabled={pendingRecomputeCount === 0}
+                className="h-8 shrink-0 rounded-md bg-accent px-3 text-xs font-medium text-on-accent hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Run pending recomputes
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <h1 className="mt-10 text-xl font-semibold tracking-tight text-fg">Customer Engagement Leads</h1>
         <p className="mt-1 text-sm text-fg-subtle">Upload the annual UIO workbook used by the CE team.</p>
         <div className="mt-4"><UioUploadForm latest={latestCeImport} /></div>
 

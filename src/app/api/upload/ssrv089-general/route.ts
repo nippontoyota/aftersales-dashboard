@@ -1,9 +1,9 @@
 import { NextResponse, after } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
-import { recomputeAfterSsrv089Upload } from "@/lib/cancellation/adjustment-recompute";
 import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
+import { markPendingRecompute } from "@/lib/pending-recomputes/store";
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { loadSsrv089Snapshot, saveSsrv089Snapshot } from "@/lib/ssrv089/store";
@@ -111,13 +111,15 @@ export async function POST(request: Request) {
     dbClient.release();
   }
 
-  // Outside the upload transaction — a recompute failure shouldn't roll back
-  // an otherwise-successful upload (see adjustment-recompute.ts). Deferred
-  // via after() rather than awaited (2026-11-18) — see part-sale's route
-  // for why: a high-volume branch's recompute can push past Vercel's
-  // response window, dropping the connection right as success would've
-  // been reported even though the save above already committed fine.
-  after(() => recomputeAfterSsrv089Upload(admin.branch, date));
+  // Outside the upload transaction — marks this (branch, date) pending
+  // rather than recomputing inline (2026-11-21, at the user's request,
+  // superseding the after()-deferred recompute from 2026-11-18) — see
+  // part-sale's route for the full reasoning, and pending-recomputes/
+  // process.ts for the HQ admin action that does the actual recompute
+  // (covers both the cancelled-accessories adjustment and
+  // cross_month_replacements this upload used to trigger directly via
+  // recomputeAfterSsrv089Upload).
+  after(() => markPendingRecompute(admin.branch, date));
 
   return NextResponse.json({ success: true, date, branch: admin.branch, totals });
 }

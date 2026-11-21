@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
-import { recomputeAfterSsrv089BpUpload } from "@/lib/cancellation/adjustment-recompute";
 import { hashBuffer } from "@/lib/duplicate-detection";
+import { markPendingRecompute } from "@/lib/pending-recomputes/store";
 import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { detectReportType, type DetectedReportType } from "@/lib/report-sniffer";
@@ -141,14 +141,15 @@ export async function POST(request: Request) {
     uploadedBy: admin.username,
   });
 
-  // Outside the save above — a recompute failure shouldn't block an
-  // otherwise-successful upload (see adjustment-recompute.ts). Deferred via
-  // after() rather than awaited (2026-11-18) — see part-sale's route for
-  // why: a high-volume branch's recompute can push past Vercel's response
-  // window, dropping the connection right as success would've been
-  // reported even though the save above already committed fine.
+  // Outside the save above — marks this (branch, date) pending rather than
+  // recomputing inline (2026-11-21, at the user's request, superseding the
+  // after()-deferred recompute from 2026-11-18) — see part-sale's route
+  // for the full reasoning, and pending-recomputes/process.ts for the HQ
+  // admin action that does the actual recompute (covers
+  // cross_month_replacements, the only thing recomputeAfterSsrv089BpUpload
+  // used to trigger directly).
   after(async () => {
-    await recomputeAfterSsrv089BpUpload(admin.branch);
+    await markPendingRecompute(admin.branch, date);
 
     // BP Referrals' RO matcher (2026-10-14) — scans this file's
     // BPJ-prefixed ROs for a vehicle reg no match against validated

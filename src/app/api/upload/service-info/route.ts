@@ -8,10 +8,7 @@ import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/sto
 import { isBpFlavoredServiceInfo, JOB_ORDER_NO_COLUMN, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-info/store";
 import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
-import { catchUpPartSaleForClosedRos, recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
-import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
-import { recomputeUniqueVinVas } from "@/lib/unique-vin-vas/recompute";
-import { recomputeTotalCarCareTreatments } from "@/lib/total-car-care/recompute";
+import { markCatchUpPartSaleDatesPending, markPendingRecompute } from "@/lib/pending-recomputes/store";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
@@ -127,20 +124,16 @@ export async function POST(request: Request) {
     dbClient.release();
   }
 
-  // Outside the save above — a recompute failure shouldn't block an
-  // otherwise-successful upload (see vas-revenue-real/recompute.ts, which
-  // already swallows its own errors; this is a no-op before 2026-10-01).
-  // Deferred via after() rather than awaited (2026-11-18) — see part-sale's
-  // route for why: a high-volume branch's recompute chain can push past
-  // Vercel's response window, dropping the connection right as success
-  // would've been reported even though the save above already committed
-  // fine.
+  // Outside the save above — marks this (branch, date) and any older Part
+  // Sale dates this upload's now-closed ROs catch up pending, rather than
+  // recomputing inline (2026-11-21, at the user's request, superseding the
+  // after()-deferred recompute from 2026-11-18) — see part-sale's route
+  // for the full reasoning, and pending-recomputes/process.ts for the HQ
+  // admin action that does the actual recompute. linkServiceInfoToCeLeads
+  // is unrelated (CE lead matching, not SA Analytics) and stays immediate.
   after(async () => {
-    await recomputeVasRevenueReal(admin.branch, date);
-    await recomputeCloseSaAnalytics(admin.branch, date);
-    await catchUpPartSaleForClosedRos(admin.branch, rawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
-    await recomputeUniqueVinVas(admin.branch, date);
-    await recomputeTotalCarCareTreatments(admin.branch, date);
+    await markPendingRecompute(admin.branch, date);
+    await markCatchUpPartSaleDatesPending(admin.branch, rawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
     await linkServiceInfoToCeLeads(rawRows, admin.branch);
   });
 

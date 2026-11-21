@@ -1817,3 +1817,23 @@ alter table bp_referral_activity add constraint bp_referral_activity_activity_ty
 -- (EM60-only, 60-minute target) — see close-sa-analytics/compute.ts.
 alter table close_sa_analytics_daily add column if not exists gs_otd_eligible_count integer not null default 0;
 alter table close_sa_analytics_daily add column if not exists gs_otd_on_time_count integer not null default 0;
+
+-- Decouples analytics recompute (close_sa_analytics_daily, VAS revenue,
+-- Unique VIN VAS, Total Car Care, cancelled-accessories adjustment,
+-- cross_month_replacements) from the moment of upload (2026-11-21, at the
+-- user's request): every one of those recomputes reloads a branch's full
+-- relevant history, which under the daily automation's own upload burst
+-- was contending for the same handful of DB connections hard enough to
+-- make unrelated requests (including dashboard login) go slow. Instead of
+-- recomputing inline, an upload now just marks the (branch, date) pairs it
+-- touched here — one row per pair, so a re-upload or several upload types
+-- for the same pair collapse to the same marker rather than piling up.
+-- An HQ admin action (see pending-recomputes/process.ts) processes the
+-- whole list later, in one controlled run, deleting each row as it's
+-- successfully recomputed — resumable if it's ever interrupted partway.
+create table if not exists pending_recomputes (
+  branch text not null,
+  date date not null,
+  created_at timestamptz not null default now(),
+  primary key (branch, date)
+);

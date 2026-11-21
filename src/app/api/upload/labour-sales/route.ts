@@ -4,8 +4,7 @@ import { pool } from "@/lib/db";
 import { parseLabourSalesWorkbook } from "@/lib/labour-sales/parse";
 import { saveLabourSalesSnapshot } from "@/lib/labour-sales/store";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
-import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
-import { recomputeVasRevenueReal } from "@/lib/vas-revenue-real/recompute";
+import { markPendingRecomputes } from "@/lib/pending-recomputes/store";
 
 /**
  * Labour Sales Report upload — see db/schema.sql's comment on
@@ -85,19 +84,12 @@ export async function POST(request: Request) {
     dbClient.release();
   }
 
-  // Outside the save above — a recompute failure shouldn't block an
-  // otherwise-successful upload. One call per date this upload touched
-  // (vas-revenue-real/recompute.ts is a no-op before 2026-10-01). Deferred
-  // via after() rather than awaited (2026-11-18) — see part-sale's route
-  // for why: a high-volume branch's recompute can push past Vercel's
-  // response window, dropping the connection right as success would've
-  // been reported even though the save above already committed fine.
-  after(async () => {
-    for (const day of parsed.days) {
-      await recomputeVasRevenueReal(admin.branch, day.date);
-      await recomputeCloseSaAnalytics(admin.branch, day.date);
-    }
-  });
+  // Outside the save above — marks every date this upload touched pending
+  // rather than recomputing inline (2026-11-21, at the user's request,
+  // superseding the after()-deferred recompute from 2026-11-18) — see
+  // part-sale's route for the full reasoning, and pending-recomputes/
+  // process.ts for the HQ admin action that does the actual recompute.
+  after(() => markPendingRecomputes(parsed.days.map((day) => ({ branch: admin.branch, date: day.date }))));
 
   const totals = parsed.days.reduce(
     (acc, d) => ({
