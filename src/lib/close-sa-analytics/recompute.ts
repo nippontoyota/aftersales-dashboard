@@ -23,21 +23,41 @@ import { saveCloseSaAnalyticsForDate } from "./store";
  * memory, which is exactly how the race surfaced (duplicate-key errors on
  * close_sa_analytics_daily, 2026-11-19). A Postgres advisory lock lives in
  * the database itself, so it's shared correctly no matter which instance
- * holds it — acquiring blocks until any other recompute for this branch
- * releases, rather than racing it. hashtext() collapses the branch code to
- * an int4; collisions are harmless here (worst case, two different
- * branches briefly serialize against each other instead of running fully
- * in parallel — never wrong, just occasionally one step more cautious than
- * strictly necessary).
+ * holds it. hashtext() collapses the branch code to an int4; collisions
+ * are harmless here (worst case, two different branches briefly serialize
+ * against each other instead of running fully in parallel).
+ *
+ * pg_try_advisory_lock (non-blocking), polled, NOT plain pg_advisory_lock
+ * (blocking) — confirmed 2026-11-21, the blocking version made things
+ * worse: every waiting recompute held its own pool connection idle for the
+ * whole wait, which pushed the pool toward exhaustion harder than the
+ * original race ever did ("Query read timeout" / "timeout exceeded when
+ * trying to connect" spreading across unrelated routes). Polling releases
+ * the connection between attempts instead of holding one hostage. A
+ * maxWaitMs safety valve gives up waiting and just runs anyway rather than
+ * queuing forever under sustained load — tolerable because recompute
+ * reloads full state fresh every time, so losing a race here just means
+ * this attempt's output isn't used; a later successful run still ends up
+ * correct.
  */
 async function withBranchRecomputeLock<T>(branch: string, work: () => Promise<T>): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query("select pg_advisory_lock(hashtext($1)::bigint)", [branch]);
-    return await work();
-  } finally {
-    await client.query("select pg_advisory_unlock(hashtext($1)::bigint)", [branch]).catch(() => {});
-    client.release();
+  const key = "select pg_try_advisory_lock(hashtext($1)::bigint) as locked";
+  const maxWaitMs = 20_000;
+  const pollIntervalMs = 500;
+  const deadline = Date.now() + maxWaitMs;
+
+  while (true) {
+    const client = await pool.connect();
+    let gotLock = false;
+    try {
+      gotLock = (await client.query(key, [branch])).rows[0].locked;
+      if (gotLock) return await work();
+    } finally {
+      if (gotLock) await client.query("select pg_advisory_unlock(hashtext($1)::bigint)", [branch]).catch(() => {});
+      client.release();
+    }
+    if (Date.now() > deadline) return work();
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 }
 
