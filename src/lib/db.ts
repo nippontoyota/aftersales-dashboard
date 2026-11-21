@@ -50,7 +50,18 @@ function getPool(): Pool {
       // photo thumbnails at once) can spin up enough instances to blow past
       // that cap even though any single request here only ever needs one
       // connection at a time. Capping `max` low bounds the worst case.
-      max: 3,
+      //
+      // Raised 3 -> 6 (2026-11-21): 3 was tight enough that a single
+      // instance doing real concurrent work for one request — e.g. an
+      // upload's own save query, its after()-deferred recompute, and the
+      // advisory-lock poll it runs under (see close-sa-analytics/
+      // recompute.ts) — could exhaust its own 3 slots and start queuing,
+      // which doesn't crash but shows up as requests (including an
+      // unrelated /login on the same instance) going silently slow instead
+      // of erroring. Watch Supabase/Vercel for EMAXCONN returning under
+      // heavy concurrent instance counts — that would mean 6 is too high
+      // again and needs splitting the difference instead.
+      max: 6,
     });
     // pg's Pool emits 'error' on an idle client when its connection drops
     // server-side (confirmed 2026-11-07: a long-running backfill script hit
