@@ -14,6 +14,7 @@ import {
   getReferralActivityAction,
   logFollowUpContactAction,
   markNotConnectedAction,
+  markSelfArrivedAction,
   submitCallOutcomeAction,
   transferReferralAction,
   type BpmActionState,
@@ -49,9 +50,10 @@ export type BpmQueueReferral = {
   pending_ro_no: string | null;
   pending_ro_entered_at: Date | string | null;
   closed_at: Date | string | null;
-  closed_reason: "not_genuine" | "not_interested" | "lost" | null;
+  closed_reason: "not_genuine" | "not_interested" | "lost" | "self_arrived" | null;
   not_interested_reason: string | null;
   lost_reason: string | null;
+  self_arrived_reason: string | null;
   last_contacted_at: Date | string | null;
   bp_estimate_invoice_no: string | null;
   bp_estimate_invoice_entered_at: Date | string | null;
@@ -72,6 +74,7 @@ type Tab =
   | "not_genuine"
   | "not_interested"
   | "lost"
+  | "self_arrived"
   | "dropped";
 
 /** Mirrors the thresholds in lib/bp-referrals/store.ts — can't import them
@@ -114,6 +117,7 @@ function classify(r: BpmQueueReferral): Tab {
     // things.
     if (r.closed_reason === "not_genuine") return "not_genuine";
     if (r.closed_reason === "not_interested") return "not_interested";
+    if (r.closed_reason === "self_arrived") return "self_arrived";
     return "lost";
   }
   if (r.bp_estimate_invoice_no) return "vehicle_received";
@@ -140,8 +144,9 @@ function StatusBadge({ r }: { r: BpmQueueReferral }) {
       </span>
     );
   }
-  if (tab === "not_genuine" || tab === "not_interested" || tab === "lost") {
-    const label = tab === "not_genuine" ? "Not genuine" : tab === "not_interested" ? "Not interested" : "Lost";
+  if (tab === "not_genuine" || tab === "not_interested" || tab === "lost" || tab === "self_arrived") {
+    const label =
+      tab === "not_genuine" ? "Not genuine" : tab === "not_interested" ? "Not interested" : tab === "self_arrived" ? "Self arrived" : "Lost";
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-fg-faint">
         <Dot className="bg-fg-faint" />
@@ -204,6 +209,7 @@ const ACTIVITY_LABEL: Record<ActivityRow["activityType"], string> = {
   payment_type_change: "Payment type changed",
   details_filled: "Details added",
   reg_no_corrected: "Reg no corrected",
+  self_arrived: "Self arrived",
 };
 
 function ActivityHistory({ referralId }: { referralId: number }) {
@@ -504,6 +510,57 @@ function CloseLostButton({ id, onDone }: { id: number; onDone: () => void }) {
           className="h-8 rounded-md bg-bad-solid px-3 text-sm font-semibold text-on-accent hover:opacity-90 disabled:opacity-60"
         >
           {pending ? "Closing…" : "Close as Lost"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-fg-muted hover:underline">
+          Cancel
+        </button>
+        {state.error ? <span className="text-xs text-bad">{state.error}</span> : null}
+      </div>
+    </form>
+  );
+}
+
+/** The customer brought the car in on their own before the BPM ever got to
+ * call (2026-11-23, at the user's request) — shown alongside Not
+ * connected/Call outcome, on the same "To call"/"Not connected" tabs,
+ * never from Follow-up. One click, one mandatory remark; no further steps
+ * for this referral at all — see markSelfArrived in store.ts for why
+ * (no payout of any kind, unlike Lost/Not genuine/Not interested which
+ * can still earn the ₹50). */
+function SelfArrivedButton({ id, onDone }: { id: number; onDone: () => void }) {
+  const [state, action, pending] = useActionState(markSelfArrivedAction, INIT);
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="h-8 rounded-md border border-border-strong px-3 text-sm font-medium text-fg-muted hover:bg-surface-2"
+      >
+        Customer already came in
+      </button>
+    );
+  }
+
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      className="rounded-md border border-border-strong bg-surface-2/50 p-3"
+    >
+      <input type="hidden" name="id" value={id} />
+      <span className={eyebrow}>How did you find out? (required)</span>
+      <textarea name="remark" required rows={2} placeholder="e.g. Saw the car at the branch, already being worked on" className={remarkField} />
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+        >
+          {pending ? "Closing…" : "Close as Self arrived"}
         </button>
         <button type="button" onClick={() => setOpen(false)} className="text-xs text-fg-muted hover:underline">
           Cancel
@@ -999,6 +1056,12 @@ function DetailModal({
                 <p className="mt-0.5 text-fg">{r.lost_reason}</p>
               </div>
             ) : null}
+            {r.self_arrived_reason ? (
+              <div>
+                <span className="text-fg-faint">Self arrived</span>
+                <p className="mt-0.5 text-fg">{r.self_arrived_reason}</p>
+              </div>
+            ) : null}
             {r.payment_type ? (
               <div className="flex items-center justify-between">
                 <span className="text-fg-faint">Payment type</span>
@@ -1059,6 +1122,7 @@ function DetailModal({
           <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
             <NotConnectedButton id={r.id} onDone={onClose} />
             <CallOutcomeForm id={r.id} onDone={onClose} />
+            <SelfArrivedButton id={r.id} onDone={onClose} />
           </div>
         ) : null}
 
@@ -1093,6 +1157,7 @@ const TAB_LABEL: Record<Tab, string> = {
   not_genuine: "Not genuine",
   not_interested: "Not interested",
   lost: "Lost",
+  self_arrived: "Self arrived",
   dropped: "Dropped",
 };
 
@@ -1122,6 +1187,7 @@ function QueueList({
       not_genuine: 0,
       not_interested: 0,
       lost: 0,
+      self_arrived: 0,
       dropped: 0,
     };
     for (const r of referrals) c[classify(r)]++;

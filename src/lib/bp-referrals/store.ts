@@ -57,7 +57,7 @@ export type BpReferralRow = {
   pending_ro_no: string | null;
   pending_ro_entered_at: Date | string | null;
   closed_at: Date | string | null;
-  closed_reason: "not_genuine" | "not_interested" | "lost" | null;
+  closed_reason: "not_genuine" | "not_interested" | "lost" | "self_arrived" | null;
   /** Why the customer declined, once genuine + not interested — a distinct
    * structured field from the call-outcome remark/damage description,
    * which stays in bp_referral_activity (2026-10-17, the user's call). */
@@ -67,6 +67,10 @@ export type BpReferralRow = {
    * another workshop. Mandatory on that path, same shape as
    * not_interested_reason (2026-10-27, the user's request). */
   lost_reason: string | null;
+  /** How the BPM found out the customer brought the car in on their own
+   * before any call — mandatory on that path, same shape as lost_reason
+   * (2026-11-23, the user's request). */
+  self_arrived_reason: string | null;
   last_contacted_at: Date | string | null;
   /** BPE-prefixed proof that the vehicle has physically arrived — insurance-
    * paid (IP) referrals only, see logFollowUpContact below. Its presence is
@@ -94,7 +98,7 @@ const SELECT_COLUMNS = `
   r.vehicle_image_url, r.customer_phone, r.submitted_at, r.vehicle_reg_no, r.vehicle_model, r.location, r.description,
   r.assigned_branch, r.call_status, r.genuine, r.estimate_amount, r.customer_interested, r.payment_type,
   r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.pending_ro_no, r.pending_ro_entered_at,
-  r.closed_at, r.closed_reason, r.not_interested_reason, r.lost_reason,
+  r.closed_at, r.closed_reason, r.not_interested_reason, r.lost_reason, r.self_arrived_reason,
   r.last_contacted_at, r.bp_estimate_invoice_no, r.bp_estimate_invoice_entered_at,
   lt.from_branch as transferred_from,
   dup.id as duplicate_of_id, dup.referring_employee_name as duplicate_of_employee_name,
@@ -214,7 +218,7 @@ async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
 
 async function logActivity(
   referralId: number,
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected",
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected" | "self_arrived",
   remark: string,
   performedBy: string,
   notConnectedReason?: string,
@@ -367,6 +371,36 @@ export async function closeFollowUpAsLost(id: number, branch: string, performedB
   await logActivity(id, "lost", lostReason, performedBy);
 }
 
+/** The customer brought the car in on their own before the BPM ever got to
+ * call (2026-11-23, at the user's request) — reached straight from "To
+ * call"/"Not connected", unlike closeFollowUpAsLost above which requires a
+ * referral to already be validated. One click, one mandatory remark,
+ * nothing else: never sets genuine/customer_interested/validated_at, so
+ * neither the ₹50 nor the ₹200 payout can ever fire for it — the user's
+ * explicit call that this one earns the referring employee nothing at all.
+ * Its own closed_reason, kept apart from not_genuine/not_interested/lost in
+ * every view that shows those (classify() in bpm-queue-client.tsx /
+ * bp-ho-analytics-client.tsx, remarksFor in group-report.ts). */
+export async function markSelfArrived(id: number, branch: string, performedBy: string, reason: string): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  const { rows } = await pool.query<{
+    validated_at: Date | string | null;
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+  }>(`select validated_at, closed_at, ro_matched_at from bp_referrals where id = $1`, [id]);
+  const referral = rows[0];
+  if (!referral || referral.validated_at || referral.closed_at || referral.ro_matched_at) {
+    throw new Error("This referral isn't open for a self-arrived close-out.");
+  }
+  await pool.query(
+    `update bp_referrals set call_status = 'connected', closed_at = now(), closed_reason = 'self_arrived',
+       self_arrived_reason = $2, handled_by = $3
+     where id = $1`,
+    [id, reason, performedBy],
+  );
+  await logActivity(id, "self_arrived", reason, performedBy);
+}
+
 /** BPM corrects an already-chosen payment type (2026-11-11, at the user's
  * request) — this used to be a one-time pick made at call-outcome time
  * (submitCallOutcome above) with no way back if it turned out wrong.
@@ -512,7 +546,7 @@ export async function correctVehicleRegNo(id: number, branch: string, performedB
 
 export type ActivityRow = {
   id: number;
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected";
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected" | "self_arrived";
   remark: string;
   notConnectedReason: string | null;
   followUpStage: string | null;
@@ -526,7 +560,7 @@ export type ActivityRow = {
 export async function loadActivityForReferral(referralId: number): Promise<ActivityRow[]> {
   const { rows } = await pool.query<{
     id: number;
-    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected";
+    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected" | "self_arrived";
     remark: string;
     not_connected_reason: string | null;
     follow_up_stage: string | null;

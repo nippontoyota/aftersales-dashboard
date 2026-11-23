@@ -94,10 +94,16 @@ function sumOrNull(...values: (number | null)[]): number | null {
   return present.length === 0 ? null : present.reduce((a, b) => a + b, 0);
 }
 
-function remarksFor(closedReason: string | null, notInterestedReason: string | null, lostReason: string | null): string | null {
+function remarksFor(
+  closedReason: string | null,
+  notInterestedReason: string | null,
+  lostReason: string | null,
+  selfArrivedReason: string | null,
+): string | null {
   if (closedReason === "not_genuine") return "Not genuine";
   if (closedReason === "not_interested") return notInterestedReason ? `Not interested: ${notInterestedReason}` : "Not interested";
   if (closedReason === "lost") return lostReason ? `Lost: ${lostReason}` : "Lost";
+  if (closedReason === "self_arrived") return selfArrivedReason ? `Self arrived: ${selfArrivedReason}` : "Self arrived";
   return null;
 }
 
@@ -120,6 +126,7 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
     closed_reason: string | null;
     not_interested_reason: string | null;
     lost_reason: string | null;
+    self_arrived_reason: string | null;
     total_sale: string | null;
     part_sale: string | null;
     part_cost: string | null;
@@ -133,7 +140,7 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
        r.id, r.submitted_at, r.referring_employee_name, r.referring_employee_id,
        r.referring_employee_branch, r.referring_employee_dept, r.assigned_branch, r.vehicle_reg_no, r.vehicle_model,
        r.matched_ro_no, r.pending_ro_no, r.estimate_amount, r.validated_at, r.ro_matched_at,
-       r.closed_reason, r.not_interested_reason, r.lost_reason,
+       r.closed_reason, r.not_interested_reason, r.lost_reason, r.self_arrived_reason,
        dms.total_sale, dms.part_sale, dms.part_cost, dms.pnt_mat_sale, dms.pnt_mat_cost,
        dms.labour_sale, dms.labour_cost, cl.vehicle_model as dms_vehicle_model
      from bp_referrals r
@@ -188,7 +195,7 @@ export async function loadGroupReportRows(range: DateRange, branches?: string[])
     partsCost: sumOrNull(toAmount(r.part_cost), toAmount(r.pnt_mat_cost)),
     labourRevenue: toAmount(r.labour_sale),
     labourCost: toAmount(r.labour_cost),
-    remarks: remarksFor(r.closed_reason, r.not_interested_reason, r.lost_reason),
+    remarks: remarksFor(r.closed_reason, r.not_interested_reason, r.lost_reason, r.self_arrived_reason),
   }));
 }
 

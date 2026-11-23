@@ -1837,3 +1837,15 @@ create table if not exists pending_recomputes (
   created_at timestamptz not null default now(),
   primary key (branch, date)
 );
+
+-- BP Referrals: "Self arrived" (2026-11-23, at the user's request) — the
+-- customer brought the car in on their own before the BPM ever got to call,
+-- so there's nothing to validate and no payout at all (not even the ₹50,
+-- unlike not_genuine/not_interested/lost which can fire that far). Reached
+-- straight from "To call"/"Not connected", never from Follow-up — see
+-- markSelfArrived in store.ts, which never sets validated_at. Its own
+-- closed_reason and its own reason column, same shape as lost_reason.
+alter table bp_referrals add column if not exists self_arrived_reason text;
+alter table bp_referrals drop constraint if exists bp_referrals_closed_reason_check;
+alter table bp_referrals add constraint bp_referrals_closed_reason_check
+  check (closed_reason is null or closed_reason in ('not_genuine', 'not_interested', 'lost', 'self_arrived'));

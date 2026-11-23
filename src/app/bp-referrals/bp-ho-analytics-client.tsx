@@ -42,6 +42,7 @@ type Status =
   | "not_genuine"
   | "not_interested"
   | "lost"
+  | "self_arrived"
   | "dropped";
 
 /** Mirrors bpm-queue-client.tsx's own classify() — can't import it directly
@@ -54,6 +55,7 @@ function classify(r: BpmQueueReferral): Status {
   if (r.pending_ro_no) return "repair_in_progress";
   if (r.closed_reason === "not_genuine") return "not_genuine";
   if (r.closed_reason === "not_interested") return "not_interested";
+  if (r.closed_reason === "self_arrived") return "self_arrived";
   if (r.closed_reason === "lost") return "lost";
   if (r.bp_estimate_invoice_no) return "vehicle_received";
   if (r.validated_at) return hoursSince(r.last_contacted_at) >= FOLLOW_UP_OVERDUE_HOURS ? "followup_overdue" : "followup";
@@ -73,6 +75,7 @@ const STATUS_LABEL: Record<Status, string> = {
   not_genuine: "Not genuine",
   not_interested: "Not interested",
   lost: "Lost",
+  self_arrived: "Self arrived",
   dropped: "Dropped",
 };
 const STATUS_CLASS: Record<Status, string> = {
@@ -86,6 +89,7 @@ const STATUS_CLASS: Record<Status, string> = {
   not_genuine: "bg-surface-2 text-fg-faint",
   not_interested: "bg-surface-2 text-fg-faint",
   lost: "bg-surface-2 text-fg-faint",
+  self_arrived: "bg-surface-2 text-fg-faint",
   dropped: "bg-bad-soft text-bad",
 };
 
@@ -540,6 +544,7 @@ export function BpHoAnalyticsClient({
       not_genuine: 0,
       not_interested: 0,
       lost: 0,
+      self_arrived: 0,
       dropped: 0,
     };
     for (const { status } of classified) counts[status]++;
@@ -698,6 +703,14 @@ export function BpHoAnalyticsClient({
           sub="still ₹50"
           value={kpis.counts.lost}
           onClick={() => openKpi("Lost", (r) => classify(r) === "lost")}
+        />
+        <KpiCard
+          icon={<DashCircleIcon />}
+          color="bad"
+          label="Self arrived"
+          sub="₹0 payout"
+          value={kpis.counts.self_arrived}
+          onClick={() => openKpi("Self arrived", (r) => classify(r) === "self_arrived")}
         />
       </div>
 

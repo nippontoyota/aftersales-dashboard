@@ -15,6 +15,7 @@ import {
   loadUrgentUnconnected,
   logFollowUpContact,
   markNotConnected,
+  markSelfArrived,
   submitCallOutcome,
   transferReferral,
   type ActivityRow,
@@ -291,6 +292,27 @@ export async function closeFollowUpAsLostAction(_prev: BpmActionState, formData:
 
   try {
     await closeFollowUpAsLost(id, admin.branch, admin.username, lostReason);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't close that referral.", ok: false };
+  }
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
+}
+
+/** The customer brought the car in on their own before the BPM ever got to
+ * call (2026-11-23, at the user's request) — see markSelfArrived in
+ * store.ts for the no-payout, no-further-steps rules. */
+export async function markSelfArrivedAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const reason = requiredRemark(formData);
+  if (!reason) return { error: "Enter how you found out.", ok: false };
+
+  try {
+    await markSelfArrived(id, admin.branch, admin.username, reason);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't close that referral.", ok: false };
   }
