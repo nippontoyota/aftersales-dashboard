@@ -359,7 +359,7 @@ function KpiModal({
   const [branchFilter, setBranchFilter] = useState("");
 
   const filtered = useMemo(() => {
-    return rows.filter((r) => {
+    const result = rows.filter((r) => {
       if (branchFilter && r.assigned_branch !== branchFilter) return false;
       if (fromDate && r.submitted_at) {
         const day = (r.submitted_at instanceof Date ? r.submitted_at.toISOString() : String(r.submitted_at)).slice(0, 10);
@@ -371,7 +371,22 @@ function KpiModal({
       }
       return true;
     });
-  }, [rows, fromDate, toDate, branchFilter]);
+    // The Follow-up KPI mixes overdue and not-yet-overdue validated
+    // referrals together (2026-11-25, at the user's request) — every
+    // overdue one, across every branch, comes first; validated-but-not-
+    // overdue ones sit below as their own group. Within each group, oldest
+    // last contact first — same ordering the separate "Follow-ups overdue"
+    // panel elsewhere on this page already uses.
+    if (title === "Follow-up") {
+      result.sort((a, b) => {
+        const aOverdue = classify(a) === "followup_overdue" ? 0 : 1;
+        const bOverdue = classify(b) === "followup_overdue" ? 0 : 1;
+        if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+        return hoursSince(b.last_contacted_at ?? b.submitted_at) - hoursSince(a.last_contacted_at ?? a.submitted_at);
+      });
+    }
+    return result;
+  }, [rows, fromDate, toDate, branchFilter, title]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
