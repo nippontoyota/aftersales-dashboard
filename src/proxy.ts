@@ -7,7 +7,10 @@ import { findAdmin } from "@/lib/admin-store";
 // already HQ-admin-gated /api/hq/revenue-stream-export route, which can't
 // forward its caller's session cookie through a fresh fetch(). Same
 // unauthenticated-by-necessity situation as /api/webhooks below.
-const PUBLIC_PATHS = ["/login", "/api/sso", "/api/webhooks", "/api/revenue_stream_fill"];
+// /api/cron is Vercel Cron's own trigger (and our manual verification calls)
+// — no session cookie to send, authenticated instead by its own
+// Authorization: Bearer CRON_SECRET check (see that route).
+const PUBLIC_PATHS = ["/login", "/api/sso", "/api/webhooks", "/api/revenue_stream_fill", "/api/cron"];
 
 /**
  * Next.js 16 renamed `middleware.ts` to `proxy.ts`. Runs on every request;
