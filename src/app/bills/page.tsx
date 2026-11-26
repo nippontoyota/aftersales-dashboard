@@ -18,7 +18,7 @@ import { BillsPageClient } from "./bills-page-client";
 export default async function BillsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; branch?: string }>;
 }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/login");
@@ -36,8 +36,23 @@ export default async function BillsPage({
     admin.role === "branch" ? admin.branch : admin.role === "regional" ? REGIONS[admin.region] : undefined;
   const scopeLabel = admin.role === "branch" ? admin.branch : admin.role === "regional" ? `the ${admin.region} region` : null;
 
+  // Branches the viewer is allowed to filter down to — their own region for
+  // a regional manager, every branch for HQ/HQ viewer/BP HO. A branch admin
+  // never sees the filter (their scope is already a single branch).
+  const branchOptions: string[] =
+    admin.role === "branch"
+      ? []
+      : admin.role === "regional"
+        ? [...REGIONS[admin.region]]
+        : [...new Set(Object.values(REGIONS).flat())].sort();
+
   const params = await searchParams;
-  const allMonthsRaw = await loadBillTotalsByMonth(scopeBranch);
+  const branchFilter = admin.role !== "branch" && params.branch && branchOptions.includes(params.branch) ? params.branch : undefined;
+  // Narrowing to one branch overrides the broader scope for both the totals
+  // and the drilldown below.
+  const effectiveScope: BillBranchScope = branchFilter ?? scopeBranch;
+
+  const allMonthsRaw = await loadBillTotalsByMonth(effectiveScope);
   // A branch admin's own scrap/used-oil revenue is masked before Aug 2026,
   // same cutover as the rest of their dashboard (see
   // branch-revenue-visibility.ts) — HQ and regional managers still see every
@@ -64,6 +79,7 @@ export default async function BillsPage({
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       queriesBadge={nav.queriesBadge}
+      cancellationsBadge={nav.cancellationsBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
     >
@@ -72,18 +88,33 @@ export default async function BillsPage({
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-fg">Bills</h1>
             <p className="mt-1 text-[13px] text-fg-subtle">
-              {scopeLabel ? `Scrap and used-oil tax invoices uploaded for ${scopeLabel}.` : "Scrap and used-oil tax invoices across all branches."}
+              {branchFilter
+                ? `Scrap and used-oil tax invoices uploaded for ${branchFilter}.`
+                : scopeLabel
+                  ? `Scrap and used-oil tax invoices uploaded for ${scopeLabel}.`
+                  : "Scrap and used-oil tax invoices across all branches."}
             </p>
           </div>
         </div>
 
         {allMonths.length === 0 ? (
           <div className="mt-6 rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
-            No bills have been uploaded yet.{" "}
+            {branchFilter ? `No bills have been uploaded for ${branchFilter} yet.` : "No bills have been uploaded yet."}{" "}
             {admin.role === "branch" ? "Upload PDF invoices from the Upload page." : ""}
+            {branchFilter ? (
+              <a href="/bills" className="text-accent-text hover:underline">
+                Clear branch filter
+              </a>
+            ) : null}
           </div>
         ) : (
-          <BillsPageClient months={allMonths} initialMonth={month} showBranchColumn={admin.role !== "branch"} />
+          <BillsPageClient
+            months={allMonths}
+            initialMonth={month}
+            showBranchColumn={admin.role !== "branch" && !branchFilter}
+            branchOptions={branchOptions}
+            selectedBranch={branchFilter}
+          />
         )}
       </div>
     </AppShell>

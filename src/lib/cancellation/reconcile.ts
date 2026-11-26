@@ -127,16 +127,23 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
   }>(
     `
     with canc as (
-      select doc_no, branch, ref_doc_no, cancel_date, cancel_reason, reg_no, owner_name, before_tax, after_tax,
-             coalesce(cancel_at, cancel_date::timestamptz) as cancel_moment,
+      select c.doc_no, c.branch, c.ref_doc_no, c.cancel_date, c.cancel_reason, c.reg_no, c.owner_name, c.before_tax, c.after_tax,
+             coalesce(c.cancel_at, c.cancel_date::timestamptz) as cancel_moment,
              -- The invoice's revenue counts in the month it was RAISED, so
              -- that's the scom205 whose refresh time matters — not the month
              -- it was cancelled in (an invoice raised in July, cancelled in
              -- August, is a concern for July's figure).
-             coalesce(to_char(issue_date, 'YYYY-MM'), month) as revenue_month,
-             replace(doc_no, '-', '') as doc_key
-      from invoice_cancellations
-      where month = $1 and ($2::text is null or branch = $2)
+             coalesce(to_char(c.issue_date, 'YYYY-MM'), c.month) as revenue_month,
+             replace(c.doc_no, '-', '') as doc_key,
+             -- A regional-approved "RO cancelled, rebilled as X" justification
+             -- (see justifications.ts) stands in for an automatically-detected
+             -- same-RO rebill below — kept behind regional approval so a
+             -- branch can't unilaterally reclassify its own cancellation.
+             case when j.branch_resolution = 'ro_cancelled' and j.regional_decision = 'approved'
+                  then replace(upper(j.branch_new_ro), '-', '') end as link_ro
+      from invoice_cancellations c
+      left join cancellation_justifications j on j.doc_no = c.doc_no
+      where c.month = $1 and ($2::text is null or c.branch = $2)
     ),
     ssrv as (
       select r.branch,
@@ -174,7 +181,10 @@ export async function reconcileCancellations(month: string, branch?: string): Pr
            c.reg_no, c.owner_name, c.before_tax, c.after_tax,
            greatest(lk.last_uploaded, lk.last_date::timestamptz)::text as last_kpi_cutoff,
            (lk.branch is not null and c.cancel_moment > greatest(lk.last_uploaded, lk.last_date::timestamptz)) as after_last_kpi,
-           exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.inv <> c.doc_key and s.ro is not null and s.ro <> '') as has_replacement,
+           (
+             exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.inv <> c.doc_key and s.ro is not null and s.ro <> '')
+             or (c.link_ro is not null and exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.link_ro and s.ro is not null and s.ro <> ''))
+           ) as has_replacement,
            exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.inv = c.doc_key) as still_present,
            exists (select 1 from ssrv s where s.branch = c.branch and s.ro = c.ref_doc_no and s.ro is not null and s.ro <> '') as ro_in_ssrv,
            exists (

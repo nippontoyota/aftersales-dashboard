@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
 import type { BpmQueueReferral } from "./bpm-queue-client";
-import type { PayoutLedgerRow, BranchRollupRow } from "@/lib/bp-referrals/store";
-import { AssignBranchForm, RescanButton } from "./bp-ho-controls";
+import type { PayoutLedgerRow, PayoutHistoryRow, BranchRollupRow } from "@/lib/bp-referrals/store";
+import { AssignBranchForm, MarkPaidButton, RescanButton } from "./bp-ho-controls";
 
 function fmt(ts: Date | string | null): string {
   if (!ts) return "—";
@@ -30,13 +31,33 @@ function hoursSince(ts: Date | string | null): number {
 const UNCONNECTED_DROP_DAYS = 3;
 const FOLLOW_UP_OVERDUE_HOURS = 24;
 
-type Status = "pending" | "not_connected" | "followup" | "followup_overdue" | "completed" | "not_genuine" | "not_interested" | "lost" | "dropped";
+type Status =
+  | "pending"
+  | "not_connected"
+  | "followup"
+  | "followup_overdue"
+  | "vehicle_received"
+  | "repair_in_progress"
+  | "completed"
+  | "not_genuine"
+  | "not_interested"
+  | "lost"
+  | "self_arrived"
+  | "dropped";
 
+/** Mirrors bpm-queue-client.tsx's own classify() — can't import it directly
+ * (that file is "use client" too, but this is a separate client bundle),
+ * kept in sync by hand. Same pipeline: Follow-up -> Vehicle received (BPE
+ * entered, insurance-paid only) -> Repair in progress (RO entered) ->
+ * Completed (RO confirmed, ₹200 triggered) — 2026-11-06, the user's call. */
 function classify(r: BpmQueueReferral): Status {
-  if (r.ro_matched_at || r.pending_ro_no) return "completed";
+  if (r.ro_matched_at) return "completed";
+  if (r.pending_ro_no) return "repair_in_progress";
   if (r.closed_reason === "not_genuine") return "not_genuine";
   if (r.closed_reason === "not_interested") return "not_interested";
+  if (r.closed_reason === "self_arrived") return "self_arrived";
   if (r.closed_reason === "lost") return "lost";
+  if (r.bp_estimate_invoice_no) return "vehicle_received";
   if (r.validated_at) return hoursSince(r.last_contacted_at) >= FOLLOW_UP_OVERDUE_HOURS ? "followup_overdue" : "followup";
   if (hoursSince(r.last_contacted_at ?? r.submitted_at) >= UNCONNECTED_DROP_DAYS * 24) return "dropped";
   if (r.call_status === "not_connected") return "not_connected";
@@ -48,10 +69,13 @@ const STATUS_LABEL: Record<Status, string> = {
   not_connected: "Not connected",
   followup: "Validated — follow up",
   followup_overdue: "Follow-up overdue",
+  vehicle_received: "Vehicle received",
+  repair_in_progress: "Repair in progress",
   completed: "Completed",
   not_genuine: "Not genuine",
   not_interested: "Not interested",
   lost: "Lost",
+  self_arrived: "Self arrived",
   dropped: "Dropped",
 };
 const STATUS_CLASS: Record<Status, string> = {
@@ -59,10 +83,13 @@ const STATUS_CLASS: Record<Status, string> = {
   not_connected: "bg-accent-soft text-accent-text",
   followup: "bg-warn-soft text-warn-text",
   followup_overdue: "bg-bad-soft text-bad",
+  vehicle_received: "bg-info-soft text-info",
+  repair_in_progress: "bg-accent-soft text-accent-text",
   completed: "bg-good-soft text-good-text",
   not_genuine: "bg-surface-2 text-fg-faint",
   not_interested: "bg-surface-2 text-fg-faint",
   lost: "bg-surface-2 text-fg-faint",
+  self_arrived: "bg-surface-2 text-fg-faint",
   dropped: "bg-bad-soft text-bad",
 };
 
@@ -84,6 +111,8 @@ const PhoneOffIcon = () => iconBase(<><path d="M5 3h3l1.5 4-2 1.5a9 9 0 0 0 4 4l
 const ClockIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M10 6v4l3 2" strokeLinecap="round" strokeLinejoin="round" /></>);
 const AlarmIcon = () => iconBase(<><circle cx="10" cy="11" r="6.5" /><path d="M10 8v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M6 4.5 4 6.5M14 4.5l2 2" strokeLinecap="round" /></>);
 const CheckCircleIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M7 10l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" /></>);
+const CarIcon = () => iconBase(<><path d="M4 13V9.5L5.5 6h9L16 9.5V13" strokeLinecap="round" strokeLinejoin="round" /><path d="M3.5 13h13v2.5a.8.8 0 0 1-.8.8H14a.8.8 0 0 1-.8-.8V14.5h-6.4v1a.8.8 0 0 1-.8.8H4.3a.8.8 0 0 1-.8-.8V13z" strokeLinecap="round" strokeLinejoin="round" /><circle cx="6.5" cy="13" r="1" /><circle cx="13.5" cy="13" r="1" /></>);
+const WrenchIcon = () => iconBase(<path d="M13.5 4a3.5 3.5 0 0 0-4.6 3.9L4 12.8V16h3.2l4.9-4.9a3.5 3.5 0 0 0 3.9-4.6l-2.3 2.3-1.8-.6-.6-1.8L13.5 4z" strokeLinecap="round" strokeLinejoin="round" />);
 const XCircleIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M7.5 7.5l5 5M12.5 7.5l-5 5" strokeLinecap="round" /></>);
 const DashCircleIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M7 10h6" strokeLinecap="round" /></>);
 const WalletIcon = () => iconBase(<><rect x="3" y="5.5" width="14" height="10" rx="1.5" /><path d="M3 8.5h14" /><circle cx="14" cy="11.5" r="1" fill="currentColor" stroke="none" /></>);
@@ -169,24 +198,25 @@ function ReferralTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
-      <table className="min-w-full text-sm">
+      <table className="min-w-full">
         <thead>
           <tr className="border-b border-border bg-surface-2">
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Submitted</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Employee</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Reg No</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Status</th>
-            <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Estimate</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Payment</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Matched RO</th>
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Photo</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Submitted</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Employee</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Department</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Branch</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Reg No</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Status</th>
+            <th className="px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Estimate</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Payment</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Matched RO</th>
+            <th className="px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">Photo</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody className="divide-y divide-border text-xs">
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={9} className="px-3 py-8 text-center text-sm text-fg-muted">
+              <td colSpan={10} className="px-2 py-8 text-center text-sm text-fg-muted">
                 Nothing here.
               </td>
             </tr>
@@ -195,57 +225,59 @@ function ReferralTable({
               const status = classify(r);
               return (
                 <tr key={r.id} className="transition-colors hover:bg-surface-2/50">
-                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">{fmt(r.submitted_at)}</td>
-                  <td className="px-3 py-2.5">
+                  <td className="whitespace-nowrap px-2 py-1.5 text-fg-muted">{fmt(r.submitted_at)}</td>
+                  <td className="px-2 py-1.5">
                     <div className="font-medium text-fg">{r.referring_employee_name ?? "—"}</div>
-                    <div className="text-xs text-fg-faint">
+                    <div className="text-[11px] text-fg-faint">
                       {r.referring_employee_id ? `ID: ${r.referring_employee_id}` : null}
                       {r.referring_employee_branch ? ` · ${r.referring_employee_branch}` : ""}
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
+                  <td className="whitespace-nowrap px-2 py-1.5 text-fg-muted">{r.referring_employee_dept ?? "—"}</td>
+                  <td className="whitespace-nowrap px-2 py-1.5 text-fg-muted">
                     {r.assigned_branch ? (
                       <>
                         {branchName(r.assigned_branch)} ({r.assigned_branch})
-                        {r.transferred_from ? <div className="text-xs text-fg-faint">from {branchName(r.transferred_from)}</div> : null}
+                        {r.transferred_from ? <div className="text-[11px] text-fg-faint">from {branchName(r.transferred_from)}</div> : null}
                       </>
                     ) : (
                       <AssignBranchForm referralId={r.id} branchCodes={allBranchCodes} />
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5">
+                  <td className="whitespace-nowrap px-2 py-1.5">
                     <div className="font-mono text-xs text-fg">{r.vehicle_reg_no ?? "—"}</div>
-                    {r.vehicle_model ? <div className="text-xs text-fg-faint">{r.vehicle_model}</div> : null}
+                    {r.vehicle_model ? <div className="text-[11px] text-fg-faint">{r.vehicle_model}</div> : null}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5">
+                  <td className="whitespace-nowrap px-2 py-1.5">
                     <StatusBadge status={status} />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-fg">
+                  <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-fg">
                     {r.estimate_amount != null ? inr(Number(r.estimate_amount)) : "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-fg-muted">
+                  <td className="whitespace-nowrap px-2 py-1.5 text-fg-muted">
                     {r.payment_type === "CP" ? "Customer paid" : r.payment_type === "IP" ? "Insurance paid" : "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-fg">
+                  <td className="whitespace-nowrap px-2 py-1.5 font-mono text-xs text-fg">
                     {r.matched_ro_no ?? (r.pending_ro_no ? <span className="text-fg-faint">{r.pending_ro_no} (pending)</span> : "—")}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-2 py-1.5">
                     {r.vehicle_image_url ? (
                       <button
                         type="button"
                         onClick={() => onPhotoClick(r.id)}
-                        className="group relative h-12 w-16 overflow-hidden rounded border border-border hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        className="group relative h-10 w-14 overflow-hidden rounded border border-border hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         aria-label="View vehicle photo"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={`/api/bp-referrals/photo/${r.id}`}
                           alt="Vehicle"
+                          loading="lazy"
                           className="h-full w-full object-cover transition-opacity group-hover:opacity-80"
                         />
                       </button>
                     ) : (
-                      <span className="flex h-12 w-16 items-center justify-center rounded border border-border bg-surface-2 text-[10px] text-fg-faint">
+                      <span className="flex h-10 w-14 items-center justify-center rounded border border-border bg-surface-2 text-[10px] text-fg-faint">
                         No photo
                       </span>
                     )}
@@ -327,7 +359,7 @@ function KpiModal({
   const [branchFilter, setBranchFilter] = useState("");
 
   const filtered = useMemo(() => {
-    return rows.filter((r) => {
+    const result = rows.filter((r) => {
       if (branchFilter && r.assigned_branch !== branchFilter) return false;
       if (fromDate && r.submitted_at) {
         const day = (r.submitted_at instanceof Date ? r.submitted_at.toISOString() : String(r.submitted_at)).slice(0, 10);
@@ -339,7 +371,22 @@ function KpiModal({
       }
       return true;
     });
-  }, [rows, fromDate, toDate, branchFilter]);
+    // The Follow-up KPI mixes overdue and not-yet-overdue validated
+    // referrals together (2026-11-25, at the user's request) — every
+    // overdue one, across every branch, comes first; validated-but-not-
+    // overdue ones sit below as their own group. Within each group, oldest
+    // last contact first — same ordering the separate "Follow-ups overdue"
+    // panel elsewhere on this page already uses.
+    if (title === "Follow-up") {
+      result.sort((a, b) => {
+        const aOverdue = classify(a) === "followup_overdue" ? 0 : 1;
+        const bOverdue = classify(b) === "followup_overdue" ? 0 : 1;
+        if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+        return hoursSince(b.last_contacted_at ?? b.submitted_at) - hoursSince(a.last_contacted_at ?? a.submitted_at);
+      });
+    }
+    return result;
+  }, [rows, fromDate, toDate, branchFilter, title]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -379,27 +426,119 @@ function KpiModal({
   );
 }
 
+function monthLabel(month: string): string {
+  if (month === "all") return "All time";
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
+/** Last 12 months plus "All time" — the currently-selected month is always
+ * included even if it falls outside that window (e.g. an old ?month= link),
+ * so the <select> never silently shows the wrong value. */
+function monthOptions(selected: string): { value: string; label: string }[] {
+  const opts: { value: string; label: string }[] = [{ value: "all", label: "All time" }];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    opts.push({ value, label: monthLabel(value) });
+  }
+  if (!opts.some((o) => o.value === selected)) opts.push({ value: selected, label: monthLabel(selected) });
+  return opts;
+}
+
+/** Scopes the whole analytics view below (KPIs, branch breakdown, the
+ * referral list) to one month instead of all time (2026-11-09, the user's
+ * request) — just navigates to ?month=, which page.tsx re-reads server-side.
+ * Needs attention and the Payout ledger/history are unaffected on purpose
+ * (see BpHoAnalyticsClient's own doc comments). */
+function MonthPicker({ month }: { month: string }) {
+  const router = useRouter();
+  const opts = useMemo(() => monthOptions(month), [month]);
+  return (
+    <select
+      value={month}
+      onChange={(e) => router.push(`/bp-referrals?month=${e.target.value}`)}
+      className={`${control} px-2`}
+    >
+      {opts.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Date-range download of the multi-sheet "Group Accident Vehicle Referral"
+ * Excel report BP HO asked for (2026-11-09) — a plain GET form (no JS
+ * needed beyond the date defaults) straight to the API route, which does
+ * its own auth/branch scoping. Defaults to the current calendar year to
+ * date, matching how BP HO's own reference sheet was named by year. */
+function GroupReportExport() {
+  const today = new Date();
+  const [from, setFrom] = useState(`${today.getFullYear()}-01-01`);
+  const [to, setTo] = useState(today.toISOString().slice(0, 10));
+  return (
+    <form action="/api/bp-referrals/group-report" method="get" className="flex flex-wrap items-end gap-2">
+      <div className="flex flex-col gap-1">
+        <span className={eyebrow}>From</span>
+        <input type="date" name="from" value={from} onChange={(e) => setFrom(e.target.value)} className={`${control} px-2`} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className={eyebrow}>To</span>
+        <input type="date" name="to" value={to} onChange={(e) => setTo(e.target.value)} className={`${control} px-2`} />
+      </div>
+      <button type="submit" className="h-8 shrink-0 rounded-md bg-accent px-3 text-xs font-semibold text-on-accent hover:bg-accent-hover">
+        Export Group Report
+      </button>
+    </form>
+  );
+}
+
 export function BpHoAnalyticsClient({
   referrals,
+  liveReferrals,
   payoutLedger,
+  payoutHistory = [],
   branchRollup,
   branchCodes: allBranchCodes,
   canRescan = true,
+  month,
 }: {
   referrals: BpmQueueReferral[];
+  /** Unscoped by month — Needs attention (overdue/dropped) always reads
+   * from this instead of `referrals`, since "what needs calling right now"
+   * shouldn't disappear just because the referral was submitted last month.
+   * Falls back to `referrals` if omitted. */
+  liveReferrals?: BpmQueueReferral[];
   payoutLedger: PayoutLedgerRow[];
+  /** Settled payout records — omitted for a regional manager's own scoped
+   * view, same gate as canRescan (see below). */
+  payoutHistory?: PayoutHistoryRow[];
   branchRollup: BranchRollupRow[];
   branchCodes: string[];
-  /** Hides the "Re-check pending RO entries" button — a company-wide,
-   * write/admin action BP HO gets but a regional manager's own scoped view
-   * doesn't (2026-10-29, the user's call). Defaults to true (BP HO/HQ). */
+  /** Hides the "Re-check pending RO entries" button AND the Payout ledger's
+   * "Mark paid" action / Payment history section — all company-wide,
+   * write/admin actions BP HO gets but a regional manager's own scoped view
+   * doesn't (2026-10-29 / 2026-11-06, the user's call). Defaults to true
+   * (BP HO/HQ). */
   canRescan?: boolean;
+  /** "YYYY-MM" or "all" — which month `referrals`/`branchRollup` are scoped
+   * to (set server-side in page.tsx from ?month=). */
+  month: string;
 }) {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [activeSlideOver, setActiveSlideOver] = useState<{ title: string; predicate: (r: BpmQueueReferral) => boolean } | null>(null);
+  // "All referrals" pagination (2026-11-16, at the user's request — this
+  // list used to render every matching referral at once, the single
+  // biggest driver of page-level scroll here since every other section
+  // already has its own capped-height scroll box). Page resets whenever
+  // the filters below change it out from under the current page.
+  const [allReferralsPage, setAllReferralsPage] = useState(0);
 
   const filterBranchCodes = useMemo(
     () => [...new Set(referrals.map((r) => r.assigned_branch).filter((b): b is string => !!b))].sort(),
@@ -414,10 +553,13 @@ export function BpHoAnalyticsClient({
       not_connected: 0,
       followup: 0,
       followup_overdue: 0,
+      vehicle_received: 0,
+      repair_in_progress: 0,
       completed: 0,
       not_genuine: 0,
       not_interested: 0,
       lost: 0,
+      self_arrived: 0,
       dropped: 0,
     };
     for (const { status } of classified) counts[status]++;
@@ -425,8 +567,9 @@ export function BpHoAnalyticsClient({
     return { total: referrals.length, counts, totalOwed };
   }, [classified, referrals.length, payoutLedger]);
 
-  const overdueFollowUps = useMemo(() => classified.filter((c) => c.status === "followup_overdue").map((c) => c.r), [classified]);
-  const dropped = useMemo(() => classified.filter((c) => c.status === "dropped").map((c) => c.r), [classified]);
+  const classifiedLive = useMemo(() => (liveReferrals ?? referrals).map((r) => ({ r, status: classify(r) })), [liveReferrals, referrals]);
+  const overdueFollowUps = useMemo(() => classifiedLive.filter((c) => c.status === "followup_overdue").map((c) => c.r), [classifiedLive]);
+  const dropped = useMemo(() => classifiedLive.filter((c) => c.status === "dropped").map((c) => c.r), [classifiedLive]);
 
   const filtered = useMemo(() => {
     return referrals.filter((r) => {
@@ -445,6 +588,19 @@ export function BpHoAnalyticsClient({
 
   const hasFilters = fromDate || toDate || branchFilter;
 
+  // Clamped rather than reset via an effect — if a filter change shrinks
+  // the result set, this alone keeps the visible page in range; if it
+  // later grows again, the viewer just lands back on whatever page they
+  // were on before, which only matters if they're deliberately paging
+  // while adjusting filters (rare, and harmless either way).
+  const ALL_REFERRALS_PAGE_SIZE = 50;
+  const allReferralsPageCount = Math.max(1, Math.ceil(filtered.length / ALL_REFERRALS_PAGE_SIZE));
+  const clampedAllReferralsPage = Math.min(allReferralsPage, allReferralsPageCount - 1);
+  const pagedReferrals = filtered.slice(
+    clampedAllReferralsPage * ALL_REFERRALS_PAGE_SIZE,
+    (clampedAllReferralsPage + 1) * ALL_REFERRALS_PAGE_SIZE,
+  );
+
   const openKpi = (title: string, predicate: (r: BpmQueueReferral) => boolean) => setActiveSlideOver({ title, predicate });
 
   return (
@@ -460,9 +616,30 @@ export function BpHoAnalyticsClient({
         />
       ) : null}
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-fg">BP Referrals</h1>
-        <p className="mt-1 text-sm text-fg-muted">Company-wide Body &amp; Paint referral analytics — {kpis.total} total referrals.</p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-fg">BP Referrals</h1>
+          <p className="mt-1 text-sm text-fg-muted">
+            Company-wide Body &amp; Paint referral analytics — {monthLabel(month)} — {kpis.total} referral{kpis.total === 1 ? "" : "s"}.
+          </p>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className={eyebrow}>Month</span>
+          <MonthPicker month={month} />
+        </div>
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-surface-2/50 px-4 py-3">
+        <div>
+          <div className={eyebrow}>Group report</div>
+          <p className="text-xs text-fg-muted">Raw log, Pivot, Summary, ROI for a date range — the old tracker, generated from live data.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <a href="/bp-referrals/group-report" className="h-8 rounded-md border border-border-strong px-3 text-xs font-semibold leading-8 text-fg hover:bg-surface-2">
+            View Report
+          </a>
+          <GroupReportExport />
+        </div>
       </div>
 
       {/* KPI strip — click a card to see the matching cases */}
@@ -489,6 +666,20 @@ export function BpHoAnalyticsClient({
           value={kpis.counts.followup + kpis.counts.followup_overdue}
           sub={kpis.counts.followup_overdue > 0 ? `${kpis.counts.followup_overdue} overdue` : undefined}
           onClick={() => openKpi("Follow-up", (r) => { const s = classify(r); return s === "followup" || s === "followup_overdue"; })}
+        />
+        <KpiCard
+          icon={<CarIcon />}
+          color="info"
+          label="Vehicle received"
+          value={kpis.counts.vehicle_received}
+          onClick={() => openKpi("Vehicle received", (r) => classify(r) === "vehicle_received")}
+        />
+        <KpiCard
+          icon={<WrenchIcon />}
+          color="accent"
+          label="Repair in progress"
+          value={kpis.counts.repair_in_progress}
+          onClick={() => openKpi("Repair in progress", (r) => classify(r) === "repair_in_progress")}
         />
         <KpiCard
           icon={<CheckCircleIcon />}
@@ -528,6 +719,14 @@ export function BpHoAnalyticsClient({
           value={kpis.counts.lost}
           onClick={() => openKpi("Lost", (r) => classify(r) === "lost")}
         />
+        <KpiCard
+          icon={<DashCircleIcon />}
+          color="bad"
+          label="Self arrived"
+          sub="₹0 payout"
+          value={kpis.counts.self_arrived}
+          onClick={() => openKpi("Self arrived", (r) => classify(r) === "self_arrived")}
+        />
       </div>
 
       {/* Needs attention */}
@@ -536,6 +735,7 @@ export function BpHoAnalyticsClient({
           <div className="flex items-center gap-2 border-b border-bad/20 bg-bad-soft/40 px-4 py-2.5">
             <AlarmIcon />
             <h2 className="text-sm font-bold text-bad">Follow-ups overdue (24h+)</h2>
+            <span className="text-xs font-normal text-fg-faint">(live, not month-scoped)</span>
             <span className="ml-auto text-xs font-semibold text-bad">{overdueFollowUps.length}</span>
           </div>
           <div className="max-h-72 overflow-y-auto divide-y divide-border">
@@ -561,6 +761,7 @@ export function BpHoAnalyticsClient({
           <div className="flex items-center gap-2 border-b border-bad/20 bg-bad-soft/40 px-4 py-2.5">
             <XCircleIcon />
             <h2 className="text-sm font-bold text-bad">Dropped (no contact in 3+ days)</h2>
+            <span className="text-xs font-normal text-fg-faint">(live, not month-scoped)</span>
             <span className="ml-auto text-xs font-semibold text-bad">{dropped.length}</span>
           </div>
           <div className="max-h-72 overflow-y-auto divide-y divide-border">
@@ -591,7 +792,7 @@ export function BpHoAnalyticsClient({
       <div className="mb-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-lg font-bold text-fg">
-            <WalletIcon /> Payout ledger
+            <WalletIcon /> Payout ledger <span className="text-xs font-normal text-fg-faint">(all-time balance, not month-scoped)</span>
           </h2>
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-fg">Total owed: {inr(kpis.totalOwed)}</span>
@@ -604,22 +805,28 @@ export function BpHoAnalyticsClient({
             {canRescan ? <RescanButton /> : null}
           </div>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-sm">
+        {/* Fixed-height scroll instead of letting this table grow the page
+         * forever (2026-11-06, at the user's request) — it used to list
+         * every employee who ever had a validated referral, with no way to
+         * settle one; see loadPayoutLedger's doc comment for the real fix
+         * (the "Mark paid" column below), this is just the visual cap. */}
+        <div className="max-h-96 overflow-auto rounded-xl border border-border bg-surface shadow-sm">
           <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-2">
+            <thead className="sticky top-0 z-10 bg-surface-2">
+              <tr className="border-b border-border">
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Employee</th>
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th>
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Validated (₹50)</th>
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Completed (₹200)</th>
                 <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Owed</th>
+                {canRescan ? <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">&nbsp;</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {payoutLedger.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-fg-muted">
-                    No payouts yet.
+                  <td colSpan={canRescan ? 6 : 5} className="px-3 py-6 text-center text-sm text-fg-muted">
+                    Nothing outstanding.
                   </td>
                 </tr>
               ) : (
@@ -633,6 +840,16 @@ export function BpHoAnalyticsClient({
                     <td className="px-3 py-2 text-right tabular-nums text-fg">{row.validatedCount}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-fg">{row.completedCount}</td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums text-fg">{inr(row.amountOwed)}</td>
+                    {canRescan ? (
+                      <td className="px-3 py-2 text-right">
+                        <MarkPaidButton
+                          employeeId={row.employeeId}
+                          employeeName={row.employeeName}
+                          employeeBranch={row.employeeBranch}
+                          amount={row.amountOwed}
+                        />
+                      </td>
+                    ) : null}
                   </tr>
                 ))
               )}
@@ -640,6 +857,51 @@ export function BpHoAnalyticsClient({
           </table>
         </div>
       </div>
+
+      {/* Payment history — the settled side of the ledger above; BP HO/HQ
+       * only, same gate as the "Mark paid" action itself. */}
+      {canRescan ? (
+        <div className="mb-8">
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-fg">
+            <WalletIcon /> Payment history <span className="text-xs font-normal text-fg-faint">(all-time)</span>
+          </h2>
+          <div className="max-h-72 overflow-auto rounded-xl border border-border bg-surface shadow-sm">
+            <table className="min-w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-surface-2">
+                <tr className="border-b border-border">
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Employee</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Branch</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Amount</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">Paid</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-fg-subtle">By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {payoutHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-6 text-center text-sm text-fg-muted">
+                      No payments recorded yet.
+                    </td>
+                  </tr>
+                ) : (
+                  payoutHistory.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-fg">{row.employeeName || "—"}</div>
+                        {row.employeeId ? <div className="text-xs text-fg-faint">ID: {row.employeeId}</div> : null}
+                      </td>
+                      <td className="px-3 py-2 text-fg-muted">{row.employeeBranch || "—"}</td>
+                      <td className="px-3 py-2 text-right font-semibold tabular-nums text-fg">{inr(row.amount)}</td>
+                      <td className="px-3 py-2 text-fg-muted">{fmt(row.paidAt)}</td>
+                      <td className="px-3 py-2 text-fg-muted">{row.paidBy || "—"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       {/* Branch / region rollup */}
       <div className="mb-8">
@@ -664,7 +926,7 @@ export function BpHoAnalyticsClient({
             <tbody className="divide-y divide-border">
               {branchRollup.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-sm text-fg-muted">
+                  <td colSpan={10} className="px-3 py-6 text-center text-sm text-fg-muted">
                     No referrals yet.
                   </td>
                 </tr>
@@ -699,9 +961,9 @@ export function BpHoAnalyticsClient({
             fromDate={fromDate}
             toDate={toDate}
             branchFilter={branchFilter}
-            setFromDate={setFromDate}
-            setToDate={setToDate}
-            setBranchFilter={setBranchFilter}
+            setFromDate={(v) => { setFromDate(v); setAllReferralsPage(0); }}
+            setToDate={(v) => { setToDate(v); setAllReferralsPage(0); }}
+            setBranchFilter={(v) => { setBranchFilter(v); setAllReferralsPage(0); }}
             branchCodes={filterBranchCodes}
           />
           {hasFilters ? (
@@ -711,6 +973,7 @@ export function BpHoAnalyticsClient({
                 setFromDate("");
                 setToDate("");
                 setBranchFilter("");
+                setAllReferralsPage(0);
               }}
               className="h-8 rounded-md px-3 text-sm text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
@@ -723,7 +986,29 @@ export function BpHoAnalyticsClient({
           </span>
         </div>
 
-        <ReferralTable rows={filtered} onPhotoClick={(id) => setLightboxUrl(`/api/bp-referrals/photo/${id}`)} allBranchCodes={allBranchCodes} />
+        <ReferralTable rows={pagedReferrals} onPhotoClick={(id) => setLightboxUrl(`/api/bp-referrals/photo/${id}`)} allBranchCodes={allBranchCodes} />
+
+        {allReferralsPageCount > 1 ? (
+          <div className="mt-2 flex items-center justify-end gap-2 text-xs text-fg-muted">
+            <button
+              type="button"
+              disabled={clampedAllReferralsPage === 0}
+              onClick={() => setAllReferralsPage((p) => Math.max(0, p - 1))}
+              className="rounded-md border border-border-strong px-2 py-1 font-medium text-fg hover:bg-surface-2 disabled:opacity-40"
+            >
+              Prev
+            </button>
+            <span>Page {clampedAllReferralsPage + 1} of {allReferralsPageCount}</span>
+            <button
+              type="button"
+              disabled={clampedAllReferralsPage >= allReferralsPageCount - 1}
+              onClick={() => setAllReferralsPage((p) => Math.min(allReferralsPageCount - 1, p + 1))}
+              className="rounded-md border border-border-strong px-2 py-1 font-medium text-fg hover:bg-surface-2 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

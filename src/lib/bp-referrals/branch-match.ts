@@ -24,6 +24,27 @@ const NAME_OVERRIDE: Record<string, string> = {
   // but BRANCH_NAMES has it as "Nettoor" — same kind of mismatch as
   // Irinjalakuda above.
   cochin: "CO01A",
+  // 2026-11-17, cross-checked against the full employee directory at the
+  // user's request — these were all either falling through unresolved (BPM
+  // having to manually assign every one) or had never come up before.
+  // Ettumanoor/Kottarakara are nearby towns the user routes to their
+  // closest branch rather than a literal name match.
+  ettumanoor: "KT01A",
+  kottarakara: "KL01A",
+  // Same "BP suffix" mismatch as Kalamassery above — the directory just
+  // says "Kochuveli"/"Kollam - B&P", not the branch's full display name
+  // ("Kochuveli BP" / "Thazhuthala BP"), so neither ever matched directly.
+  kochuveli: "TR01B",
+  "kollam - b&p": "KL01B",
+  // Formatting-only mismatch — BRANCH_NAMES has "Kollam 3S" with no dash.
+  "kollam - 3s": "KL01A",
+  // Trivandrum city has three of this group's branches (TR01A/B/C) —
+  // Enchakkal and Kochuveli already resolve on their own above, so a bare
+  // "Trivandrum" with no locality is specifically TR01A (Kazhakkottam),
+  // confirmed with the user.
+  trivandrum: "TR01A",
+  // Not a location name — the user's own call on where this maps.
+  motorspot: "CO01B",
 };
 
 function normalize(s: string): string {

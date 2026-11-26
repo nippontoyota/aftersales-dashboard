@@ -18,17 +18,20 @@ type OverdueReferral = {
   assigned_branch: string | null;
 };
 
-const SEEN_MARKER_KEY = "bp_followup_popup_seen_marker";
+/** How often this popup is allowed to re-interrupt — 8 hours, matching
+ * BpUrgentContactPopupGate's own cooldown (2026-11-18, replacing the old
+ * once-per-login-marker gate: BPMs log in/out several times a day, and that
+ * gate re-showed the exact same already-seen overdue items on every fresh
+ * login, even ones they'd just dismissed minutes earlier — the user's
+ * complaint). Independent of login/logout entirely, same as that sibling
+ * popup. */
+const REMIND_COOLDOWN_HOURS = 8;
+const LAST_SHOWN_KEY = "bp_followup_popup_last_shown_at";
 const INIT: BpmActionState = { error: null, ok: false };
 
-function readCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-function hoursSince(ts: Date | string | null): number {
+function hoursSince(ts: Date | string | number | null): number {
   if (!ts) return 0;
-  const then = new Date(ts as string).getTime();
+  const then = typeof ts === "number" ? ts : new Date(ts as string).getTime();
   if (isNaN(then)) return 0;
   return Math.floor((Date.now() - then) / (1000 * 60 * 60));
 }
@@ -42,9 +45,8 @@ function hoursSince(ts: Date | string | null): number {
  * Mounted unconditionally in BpShell for every BP role — harmless for BP
  * HO, since getMyOverdueFollowUpsAction returns [] for anyone but
  * bp_manager (same "decides for itself, server-side" convention as
- * QueryPopupGate). Same once-per-fresh-login suppression via the
- * login_marker cookie, under its own storage key so it doesn't collide
- * with the Queries pop-up's marker.
+ * QueryPopupGate). Cooldown-gated rather than once-per-login — see
+ * REMIND_COOLDOWN_HOURS above.
  */
 export function BpFollowUpPopupGate() {
   const [items, setItems] = useState<OverdueReferral[] | null>(null);
@@ -52,24 +54,23 @@ export function BpFollowUpPopupGate() {
   const [logState, logAction, logPending] = useActionState(logFollowUpContactAction, INIT);
 
   useEffect(() => {
-    const marker = readCookie("login_marker");
-    if (!marker) return;
-    let seen: string | null = null;
+    let lastShown = 0;
     try {
-      seen = localStorage.getItem(SEEN_MARKER_KEY);
+      lastShown = Number(localStorage.getItem(LAST_SHOWN_KEY) ?? 0);
     } catch {
-      // Private window / blocked storage — show it every page load rather
-      // than crash; better an occasional repeat than silence.
+      // Private window / blocked storage — fall through, show every load.
     }
-    if (marker === seen) return;
+    if (lastShown && hoursSince(lastShown) < REMIND_COOLDOWN_HOURS) return;
 
     getMyOverdueFollowUpsAction()
       .then((rows) => {
-        if (rows.length > 0) setItems(rows);
-        try {
-          localStorage.setItem(SEEN_MARKER_KEY, marker);
-        } catch {
-          // ignore — see above
+        if (rows.length > 0) {
+          setItems(rows);
+          try {
+            localStorage.setItem(LAST_SHOWN_KEY, String(Date.now()));
+          } catch {
+            // ignore — see above
+          }
         }
       })
       .catch(() => {

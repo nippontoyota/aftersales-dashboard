@@ -1,39 +1,65 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import {
   CONNECTED_OUTCOMES,
   NOT_CONNECTED_OUTCOMES,
-  formatCeDate,
   indiaDate,
   outcomeNeedsDate,
-  parseCeDateInput,
   type CeCallOutcome,
   type CeCallStatus,
 } from "@/lib/ce/rules";
-import { updateCeLeadAction, type CeUpdateState } from "../../actions";
+import { markCeMrsFollowUpAlreadyScheduledAction, updateCeLeadAction, type CeUpdateState } from "../../actions";
+import { HolidayDatePicker } from "./holiday-date-picker";
 
 const initial: CeUpdateState = { error: null, success: false };
 
-export function UpdateForm({ vin, attemptCount }: { vin: string; attemptCount: number }) {
+export function UpdateForm({ vin, attemptCount, holidays }: { vin: string; attemptCount: number; holidays: string[] }) {
   const action = updateCeLeadAction.bind(null, vin);
   const [state, formAction, pending] = useActionState(action, initial);
+  const [mrsState, setMrsState] = useState<CeUpdateState>(initial);
+  const [mrsPending, startMrsTransition] = useTransition();
   const [callStatus, setCallStatus] = useState<CeCallStatus>("connected");
   const [outcome, setOutcome] = useState<CeCallOutcome | "">("");
+  const [followUpDate, setFollowUpDate] = useState<string | null>(null);
   const outcomes = callStatus === "connected" ? CONNECTED_OUTCOMES : NOT_CONNECTED_OUTCOMES;
   const nextAttempt = Math.min(5, attemptCount + 1);
   const today = indiaDate();
   const tomorrow = new Date(`${today}T00:00:00Z`);
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   const earliestDate = tomorrow.toISOString().slice(0, 10);
+  const holidaySet = new Set(holidays);
 
   function chooseCallStatus(value: CeCallStatus) {
     setCallStatus(value);
     setOutcome("");
+    setFollowUpDate(null);
+  }
+
+  function chooseOutcome(value: CeCallOutcome) {
+    setOutcome(value);
+    setFollowUpDate(null);
+  }
+
+  function markMrsFollowUpScheduled() {
+    startMrsTransition(async () => {
+      setMrsState(await markCeMrsFollowUpAlreadyScheduledAction(vin));
+    });
   }
 
   return (
-    <form action={formAction} className="mt-4 space-y-4">
+    <div className="mt-4 space-y-4">
+      <div className="rounded-md border border-dashed border-border-strong p-3">
+        <p className="text-xs font-medium text-fg-muted">Not calling this one?</p>
+        <p className="mt-0.5 text-[10px] text-fg-faint">Use this when the MRS follow-up is already scheduled some other way — no call attempt is logged, and it drops off the catch list right away.</p>
+        {mrsState.error ? <p role="alert" className="mt-2 text-xs text-bad">{mrsState.error}</p> : null}
+        {mrsState.success ? <p role="status" className="mt-2 text-xs text-good">Marked — no call attempt logged.</p> : null}
+        <button type="button" onClick={markMrsFollowUpScheduled} disabled={mrsPending} className="mt-2 h-9 w-full rounded-md border border-border-strong bg-surface px-4 text-xs font-medium text-fg hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60">
+          {mrsPending ? "Saving…" : "MRS follow-up already scheduled"}
+        </button>
+      </div>
+
+      <form action={formAction} className="space-y-4">
       <div>
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs font-medium text-fg-muted">Call attempt</span>
@@ -95,7 +121,7 @@ export function UpdateForm({ vin, attemptCount }: { vin: string; attemptCount: n
                 name="outcome"
                 value={item}
                 checked={outcome === item}
-                onChange={() => setOutcome(item)}
+                onChange={() => chooseOutcome(item)}
                 required
               />
               <span className="flex min-h-11 items-center rounded-md border border-border-strong bg-surface px-2.5 py-2 text-xs leading-snug text-fg-muted transition hover:bg-surface-2 peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-medium peer-checked:text-accent-text peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-accent">
@@ -107,27 +133,14 @@ export function UpdateForm({ vin, attemptCount }: { vin: string; attemptCount: n
       </fieldset>
 
       {outcome && outcomeNeedsDate(outcome) ? (
-        <label>
-          <span className="block text-xs font-medium text-fg-muted">{outcome === "Appointment booked" ? "Appointment date" : "Next follow-up"}</span>
-          <input
-            name="nextFollowUpDate"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="DD/MM/YYYY"
-            pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}"
-            minLength={10}
-            maxLength={10}
-            required
-            aria-describedby={`follow-up-help-${vin}`}
-            onChange={(event) => {
-              const value = parseCeDateInput(event.currentTarget.value);
-              event.currentTarget.setCustomValidity(!value ? "Enter the date as DD/MM/YYYY." : value <= today ? "Choose a future date." : "");
-            }}
-            className="mt-1 h-9 w-full rounded-md border border-border-strong bg-surface px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          />
-          <span id={`follow-up-help-${vin}`} className="mt-1 block text-[10px] text-fg-faint">DD/MM/YYYY · earliest {formatCeDate(earliestDate)}</span>
-        </label>
+        <HolidayDatePicker
+          name="nextFollowUpDate"
+          label={outcome === "Appointment booked" ? "Appointment date" : "Next follow-up"}
+          valueIso={followUpDate}
+          onChangeIso={setFollowUpDate}
+          minIso={earliestDate}
+          holidays={holidaySet}
+        />
       ) : null}
 
       <label>
@@ -140,5 +153,6 @@ export function UpdateForm({ vin, attemptCount }: { vin: string; attemptCount: n
         {pending ? "Saving…" : `Save F${nextAttempt} call`}
       </button>
     </form>
+    </div>
   );
 }

@@ -817,6 +817,28 @@ create table if not exists cancellation_justifications (
 create index if not exists cancellation_justifications_branch_idx
   on cancellation_justifications (branch);
 
+-- 2026-11-20: the branch's reason is now a required dropdown rather than
+-- free text alone — 'ro_cancelled' (genuinely rebilled, under a NEW RO
+-- entered in branch_new_ro — reconcile.ts/cross-month-replacement.ts treat
+-- it as evidence of a fix once regional approves it, same as an
+-- automatically-detected same-RO rebill) or 'still_not_closed' (no rebill
+-- yet — stays "stale", branch_note explains why). branch_note is kept as a
+-- free-text remark alongside the dropdown either way.
+--
+-- The regional step changed from an unconditional co-sign to an explicit
+-- approve/reject call: regional_decision null means still pending review.
+-- 'rejected' lets the branch edit and resubmit (submitBranchJustification
+-- clears regional_* on every branch edit) rather than being a dead end.
+-- Only 'approved' + branch_resolution = 'ro_cancelled' makes the RO link
+-- take effect in reconcile.ts/cross-month-replacement.ts — kept behind
+-- regional sign-off on purpose, so a branch can't unilaterally reclassify
+-- its own cancellation as "replaced" by naming any RO.
+alter table cancellation_justifications add column if not exists branch_resolution text
+  check (branch_resolution in ('ro_cancelled','still_not_closed'));
+alter table cancellation_justifications add column if not exists branch_new_ro text;
+alter table cancellation_justifications add column if not exists regional_decision text
+  check (regional_decision in ('approved','rejected'));
+
 -- Backup-before-delete audit trail (2026-10-06), added after TI01B's
 -- September SSRV089-GS (1-13) and Part Sale (1-14) snapshots + raw rows were
 -- found deleted with no trace anywhere — no committed script did it, so it
@@ -1145,11 +1167,13 @@ create table if not exists ce_lead_workflow (
   latest_outcome text,
   last_editor text references admins(username),
   updated_at timestamptz not null default now(),
-  constraint ce_lead_workflow_status_check check (status in ('New', 'Attempted', 'Connected', 'Follow-up', 'Appointment booked', 'Converted', 'Not interested', 'Unreachable'))
+  constraint ce_lead_workflow_status_check check (status in ('New', 'Attempted', 'Connected', 'Follow-up', 'Appointment booked', 'Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable', 'MRS follow-up already scheduled'))
 );
 alter table ce_lead_workflow add column if not exists attempt_count smallint not null default 0 check (attempt_count between 0 and 5);
 alter table ce_lead_workflow add column if not exists latest_call_status text check (latest_call_status in ('connected', 'not_connected'));
 alter table ce_lead_workflow add column if not exists latest_outcome text;
+alter table ce_lead_workflow drop constraint if exists ce_lead_workflow_status_check;
+alter table ce_lead_workflow add constraint ce_lead_workflow_status_check check (status in ('New', 'Attempted', 'Connected', 'Follow-up', 'Appointment booked', 'Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable', 'MRS follow-up already scheduled'));
 create index if not exists ce_lead_workflow_followup_idx on ce_lead_workflow (next_follow_up_date) where next_follow_up_date is not null;
 
 create table if not exists ce_lead_activity (
@@ -1169,6 +1193,25 @@ alter table ce_lead_activity add column if not exists attempt_number smallint ch
 alter table ce_lead_activity add column if not exists call_status text check (call_status in ('connected', 'not_connected'));
 alter table ce_lead_activity add column if not exists outcome text;
 create index if not exists ce_lead_activity_vin_idx on ce_lead_activity (vin, created_at desc, id desc);
+
+-- One row per result from the MRS "download, call offline, reupload" bulk
+-- apply (2026-11-06, at the user's request) — before this, apply's
+-- per-row success/failure list only ever existed in the browser response,
+-- so a row that failed (lead archived/reassigned between preview and
+-- apply, a note over 2,000 chars, etc.) was unrecoverable the moment the
+-- dialog closed. Logs every row the apply route attempted, not just
+-- failures, so a whole run's outcome stays auditable later.
+create table if not exists ce_mrs_bulk_apply_log (
+  id          bigserial    primary key,
+  uploaded_by text         not null references admins(username),
+  file_name   text,
+  row_number  integer      not null,
+  vin         text         not null,
+  success     boolean      not null,
+  message     text         not null,
+  created_at  timestamptz  not null default now()
+);
+create index if not exists ce_mrs_bulk_apply_log_run_idx on ce_mrs_bulk_apply_log (uploaded_by, created_at desc);
 
 -- 2026-10-15: every BP referral action — a not-connected attempt, the
 -- connected-call outcome, or a later follow-up — now requires the BPM to
@@ -1563,3 +1606,273 @@ alter table bp_referral_activity add constraint bp_referral_activity_activity_ty
 create index if not exists raw_upload_rows_part_sale_refdoc_idx
   on raw_upload_rows (branch, (upper(replace(row_data->>'RefDocNo', '-', ''))))
   where report_type = 'part_sale';
+
+-- CE lead "what they did when they came" (2026-11-02, at the user's
+-- request): the MRS catch-list's lead detail page shows a Service
+-- timeline (date/mileage/dealer per N/N1/N2 visit) but not what was
+-- actually done — that detail only exists in the Service Info Report's
+-- raw job lines (see src/lib/ce/service-info-history.ts). Scoped to the
+-- two Service Info report types only (~905k of 3.7M raw_upload_rows
+-- rows, 2026-11-02) rather than the whole table. Created with
+-- `concurrently` in production, same reasoning as the part_sale index
+-- above — omitted here since CONCURRENTLY can't run inside a
+-- transaction block, which is how this file is normally replayed.
+create index if not exists raw_upload_rows_service_info_vin_idx
+  on raw_upload_rows ((upper(trim(row_data->>'Vin no'))))
+  where report_type in ('service_info', 'service_info_bp');
+
+-- CE head/agent lead assignment (2026-11-02, at the user's request): the
+-- single flat 'ce' role is split into 'ce_head' (the existing CE account —
+-- full company-wide visibility, can bulk-assign MRS catch-list leads) and
+-- 'ce_agent' (sees only leads assigned to them). reports_to links an agent
+-- to their head; null for everyone else, including ce_head itself. The role
+-- constraint keeps 'ce' in its allowed list rather than removing it — this
+-- file's own history never retires a role string, only adds to it — but no
+-- row should carry it after the migration UPDATE below runs.
+alter table admins add column if not exists reports_to text references admins(username);
+alter table admins drop constraint if exists admins_role_check;
+alter table admins add constraint admins_role_check
+  check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce', 'kl_cluster', 'ce_head', 'ce_agent'));
+alter table admins drop constraint if exists admins_role_scope_consistency;
+alter table admins add constraint admins_role_scope_consistency check (
+  (role = 'branch'      and branch is not null and region is null) or
+  (role = 'hq'          and branch is null     and region is null) or
+  (role = 'regional'    and branch is null     and region in ('North', 'Central', 'South')) or
+  (role = 'vp_service'  and branch is null     and region is null) or
+  (role = 'ceo'         and branch is null     and region is null) or
+  (role = 'accounts'    and branch is null     and region is null) or
+  (role = 'hq_viewer'   and branch is null     and region is null) or
+  (role = 'bp_manager'  and branch is not null and region is null) or
+  (role = 'bp_ho'       and branch is null     and region is null) or
+  (role = 'ce'          and branch is null     and region is null) or
+  (role = 'kl_cluster'  and branch is null     and region is null) or
+  (role = 'ce_head'     and branch is null     and region is null) or
+  (role = 'ce_agent'    and branch is null     and region is null)
+);
+-- Idempotent: only ever touches a row still carrying the retired 'ce' role,
+-- so re-running this file after the first apply is a no-op here.
+update admins set role = 'ce_head' where role = 'ce';
+
+alter table ce_lead_workflow add column if not exists assigned_to text references admins(username);
+
+-- BP Referrals payout ledger (2026-11-06, at the user's request): a "mark as
+-- paid" record so the Payout ledger table stops growing forever. One row per
+-- payment run against a referring employee (not per referral — validation
+-- and completion payouts for the same employee are usually settled
+-- together), so loadPayoutLedger can net amountOwed = earned - sum(paid) and
+-- drop anyone fully settled off the main table. employee_id/name/branch
+-- mirror bp_referrals' own referring_employee_* grouping (free-text branch,
+-- same as there) so a payout record matches back to its ledger row.
+create table if not exists bp_referral_payouts (
+  id              serial       primary key,
+  employee_id     text,
+  employee_name   text,
+  employee_branch text,
+  amount          numeric      not null,
+  paid_at         timestamptz  not null default now(),
+  paid_by         text         references admins(username)
+);
+create index if not exists bp_referral_payouts_employee_idx
+  on bp_referral_payouts (employee_id, employee_name, employee_branch);
+create index if not exists ce_lead_workflow_assigned_to_idx on ce_lead_workflow (assigned_to) where assigned_to is not null;
+
+-- BP Referrals follow-up pipeline (2026-11-06, at the user's request): a
+-- structured "stage" per follow-up log entry (see followup-stages.ts),
+-- stored the same way not_connected_reason already is — alongside the
+-- free-text remark, not instead of it. follow_up_stage is nullable because
+-- the login-popup's quick "spoke to them" form (bp-followup-popup-gate.tsx)
+-- intentionally doesn't ask for one — only the full follow-up form in the
+-- queue/detail-modal UI requires picking a stage.
+alter table bp_referral_activity add column if not exists follow_up_stage text;
+
+-- The proof that a vehicle under an INSURANCE-PAID (IP) referral has
+-- physically arrived at the workshop: BP HO's own BPE-prefixed estimate/
+-- invoice reference (same prefix convention already used for Body & Paint
+-- RefDocNo elsewhere — see cancellations' reconcile.ts). Entering this is
+-- what moves a referral out of Follow-up into the new "Vehicle received"
+-- section (see classify() in bpm-queue-client.tsx / bp-ho-analytics-
+-- client.tsx) — customer-paid (CP) referrals have no such paperwork step
+-- and skip straight to "Repair in progress" once an RO is entered instead.
+alter table bp_referrals add column if not exists bp_estimate_invoice_no text;
+alter table bp_referrals add column if not exists bp_estimate_invoice_entered_at timestamptz;
+
+-- The referring employee's own department (Service/Sales/Accessory/etc.) —
+-- added directly in Supabase 2026-11-11, now sent by the WhatsApp intake
+-- bot as referring_employee_dept (confirmed against a live webhook log:
+-- {"referring_employee_dept": "IT", ...}). Needed for the Group Report's
+-- Dept.Contribution breakdown (see group-report.ts), which had no way to
+-- fill it in before this.
+alter table bp_referrals add column if not exists referring_employee_dept text;
+
+-- BP Referrals: a BPM can correct an already-chosen payment type (CP <-> IP)
+-- any time before the RO is confirmed (2026-11-11, at the user's request —
+-- this used to be a one-time, unchangeable pick made at call-outcome time).
+-- Logged as its own activity type for the audit trail, same as every other
+-- action here. See changePaymentType in store.ts.
+alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
+alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
+  check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost', 'payment_type_change'));
+
+-- BP Referrals: the WhatsApp intake bot's webhook (see api/webhooks/bp-
+-- referral/route.ts) saves vehicle_reg_no/customer_phone/vehicle_model as
+-- whatever the referring employee happened to type — any of the three can
+-- come through blank. A BPM can now fill in a blank one once they've got it
+-- from the customer themselves (2026-11-12, at the user's request) — see
+-- fillMissingReferralDetails in store.ts. Fill-only (never overwrites an
+-- already-filled value) and needs no remark, so no new column, just its own
+-- activity type for the History tab.
+alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
+alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
+  check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost', 'payment_type_change', 'details_filled'));
+
+-- Conquest leads (2026-11-11, at the user's request): Toyota/Lexus owners
+-- found in external RTO vehicle-registration extracts who match neither
+-- ce_leads, our own Service Info/SSRV089 history, nor any N-9 list — never
+-- serviced by us at all, a cold-outreach prospect list, not a reminder for
+-- an existing customer. Deliberately a separate table from ce_leads rather
+-- than shoehorned into it: ce_leads' schema (sales_date, n_report_date,
+-- n_mileage etc., all NOT NULL) assumes a known service history to compute
+-- due dates/AVF from, which these vehicles don't have — faking that data
+-- to fit would corrupt MRS's due-date math and company-wide AVF stats.
+-- registration_no is the one field guaranteed present across every source
+-- file (some have no VIN at all); vin is filled in whenever a source had a
+-- chassis number. See scripts/import-conquest-leads.mjs.
+create table if not exists ce_conquest_leads (
+  id bigint generated always as identity primary key,
+  registration_no text not null,
+  vin text,
+  owner_name text,
+  owner_mobile text,
+  vehicle_model text,
+  vehicle_maker text,
+  registration_date date,
+  address text,
+  source_file text not null,
+  active boolean not null default true,
+  imported_at timestamptz not null default now()
+);
+create unique index if not exists ce_conquest_leads_regno_idx on ce_conquest_leads (registration_no);
+create unique index if not exists ce_conquest_leads_vin_idx on ce_conquest_leads (vin) where vin is not null;
+create index if not exists ce_conquest_leads_name_search_idx on ce_conquest_leads (lower(owner_name));
+
+-- Same shape as ce_lead_workflow, minus the MRS-only "MRS follow-up already
+-- scheduled" status (meaningless here — these were never on an MRS list).
+create table if not exists ce_conquest_workflow (
+  conquest_lead_id bigint primary key references ce_conquest_leads(id),
+  status text not null default 'New',
+  next_follow_up_date date,
+  attempt_count smallint not null default 0 check (attempt_count between 0 and 5),
+  latest_call_status text check (latest_call_status in ('connected', 'not_connected')),
+  latest_outcome text,
+  assigned_to text references admins(username),
+  last_editor text references admins(username),
+  updated_at timestamptz not null default now(),
+  constraint ce_conquest_workflow_status_check check (status in ('New', 'Attempted', 'Connected', 'Follow-up', 'Appointment booked', 'Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable'))
+);
+create index if not exists ce_conquest_workflow_followup_idx on ce_conquest_workflow (next_follow_up_date) where next_follow_up_date is not null;
+create index if not exists ce_conquest_workflow_assigned_idx on ce_conquest_workflow (assigned_to);
+
+create table if not exists ce_conquest_activity (
+  id bigint generated always as identity primary key,
+  conquest_lead_id bigint not null references ce_conquest_leads(id),
+  previous_status text not null,
+  status text not null,
+  next_follow_up_date date,
+  note text not null,
+  attempt_number smallint check (attempt_number between 1 and 5),
+  call_status text check (call_status in ('connected', 'not_connected')),
+  outcome text,
+  author text not null references admins(username),
+  created_at timestamptz not null default now()
+);
+create index if not exists ce_conquest_activity_lead_idx on ce_conquest_activity (conquest_lead_id, created_at desc, id desc);
+
+-- Conquest's "download, call offline, reupload" bulk-apply log (2026-11-13,
+-- at the user's request) — same shape and purpose as ce_mrs_bulk_apply_log,
+-- lead_id in place of vin since not every conquest lead has one.
+create table if not exists ce_conquest_bulk_apply_log (
+  id          bigserial    primary key,
+  uploaded_by text         not null references admins(username),
+  file_name   text,
+  row_number  integer      not null,
+  lead_id     bigint       not null,
+  success     boolean      not null,
+  message     text         not null,
+  created_at  timestamptz  not null default now()
+);
+create index if not exists ce_conquest_bulk_apply_log_run_idx on ce_conquest_bulk_apply_log (uploaded_by, created_at desc);
+
+-- BP Referrals: a BPM can correct a mistyped vehicle reg no (2026-11-18, at
+-- the user's request) — unlike the fill-only "details added" action, this
+-- overwrites whatever's already on file. Logged as its own activity type
+-- for the audit trail. See correctVehicleRegNo in store.ts.
+alter table bp_referral_activity drop constraint if exists bp_referral_activity_activity_type_check;
+alter table bp_referral_activity add constraint bp_referral_activity_activity_type_check
+  check (activity_type in ('not_connected', 'call_outcome', 'follow_up', 'ro_entered', 'lost', 'payment_type_change', 'details_filled', 'reg_no_corrected'));
+
+-- SA Analytics GS OTD (2026-11-18, at the user's request) — Invoice
+-- Date/Time <= Promise Delivery Date/Time, any GS RO where both parsed.
+-- Distinct from bp_otd_eligible_count/bp_otd_on_time_count (SMS-based
+-- handover, early-arrival window) and em60_count/em60_on_time_count
+-- (EM60-only, 60-minute target) — see close-sa-analytics/compute.ts.
+alter table close_sa_analytics_daily add column if not exists gs_otd_eligible_count integer not null default 0;
+alter table close_sa_analytics_daily add column if not exists gs_otd_on_time_count integer not null default 0;
+
+-- Decouples analytics recompute (close_sa_analytics_daily, VAS revenue,
+-- Unique VIN VAS, Total Car Care, cancelled-accessories adjustment,
+-- cross_month_replacements) from the moment of upload (2026-11-21, at the
+-- user's request): every one of those recomputes reloads a branch's full
+-- relevant history, which under the daily automation's own upload burst
+-- was contending for the same handful of DB connections hard enough to
+-- make unrelated requests (including dashboard login) go slow. Instead of
+-- recomputing inline, an upload now just marks the (branch, date) pairs it
+-- touched here — one row per pair, so a re-upload or several upload types
+-- for the same pair collapse to the same marker rather than piling up.
+-- An HQ admin action (see pending-recomputes/process.ts) processes the
+-- whole list later, in one controlled run, deleting each row as it's
+-- successfully recomputed — resumable if it's ever interrupted partway.
+create table if not exists pending_recomputes (
+  branch text not null,
+  date date not null,
+  created_at timestamptz not null default now(),
+  primary key (branch, date)
+);
+
+-- BP Referrals: "Self arrived" (2026-11-23, at the user's request) — the
+-- customer brought the car in on their own before the BPM ever got to call,
+-- so there's nothing to validate and no payout at all (not even the ₹50,
+-- unlike not_genuine/not_interested/lost which can fire that far). Reached
+-- straight from "To call"/"Not connected", never from Follow-up — see
+-- markSelfArrived in store.ts, which never sets validated_at. Its own
+-- closed_reason and its own reason column, same shape as lost_reason.
+alter table bp_referrals add column if not exists self_arrived_reason text;
+alter table bp_referrals drop constraint if exists bp_referrals_closed_reason_check;
+alter table bp_referrals add constraint bp_referrals_closed_reason_check
+  check (closed_reason is null or closed_reason in ('not_genuine', 'not_interested', 'lost', 'self_arrived'));
+
+-- CTDMS automation's single login (2026-11-26, at the user's request): one
+-- account that can upload AS any branch (branch comes from an explicit form
+-- field at upload time instead of this row's own branch column — see
+-- upload-branch.ts), replacing the one-dashboard-account-per-branch setup
+-- that made the daily automation log in up to 18 times a day. No branch/
+-- region of its own, same shape as hq/ceo/etc.
+alter table admins drop constraint if exists admins_role_check;
+alter table admins add constraint admins_role_check
+  check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce', 'kl_cluster', 'ce_head', 'ce_agent', 'automation'));
+alter table admins drop constraint if exists admins_role_scope_consistency;
+alter table admins add constraint admins_role_scope_consistency check (
+  (role = 'branch'      and branch is not null and region is null) or
+  (role = 'hq'          and branch is null     and region is null) or
+  (role = 'regional'    and branch is null     and region in ('North', 'Central', 'South')) or
+  (role = 'vp_service'  and branch is null     and region is null) or
+  (role = 'ceo'         and branch is null     and region is null) or
+  (role = 'accounts'    and branch is null     and region is null) or
+  (role = 'hq_viewer'   and branch is null     and region is null) or
+  (role = 'bp_manager'  and branch is not null and region is null) or
+  (role = 'bp_ho'       and branch is null     and region is null) or
+  (role = 'ce'          and branch is null     and region is null) or
+  (role = 'kl_cluster'  and branch is null     and region is null) or
+  (role = 'ce_head'     and branch is null     and region is null) or
+  (role = 'ce_agent'    and branch is null     and region is null) or
+  (role = 'automation'  and branch is null     and region is null)
+);

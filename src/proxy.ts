@@ -7,7 +7,10 @@ import { findAdmin } from "@/lib/admin-store";
 // already HQ-admin-gated /api/hq/revenue-stream-export route, which can't
 // forward its caller's session cookie through a fresh fetch(). Same
 // unauthenticated-by-necessity situation as /api/webhooks below.
-const PUBLIC_PATHS = ["/login", "/api/sso", "/api/webhooks", "/api/revenue_stream_fill"];
+// /api/cron is Vercel Cron's own trigger (and our manual verification calls)
+// — no session cookie to send, authenticated instead by its own
+// Authorization: Bearer CRON_SECRET check (see that route).
+const PUBLIC_PATHS = ["/login", "/api/sso", "/api/webhooks", "/api/revenue_stream_fill", "/api/cron"];
 
 /**
  * Next.js 16 renamed `middleware.ts` to `proxy.ts`. Runs on every request;
@@ -53,15 +56,16 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
     const path = request.nextUrl.pathname;
-    const isCePath = path === "/ce" || path.startsWith("/ce/");
-    if (admin.role === "ce" && path !== "/" && !isCePath) {
+    const isCePath = path === "/ce" || path.startsWith("/ce/") || path.startsWith("/api/ce/");
+    const isCe = admin.role === "ce_head" || admin.role === "ce_agent";
+    if (isCe && path !== "/" && !isCePath) {
       if (path.startsWith("/api/")) return NextResponse.json({ error: "Not allowed." }, { status: 403 });
       const ceUrl = request.nextUrl.clone();
       ceUrl.pathname = "/ce";
       ceUrl.search = "";
       return NextResponse.redirect(ceUrl);
     }
-    if (admin.role !== "ce" && admin.role !== "hq" && isCePath) {
+    if (!isCe && admin.role !== "hq" && isCePath) {
       const homeUrl = request.nextUrl.clone();
       homeUrl.pathname = "/";
       homeUrl.search = "";

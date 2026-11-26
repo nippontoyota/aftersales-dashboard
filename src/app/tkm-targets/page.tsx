@@ -64,7 +64,7 @@ export default async function TkmTargetsPage({ searchParams }: { searchParams: P
   const identity = adminIdentityLabel(admin);
 
   return (
-    <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} isBpHo={admin.role === "bp_ho"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} queriesBadge={nav.queriesBadge} identity={identity}>
+    <AppShell current="tkm-targets" showDashboardLink isHq={admin.role === "hq"} isBpHo={admin.role === "bp_ho"} companyTabs={nav.companyTabs} canUpload={nav.canUpload} queriesBadge={nav.queriesBadge} cancellationsBadge={nav.cancellationsBadge} identity={identity}>
       <Suspense fallback={<DashboardPageSkeleton heroCards={5} />}>
         <TkmTargetsContent searchParams={searchParams} admin={admin} />
       </Suspense>

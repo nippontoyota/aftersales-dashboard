@@ -32,7 +32,7 @@ export default async function UploadPage() {
   const identity = admin ? adminIdentityLabel(admin) : "";
   const nav = admin
     ? await loadNavState(admin)
-    : { companyTabs: true, dashboardLabel: "Executive Overview", canUpload: true, slimNav: false, queriesBadge: 0 };
+    : { companyTabs: true, dashboardLabel: "Executive Overview", canUpload: true, slimNav: false, queriesBadge: 0, cancellationsBadge: 0 };
 
   // Branches no longer upload these themselves (CTDMS automation does it
   // end to end now, see d88ca68) — just show what's arrived for today's
@@ -71,7 +71,7 @@ export default async function UploadPage() {
       : null;
 
   return (
-    <AppShell current="upload" showDashboardLink={admin?.canViewDashboard ?? false} isHq={admin?.role === "hq"} companyTabs={nav.companyTabs} slimNav={nav.slimNav} isBranch={admin?.role === "branch"} queriesBadge={nav.queriesBadge} dashboardLabel={nav.dashboardLabel} identity={identity}>
+    <AppShell current="upload" showDashboardLink={admin?.canViewDashboard ?? false} isHq={admin?.role === "hq"} companyTabs={nav.companyTabs} slimNav={nav.slimNav} isBranch={admin?.role === "branch"} queriesBadge={nav.queriesBadge} cancellationsBadge={nav.cancellationsBadge} dashboardLabel={nav.dashboardLabel} identity={identity}>
       <div className="mx-auto w-full max-w-2xl p-6">
         {admin?.role === "hq" ? (
           <UploadTabs

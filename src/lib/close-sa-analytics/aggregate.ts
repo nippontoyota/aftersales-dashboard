@@ -97,6 +97,8 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
         bpWorkOrderCount: 0,
         bpOtdEligibleCount: 0,
         bpOtdOnTimeCount: 0,
+        otdEligibleCount: 0,
+        otdOnTimeCount: 0,
         repeatJobCount: 0,
       };
       byKey.set(key, acc);
@@ -154,6 +156,8 @@ export function aggregateCloseSaRows(rows: CloseSaAnalyticsRow[]): CloseSaPeriod
     acc.bpWorkOrderCount += r.bpWorkOrderCount;
     acc.bpOtdEligibleCount += r.bpOtdEligibleCount;
     acc.bpOtdOnTimeCount += r.bpOtdOnTimeCount;
+    acc.otdEligibleCount += r.otdEligibleCount;
+    acc.otdOnTimeCount += r.otdOnTimeCount;
   }
 
   for (const [key, acc] of byKey) {
@@ -197,6 +201,16 @@ export function tglossGentaniVsPitched(totals: CloseSaPeriodTotals): number | nu
 export function sameDayDeliveryPct(totals: CloseSaPeriodTotals): number | null {
   if (totals.roCount === 0) return null;
   return totals.sameDayDeliveryCount / totals.roCount;
+}
+
+/** GS OTD (2026-11-18, at the user's request) — Invoice Date/Time ≤ Promise
+ * Delivery Date/Time, any GS RO where both parsed. Distinct from BP OTD
+ * (SMS-based handover, early-arrival window) and EM60 OTD (EM60-only,
+ * 60-minute target). null when neither field was ever on file for this SA's
+ * ROs. */
+export function gsOtdPct(totals: CloseSaPeriodTotals): number | null {
+  if (totals.otdEligibleCount === 0) return null;
+  return totals.otdOnTimeCount / totals.otdEligibleCount;
 }
 
 export function bpPartsGentani(totals: CloseSaPeriodTotals): number | null {

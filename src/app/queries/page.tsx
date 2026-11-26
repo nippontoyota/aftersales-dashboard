@@ -48,6 +48,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
       slimNav={nav.slimNav}
       dashboardLabel={nav.dashboardLabel}
       queriesBadge={nav.queriesBadge}
+      cancellationsBadge={nav.cancellationsBadge}
       identity={identity}
     >
       {admin.role === "regional" ? (

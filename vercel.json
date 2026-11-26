@@ -4,5 +4,11 @@
     "api/revenue_stream_fill.py": {
       "includeFiles": "templates/revenue-stream-template.xlsx"
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/process-pending-recomputes",
+      "schedule": "0 5 * * *"
+    }
+  ]
 }

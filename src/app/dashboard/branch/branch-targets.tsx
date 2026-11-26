@@ -45,7 +45,12 @@ function Card({ s }: { s: TargetStat }) {
           </span>
         ) : null}
       </div>
-      <div className="mt-1 text-sm font-semibold tabular-nums text-fg">{fmt(s.mtd)}</div>
+      <div className="mt-1 text-sm font-semibold tabular-nums text-fg">
+        {fmt(s.mtd)}
+        {s.key === "bpu" && s.target !== null ? (
+          <span className="ml-1 text-[11px] font-medium text-fg-faint">/ Target {fmt(s.target)}</span>
+        ) : null}
+      </div>
       <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-2">
         <div className={`h-full rounded-full ${TONE_BAR[tone]}`} style={{ width: `${barPct}%` }} />
       </div>

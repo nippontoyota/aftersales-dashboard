@@ -27,6 +27,11 @@ const NAV_ITEMS = [
   { href: "/queries", label: "Queries", key: "queries" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: true, alwaysVisible: false },
   { href: "/branches", label: "Branch Performance", key: "branches" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false, alwaysVisible: false },
   { href: "/reports", label: "Reports", key: "reports" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: false, alwaysVisible: false },
+  // Model-wise (Toyota/Alliance/Lexus revenue split) — hq, regional (own
+  // region) and branch (own branch) all see this, so regionalVisible: true
+  // unlike Branch Performance/Reports above (2026-11-21, at the user's
+  // explicit request).
+  { href: "/model-wise", label: "Model-wise", key: "model-wise" as const, requiresDashboard: true, companyWide: true, uploadOnly: false, regionalVisible: true, alwaysVisible: false },
   // alwaysVisible: true — branch admins see their own bills and cancellations
   // regardless of whether the latest date is published (these pages are about
   // their own uploads, not the company-wide dashboard state).
@@ -44,12 +49,18 @@ const NAV_ITEMS = [
 
 /** The Accounts view (role `accounts`) gets its own single-item nav —
  * branch detail (/accounts/branches) isn't a nav item, reached only by
- * clicking a region on Overview. See src/app/accounts/*. (The VP Service
- * view and the CEO view, roles `vp_service` and `ceo`, used to have an
- * equivalent single-item nav here too — retired 2026-09-26 and 2026-10-01
- * respectively, in favour of their own bare shells with no sidebar/nav at
- * all; see src/app/vp/vp-shell.tsx and src/app/ceo/ceo-shell.tsx.) */
-const ACCOUNTS_NAV_ITEMS = [{ href: "/accounts", label: "Overview", key: "accounts" as const }];
+ * two own pages — Overview (company-wide KPIs) and Branches (the flat,
+ * company-wide branchwise table, 2026-11-05 — promoted to a real nav item
+ * once /accounts/branches stopped being a per-region drill-down reached only
+ * by clicking a region card). See src/app/accounts/*. (The VP Service view
+ * and the CEO view, roles `vp_service` and `ceo`, used to have an equivalent
+ * single-item nav here too — retired 2026-09-26 and 2026-10-01 respectively,
+ * in favour of their own bare shells with no sidebar/nav at all; see
+ * src/app/vp/vp-shell.tsx and src/app/ceo/ceo-shell.tsx.) */
+const ACCOUNTS_NAV_ITEMS = [
+  { href: "/accounts", label: "Overview", key: "accounts" as const },
+  { href: "/accounts/branches", label: "Branches", key: "accounts-branches" as const },
+];
 
 /** The Central regional manager's own nav (2026-09-26, replacing the single
  * combined "My Region" page) — three of his own pages (My Region, TKM
@@ -62,6 +73,7 @@ const CENTRAL_NAV_ITEMS = [
   { href: "/dashboard", label: "My Region", key: "dashboard" as const },
   { href: "/dashboard/central/tkm-targets", label: "TKM Targets", key: "central-tkm-targets" as const },
   { href: "/dashboard/central/sa-analytics", label: "SA Analytics", key: "central-sa-analytics" as const },
+  { href: "/model-wise", label: "Model-wise", key: "model-wise" as const },
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
@@ -76,6 +88,7 @@ const REGIONAL_RM_NAV_ITEMS = [
   { href: "/dashboard", label: "My Region", key: "dashboard" as const },
   { href: "/dashboard/region/tkm-targets", label: "TKM Targets", key: "region-tkm-targets" as const },
   { href: "/dashboard/region/sa-analytics", label: "SA Analytics", key: "region-sa-analytics" as const },
+  { href: "/model-wise", label: "Model-wise", key: "model-wise" as const },
   { href: "/queries", label: "Queries", key: "queries" as const },
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const },
@@ -246,6 +259,26 @@ function ChatIcon() {
   );
 }
 
+function ModelWiseIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <path d="M3 12.5 4.3 8a1.5 1.5 0 0 1 1.44-1h8.52a1.5 1.5 0 0 1 1.44 1l1.3 4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="2.5" y="12.5" width="15" height="3.5" rx="1" />
+      <circle cx="6" cy="16" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="14" cy="16" r="1.3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function SignOutIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-4 w-4" aria-hidden="true">
+      <path d="M8 3.5H4.5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1H8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12.5 13.5 16 10l-3.5-3.5M16 10H7.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 const SIDEBAR_STORAGE_KEY = "nt-sidebar-collapsed";
 const SIDEBAR_EVENT = "nt-sidebar-change";
 
@@ -310,12 +343,14 @@ const ICONS: Record<NavKey, () => React.ReactElement> = {
   data: DataIcon,
   "upload-sheet": UploadSheetIcon,
   accounts: DashboardIcon,
+  "accounts-branches": BranchesIcon,
   "central-tkm-targets": TkmTargetsIcon,
   "central-set-targets": SetTargetsIcon,
   "central-sa-analytics": BranchesIcon,
   "region-tkm-targets": TkmTargetsIcon,
   "region-set-targets": SetTargetsIcon,
   "region-sa-analytics": BranchesIcon,
+  "model-wise": ModelWiseIcon,
   ce: ChatIcon,
 };
 
@@ -333,6 +368,7 @@ export function AppShell({
   isRegional = false,
   isBranch = false,
   queriesBadge = 0,
+  cancellationsBadge = 0,
   dashboardLabel = "Executive Overview",
   identity,
   children,
@@ -348,7 +384,9 @@ export function AppShell({
    * full read-only HQ suite (same scope as hq_viewer) instead of its own
    * bare BpShell, so one account covers both without switching. Only gates
    * the "BP Referrals" nav item itself, never the HQ-only utility tools
-   * (Data/Upload Sheet/CE Leads) — those stay `isHq`-only. */
+   * (Data/Upload Sheet/CE Leads) — those stay `isHq`-only. A plain branch
+   * account's own read-only view of the same page (2026-11-16) widens this
+   * same gate to `isBranch` too, below. */
   isBpHo?: boolean;
   /** When false, the company-wide tabs (TKM Targets, Alerts, Branches,
    * Reports) are hidden — a branch admin whose latest date isn't published
@@ -383,6 +421,13 @@ export function AppShell({
   /** Count shown as a small badge on the Queries nav item — threads awaiting
    * this viewer's attention. 0 (default) renders no badge. */
   queriesBadge?: number;
+  /** Count shown as a small badge on the Cancellations nav item — flagged
+   * cancellations awaiting this viewer's own justification action (branch:
+   * not yet submitted; regional: awaiting their co-sign; HQ: overdue past
+   * the 3-day grace period), so it surfaces even off the Cancellations page
+   * itself. See lib/cancellation/pending-justifications.ts. 0 (default)
+   * renders no badge. */
+  cancellationsBadge?: number;
   /** Label for the /dashboard nav item — "Daily Report" / "Regional Report"
    * for a pre-publish raw view, "Executive Overview" otherwise. */
   dashboardLabel?: string;
@@ -407,7 +452,7 @@ export function AppShell({
           (!item.requiresDashboard || showDashboardLink) &&
           (item.alwaysVisible || !item.companyWide || (companyTabs && !slimNav) || (item.regionalVisible && (isRegional || isBranch))) &&
           (!item.uploadOnly || canUpload) &&
-          (!item.hqOnly || isHq || isBpHo) &&
+          (!item.hqOnly || isHq || isBpHo || isBranch) &&
           (!item.branchOnly || isBranch) &&
           (!item.branchOrHqOnly || isBranch || isHq),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
@@ -416,7 +461,7 @@ export function AppShell({
   const navLink = (item: { href: string; label: string; key: NavKey }, compact: boolean) => {
     const Icon = ICONS[item.key];
     const active = current === item.key;
-    const badge = item.key === "queries" ? queriesBadge : 0;
+    const badge = item.key === "queries" ? queriesBadge : item.key === "cancellations" ? cancellationsBadge : 0;
     return (
       <Link
         key={item.key}
@@ -480,14 +525,42 @@ export function AppShell({
         )}
       </div>
 
-      {!compact ? (
-        <div className="shrink-0 border-b border-border-subtle bg-accent-soft/50 px-4 py-2">
-          <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-fg-faint">Signed in as</div>
-          <div className="truncate text-sm font-bold text-accent-text">{identity}</div>
-        </div>
-      ) : null}
+      {/* Identity + sign out — always rendered, even in the collapsed icon
+       * rail (just as an icon-only button there), so signing out never
+       * requires expanding the sidebar first (2026-11-11, at the user's
+       * request — this used to live in the top-right header bar, which
+       * scrolled out of view along with the rest of the page). */}
+      <div className={`shrink-0 border-b border-border-subtle ${compact ? "flex justify-center py-2" : "bg-accent-soft/50 px-4 py-2"}`}>
+        {compact ? (
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              title="Sign out"
+              aria-label="Sign out"
+              className="rounded-md p-1.5 text-fg-faint hover:bg-surface-2 hover:text-fg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <SignOutIcon />
+            </button>
+          </form>
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-fg-faint">Signed in as</div>
+              <div className="truncate text-sm font-bold text-accent-text">{identity}</div>
+            </div>
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="shrink-0 rounded-md border border-border-strong bg-surface px-2 py-1 text-[11px] font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
 
-      <nav className={`flex-1 space-y-0.5 ${compact ? "p-2" : "p-3"}`}>{items.map((item) => navLink(item, compact))}</nav>
+      <nav className={`min-h-0 flex-1 overflow-y-auto space-y-0.5 ${compact ? "p-2" : "p-3"}`}>{items.map((item) => navLink(item, compact))}</nav>
 
       {utilityItems.length > 0 ? (
         <nav className={`space-y-0.5 border-t border-border-subtle ${compact ? "p-2" : "p-3"}`}>
@@ -498,7 +571,7 @@ export function AppShell({
   );
 
   return (
-    <div className="flex min-h-screen bg-canvas text-fg">
+    <div className="flex h-screen overflow-hidden bg-canvas text-fg">
       <AutoRefresh />
       <QueryPopupGate />
       <HolidayMergePopupGate />
@@ -526,7 +599,7 @@ export function AppShell({
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4 print:hidden">
           <div className="flex items-center gap-3">
             <button
@@ -543,17 +616,9 @@ export function AppShell({
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <form action={logoutAction}>
-              <button
-                type="submit"
-                className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                Sign out
-              </button>
-            </form>
           </div>
         </header>
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

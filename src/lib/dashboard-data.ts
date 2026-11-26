@@ -12,6 +12,7 @@ import { isDatePublished } from "./publish-store";
 import { countActionableForBranch, countActionableForHq, countActionableForRegion } from "./region-queries/store";
 import { countOpenForBranch as countOpenVpForBranch, countOpenForHq, countOpenForRegion } from "./vp-flags/store";
 import { BRANCH_REVENUE_VISIBLE_FROM_MONTH, maskBranchRevenue } from "./branch-revenue-visibility";
+import { countPendingJustifications } from "./cancellation/pending-justifications";
 
 /** Nav-shell state for the dashboard family of pages — cheap enough to run in
  * the fast outer shell (before the Suspense'd content). A branch or regional
@@ -23,23 +24,42 @@ import { BRANCH_REVENUE_VISIBLE_FROM_MONTH, maskBranchRevenue } from "./branch-r
  * tab. HQ is never restricted. */
 export async function loadNavState(
   admin: AdminAccount,
-): Promise<{ companyTabs: boolean; dashboardLabel: string; canUpload: boolean; slimNav: boolean; queriesBadge: number }> {
+): Promise<{
+  companyTabs: boolean;
+  dashboardLabel: string;
+  canUpload: boolean;
+  slimNav: boolean;
+  queriesBadge: number;
+  cancellationsBadge: number;
+}> {
   const canUpload = admin.role !== "regional" && admin.role !== "hq_viewer" && admin.role !== "bp_ho";
   if (admin.role === "hq" || admin.role === "hq_viewer" || admin.role === "bp_ho") {
-    const [vpOpen, regionActionable] = await Promise.all([countOpenForHq(), countActionableForHq()]);
-    return { companyTabs: true, dashboardLabel: "Executive Overview", canUpload, slimNav: false, queriesBadge: vpOpen + regionActionable };
+    const [vpOpen, regionActionable, cancellationsBadge] = await Promise.all([
+      countOpenForHq(),
+      countActionableForHq(),
+      countPendingJustifications(admin),
+    ]);
+    return {
+      companyTabs: true,
+      dashboardLabel: "Executive Overview",
+      canUpload,
+      slimNav: false,
+      queriesBadge: vpOpen + regionActionable,
+      cancellationsBadge,
+    };
   }
   // Branch / regional accounts get the slim nav (company pages dropped, their
   // content folded into the branch-first dashboard) — but only once the
   // latest date is published; before that they're still in raw-report mode.
   const slimNav = admin.role === "branch" || admin.role === "regional";
-  const [dates, queriesBadge] = await Promise.all([
+  const [dates, queriesBadge, cancellationsBadge] = await Promise.all([
     listSnapshotDates(),
     admin.role === "regional"
       ? Promise.all([countActionableForRegion(admin.region), countOpenForRegion(admin.region)]).then(([a, b]) => a + b)
       : admin.role === "branch"
       ? Promise.all([countActionableForBranch(admin.branch), countOpenVpForBranch(admin.branch)]).then(([a, b]) => a + b)
       : Promise.resolve(0),
+    countPendingJustifications(admin),
   ]);
   const latest = dates.at(-1);
   const latestPublished = latest ? await isDatePublished(latest) : true;
@@ -50,6 +70,7 @@ export async function loadNavState(
     canUpload,
     slimNav,
     queriesBadge,
+    cancellationsBadge,
   };
 }
 

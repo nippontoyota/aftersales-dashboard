@@ -1,6 +1,6 @@
 import type { RegionRevenueView, RegionMetricBlock, RegionBranchRow, RegionMetricStatus } from "@/lib/region-revenue-data";
 import type { BranchReport } from "@/lib/report";
-import { formatCompactCurrency, formatPercent } from "@/lib/format";
+import { formatCompactCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { eyebrow } from "@/lib/ui";
 import { tglossText } from "@/components/tgloss-text";
 import { DraftWarning } from "@/components/draft-warning";
@@ -26,21 +26,36 @@ function asOf(uploadedAt: string): string {
   return new Date(uploadedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
-function guidance(block: RegionMetricBlock, remaining: number): string {
+/** `fmt`/`unitLabel` let this same cell render either a ₹ block (the
+ * default, for GS/BP/Ext revenue) or a plain RO-count block (GS/BP RO
+ * targets below) without a second copy of the pace/gap/status machinery. */
+function guidance(block: RegionMetricBlock, remaining: number, fmt: (v: number | null) => string, unitLabel: string): string {
   if (block.target === null || block.achieved === null) return "No target set";
-  if (block.status === "achieved") return `Target met — ${formatCompactCurrency(-(block.gap ?? 0))} ahead`;
+  if (block.status === "achieved") return `Target met — ${fmt(-(block.gap ?? 0))} ahead`;
   if (remaining <= 0) return "No working days left this month";
-  if (block.requiredPerWorkingDay !== null) return `Need ${formatCompactCurrency(block.requiredPerWorkingDay)}/working day × ${remaining}d left`;
+  if (block.requiredPerWorkingDay !== null) return `Need ${fmt(block.requiredPerWorkingDay)}${unitLabel}/working day × ${remaining}d left`;
   return "—";
 }
 
-function MetricCell({ block, remaining, title }: { block: RegionMetricBlock; remaining: number; title?: string }) {
+function MetricCell({
+  block,
+  remaining,
+  title,
+  fmt = formatCompactCurrency,
+  unitLabel = "",
+}: {
+  block: RegionMetricBlock;
+  remaining: number;
+  title?: string;
+  fmt?: (v: number | null) => string;
+  unitLabel?: string;
+}) {
   const pct = block.target !== null && block.target > 0 && block.achieved !== null ? Math.min(100, (block.achieved / block.target) * 100) : 0;
   return (
     <div className="min-w-[150px] space-y-1" title={title}>
       <div className="flex items-baseline justify-between gap-1 text-[12px]">
-        <span className="font-semibold tabular-nums text-fg">{formatCompactCurrency(block.achieved)}</span>
-        <span className="tabular-nums text-fg-faint">/ {formatCompactCurrency(block.target)}</span>
+        <span className="font-semibold tabular-nums text-fg">{fmt(block.achieved)}</span>
+        <span className="tabular-nums text-fg-faint">/ {fmt(block.target)}</span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
         <div className={`h-full rounded-full ${STATUS_BAR[block.status]}`} style={{ width: `${pct}%` }} />
@@ -50,20 +65,32 @@ function MetricCell({ block, remaining, title }: { block: RegionMetricBlock; rem
         <span className="text-[10px] tabular-nums text-fg-faint">{formatPercent(block.mtdAchievementPct)} MTD</span>
       </div>
       <div className="text-[10px] leading-tight text-fg-subtle">
-        Gap {formatCompactCurrency(block.gap !== null ? Math.max(0, block.gap) : null)} · Proj {formatCompactCurrency(block.projectedEom)}
+        Gap {fmt(block.gap !== null ? Math.max(0, block.gap) : null)} · Proj {fmt(block.projectedEom)}
       </div>
-      <div className="text-[10px] leading-tight text-fg-faint">{guidance(block, remaining)}</div>
+      <div className="text-[10px] leading-tight text-fg-faint">{guidance(block, remaining, fmt, unitLabel)}</div>
     </div>
   );
 }
 
-function Row({ label, cells, remaining }: { label: string; cells: { key: string; block: RegionMetricBlock; title?: string }[]; remaining: number }) {
+function Row({
+  label,
+  cells,
+  remaining,
+  fmt,
+  unitLabel,
+}: {
+  label: string;
+  cells: { key: string; block: RegionMetricBlock; title?: string }[];
+  remaining: number;
+  fmt?: (v: number | null) => string;
+  unitLabel?: string;
+}) {
   return (
     <tr className="border-t border-border-subtle align-top">
       <td className="py-3 pr-3 text-[12px] font-semibold text-fg">{label}</td>
       {cells.map((c) => (
         <td key={c.key} className="py-3 pr-4">
-          <MetricCell block={c.block} remaining={remaining} title={c.title} />
+          <MetricCell block={c.block} remaining={remaining} title={c.title} fmt={fmt} unitLabel={unitLabel} />
         </td>
       ))}
     </tr>
@@ -118,6 +145,8 @@ export function RegionRevenueDashboard({
     gs: view.totals.gs,
     bp: view.totals.bp,
     ext: view.totals.ext,
+    gsRo: view.totals.gsRo,
+    bpRo: view.totals.bpRo,
     totalMonthlyTarget: view.totals.totalMonthlyTarget,
     totalAchieved: view.totals.totalAchieved,
     scrapAndUsedOil: view.totals.scrapAndUsedOil,
@@ -212,6 +241,20 @@ export function RegionRevenueDashboard({
                 block: c.ext,
                 title: `SPR External (BA Tool, reference only): ${formatCompactCurrency(c.ext.sprExternalReference)}`,
               }))}
+            />
+            <Row
+              label="GS ROs"
+              remaining={view.workingDays.remaining}
+              cells={columns.map((c) => ({ key: c.branch, block: c.gsRo }))}
+              fmt={formatNumber}
+              unitLabel=" ROs"
+            />
+            <Row
+              label="BP ROs"
+              remaining={view.workingDays.remaining}
+              cells={columns.map((c) => ({ key: c.branch, block: c.bpRo }))}
+              fmt={formatNumber}
+              unitLabel=" ROs"
             />
             <tr className="border-t border-border-subtle">
               <td className="py-2 pr-3 text-[12px] font-semibold text-fg">Total Monthly Target</td>

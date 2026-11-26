@@ -5,6 +5,7 @@ import pg from "pg";
 import XLSX from "xlsx";
 import "./load-env.mjs";
 import { normalizeCeVin, normalizeIndianMobile } from "../src/lib/ce/dms.mjs";
+import { relinkServiceInfoForNewVins } from "./relink-service-info-for-vins.mjs";
 
 // One-off import for a fresh TKM UIO export that does NOT match the
 // reformatted CE_HEADERS shape the live /data upload form expects (see
@@ -232,6 +233,13 @@ try {
     );
     await client.query(`insert into ce_lead_workflow (vin) select vin from ce_leads where active on conflict (vin) do nothing`);
 
+    // Re-link the VINs this import just inserted against any Service Info
+    // (GS) visit history already on file — otherwise a VIN that's new to
+    // ce_leads but not new to our own branches keeps TKM's possibly-stale
+    // N date forever (see relink-service-info-for-vins.mjs).
+    const { rows: newVinRows } = await client.query("select vin from ce_leads where source_import_id = $1", [importId]);
+    const relink = await relinkServiceInfoForNewVins(client, newVinRows.map((r) => r.vin));
+
     const validation = await client.query(`
       select
         (select count(*)::int from uio_refresh_active_before b join ce_leads l using (vin) where b.active and not l.active) archived,
@@ -259,6 +267,8 @@ try {
       newVinsInserted: result.new_vins,
       contactsEnriched: result.enrichable,
       archived: result.archived,
+      serviceInfoRelinkBatches: relink.batchesApplied,
+      serviceInfoRelinkVisits: relink.visitsApplied,
       importId,
     });
     if (!apply) console.log("No changes committed. Re-run with --apply after reviewing these numbers.");

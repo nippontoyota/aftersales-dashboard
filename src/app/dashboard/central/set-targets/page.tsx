@@ -31,6 +31,7 @@ export default async function CentralSetTargetsPage({ searchParams }: { searchPa
       centralNav
       dashboardLabel={nav.dashboardLabel}
       queriesBadge={nav.queriesBadge}
+      cancellationsBadge={nav.cancellationsBadge}
       identity={identity}
     >
       <Suspense fallback={<DashboardPageSkeleton heroCards={0} />}>

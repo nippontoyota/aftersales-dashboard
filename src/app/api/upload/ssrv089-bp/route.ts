@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
-import { recomputeAfterSsrv089BpUpload } from "@/lib/cancellation/adjustment-recompute";
 import { hashBuffer } from "@/lib/duplicate-detection";
+import { markPendingRecompute } from "@/lib/pending-recomputes/store";
 import { loadAllRawReportUploadsBefore, loadRawReportUpload, saveRawReportUpload } from "@/lib/raw-report-uploads/store";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { detectReportType, type DetectedReportType } from "@/lib/report-sniffer";
 import { matchBpReferralsFromCostSalesBpRows } from "@/lib/bp-referrals/ro-matcher";
 import { parseSsrv089BpGreyTotals } from "@/lib/ssrv089-bp/parse";
+import { resolveUploadBranch } from "@/lib/upload-branch";
 import { saveSsrv089BpGreySnapshot } from "@/lib/ssrv089-bp/store";
 
 const WRONG_TYPE_LABELS: Record<Exclude<DetectedReportType, "ssrv089">, string> = {
@@ -39,11 +40,16 @@ export async function POST(request: Request) {
   if (!admin) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
-  if (admin.role !== "branch") {
-    return NextResponse.json({ error: "Only a branch account can upload a Cost and Sales Report." }, { status: 403 });
+  if (admin.role !== "branch" && admin.role !== "automation") {
+    return NextResponse.json({ error: "Only a branch (or the automation) account can upload a Cost and Sales Report." }, { status: 403 });
   }
 
   const formData = await request.formData();
+  const branchResult = await resolveUploadBranch(admin, formData);
+  if ("error" in branchResult) {
+    return NextResponse.json({ error: branchResult.error }, { status: 400 });
+  }
+  const branch = branchResult.branch;
   const file = formData.get("file");
   const date = String(formData.get("date") ?? "").trim();
 
@@ -54,7 +60,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Choose a valid date for this upload." }, { status: 400 });
   }
 
-  if (await loadRawReportUpload(date, admin.branch, "ssrv089_bp")) {
+  if (await loadRawReportUpload(date, branch, "ssrv089_bp")) {
     return NextResponse.json(
       { error: `Already uploaded for ${date} — contact HQ (Upload Sheet) if this needs correcting.` },
       { status: 409 }
@@ -109,7 +115,7 @@ export async function POST(request: Request) {
   // file bytes are compared directly, against every prior upload this month
   // rather than just the most recent one). A genuine false positive now
   // needs HQ (Upload Sheet).
-  const priorUploads = await loadAllRawReportUploadsBefore(admin.branch, "ssrv089_bp", date);
+  const priorUploads = await loadAllRawReportUploadsBefore(branch, "ssrv089_bp", date);
   const newHash = hashBuffer(buffer);
   const match = priorUploads.find((u) => hashBuffer(u.fileData) === newHash);
   if (match) {
@@ -122,7 +128,7 @@ export async function POST(request: Request) {
   const uploadedAt = new Date().toISOString();
   await saveRawReportUpload({
     date,
-    branch: admin.branch,
+    branch,
     reportType: "ssrv089_bp",
     uploadedAt,
     sourceFileName: file.name,
@@ -131,34 +137,41 @@ export async function POST(request: Request) {
   });
 
   // parsed was already extracted and validated above.
-  await saveSsrv089BpGreySnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, totals: parsed.totals });
+  await saveSsrv089BpGreySnapshot({ date, branch, uploadedAt, sourceFileName: file.name, totals: parsed.totals });
   await saveRawUploadRows({
     reportType: "ssrv089_bp",
     date,
     uploadedAt,
     sourceFileName: file.name,
-    rows: parsed.rawRows.map((data) => ({ branch: admin.branch, data })),
+    rows: parsed.rawRows.map((data) => ({ branch, data })),
     uploadedBy: admin.username,
   });
 
-  // Outside the save above — a recompute failure shouldn't block an
-  // otherwise-successful upload (see adjustment-recompute.ts).
-  await recomputeAfterSsrv089BpUpload(admin.branch);
+  // Outside the save above — marks this (branch, date) pending rather than
+  // recomputing inline (2026-11-21, at the user's request, superseding the
+  // after()-deferred recompute from 2026-11-18) — see part-sale's route
+  // for the full reasoning, and pending-recomputes/process.ts for the HQ
+  // admin action that does the actual recompute (covers
+  // cross_month_replacements, the only thing recomputeAfterSsrv089BpUpload
+  // used to trigger directly).
+  after(async () => {
+    await markPendingRecompute(branch, date);
 
-  // BP Referrals' RO matcher (2026-10-14) — scans this file's BPJ-prefixed
-  // ROs for a vehicle reg no match against validated referrals, company-wide
-  // (see ro-matcher.ts). Wrapped so a matcher bug can never break an
-  // otherwise-successful daily upload.
-  try {
-    await matchBpReferralsFromCostSalesBpRows(parsed.rawRows);
-  } catch (err) {
-    console.error("BP referral RO matcher failed:", err);
-  }
+    // BP Referrals' RO matcher (2026-10-14) — scans this file's
+    // BPJ-prefixed ROs for a vehicle reg no match against validated
+    // referrals, company-wide (see ro-matcher.ts). Wrapped so a matcher bug
+    // can never break an otherwise-successful daily upload.
+    try {
+      await matchBpReferralsFromCostSalesBpRows(parsed.rawRows, branch);
+    } catch (err) {
+      console.error("BP referral RO matcher failed:", err);
+    }
+  });
 
   return NextResponse.json({
     success: true,
     date,
-    branch: admin.branch,
+    branch,
     sourceFileName: file.name,
     // Header matched but there were zero data rows underneath it — accepted
     // (see ssrv089-bp/parse.ts), but worth the uploader double-checking this

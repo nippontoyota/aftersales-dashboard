@@ -34,7 +34,7 @@ const toggle = <T extends string>(values: T[], value: T) => values.includes(valu
 export default async function CeAvfPage({ searchParams }: { searchParams: Promise<Params> }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/login");
-  if (admin.role !== "ce" && admin.role !== "hq") redirect("/");
+  if (admin.role !== "ce_head" && admin.role !== "ce_agent" && admin.role !== "hq") redirect("/");
 
   const raw = await searchParams;
   const query = one(raw.q)?.trim().slice(0, 100) || undefined;

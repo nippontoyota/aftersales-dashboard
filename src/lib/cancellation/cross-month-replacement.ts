@@ -1,4 +1,5 @@
 import { pool } from "../db";
+import { withAdvisoryLock } from "../db-lock";
 
 /**
  * A cancelled invoice's job (RO) sometimes gets re-invoiced under a new
@@ -238,12 +239,31 @@ export async function computeCrossMonthReplacementsFresh(branches?: string[]): P
   }>(
     `
     with canc as (
-      select doc_no, branch, ref_doc_no, month as cancel_month,
-             coalesce(cancel_at, cancel_date::timestamptz) as cancel_moment,
-             coalesce(to_char(issue_date, 'YYYY-MM'), month) as revenue_month,
-             replace(doc_no, '-', '') as doc_key
-      from invoice_cancellations
-      where ref_doc_no is not null and ref_doc_no <> '' and ($2::text[] is null or branch = any($2::text[]))
+      select c.doc_no, c.branch, c.ref_doc_no,
+             -- A regional-approved "RO cancelled, rebilled as X" justification
+             -- (see justifications.ts) overrides ref_doc_no as the RO the
+             -- REPLACEMENT is searched for below — ref_doc_no itself stays
+             -- the real original RO (needed as-is to find the cancelled
+             -- invoice's own dead row further down). Same reasoning as
+             -- reconcile.ts's own link_ro: the manual equivalent of an
+             -- automatically-detected same-RO rebill, kept behind regional
+             -- approval so a branch can't unilaterally link any RO it wants.
+             coalesce(
+               case when j.branch_resolution = 'ro_cancelled' and j.regional_decision = 'approved'
+                    then replace(upper(j.branch_new_ro), '-', '') end,
+               c.ref_doc_no
+             ) as match_ro,
+             c.month as cancel_month,
+             coalesce(c.cancel_at, c.cancel_date::timestamptz) as cancel_moment,
+             coalesce(to_char(c.issue_date, 'YYYY-MM'), c.month) as revenue_month,
+             replace(c.doc_no, '-', '') as doc_key
+      from invoice_cancellations c
+      left join cancellation_justifications j on j.doc_no = c.doc_no
+      where (
+              c.ref_doc_no is not null and c.ref_doc_no <> ''
+              or (j.branch_resolution = 'ro_cancelled' and j.regional_decision = 'approved' and j.branch_new_ro is not null and j.branch_new_ro <> '')
+            )
+            and ($2::text[] is null or c.branch = any($2::text[]))
     ),
     -- The branch's freshest Monthly-KPI (scom205) read per month — same
     -- logic as reconcile.ts's own last_kpi CTE. Used only to decide
@@ -293,7 +313,7 @@ export async function computeCrossMonthReplacementsFresh(branches?: string[]): P
            (c.cancel_month = c.revenue_month and lk.branch is not null
               and c.cancel_moment <= greatest(lk.last_uploaded, lk.last_date::timestamptz)) as skip_adjustment
     from canc c
-    join ssrv_dedup s on s.branch = c.branch and s.ro = c.ref_doc_no and s.inv <> c.doc_key and s.inv <> ''
+    join ssrv_dedup s on s.branch = c.branch and s.ro = c.match_ro and s.inv <> c.doc_key and s.inv <> ''
     -- A candidate replacement that was itself later cancelled never actually
     -- stuck — it's an intermediate invoice in a cancel→reissue→cancel chain,
     -- not where the job's revenue landed. Matching it anyway double-subtracts
@@ -346,8 +366,31 @@ export async function computeCrossMonthReplacementsFresh(branches?: string[]): P
 /** Recomputes cross_month_replacements and replaces every row — scoped to
  * `branches` when given (the normal per-upload path, cheap), or every
  * branch in the table when omitted (an explicit full recompute only; see
- * computeCrossMonthReplacementsFresh's doc comment on why that's slow). */
+ * computeCrossMonthReplacementsFresh's doc comment on why that's slow).
+ *
+ * Locked per branch-set (2026-11-21): recomputeAfterSsrv089Upload and
+ * recomputeAfterSsrv089BpUpload both call this for the same single branch,
+ * and both got deferred via after() in their upload routes — landing close
+ * together (normal for the daily automation, which uploads GS and BP cost-
+ * sales back to back) made them race, surfacing as a raw duplicate-key
+ * error on cross_month_replacements (TI01A, 2026-11-21), the same bug class
+ * already fixed for close_sa_analytics_daily. See db-lock.ts for why a
+ * non-blocking, polled Postgres advisory lock rather than an in-process one
+ * or a blocking pg_advisory_lock. Keyed by the exact branches list (sorted,
+ * joined) — a concurrent call for a different branch-set doesn't contend,
+ * which covers the actual observed race (the same single branch) without
+ * serializing unrelated work. The full-table recompute (branches omitted)
+ * is an explicit, rare, manual-only path — not worth locking. */
 export async function recomputeCrossMonthReplacements(branches?: string[]): Promise<void> {
+  if (branches) {
+    const lockKey = [...branches].sort().join(",");
+    await withAdvisoryLock("cross-month-replacements", lockKey, () => recomputeCrossMonthReplacementsLocked(branches));
+    return;
+  }
+  await recomputeCrossMonthReplacementsLocked(branches);
+}
+
+async function recomputeCrossMonthReplacementsLocked(branches?: string[]): Promise<void> {
   const fresh = await computeCrossMonthReplacementsFresh(branches);
 
   const client = await pool.connect();

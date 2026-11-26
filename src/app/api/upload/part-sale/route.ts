@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getCurrentAdmin } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
@@ -6,18 +6,24 @@ import { parsePartSaleWorkbook } from "@/lib/part-sale/parse";
 import { loadPartSaleSnapshot, savePartSaleSnapshot } from "@/lib/part-sale/store";
 import { checkBillOverlap, checkSaleDateSanity } from "@/lib/part-sale/upload-validation";
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
-import { recomputeCloseSaAnalytics } from "@/lib/close-sa-analytics/recompute";
+import { markPendingRecompute } from "@/lib/pending-recomputes/store";
+import { resolveUploadBranch } from "@/lib/upload-branch";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
-  if (admin.role !== "branch") {
-    return NextResponse.json({ error: "Only a branch account can upload a Part Sale Report." }, { status: 403 });
+  if (admin.role !== "branch" && admin.role !== "automation") {
+    return NextResponse.json({ error: "Only a branch (or the automation) account can upload a Part Sale Report." }, { status: 403 });
   }
 
   const formData = await request.formData();
+  const branchResult = await resolveUploadBranch(admin, formData);
+  if ("error" in branchResult) {
+    return NextResponse.json({ error: branchResult.error }, { status: 400 });
+  }
+  const branch = branchResult.branch;
   const file = formData.get("file");
   const date = String(formData.get("date") ?? "").trim();
 
@@ -32,7 +38,7 @@ export async function POST(request: Request) {
   // the user's request — prevents accidental re-uploads and makes "has this
   // been done today" visible at a glance). HQ's own uploads (BA Tool, and
   // /upload-sheet on a branch's behalf) are never subject to this.
-  if (await loadPartSaleSnapshot(date, admin.branch)) {
+  if (await loadPartSaleSnapshot(date, branch)) {
     return NextResponse.json(
       { error: `Already uploaded for ${date} — contact HQ (Upload Sheet) if this needs correcting.` },
       { status: 409 }
@@ -48,7 +54,7 @@ export async function POST(request: Request) {
 
   let counts, rawRows;
   try {
-    ({ counts, rawRows } = await parsePartSaleWorkbook(buffer, admin.branch, date));
+    ({ counts, rawRows } = await parsePartSaleWorkbook(buffer, branch, date));
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
@@ -60,7 +66,7 @@ export async function POST(request: Request) {
   // had since 2026-09-19 — see upload-date-sanity.ts). Skipped for TI01C/
   // IR01A, whose SaleDate encoding is non-standard (see part-sale/
   // upload-validation.ts).
-  const dateSanity = checkSaleDateSanity(admin.branch, rawRows, date);
+  const dateSanity = checkSaleDateSanity(branch, rawRows, date);
   if (!dateSanity.ok) {
     return NextResponse.json({ error: dateSanity.error }, { status: 422 });
   }
@@ -77,7 +83,7 @@ export async function POST(request: Request) {
   // against every prior upload this month, not just the most recent one (see
   // raw-upload-rows/store.ts for why).
   const newHash = hashRows(rawRows);
-  const duplicateDate = await findDuplicateBatch("part_sale", admin.branch, date, newHash);
+  const duplicateDate = await findDuplicateBatch("part_sale", branch, date, newHash);
   if (duplicateDate) {
     return NextResponse.json(
       { error: `This file looks identical to your upload from ${duplicateDate} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
@@ -85,7 +91,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const overlap = await checkBillOverlap(admin.branch, rawRows, date);
+  const overlap = await checkBillOverlap(branch, rawRows, date);
   if (overlap.duplicate) {
     return NextResponse.json({ error: `${overlap.message} If this really is new data, contact HQ (Upload Sheet).` }, { status: 422 });
   }
@@ -94,9 +100,9 @@ export async function POST(request: Request) {
   const dbClient = await pool.connect();
   try {
     await dbClient.query("begin");
-    await savePartSaleSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username }, dbClient);
+    await savePartSaleSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username }, dbClient);
     await saveRawUploadRows(
-      { reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })), uploadedBy: admin.username, contentHash: newHash },
+      { reportType: "part_sale", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username, contentHash: newHash },
       dbClient
     );
     await dbClient.query("commit");
@@ -107,10 +113,13 @@ export async function POST(request: Request) {
     dbClient.release();
   }
 
-  // Outside the save above — a recompute failure shouldn't block an
-  // otherwise-successful upload (see close-sa-analytics/recompute.ts, which
-  // already swallows its own errors).
-  await recomputeCloseSaAnalytics(admin.branch, date);
+  // Outside the save above — marks this (branch, date) pending rather than
+  // recomputing inline (2026-11-21, at the user's request, superseding the
+  // after()-deferred recompute from 2026-11-18): an HQ admin action runs
+  // the actual recompute later, in one controlled batch, instead of it
+  // competing for DB connections during the automation's own upload burst
+  // — see pending-recomputes/process.ts.
+  after(() => markPendingRecompute(branch, date));
 
-  return NextResponse.json({ success: true, date, branch: admin.branch, counts });
+  return NextResponse.json({ success: true, date, branch, counts });
 }

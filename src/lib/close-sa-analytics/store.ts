@@ -3,9 +3,17 @@ import { pool } from "../db";
 import type { CloseSaDailyMetrics } from "./compute";
 
 /** Replaces one branch/date's whole set of Close SA rows — compute.ts always
- * produces a full recompute for that day, never a partial update, so the
- * simplest correct write is delete-then-insert (same approach
- * raw-upload-rows/store.ts uses for a re-upload). */
+ * produces a full recompute for that day, never a partial update. Upserts
+ * each close_sa_name row (on conflict (date, branch, close_sa_name) do
+ * update) rather than delete-then-insert: this is called from `after()` in
+ * six upload routes, so two uploads touching the same branch/date can now
+ * recompute concurrently (confirmed 2026-11-19 — a plain delete-then-insert
+ * let two concurrent recomputes race to insert the same primary key, one
+ * failing with a duplicate-key error and silently losing that recompute).
+ * An upsert just serializes on Postgres's own row lock instead. Still
+ * deletes first, but only the close_sa_names that no longer appear in this
+ * recompute (an SA who had rows yesterday but none today) — those have no
+ * row to upsert over. */
 export async function saveCloseSaAnalyticsForDate(
   branch: string,
   date: string,
@@ -13,7 +21,11 @@ export async function saveCloseSaAnalyticsForDate(
   client?: PoolClient
 ): Promise<void> {
   const run = async (qc: Pick<PoolClient, "query">) => {
-    await qc.query(`delete from close_sa_analytics_daily where branch = $1 and date = $2`, [branch, date]);
+    const closeSaNames = [...byCloseSa.keys()].filter(Boolean);
+    await qc.query(
+      `delete from close_sa_analytics_daily where branch = $1 and date = $2 and not (close_sa_name = any($3::text[]))`,
+      [branch, date, closeSaNames]
+    );
     for (const [closeSaName, m] of byCloseSa) {
       if (!closeSaName) continue;
       await qc.query(
@@ -30,7 +42,8 @@ export async function saveCloseSaAnalyticsForDate(
            em60_count, em60_on_time_count,
            mech_care_count, brake_cleaning_labour_count, tgloss_pitched_ro_count, pm_ro_count,
            same_day_delivery_count, bp_labour_revenue, bp_parts_revenue, bp_tgloss_revenue,
-           bp_repair_type_counts, bp_work_order_count, bp_otd_eligible_count, bp_otd_on_time_count
+           bp_repair_type_counts, bp_work_order_count, bp_otd_eligible_count, bp_otd_on_time_count,
+           gs_otd_eligible_count, gs_otd_on_time_count
          ) values (
            $1, $2, $3, $4, $5::jsonb, $6::jsonb,
            $7, $8, $9, $10,
@@ -44,8 +57,61 @@ export async function saveCloseSaAnalyticsForDate(
            $38, $39,
            $40, $41, $42, $43,
            $44, $45, $46, $47,
-           $48::jsonb, $49, $50, $51
-         )`,
+           $48::jsonb, $49, $50, $51,
+           $52, $53
+         )
+         on conflict (date, branch, close_sa_name) do update set
+           ro_count = excluded.ro_count,
+           vehicle_vins = excluded.vehicle_vins,
+           job_desc_counts = excluded.job_desc_counts,
+           wheel_balancing_count = excluded.wheel_balancing_count,
+           wheel_alignment_count = excluded.wheel_alignment_count,
+           brake_skimming_count = excluded.brake_skimming_count,
+           evaporator_cleaning_count = excluded.evaporator_cleaning_count,
+           vas_bill_revenue = excluded.vas_bill_revenue,
+           job_type_counts = excluded.job_type_counts,
+           pay_type_counts = excluded.pay_type_counts,
+           amc_count = excluded.amc_count,
+           fmsc_count = excluded.fmsc_count,
+           em_count = excluded.em_count,
+           appointment_count = excluded.appointment_count,
+           walkin_count = excluded.walkin_count,
+           bp_potential_count = excluded.bp_potential_count,
+           labour_revenue_before = excluded.labour_revenue_before,
+           labour_revenue_after = excluded.labour_revenue_after,
+           sold_hours = excluded.sold_hours,
+           over_target_total = excluded.over_target_total,
+           parts_revenue = excluded.parts_revenue,
+           parts_matched_ro_count = excluded.parts_matched_ro_count,
+           engine_flush_count = excluded.engine_flush_count,
+           injector_cleaner_count = excluded.injector_cleaner_count,
+           synthetic_oil_ltrs = excluded.synthetic_oil_ltrs,
+           brake_cleaning_count = excluded.brake_cleaning_count,
+           diy_count = excluded.diy_count,
+           diy_revenue = excluded.diy_revenue,
+           external_sales = excluded.external_sales,
+           tyre_count = excluded.tyre_count,
+           battery_count = excluded.battery_count,
+           bp_final_invoice_amount = excluded.bp_final_invoice_amount,
+           bp_estimate_amount = excluded.bp_estimate_amount,
+           bp_ro_count = excluded.bp_ro_count,
+           em60_count = excluded.em60_count,
+           em60_on_time_count = excluded.em60_on_time_count,
+           mech_care_count = excluded.mech_care_count,
+           brake_cleaning_labour_count = excluded.brake_cleaning_labour_count,
+           tgloss_pitched_ro_count = excluded.tgloss_pitched_ro_count,
+           pm_ro_count = excluded.pm_ro_count,
+           same_day_delivery_count = excluded.same_day_delivery_count,
+           bp_labour_revenue = excluded.bp_labour_revenue,
+           bp_parts_revenue = excluded.bp_parts_revenue,
+           bp_tgloss_revenue = excluded.bp_tgloss_revenue,
+           bp_repair_type_counts = excluded.bp_repair_type_counts,
+           bp_work_order_count = excluded.bp_work_order_count,
+           bp_otd_eligible_count = excluded.bp_otd_eligible_count,
+           bp_otd_on_time_count = excluded.bp_otd_on_time_count,
+           gs_otd_eligible_count = excluded.gs_otd_eligible_count,
+           gs_otd_on_time_count = excluded.gs_otd_on_time_count,
+           computed_at = now()`,
         [
           date,
           branch,
@@ -98,6 +164,8 @@ export async function saveCloseSaAnalyticsForDate(
           m.bpWorkOrderCount,
           m.bpOtdEligibleCount,
           m.bpOtdOnTimeCount,
+          m.otdEligibleCount,
+          m.otdOnTimeCount,
         ]
       );
     }
@@ -175,6 +243,8 @@ function rowFromDb(r: Record<string, unknown>): CloseSaAnalyticsRow {
     bpWorkOrderCount: Number(r.bp_work_order_count),
     bpOtdEligibleCount: Number(r.bp_otd_eligible_count),
     bpOtdOnTimeCount: Number(r.bp_otd_on_time_count),
+    otdEligibleCount: Number(r.gs_otd_eligible_count),
+    otdOnTimeCount: Number(r.gs_otd_on_time_count),
   };
 }
 

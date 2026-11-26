@@ -6,7 +6,7 @@ export default async function RootPage() {
   if (admin?.role === "vp_service") redirect("/vp");
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
-  if (admin?.role === "ce") redirect("/ce");
+  if (admin?.role === "ce_head" || admin?.role === "ce_agent") redirect("/ce");
   if (admin?.role === "kl_cluster") redirect("/kl-branches");
   redirect(admin?.canViewDashboard ? "/dashboard" : "/upload");
 }

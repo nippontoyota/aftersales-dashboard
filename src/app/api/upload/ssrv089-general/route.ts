@@ -1,24 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { listAccessoriesStaffNamesForBranch } from "@/lib/accessories-staff-store";
 import { getCurrentAdmin } from "@/lib/auth";
-import { recomputeAfterSsrv089Upload } from "@/lib/cancellation/adjustment-recompute";
 import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
+import { markPendingRecompute } from "@/lib/pending-recomputes/store";
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseSsrv089Workbook } from "@/lib/ssrv089/parse";
 import { loadSsrv089Snapshot, saveSsrv089Snapshot } from "@/lib/ssrv089/store";
 import { checkInvoiceDocDateSanity, checkInvoiceOverlap } from "@/lib/ssrv089/upload-validation";
+import { resolveUploadBranch } from "@/lib/upload-branch";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
-  if (admin.role !== "branch") {
-    return NextResponse.json({ error: "Only a branch account can upload a Cost & Sales (GS) report." }, { status: 403 });
+  if (admin.role !== "branch" && admin.role !== "automation") {
+    return NextResponse.json({ error: "Only a branch (or the automation) account can upload a Cost & Sales (GS) report." }, { status: 403 });
   }
 
   const formData = await request.formData();
+  const branchResult = await resolveUploadBranch(admin, formData);
+  if ("error" in branchResult) {
+    return NextResponse.json({ error: branchResult.error }, { status: 400 });
+  }
+  const branch = branchResult.branch;
   const file = formData.get("file");
   const date = String(formData.get("date") ?? "").trim();
 
@@ -33,7 +39,7 @@ export async function POST(request: Request) {
   // the user's request — prevents accidental re-uploads and makes "has this
   // been done today" visible at a glance). HQ's own uploads (BA Tool, and
   // /upload-sheet on a branch's behalf) are never subject to this.
-  if (await loadSsrv089Snapshot(date, admin.branch, "general")) {
+  if (await loadSsrv089Snapshot(date, branch, "general")) {
     return NextResponse.json(
       { error: `Already uploaded for ${date} — contact HQ (Upload Sheet) if this needs correcting.` },
       { status: 409 }
@@ -49,7 +55,7 @@ export async function POST(request: Request) {
 
   let totals, rawRows;
   try {
-    const staffNames = await listAccessoriesStaffNamesForBranch(admin.branch);
+    const staffNames = await listAccessoriesStaffNamesForBranch(branch);
     ({ totals, rawRows } = parseSsrv089Workbook(buffer, staffNames));
   } catch (err) {
     return NextResponse.json(
@@ -75,7 +81,7 @@ export async function POST(request: Request) {
   // just the most recent one. A genuine false positive now needs HQ
   // (Upload Sheet).
   const newHash = hashRows(rawRows);
-  const duplicateDate = await findDuplicateBatch("ssrv089", admin.branch, date, newHash);
+  const duplicateDate = await findDuplicateBatch("ssrv089", branch, date, newHash);
   if (duplicateDate) {
     return NextResponse.json(
       { error: `This file looks identical to your upload from ${duplicateDate} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
@@ -86,7 +92,7 @@ export async function POST(request: Request) {
   // Partial-duplicate check (2026-10-05) — catches a resend that isn't
   // byte-identical to any single prior upload (extra/missing rows), which
   // the exact-hash check above can't see. See ssrv089/upload-validation.ts.
-  const overlap = await checkInvoiceOverlap(admin.branch, rawRows, date);
+  const overlap = await checkInvoiceOverlap(branch, rawRows, date);
   if (overlap.duplicate) {
     return NextResponse.json({ error: `${overlap.message} If this really is new data, contact HQ (Upload Sheet).` }, { status: 422 });
   }
@@ -96,11 +102,11 @@ export async function POST(request: Request) {
   try {
     await dbClient.query("begin");
     await saveSsrv089Snapshot(
-      { date, branch: admin.branch, variant: "general", uploadedAt, sourceFileName: file.name, totals, uploadedBy: admin.username },
+      { date, branch, variant: "general", uploadedAt, sourceFileName: file.name, totals, uploadedBy: admin.username },
       dbClient
     );
     await saveRawUploadRows(
-      { reportType: "ssrv089", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })), uploadedBy: admin.username, contentHash: newHash },
+      { reportType: "ssrv089", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username, contentHash: newHash },
       dbClient
     );
     await dbClient.query("commit");
@@ -111,9 +117,15 @@ export async function POST(request: Request) {
     dbClient.release();
   }
 
-  // Outside the upload transaction — a recompute failure shouldn't roll back
-  // an otherwise-successful upload (see adjustment-recompute.ts).
-  await recomputeAfterSsrv089Upload(admin.branch, date);
+  // Outside the upload transaction — marks this (branch, date) pending
+  // rather than recomputing inline (2026-11-21, at the user's request,
+  // superseding the after()-deferred recompute from 2026-11-18) — see
+  // part-sale's route for the full reasoning, and pending-recomputes/
+  // process.ts for the HQ admin action that does the actual recompute
+  // (covers both the cancelled-accessories adjustment and
+  // cross_month_replacements this upload used to trigger directly via
+  // recomputeAfterSsrv089Upload).
+  after(() => markPendingRecompute(branch, date));
 
-  return NextResponse.json({ success: true, date, branch: admin.branch, totals });
+  return NextResponse.json({ success: true, date, branch, totals });
 }

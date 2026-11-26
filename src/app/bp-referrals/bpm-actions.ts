@@ -4,13 +4,18 @@ import { revalidatePath } from "next/cache";
 import { getCurrentAdmin } from "@/lib/auth";
 import { listBranchCodes } from "@/lib/admin-store";
 import {
+  changePaymentType,
   closeFollowUpAsLost,
+  correctVehicleRegNo,
   enterRoNumber,
+  fillMissingReferralDetails,
   loadActivityForReferral,
   loadOverdueFollowUps,
+  loadReferralPaymentType,
   loadUrgentUnconnected,
   logFollowUpContact,
   markNotConnected,
+  markSelfArrived,
   submitCallOutcome,
   transferReferral,
   type ActivityRow,
@@ -18,6 +23,7 @@ import {
   type CallOutcome,
 } from "@/lib/bp-referrals/store";
 import { NOT_CONNECTED_REASONS, notConnectedReasonLabel } from "@/lib/bp-referrals/not-connected-reasons";
+import { FOLLOW_UP_STAGES } from "@/lib/bp-referrals/followup-stages";
 
 export type BpmActionState = { error: string | null; ok: boolean };
 
@@ -146,9 +152,17 @@ export async function getMyUrgentUnconnectedAction(): Promise<BpReferralRow[]> {
   return loadUrgentUnconnected(admin.branch);
 }
 
-/** Inline "I just spoke to them again" action from the popup or the queue
- * page — resets the follow-up clock, remark required same as every other
- * action. */
+/** Inline "I just spoke to them again" / progress-note action from the
+ * popup or the queue page — resets the follow-up clock, remark required
+ * same as every other action. `stage` is optional (the login popup's quick
+ * form omits it, see bp-followup-popup-gate.tsx); when the full follow-up
+ * form sends "vehicle_received" for an insurance-paid (IP) referral, the
+ * BPE estimate invoice number is additionally required — re-checked here
+ * against the referral's own payment_type, never trusting what the client
+ * claims it is (2026-11-06, the user's pipeline: this is what moves a
+ * referral into "Vehicle received"). A customer-paid (CP) referral can
+ * still log "vehicle_received" as a plain note; it just doesn't ask for or
+ * accept a BPE number, since CP has no estimate-invoice paperwork step. */
 export async function logFollowUpContactAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
   const admin = requireBpManager(await getCurrentAdmin());
   if (!admin) return { error: "Not allowed.", ok: false };
@@ -158,10 +172,106 @@ export async function logFollowUpContactAction(_prev: BpmActionState, formData: 
   const remark = requiredRemark(formData);
   if (!remark) return { error: "A remark is required.", ok: false };
 
+  const stageRaw = String(formData.get("followUpStage") ?? "").trim();
+  const stage = stageRaw || undefined;
+  if (stage && !FOLLOW_UP_STAGES.some((s) => s.value === stage)) return { error: "Choose a valid stage.", ok: false };
+
+  let estimateInvoiceNo: string | undefined;
+  if (stage === "vehicle_received") {
+    const paymentType = await loadReferralPaymentType(id);
+    if (paymentType === "IP") {
+      const digits = String(formData.get("estimateInvoiceDigits") ?? "").trim();
+      if (!digits) return { error: "Enter the BP Estimate Invoice number.", ok: false };
+      estimateInvoiceNo = `BPE${digits}`;
+    }
+  }
+
   try {
-    await logFollowUpContact(id, admin.branch, admin.username, remark);
+    await logFollowUpContact(id, admin.branch, admin.username, remark, stage, estimateInvoiceNo);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't update that referral.", ok: false };
+  }
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
+}
+
+/** BPM fills in a vehicle reg no / customer phone / vehicle model the
+ * referring employee left blank (2026-11-12, at the user's request) — see
+ * fillMissingReferralDetails in store.ts for the fill-only rules. Every
+ * field here is optional on the wire; the UI only ever sends the ones it
+ * showed an input for (i.e. the ones that were actually blank), and
+ * store.ts re-enforces fill-only regardless of what's sent. */
+export async function fillReferralDetailsAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+
+  const vehicleRegNo = String(formData.get("vehicleRegNo") ?? "").trim();
+  const customerPhone = String(formData.get("customerPhone") ?? "").trim();
+  const vehicleModel = String(formData.get("vehicleModel") ?? "").trim();
+  if (!vehicleRegNo && !customerPhone && !vehicleModel) return { error: "Enter at least one detail.", ok: false };
+
+  try {
+    await fillMissingReferralDetails(id, admin.branch, admin.username, {
+      vehicleRegNo: vehicleRegNo || undefined,
+      customerPhone: customerPhone || undefined,
+      vehicleModel: vehicleModel || undefined,
+    });
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't save those details.", ok: false };
+  }
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
+}
+
+/** BPM corrects a mistyped vehicle reg no (2026-11-18, at the user's
+ * request) — see correctVehicleRegNo in store.ts for the overwrite-allowed
+ * rules; this is just the form-data plumbing, same shape as every other
+ * action here. */
+export async function correctVehicleRegNoAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const vehicleRegNo = String(formData.get("vehicleRegNo") ?? "").trim();
+  if (!vehicleRegNo) return { error: "Enter a vehicle registration number.", ok: false };
+
+  try {
+    await correctVehicleRegNo(id, admin.branch, admin.username, vehicleRegNo);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't save that correction.", ok: false };
+  }
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
+}
+
+/** BPM corrects an already-chosen payment type (2026-11-11, at the user's
+ * request) — see changePaymentType in store.ts for the full rules; this is
+ * just the form-data plumbing, same shape as every other action here. The
+ * BPE digits are optional on the wire (the UI only shows that field when it
+ * thinks it's needed) — store.ts re-derives whether it's actually required
+ * and throws if it's missing. */
+export async function changePaymentTypeAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const newPaymentType = String(formData.get("paymentType") ?? "").trim();
+  if (newPaymentType !== "CP" && newPaymentType !== "IP") return { error: "Choose a payment type.", ok: false };
+  const remark = requiredRemark(formData);
+  if (!remark) return { error: "A remark is required.", ok: false };
+
+  const digits = String(formData.get("estimateInvoiceDigits") ?? "").trim();
+  const estimateInvoiceNo = digits ? `BPE${digits}` : undefined;
+
+  try {
+    await changePaymentType(id, admin.branch, admin.username, newPaymentType, remark, estimateInvoiceNo);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't change the payment type.", ok: false };
   }
   revalidatePath("/bp-referrals");
   return { error: null, ok: true };
@@ -182,6 +292,27 @@ export async function closeFollowUpAsLostAction(_prev: BpmActionState, formData:
 
   try {
     await closeFollowUpAsLost(id, admin.branch, admin.username, lostReason);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't close that referral.", ok: false };
+  }
+  revalidatePath("/bp-referrals");
+  return { error: null, ok: true };
+}
+
+/** The customer brought the car in on their own before the BPM ever got to
+ * call (2026-11-23, at the user's request) — see markSelfArrived in
+ * store.ts for the no-payout, no-further-steps rules. */
+export async function markSelfArrivedAction(_prev: BpmActionState, formData: FormData): Promise<BpmActionState> {
+  const admin = requireBpManager(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+  const reason = requiredRemark(formData);
+  if (!reason) return { error: "Enter how you found out.", ok: false };
+
+  try {
+    await markSelfArrived(id, admin.branch, admin.username, reason);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't close that referral.", ok: false };
   }

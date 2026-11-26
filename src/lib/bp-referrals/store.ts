@@ -2,12 +2,37 @@ import { pool } from "@/lib/db";
 import { listBranchCodes } from "@/lib/admin-store";
 import { REGIONS, regionForBranch, type RegionName } from "@/lib/regions";
 import { resolveBranchCode } from "./branch-match";
+import { normalizeRoNo, normalizeRegNo, NORMALIZE_RO_SQL } from "./ro-normalize";
+
+export type MonthRange = { start: string; end: string };
+
+/** "YYYY-MM" -> the submitted_at window it covers (end exclusive) — scopes
+ * the BP HO analytics view to one month instead of all time (2026-11-09,
+ * the user's request). The Payout ledger/history stay all-time on purpose
+ * (see loadPayoutLedger's doc comment): only referral-reporting queries
+ * take a range. */
+export function monthToRange(month: string): MonthRange {
+  const [year, mon] = month.split("-").map(Number);
+  const start = `${year}-${String(mon).padStart(2, "0")}-01`;
+  const end = mon === 12 ? `${year + 1}-01-01` : `${year}-${String(mon + 1).padStart(2, "0")}-01`;
+  return { start, end };
+}
+
+/** This month, in IST — the analytics view's default when no ?month= is
+ * given. */
+export function currentMonthKey(): string {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit" }).formatToParts(new Date());
+  const year = parts.find((p) => p.type === "year")!.value;
+  const month = parts.find((p) => p.type === "month")!.value;
+  return `${year}-${month}`;
+}
 
 export type BpReferralRow = {
   id: number;
   referring_employee_id: string | null;
   referring_employee_name: string | null;
   referring_employee_branch: string | null;
+  referring_employee_dept: string | null;
   vehicle_image_url: string | null;
   customer_phone: string | null;
   submitted_at: Date | string | null;
@@ -32,7 +57,7 @@ export type BpReferralRow = {
   pending_ro_no: string | null;
   pending_ro_entered_at: Date | string | null;
   closed_at: Date | string | null;
-  closed_reason: "not_genuine" | "not_interested" | "lost" | null;
+  closed_reason: "not_genuine" | "not_interested" | "lost" | "self_arrived" | null;
   /** Why the customer declined, once genuine + not interested — a distinct
    * structured field from the call-outcome remark/damage description,
    * which stays in bp_referral_activity (2026-10-17, the user's call). */
@@ -42,19 +67,43 @@ export type BpReferralRow = {
    * another workshop. Mandatory on that path, same shape as
    * not_interested_reason (2026-10-27, the user's request). */
   lost_reason: string | null;
+  /** How the BPM found out the customer brought the car in on their own
+   * before any call — mandatory on that path, same shape as lost_reason
+   * (2026-11-23, the user's request). */
+  self_arrived_reason: string | null;
   last_contacted_at: Date | string | null;
+  /** BPE-prefixed proof that the vehicle has physically arrived — insurance-
+   * paid (IP) referrals only, see logFollowUpContact below. Its presence is
+   * what moves a referral from Follow-up into the "Vehicle received"
+   * section (see classify() in bpm-queue-client.tsx /
+   * bp-ho-analytics-client.tsx). */
+  bp_estimate_invoice_no: string | null;
+  bp_estimate_invoice_entered_at: Date | string | null;
   /** Most recent transfer's origin branch, if this referral has ever been
    * transferred — null otherwise. Joined in, not a real column. */
   transferred_from: string | null;
+  /** The earlier referral this one is a possible duplicate of, if any —
+   * same vehicle, submitted first — null when there isn't one. See
+   * DUPLICATE_CHECK_JOIN's doc comment for the exact rules. Joined in, not
+   * a real column. */
+  duplicate_of_id: number | null;
+  duplicate_of_employee_name: string | null;
+  duplicate_of_branch: string | null;
+  duplicate_of_description: string | null;
+  duplicate_of_submitted_at: Date | string | null;
 };
 
 const SELECT_COLUMNS = `
-  r.id, r.referring_employee_id, r.referring_employee_name, r.referring_employee_branch,
+  r.id, r.referring_employee_id, r.referring_employee_name, r.referring_employee_branch, r.referring_employee_dept,
   r.vehicle_image_url, r.customer_phone, r.submitted_at, r.vehicle_reg_no, r.vehicle_model, r.location, r.description,
   r.assigned_branch, r.call_status, r.genuine, r.estimate_amount, r.customer_interested, r.payment_type,
   r.validated_at, r.handled_by, r.matched_ro_no, r.ro_matched_at, r.pending_ro_no, r.pending_ro_entered_at,
-  r.closed_at, r.closed_reason, r.not_interested_reason, r.lost_reason,
-  r.last_contacted_at, lt.from_branch as transferred_from
+  r.closed_at, r.closed_reason, r.not_interested_reason, r.lost_reason, r.self_arrived_reason,
+  r.last_contacted_at, r.bp_estimate_invoice_no, r.bp_estimate_invoice_entered_at,
+  lt.from_branch as transferred_from,
+  dup.id as duplicate_of_id, dup.referring_employee_name as duplicate_of_employee_name,
+  dup.assigned_branch as duplicate_of_branch, dup.description as duplicate_of_description,
+  dup.submitted_at as duplicate_of_submitted_at
 `;
 
 const LATEST_TRANSFER_JOIN = `
@@ -62,6 +111,35 @@ const LATEST_TRANSFER_JOIN = `
     select from_branch from bp_referral_transfers t
     where t.referral_id = r.id order by t.transferred_at desc limit 1
   ) lt on true
+`;
+
+/** The earlier referral (if any) this one is a possible duplicate of — same
+ * vehicle, submitted first (2026-11-18, at the user's request: one branch's
+ * employee refers a car, then someone else later refers the same car).
+ * "Not genuine" priors don't count as a real first claim; otherwise an
+ * earlier referral keeps blocking forever once it actually completed (car
+ * came in and got repaired), or for 60 days from its own submission while
+ * it's still open/dropped/not-interested/lost — past that it's considered
+ * stale and a new referral for the same car is a fresh case. Deliberately
+ * doesn't try to compare the free-text damage description itself (two
+ * different-wording descriptions of the same damage, or two genuinely
+ * different incidents on the same car, are impossible to tell apart
+ * reliably from text alone) — both descriptions are surfaced to the BPM
+ * instead, who makes that call themselves, same as the Genuine decision
+ * already works. */
+const DUPLICATE_CHECK_JOIN = `
+  left join lateral (
+    select d.id, d.referring_employee_name, d.assigned_branch, d.description, d.submitted_at
+    from bp_referrals d
+    where d.id <> r.id
+      and d.vehicle_reg_no is not null and d.vehicle_reg_no <> ''
+      and upper(regexp_replace(d.vehicle_reg_no, '[\\s-]', '', 'g')) = upper(regexp_replace(r.vehicle_reg_no, '[\\s-]', '', 'g'))
+      and d.submitted_at < r.submitted_at
+      and coalesce(d.closed_reason, '') <> 'not_genuine'
+      and (d.ro_matched_at is not null or d.submitted_at >= now() - interval '60 days')
+    order by d.submitted_at asc
+    limit 1
+  ) dup on r.vehicle_reg_no is not null and r.vehicle_reg_no <> ''
 `;
 
 /** Resolves and persists assigned_branch for any referral the external
@@ -89,7 +167,7 @@ export async function ensureAssignedBranches(): Promise<void> {
 
 export async function loadQueueForBranch(branch: string): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
      where r.assigned_branch = $1 order by r.submitted_at desc`,
     [branch],
   );
@@ -98,12 +176,15 @@ export async function loadQueueForBranch(branch: string): Promise<BpReferralRow[
 
 /** Read-only, for the three regional-lead BPMs (CO01A/KL01B/TI01A) — every
  * referral across their whole region, own branch included. */
-export async function loadRegionRollup(region: RegionName): Promise<BpReferralRow[]> {
+export async function loadRegionRollup(region: RegionName, range?: MonthRange): Promise<BpReferralRow[]> {
   const branches = REGIONS[region].filter((b) => b !== "CO01C");
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
-     where r.assigned_branch = any($1::text[]) order by r.submitted_at desc`,
-    [branches],
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
+     where r.assigned_branch = any($1::text[])
+       and ($2::date is null or r.submitted_at >= $2::date)
+       and ($3::date is null or r.submitted_at < $3::date)
+     order by r.submitted_at desc`,
+    [branches, range?.start ?? null, range?.end ?? null],
   );
   return rows;
 }
@@ -115,6 +196,14 @@ export function regionalLeadFor(branch: string): RegionName | null {
   if (branch === "KL01B") return "South";
   if (branch === "TI01A") return "North";
   return null;
+}
+
+/** Server-side check for whether the BPE estimate-invoice field is actually
+ * required on a "vehicle_received" follow-up submission — never trust the
+ * client's own payment_type, see logFollowUpContactAction. */
+export async function loadReferralPaymentType(id: number): Promise<"CP" | "IP" | null> {
+  const { rows } = await pool.query<{ payment_type: "CP" | "IP" | null }>(`select payment_type from bp_referrals where id = $1`, [id]);
+  return rows[0]?.payment_type ?? null;
 }
 
 async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
@@ -129,14 +218,16 @@ async function assertOwnedByBranch(id: number, branch: string): Promise<void> {
 
 async function logActivity(
   referralId: number,
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost",
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected" | "self_arrived",
   remark: string,
   performedBy: string,
   notConnectedReason?: string,
+  followUpStage?: string,
 ): Promise<void> {
   await pool.query(
-    `insert into bp_referral_activity (referral_id, activity_type, remark, performed_by, not_connected_reason) values ($1, $2, $3, $4, $5)`,
-    [referralId, activityType, remark, performedBy, notConnectedReason ?? null],
+    `insert into bp_referral_activity (referral_id, activity_type, remark, performed_by, not_connected_reason, follow_up_stage)
+     values ($1, $2, $3, $4, $5, $6)`,
+    [referralId, activityType, remark, performedBy, notConnectedReason ?? null, followUpStage ?? null],
   );
 }
 
@@ -181,9 +272,10 @@ export const UNCONNECTED_DROP_DAYS = 3;
  * BPM re-contacts the customer. */
 export async function loadOverdueFollowUps(branch: string): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
      where r.assigned_branch = $1 and r.genuine = true and r.customer_interested = true
        and r.closed_at is null and r.ro_matched_at is null and r.pending_ro_no is null
+       and r.bp_estimate_invoice_no is null
        and r.last_contacted_at <= now() - interval '${FOLLOW_UP_OVERDUE_HOURS} hours'
      order by r.last_contacted_at asc`,
     [branch],
@@ -199,7 +291,7 @@ export async function loadOverdueFollowUps(branch: string): Promise<BpReferralRo
  * UI treats that as its own bucket, no longer "needs a reminder"). */
 export async function loadUrgentUnconnected(branch: string): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
      where r.assigned_branch = $1 and r.call_status in ('pending', 'not_connected')
        and r.closed_at is null and r.validated_at is null
        and coalesce(r.last_contacted_at, r.submitted_at) <= now() - interval '${UNCONNECTED_REMINDER_HOURS} hours'
@@ -210,13 +302,47 @@ export async function loadUrgentUnconnected(branch: string): Promise<BpReferralR
   return rows;
 }
 
-/** BPM re-contacted the customer on an already-validated referral — resets
- * the follow-up clock without touching anything else recorded about the
- * call. */
-export async function logFollowUpContact(id: number, branch: string, performedBy: string, remark: string): Promise<void> {
+/** BPM re-contacted the customer, or logged a progress note, on an already-
+ * validated referral — resets the follow-up clock and, when followUpStage
+ * is given, records which stage this note is about (see
+ * followup-stages.ts). `estimateInvoiceNo`, when given, is the BPE-prefixed
+ * proof the vehicle's arrived — only ever sent by the UI for an insurance-
+ * paid (IP) referral logging the "vehicle_received" stage for the first
+ * time (2026-11-06, the user's pipeline) — and is what actually moves this
+ * referral into the "Vehicle received" section; once set it's never
+ * overwritten (the UI won't ask again once bp_estimate_invoice_no is on
+ * file). followUpStage itself is optional — the login popup's quick "spoke
+ * to them" form intentionally skips it, see bp-followup-popup-gate.tsx. */
+export async function logFollowUpContact(
+  id: number,
+  branch: string,
+  performedBy: string,
+  remark: string,
+  followUpStage?: string,
+  estimateInvoiceNo?: string,
+): Promise<void> {
   await assertOwnedByBranch(id, branch);
-  await pool.query(`update bp_referrals set last_contacted_at = now() where id = $1`, [id]);
-  await logActivity(id, "follow_up", remark, performedBy);
+  const { rows } = await pool.query<{
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+    validated_at: Date | string | null;
+  }>(`select closed_at, ro_matched_at, validated_at from bp_referrals where id = $1`, [id]);
+  const referral = rows[0];
+  if (!referral || !referral.validated_at || referral.closed_at || referral.ro_matched_at) {
+    throw new Error("This referral isn't open for a follow-up.");
+  }
+  if (estimateInvoiceNo) {
+    await pool.query(
+      `update bp_referrals set last_contacted_at = now(),
+         bp_estimate_invoice_no = coalesce(bp_estimate_invoice_no, $2),
+         bp_estimate_invoice_entered_at = coalesce(bp_estimate_invoice_entered_at, now())
+       where id = $1`,
+      [id, estimateInvoiceNo],
+    );
+  } else {
+    await pool.query(`update bp_referrals set last_contacted_at = now() where id = $1`, [id]);
+  }
+  await logActivity(id, "follow_up", remark, performedBy, undefined, followUpStage);
 }
 
 /** BPM closes out a validated (genuine + interested) referral as "Lost" —
@@ -245,11 +371,185 @@ export async function closeFollowUpAsLost(id: number, branch: string, performedB
   await logActivity(id, "lost", lostReason, performedBy);
 }
 
+/** The customer brought the car in on their own before the BPM ever got to
+ * call (2026-11-23, at the user's request) — reached straight from "To
+ * call"/"Not connected", unlike closeFollowUpAsLost above which requires a
+ * referral to already be validated. One click, one mandatory remark,
+ * nothing else: never sets genuine/customer_interested/validated_at, so
+ * neither the ₹50 nor the ₹200 payout can ever fire for it — the user's
+ * explicit call that this one earns the referring employee nothing at all.
+ * Its own closed_reason, kept apart from not_genuine/not_interested/lost in
+ * every view that shows those (classify() in bpm-queue-client.tsx /
+ * bp-ho-analytics-client.tsx, remarksFor in group-report.ts). */
+export async function markSelfArrived(id: number, branch: string, performedBy: string, reason: string): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  const { rows } = await pool.query<{
+    validated_at: Date | string | null;
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+  }>(`select validated_at, closed_at, ro_matched_at from bp_referrals where id = $1`, [id]);
+  const referral = rows[0];
+  if (!referral || referral.validated_at || referral.closed_at || referral.ro_matched_at) {
+    throw new Error("This referral isn't open for a self-arrived close-out.");
+  }
+  await pool.query(
+    `update bp_referrals set call_status = 'connected', closed_at = now(), closed_reason = 'self_arrived',
+       self_arrived_reason = $2, handled_by = $3
+     where id = $1`,
+    [id, reason, performedBy],
+  );
+  await logActivity(id, "self_arrived", reason, performedBy);
+}
+
+/** BPM corrects an already-chosen payment type (2026-11-11, at the user's
+ * request) — this used to be a one-time pick made at call-outcome time
+ * (submitCallOutcome above) with no way back if it turned out wrong.
+ * Allowed any time the referral is still open for a follow-up at all (same
+ * window as logFollowUpContact — validated, not closed, not yet RO-
+ * matched); payment type no longer matters once the RO's confirmed.
+ *
+ * Switching to IP when the vehicle's already been received under CP (so no
+ * BPE was ever asked for — CP skips that step, see logFollowUpContact's doc
+ * comment) needs its BPE number backfilled right here, since no future
+ * "vehicle_received" log is coming to ask for it. Re-derives whether that
+ * applies itself from pending_ro_no/bp_estimate_invoice_no — never trusts
+ * what the client claims — and throws if estimateInvoiceNo is missing when
+ * it does. */
+export async function changePaymentType(
+  id: number,
+  branch: string,
+  performedBy: string,
+  newPaymentType: "CP" | "IP",
+  remark: string,
+  estimateInvoiceNo?: string,
+): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  const { rows } = await pool.query<{
+    payment_type: "CP" | "IP" | null;
+    validated_at: Date | string | null;
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+    pending_ro_no: string | null;
+    bp_estimate_invoice_no: string | null;
+  }>(
+    `select payment_type, validated_at, closed_at, ro_matched_at, pending_ro_no, bp_estimate_invoice_no
+     from bp_referrals where id = $1`,
+    [id],
+  );
+  const referral = rows[0];
+  if (!referral || !referral.validated_at || referral.closed_at || referral.ro_matched_at) {
+    throw new Error("This referral isn't open for a payment-type change.");
+  }
+  if (referral.payment_type === newPaymentType) {
+    throw new Error("That's already the current payment type.");
+  }
+
+  const alreadyReceived = !!referral.pending_ro_no || !!referral.bp_estimate_invoice_no;
+  const needsEstimateInvoice = newPaymentType === "IP" && alreadyReceived && !referral.bp_estimate_invoice_no;
+  if (needsEstimateInvoice && !estimateInvoiceNo) {
+    throw new Error("Enter the BP Estimate Invoice number.");
+  }
+
+  if (estimateInvoiceNo) {
+    await pool.query(
+      `update bp_referrals set payment_type = $2,
+         bp_estimate_invoice_no = coalesce(bp_estimate_invoice_no, $3),
+         bp_estimate_invoice_entered_at = coalesce(bp_estimate_invoice_entered_at, now())
+       where id = $1`,
+      [id, newPaymentType, estimateInvoiceNo],
+    );
+  } else {
+    await pool.query(`update bp_referrals set payment_type = $2 where id = $1`, [id, newPaymentType]);
+  }
+  await logActivity(
+    id,
+    "payment_type_change",
+    `Payment type changed to ${newPaymentType === "CP" ? "Customer paid" : "Insurance paid"} — ${remark}`,
+    performedBy,
+  );
+}
+
+/** BPM fills in a vehicle reg no / customer phone / vehicle model the
+ * referring employee left blank in the WhatsApp submission, once they've
+ * actually gotten it from the customer themselves (2026-11-12, at the
+ * user's request). Fill-only by design — never overwrites a value that's
+ * already on file, no matter what the caller passes, so the employee's own
+ * submission is never silently altered. Allowed through To call /
+ * Follow-up / Vehicle received; locks once an RO is entered (pending_ro_no
+ * set), since vehicle_reg_no is already load-bearing for RO-matching by
+ * then and shouldn't move under it. No remark — this is plain data
+ * completion, not a judgment call like the other actions here. */
+export async function fillMissingReferralDetails(
+  id: number,
+  branch: string,
+  performedBy: string,
+  updates: { vehicleRegNo?: string; customerPhone?: string; vehicleModel?: string },
+): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  const { rows } = await pool.query<{
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+    pending_ro_no: string | null;
+  }>(`select closed_at, ro_matched_at, pending_ro_no from bp_referrals where id = $1`, [id]);
+  const referral = rows[0];
+  if (!referral || referral.closed_at || referral.ro_matched_at || referral.pending_ro_no) {
+    throw new Error("This referral isn't open for adding details.");
+  }
+
+  const filled: string[] = [];
+  if (updates.vehicleRegNo) filled.push("vehicle reg no");
+  if (updates.customerPhone) filled.push("phone");
+  if (updates.vehicleModel) filled.push("vehicle model");
+  if (filled.length === 0) return;
+
+  await pool.query(
+    `update bp_referrals set
+       vehicle_reg_no = coalesce(vehicle_reg_no, nullif($2, '')),
+       customer_phone = coalesce(customer_phone, nullif($3, '')),
+       vehicle_model = coalesce(vehicle_model, nullif($4, ''))
+     where id = $1`,
+    [id, updates.vehicleRegNo ?? "", updates.customerPhone ?? "", updates.vehicleModel ?? ""],
+  );
+  await logActivity(id, "details_filled", `Details added: ${filled.join(", ")}`, performedBy);
+}
+
+/** BPM corrects a mistyped vehicle reg no (2026-11-18, at the user's
+ * request) — unlike fillMissingReferralDetails above, this overwrites
+ * whatever's already on file; the whole point is fixing a typo, not
+ * preserving the employee's original submission. Allowed any time before
+ * the RO is actually matched — not just before one's entered, unlike the
+ * fill-only window above — because a wrong reg no is often exactly what
+ * causes enterRoNumber to reject an RO as "recorded against a different
+ * vehicle" in the first place, so the BPM needs to be able to fix it and
+ * retry even with a pending RO already on file. Logs the before/after to
+ * History; no reason required, same as fillMissingReferralDetails. */
+export async function correctVehicleRegNo(id: number, branch: string, performedBy: string, newRegNo: string): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  const trimmed = newRegNo.trim();
+  if (!trimmed) throw new Error("Enter a vehicle registration number.");
+
+  const { rows } = await pool.query<{
+    closed_at: Date | string | null;
+    ro_matched_at: Date | string | null;
+    vehicle_reg_no: string | null;
+  }>(`select closed_at, ro_matched_at, vehicle_reg_no from bp_referrals where id = $1`, [id]);
+  const referral = rows[0];
+  if (!referral || referral.closed_at || referral.ro_matched_at) {
+    throw new Error("This referral isn't open for a reg no correction.");
+  }
+
+  const oldRegNo = referral.vehicle_reg_no;
+  if (oldRegNo === trimmed) return;
+  await pool.query(`update bp_referrals set vehicle_reg_no = $2 where id = $1`, [id, trimmed]);
+  await logActivity(id, "reg_no_corrected", `Vehicle reg corrected: ${oldRegNo ?? "—"} → ${trimmed}`, performedBy);
+}
+
 export type ActivityRow = {
   id: number;
-  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost";
+  activityType: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected" | "self_arrived";
   remark: string;
   notConnectedReason: string | null;
+  followUpStage: string | null;
   performedBy: string;
   performedAt: Date | string;
 };
@@ -260,13 +560,14 @@ export type ActivityRow = {
 export async function loadActivityForReferral(referralId: number): Promise<ActivityRow[]> {
   const { rows } = await pool.query<{
     id: number;
-    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered";
+    activity_type: "not_connected" | "call_outcome" | "follow_up" | "ro_entered" | "lost" | "payment_type_change" | "details_filled" | "reg_no_corrected" | "self_arrived";
     remark: string;
     not_connected_reason: string | null;
+    follow_up_stage: string | null;
     performed_by: string;
     performed_at: Date | string;
   }>(
-    `select id, activity_type, remark, not_connected_reason, performed_by, performed_at from bp_referral_activity
+    `select id, activity_type, remark, not_connected_reason, follow_up_stage, performed_by, performed_at from bp_referral_activity
      where referral_id = $1 order by performed_at desc`,
     [referralId],
   );
@@ -275,6 +576,7 @@ export async function loadActivityForReferral(referralId: number): Promise<Activ
     activityType: r.activity_type,
     remark: r.remark,
     notConnectedReason: r.not_connected_reason,
+    followUpStage: r.follow_up_stage,
     performedBy: r.performed_by,
     performedAt: r.performed_at,
   }));
@@ -391,18 +693,24 @@ export async function enterRoNumber(id: number, branch: string, enteredBy: strin
     throw new Error("This referral has no vehicle registration number on record.");
   }
 
-  const normalizedRo = roNo.trim().toUpperCase();
-  const normalizedReg = referral.vehicle_reg_no.trim().toUpperCase().replace(/[\s-]/g, "");
+  const normalizedRo = normalizeRoNo(roNo);
+  const normalizedReg = normalizeRegNo(referral.vehicle_reg_no);
 
+  // Scoped to this referral's own branch (2026-11-11 — "BPJ" job order
+  // numbers turned out to be a per-branch counter, not company-wide-unique;
+  // see ro-matcher.ts's doc comment for the full story). `branch` here is
+  // already asserted (above) to equal this referral's assigned_branch.
   const { rows: uploaded } = await pool.query<{ veh_reg_no: string | null }>(
     `select row_data->>'VehRegNo' as veh_reg_no from raw_upload_rows
-     where report_type = 'ssrv089_bp' and upper(coalesce(row_data->>'JobOrder No', '')) = $1
+     where report_type = 'ssrv089_bp' and branch = $1
+       and ${NORMALIZE_RO_SQL(`upper(coalesce(row_data->>'JobOrder No', ''))`)} = $2
+     order by uploaded_at desc
      limit 1`,
-    [normalizedRo],
+    [branch, normalizedRo],
   );
 
   if (uploaded.length > 0) {
-    const uploadedReg = String(uploaded[0].veh_reg_no ?? "").toUpperCase().replace(/[\s-]/g, "");
+    const uploadedReg = normalizeRegNo(String(uploaded[0].veh_reg_no ?? ""));
     if (uploadedReg !== normalizedReg) {
       throw new Error("That RO is recorded against a different vehicle — check the number and try again.");
     }
@@ -433,7 +741,7 @@ export async function enterRoNumber(id: number, branch: string, enteredBy: strin
  * anything that's since made its way back to this same branch. */
 export async function loadTransferredOutFromBranch(branch: string): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN}
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
      join (
        select distinct on (referral_id) referral_id, from_branch
        from bp_referral_transfers
@@ -450,9 +758,13 @@ export async function loadTransferredOutFromBranch(branch: string): Promise<BpRe
  * BPM's own queue this isn't scoped to a branch; ensureAssignedBranches()
  * is still the caller's job to run first (see page.tsx) so assigned_branch
  * is resolved before this reads it. */
-export async function loadAllReferrals(): Promise<BpReferralRow[]> {
+export async function loadAllReferrals(range?: MonthRange): Promise<BpReferralRow[]> {
   const { rows } = await pool.query<BpReferralRow>(
-    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} order by r.submitted_at desc`,
+    `select ${SELECT_COLUMNS} from bp_referrals r ${LATEST_TRANSFER_JOIN} ${DUPLICATE_CHECK_JOIN}
+     where ($1::date is null or r.submitted_at >= $1::date)
+       and ($2::date is null or r.submitted_at < $2::date)
+     order by r.submitted_at desc`,
+    [range?.start ?? null, range?.end ?? null],
   );
   return rows;
 }
@@ -466,6 +778,12 @@ export type PayoutLedgerRow = {
   employeeBranch: string | null;
   validatedCount: number;
   completedCount: number;
+  /** Lifetime earned, before netting off bp_referral_payouts. */
+  amountEarned: number;
+  /** Already paid out (sum of bp_referral_payouts for this employee). */
+  amountPaid: number;
+  /** amountEarned - amountPaid. Only rows with amountOwed > 0 are returned —
+   * see loadPayoutLedger's doc comment. */
   amountOwed: number;
 };
 
@@ -474,16 +792,29 @@ const COMPLETED_PAYOUT = 200;
 
 /** ₹50 per validated (genuine + interested) referral, another ₹200 once
  * its RO is matched (see ro-matcher.ts) — grouped per referring employee,
- * for BP HO to action payment manually (see the CSV export route). Only
- * employees with at least one validated referral appear; nothing is owed
- * otherwise.
+ * for BP HO to action payment manually (see the CSV export route and
+ * markPayoutPaid below). Only employees with an outstanding balance appear
+ * — once a payout record covers what they earned, they drop off this list
+ * entirely (2026-11-06: this table used to list every employee who ever had
+ * a validated referral, forever, with no way to settle one — see
+ * bp_referral_payouts in schema.sql). Settled payouts are still visible via
+ * loadPayoutHistory.
  *
  * `branches`, when given, scopes this to a region (a regional manager's own
  * view, see bp-referrals/page.tsx) — filtered on assigned_branch (where the
  * work currently sits, same convention as loadBranchRollup below), NOT
  * referring_employee_branch, since the latter is free text off the WhatsApp
  * submission ("Kalamassery") rather than a resolved branch code and can't be
- * matched against REGIONS reliably. */
+ * matched against REGIONS reliably. Payout records aren't branch-scoped (only
+ * bp_ho/hq can create them, against the company-wide view), so the paid
+ * amount nets off the same regardless of which regional view is reading it.
+ *
+ * Deliberately NOT month-scoped, even though the rest of the BP HO analytics
+ * view went month-wise on 2026-11-09 — this is the real running balance BP
+ * HO pays against (Mark Paid settles whatever's owed, not one month's
+ * slice), and a payment can settle an earlier month's earnings, so slicing
+ * "owed" per month would misstate it. loadPayoutHistory below is the same
+ * call. */
 export async function loadPayoutLedger(branches?: string[]): Promise<PayoutLedgerRow[]> {
   const { rows } = await pool.query<{
     referring_employee_id: string | null;
@@ -491,30 +822,108 @@ export async function loadPayoutLedger(branches?: string[]): Promise<PayoutLedge
     referring_employee_branch: string | null;
     validated_count: string;
     completed_count: string;
+    paid_amount: string;
   }>(
-    `select referring_employee_id, referring_employee_name, referring_employee_branch,
-            count(*) filter (where validated_at is not null) as validated_count,
-            count(*) filter (where ro_matched_at is not null) as completed_count
-     from bp_referrals
-     where validated_at is not null
-       and ($1::text[] is null or assigned_branch = any($1::text[]))
-     group by referring_employee_id, referring_employee_name, referring_employee_branch`,
+    `with earned as (
+       select referring_employee_id, referring_employee_name, referring_employee_branch,
+              count(*) filter (where validated_at is not null) as validated_count,
+              count(*) filter (where ro_matched_at is not null) as completed_count
+       from bp_referrals
+       where validated_at is not null
+         and ($1::text[] is null or assigned_branch = any($1::text[]))
+       group by referring_employee_id, referring_employee_name, referring_employee_branch
+     ),
+     paid as (
+       select employee_id, employee_name, employee_branch, sum(amount) as paid_amount
+       from bp_referral_payouts
+       group by employee_id, employee_name, employee_branch
+     )
+     select e.*, coalesce(p.paid_amount, 0) as paid_amount
+     from earned e
+     left join paid p
+       on p.employee_id is not distinct from e.referring_employee_id
+      and p.employee_name is not distinct from e.referring_employee_name
+      and p.employee_branch is not distinct from e.referring_employee_branch`,
     [branches ?? null],
   );
   return rows
     .map((r) => {
       const validatedCount = Number(r.validated_count);
       const completedCount = Number(r.completed_count);
+      const amountEarned = validatedCount * VALIDATED_PAYOUT + completedCount * COMPLETED_PAYOUT;
+      const amountPaid = Number(r.paid_amount);
       return {
         employeeId: r.referring_employee_id,
         employeeName: r.referring_employee_name,
         employeeBranch: r.referring_employee_branch,
         validatedCount,
         completedCount,
-        amountOwed: validatedCount * VALIDATED_PAYOUT + completedCount * COMPLETED_PAYOUT,
+        amountEarned,
+        amountPaid,
+        amountOwed: amountEarned - amountPaid,
       };
     })
+    .filter((r) => r.amountOwed > 0)
     .sort((a, b) => b.amountOwed - a.amountOwed);
+}
+
+export type PayoutHistoryRow = {
+  id: number;
+  employeeId: string | null;
+  employeeName: string | null;
+  employeeBranch: string | null;
+  amount: number;
+  paidAt: string;
+  paidBy: string | null;
+};
+
+/** Settled payout records, newest first — the flip side of loadPayoutLedger
+ * filtering out anyone fully paid. Company-wide; see that function's doc
+ * comment on why payout records aren't region-scoped. */
+export async function loadPayoutHistory(limit = 100): Promise<PayoutHistoryRow[]> {
+  const { rows } = await pool.query<{
+    id: number;
+    employee_id: string | null;
+    employee_name: string | null;
+    employee_branch: string | null;
+    amount: string;
+    paid_at: string;
+    paid_by: string | null;
+  }>(
+    `select id, employee_id, employee_name, employee_branch, amount, paid_at, paid_by
+     from bp_referral_payouts
+     order by paid_at desc
+     limit $1`,
+    [limit],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    employeeId: r.employee_id,
+    employeeName: r.employee_name,
+    employeeBranch: r.employee_branch,
+    amount: Number(r.amount),
+    paidAt: r.paid_at,
+    paidBy: r.paid_by,
+  }));
+}
+
+/** Records a payout run for one referring employee — BP HO/HQ marking an
+ * amount as settled (see bp-ho-actions.ts's markPayoutPaidAction). Append-
+ * only, same convention as bp_referral_activity: never updates or deletes a
+ * past record, so the payment trail stays intact even if a later ledger
+ * recompute changes what's still owed. */
+export async function markPayoutPaid(
+  employeeId: string | null,
+  employeeName: string | null,
+  employeeBranch: string | null,
+  amount: number,
+  paidBy: string,
+): Promise<void> {
+  await pool.query(
+    `insert into bp_referral_payouts (employee_id, employee_name, employee_branch, amount, paid_by)
+     values ($1, $2, $3, $4, $5)`,
+    [employeeId, employeeName, employeeBranch, amount, paidBy],
+  );
 }
 
 export type BranchRollupRow = {
@@ -533,7 +942,7 @@ export type BranchRollupRow = {
  * currently sits), not the referring employee's own branch. Company-wide by
  * default; `branches`, when given, scopes this to a region (a regional
  * manager's own view — see bp-referrals/page.tsx). */
-export async function loadBranchRollup(branches?: string[]): Promise<BranchRollupRow[]> {
+export async function loadBranchRollup(branches?: string[], range?: MonthRange): Promise<BranchRollupRow[]> {
   const { rows } = await pool.query<{
     assigned_branch: string | null;
     total: string;
@@ -555,9 +964,11 @@ export async function loadBranchRollup(branches?: string[]): Promise<BranchRollu
      from bp_referrals
      where assigned_branch is not null and assigned_branch <> ''
        and ($1::text[] is null or assigned_branch = any($1::text[]))
+       and ($2::date is null or submitted_at >= $2::date)
+       and ($3::date is null or submitted_at < $3::date)
      group by assigned_branch
      order by assigned_branch`,
-    [branches ?? null],
+    [branches ?? null, range?.start ?? null, range?.end ?? null],
   );
   return rows.map((r) => ({
     branch: r.assigned_branch ?? "",

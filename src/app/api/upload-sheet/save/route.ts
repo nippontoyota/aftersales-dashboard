@@ -364,7 +364,7 @@ export async function POST(request: Request) {
         // own upload route (ssrv089-bp/route.ts); see ro-matcher.ts. Wrapped
         // so a matcher bug can never break an otherwise-successful upload.
         try {
-          await matchBpReferralsFromCostSalesBpRows(parsed.rawRows);
+          await matchBpReferralsFromCostSalesBpRows(parsed.rawRows, branch);
         } catch (err) {
           console.error("BP referral RO matcher failed:", err);
         }

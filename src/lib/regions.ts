@@ -16,6 +16,16 @@ export const REGIONS = {
 
 export type RegionName = keyof typeof REGIONS;
 
+/** Shared region → accent-color mapping, so every view that groups branches
+ * by region (Accounts overview's region cards, the branchwise table's region
+ * bands) reads as the same color coding rather than each page picking its
+ * own. */
+export const REGION_COLOR: Record<RegionName, string> = {
+  Central: "var(--color-cat-central)",
+  South: "var(--color-cat-south)",
+  North: "var(--color-cat-north)",
+};
+
 export function regionForBranch(branch: string): RegionName | null {
   for (const region of Object.keys(REGIONS) as RegionName[]) {
     if ((REGIONS[region] as readonly string[]).includes(branch)) return region;

@@ -219,11 +219,15 @@ function parseAmount(value: unknown): number {
  * well-formed — without handling it, OTD silently couldn't be computed for
  * ~29% of them). A 2-digit year is assumed 20YY, same convention used
  * elsewhere in this codebase (e.g. labour-sales/parse.ts's date parsing).
- * Returns minutes-since-epoch (UTC, no timezone meaning of its own — only
- * ever used to diff two values parsed the same way) or null if either half
- * isn't readable. */
+ * The separator is sometimes "-" instead of "/" (confirmed 2026-11-09
+ * against MV01A's real October data: 108/359 NINETH_SMS_SEND_DT values and
+ * 129/359 Promise Delivery Date values used "MM-DD-YYYY", same field order,
+ * just a dash — silently unparseable before this, undercounting BP OTD
+ * eligibility by ~38%). Returns minutes-since-epoch (UTC, no timezone
+ * meaning of its own — only ever used to diff two values parsed the same
+ * way) or null if either half isn't readable. */
 function parseServiceInfoDateTime(dateStr: unknown, timeStr: unknown): number | null {
-  const dm = normalizeText(dateStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  const dm = normalizeText(dateStr).match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);
   const tm = normalizeText(timeStr).match(/^(\d{1,2}):(\d{2})$/);
   if (!dm || !tm) return null;
   const month = Number(dm[1]);
@@ -239,7 +243,7 @@ function parseServiceInfoDateTime(dateStr: unknown, timeStr: unknown): number | 
  * Same Day Delivery, which only needs calendar-day equality, not a
  * duration. Returns "YYYY-MM-DD" or null. */
 function parseServiceInfoDate(dateStr: unknown): string | null {
-  const dm = normalizeText(dateStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  const dm = normalizeText(dateStr).match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);
   if (!dm) return null;
   const month = Number(dm[1]);
   const day = Number(dm[2]);
@@ -248,8 +252,11 @@ function parseServiceInfoDate(dateStr: unknown): string | null {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+/** Same "/" or "-" separator tolerance as parseServiceInfoDateTime above —
+ * shared by parsePromiseDeliveryAt and parseCombinedDateTime below, both of
+ * which hit the same dash-formatted rows in real BP data. */
 function parseMmDdYy(dateStr: unknown): { year: number; month: number; day: number } | null {
-  const dm = normalizeText(dateStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  const dm = normalizeText(dateStr).match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);
   if (!dm) return null;
   const month = Number(dm[1]);
   const day = Number(dm[2]);
@@ -369,6 +376,15 @@ export type CloseSaDailyMetrics = {
    * − 24h, Promise] — confirmed with the user 2026-10-24: arriving more than
    * 24h before the promise fails this just like arriving late does. */
   bpOtdOnTimeCount: number;
+  /** GS OTD (2026-11-18, at the user's request) — distinct from BP OTD
+   * above (no SMS tracking, no early-arrival window) and from EM60 OTD (not
+   * limited to EM60 ROs, no 60-minute target). GS ROs where both Invoice
+   * Date/Time and Promise Delivery Date/Time parsed — the denominator. */
+  otdEligibleCount: number;
+  /** Of otdEligibleCount, how many had Invoice Date/Time at or before
+   * Promise Delivery Date/Time — exactly on time counts as on time, same
+   * convention as every other OTD metric in this module. */
+  otdOnTimeCount: number;
 };
 
 function emptyMetrics(): CloseSaDailyMetrics {
@@ -421,6 +437,8 @@ function emptyMetrics(): CloseSaDailyMetrics {
     bpWorkOrderCount: 0,
     bpOtdEligibleCount: 0,
     bpOtdOnTimeCount: 0,
+    otdEligibleCount: 0,
+    otdOnTimeCount: 0,
   };
 }
 
@@ -470,11 +488,20 @@ type RoInfo = {
   /** BP's own Work Order number — "" when absent (not every RO gets one). */
   workOrdNo: string;
   /** Promise Delivery Date+Time, minutes since epoch — null if either side
-   * didn't parse (BP only; always null on a GS row, no such columns). */
+   * didn't parse. Despite the name, this column exists on GS rows too
+   * (confirmed 2026-11-18 against real data — an earlier version of this
+   * comment wrongly called it BP-only); used for BP OTD below and for GS
+   * OTD (otdEligibleCount/otdOnTimeCount). */
   bpPromiseAt: number | null;
   /** NINETH_SMS_SEND_DT ("vehicle ready" SMS), minutes since epoch — null if
-   * unparseable/missing (BP only). */
+   * unparseable/missing (BP only — no such column on a GS row). */
   bpHandoverAt: number | null;
+  /** Invoice Date+Time, minutes since epoch — null if either side didn't
+   * parse. Same value em60DurationMinutes already derives inline; kept here
+   * too for GS OTD (2026-11-18, at the user's request: Invoice Date/Time ≤
+   * Promise Delivery Date/Time, any GS RO — not just EM60's 60-minute
+   * target). */
+  invoiceAt: number | null;
 };
 
 function readRoInfo(row: Record<string, unknown>, isBp: boolean): RoInfo {
@@ -491,6 +518,7 @@ function readRoInfo(row: Record<string, unknown>, isBp: boolean): RoInfo {
   const openDate = parseServiceInfoDate(row[JOB_OPEN_DATE_COLUMN]);
   const invoiceDate = parseServiceInfoDate(row[INVOICE_DATE_COLUMN]);
   const sameDayDelivery = openDate !== null && invoiceDate !== null ? openDate === invoiceDate : null;
+  const invoiceAt = parseServiceInfoDateTime(row[INVOICE_DATE_COLUMN], row[INVOICE_TIME_COLUMN]);
   return {
     closeSaName: normalizeCloseSaName(row[CLOSE_SA_NAME_COLUMN]),
     vin: normalizeText(row[VIN_COLUMN]),
@@ -510,6 +538,7 @@ function readRoInfo(row: Record<string, unknown>, isBp: boolean): RoInfo {
     workOrdNo: normalizeText(row[WORK_ORDER_NO_COLUMN]),
     bpPromiseAt: parsePromiseDeliveryAt(row[PROMISE_DELIVERY_DATE_COLUMN], row[PROMISE_DELIVERY_TIME_COLUMN]),
     bpHandoverAt: parseCombinedDateTime(row[NINTH_SMS_SEND_DT_COLUMN]),
+    invoiceAt,
   };
 }
 
@@ -543,7 +572,20 @@ export function computeCloseSaAnalytics(
    * closes — this is recomputed fresh from the RO's full Part Sale history
    * every time this date is recomputed, so it never needs a separate
    * catch-up once the RO closes (see close-sa-analytics/recompute.ts). */
-  partSaleRowsForClosedRos: Record<string, unknown>[]
+  partSaleRowsForClosedRos: Record<string, unknown>[],
+  /** Every Part Sale row (any date, this branch's whole history) whose
+   * RefDocNo matches one of `partSaleRowsForClosedRos`'s own BillNo values —
+   * i.e. a cancellation of one of today's matched parts. Confirmed with the
+   * user 2026-11-06: a cancelled Part Sale line is a *second* row, never an
+   * edit to the original — RefDocNo on the cancellation row is the original
+   * bill's BillNo (not an RO), BillNo type `I`, qty/amount already negative
+   * in the source. Netted into the same SA as the original (via
+   * billNoToOriginalRo below, built from partSaleRowsForClosedRos — never
+   * roCloseSaMap, which only has RO keys, not bill numbers). Scoped to
+   * tyre/battery/Parts ₹ (matched) only, same as partSaleRowsForClosedRos —
+   * matched-RO count is deliberately left untouched by this (2026-11-06, at
+   * the user's request — revisit separately). */
+  partSaleCancellationRowsForClosedRos: Record<string, unknown>[]
 ): Map<string, CloseSaDailyMetrics> {
   const byCloseSa = new Map<string, CloseSaDailyMetrics>();
   const metricsFor = (name: string): CloseSaDailyMetrics => {
@@ -617,6 +659,15 @@ export function computeCloseSaAnalytics(
     if (info.appointment === true) m.appointmentCount++;
     else if (info.appointment === false) m.walkinCount++;
     if (info.sameDayDelivery === true) m.sameDayDeliveryCount++;
+
+    // GS OTD (2026-11-18, at the user's request): Invoice Date/Time ≤
+    // Promise Delivery Date/Time, any GS RO — BP has its own separate OTD
+    // (below) with SMS-based handover and an early-arrival window, neither
+    // of which applies here.
+    if (!info.isBp && info.invoiceAt !== null && info.bpPromiseAt !== null) {
+      m.otdEligibleCount++;
+      if (info.invoiceAt <= info.bpPromiseAt) m.otdOnTimeCount++;
+    }
 
     if (info.isBp) {
       if (!bpRoCountBySa.has(info.closeSaName)) bpRoCountBySa.set(info.closeSaName, new Set());
@@ -769,6 +820,10 @@ export function computeCloseSaAnalytics(
   // partSaleRowsForClosedRos's doc comment above. Extended to Parts ₹ and
   // its matched-RO count 2026-10-28, same request/reasoning as tyre/battery.
   const matchedRosBySa = new Map<string, Set<string>>();
+  // Original BillNo -> which SA/isBp it belongs to, for the cancellation
+  // loop below — a cancellation row's RefDocNo is this BillNo, not an RO, so
+  // it can never be looked up in roCloseSaMap.
+  const billNoToOriginalRo = new Map<string, { closeSaName: string; isBp: boolean }>();
   for (const row of partSaleRowsForClosedRos) {
     const refDoc = normalizeRo(row[PS_REF_DOC_NO_COLUMN]);
     if (!refDoc) continue;
@@ -787,8 +842,32 @@ export function computeCloseSaAnalytics(
     const qty = toQty(row[PS_SALE_QTY_COLUMN]);
     if (part.toUpperCase().startsWith(TYRE_PART_PREFIX)) m.tyreCount += qty;
     if (part.toUpperCase().startsWith(BATTERY_PART_PREFIX)) m.batteryCount += qty;
+
+    const billNo = normalizeRo(row[PS_BILL_NO_COLUMN]);
+    if (billNo) billNoToOriginalRo.set(billNo, { closeSaName, isBp: isBpRo(refDoc) });
   }
   for (const [name, set] of matchedRosBySa) metricsFor(name).partsMatchedRoCount = set.size;
+
+  // --- Cancellations of those same matched parts — see
+  // partSaleCancellationRowsForClosedRos's doc comment above. Qty/amount are
+  // already negative in the source, so adding them straight into the same
+  // SA's totals is the whole fix; matched-RO count deliberately untouched.
+  for (const row of partSaleCancellationRowsForClosedRos) {
+    const origBillNo = normalizeRo(row[PS_REF_DOC_NO_COLUMN]);
+    if (!origBillNo) continue;
+    const original = billNoToOriginalRo.get(origBillNo);
+    if (!original) continue;
+    const m = metricsFor(original.closeSaName);
+
+    const netAmnt = toQty(row[PS_NET_AMNT_COLUMN]);
+    m.partsRevenue += netAmnt;
+    if (original.isBp) m.bpPartsRevenue += netAmnt;
+
+    const part = normalizePart(row[PS_PART_NO_COLUMN]);
+    const qty = toQty(row[PS_SALE_QTY_COLUMN]);
+    if (part.toUpperCase().startsWith(TYRE_PART_PREFIX)) m.tyreCount += qty;
+    if (part.toUpperCase().startsWith(BATTERY_PART_PREFIX)) m.batteryCount += qty;
+  }
 
   return byCloseSa;
 }

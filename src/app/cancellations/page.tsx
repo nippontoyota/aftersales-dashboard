@@ -107,6 +107,7 @@ export default async function CancellationsPage({
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       queriesBadge={nav.queriesBadge}
+      cancellationsBadge={nav.cancellationsBadge}
       dashboardLabel={nav.dashboardLabel}
       identity={identity}
     >
@@ -237,6 +238,8 @@ export default async function CancellationsPage({
                       viewerRole={viewerRole}
                       status={status}
                       branchNote={justification?.branchNote ?? null}
+                      branchResolution={justification?.branchResolution ?? null}
+                      branchNewRo={justification?.branchNewRo ?? null}
                       regionalNote={justification?.regionalNote ?? null}
                       overdue={overdue}
                     />

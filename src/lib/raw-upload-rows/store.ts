@@ -116,6 +116,26 @@ export async function loadRawUploadRows(reportType: RawUploadReportType, date: s
   return rows.map((r) => r.row_data);
 }
 
+/** Every raw row on file for one report type/branch across a whole date
+ * range (inclusive) — model-wise/compute.ts's brand split needs a full
+ * month of Service Info / SSRV089 / Part Sale rows at once (not one day at
+ * a time, like loadRawUploadRows above), to build its RO→brand map and sum
+ * Parts/Labour/TGLOSS/item revenue over the month. */
+export async function loadRawUploadRowsForRange(
+  reportType: RawUploadReportType,
+  branch: string,
+  fromDate: string,
+  toDate: string
+): Promise<unknown[]> {
+  const { rows } = await pool.query<{ row_data: unknown }>(
+    `select row_data from raw_upload_rows
+     where report_type = $1 and branch = $2 and date >= $3 and date <= $4
+     order by date, row_index`,
+    [reportType, branch, fromDate, toDate]
+  );
+  return rows.map((r) => r.row_data);
+}
+
 /** Distinct dates (any date, this branch's whole Part Sale history) whose
  * RefDocNo — dash-stripped, uppercased, same normalization as
  * close-sa-analytics/compute.ts's normalizeRo — matches one of the given
@@ -171,16 +191,60 @@ export async function loadPartSaleRowsForRos(branch: string, normalizedRos: stri
  * row_data, which is what keeps that affordable: confirmed ~2.2s for
  * CO01B's 142k-row history (the largest branch), vs ~100s pulling full
  * row_data for the same scope — the two-column projection is the part that
- * actually matters for performance, not the date bound. */
+ * actually matters for performance, not the date bound.
+ *
+ * Ordered by date ascending (2026-11-07, at the user's request) — 129 ROs
+ * company-wide genuinely have a different Close SA Name across their own
+ * re-uploads (a real reassignment/correction, not a formatting artifact:
+ * e.g. one RO shows 3 different people across 3 uploads), and the caller
+ * dedupes "last one wins" over this order, so it lands on the SAME RO's
+ * TRUE latest Close SA Name that loadLatestServiceInfoDatePerRo/RO count
+ * already uses — before this, dedup was "first in arbitrary row order
+ * wins", which could silently attribute an RO's Labour Sales / Part Sale
+ * lines to a stale SA from an earlier, superseded upload. */
 export async function loadRoCloseSaPairs(branch: string): Promise<{ ro: unknown; sa: unknown }[]> {
   const { rows } = await pool.query<{ ro: unknown; sa: unknown }>(
     `select row_data->>'Job Order No' as ro, row_data->>'Close Service Advisor Name' as sa
      from raw_upload_rows
      where report_type in ('service_info', 'service_info_bp')
-       and branch = $1`,
+       and branch = $1
+     order by date asc`,
     [branch]
   );
   return rows;
+}
+
+/** Job Order No → the LATEST date this branch has ever filed a Service Info
+ * (GS or BP) row for it, any date — close-sa-analytics/recompute.ts uses
+ * this to keep an RO's MTD contribution (RO count, vehicle count, job-type
+ * counts, tyre/battery, Parts ₹, TGLOSS ₹, everything computed from
+ * roInfoByRo) to exactly one date: its true final close, not every date it
+ * happens to appear on. An RO legitimately gets re-invoiced on a later date
+ * before it's truly done (confirmed 2026-11-06, KY01A's BPJ2602986: same job
+ * lines, Invoice Date advancing from 10/17 to 10/30) — without this, both
+ * dates independently credit the RO's full contribution, double-counting it
+ * whenever a month's dates get summed. 1,345 ROs company-wide hit this
+ * Jul-Nov 2026 (1,173 of them one KL01A cluster around Aug 28-30 that looks
+ * like a straight duplicate upload, not a genuine re-invoice — flagged for
+ * its own look, not fixed by this). Same whole-history reasoning as
+ * loadRoCloseSaPairs above, same performance tradeoff (two-column
+ * projection, not full row_data). */
+export async function loadLatestServiceInfoDatePerRo(branch: string): Promise<Map<string, string>> {
+  // Normalized (upper + dash-stripped) the same way normalizeRo() does, so
+  // the map's keys line up with what the caller looks them up by — Service
+  // Info's own Job Order No hasn't been seen with a dash in practice, but
+  // matching the same normalization everywhere else in this module is what
+  // keeps that an assumption this query doesn't also have to rely on.
+  const { rows } = await pool.query<{ ro: string; latest_date: string }>(
+    `select upper(replace(row_data->>'Job Order No', '-', '')) as ro, max(date)::text as latest_date
+     from raw_upload_rows
+     where report_type in ('service_info', 'service_info_bp')
+       and branch = $1
+       and row_data->>'Job Order No' <> ''
+     group by 1`,
+    [branch]
+  );
+  return new Map(rows.map((r) => [r.ro, r.latest_date]));
 }
 
 /** Fast duplicate-upload check — returns the date of the first prior batch

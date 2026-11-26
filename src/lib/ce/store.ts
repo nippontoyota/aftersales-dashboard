@@ -1,8 +1,9 @@
 import "server-only";
 import { pool } from "@/lib/db";
 import type { CeLeadInput, ParsedCeWorkbook } from "./parse";
+import { LEXUS_VIN_WMI_PREFIXES, type CeVehicleBrand } from "./vehicle-brand";
 import {
-  CE_DUE_KM, CE_DUE_MONTHS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_MRS_PRIORITY_LEAD_DAYS, CE_MRS_WINDOW_DAYS,
+  CE_DUE_KM, CE_DUE_MONTHS, CE_MIN_PLAUSIBLE_KM_PER_DAY, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS, CE_MRS_PRIORITY_LEAD_DAYS, CE_MRS_RESOLVED_STATUSES, CE_MRS_WINDOW_DAYS,
   deriveCeCallUpdate, indiaDate,
   type CeAvfCategory, type CeCallOutcome, type CeCallStatus, type CeCategory, type CeFollowUpFilter, type CeStatus,
 } from "./rules";
@@ -65,6 +66,7 @@ export type CeLeadDetail = CeLeadInput & {
   vehicleModel: string | null;
   dmsSourceFileName: string | null;
   dmsImportedAt: string | null;
+  assignedTo: string | null;
 };
 
 export type CeActivity = {
@@ -233,12 +235,17 @@ export async function loadCeLeadPage(options: {
   statuses?: CeStatus[];
   dealers?: string[];
   followUps?: CeFollowUpFilter[];
+  assignedTo?: string;
   month?: number;
   year?: number;
   page?: number;
 }) {
   const values: unknown[] = [options.today, options.active];
   const where = ["l.active = $2"];
+  if (options.assignedTo) {
+    values.push(options.assignedTo);
+    where.push(`w.assigned_to = $${values.length}`);
+  }
   if (options.query) {
     values.push(`%${options.query}%`);
     where.push(`(l.vin ilike $${values.length} or concat_ws(' ', l.customer_first_name, l.customer_family_name) ilike $${values.length} or l.contact_number ilike $${values.length} or l.vehicle_model ilike $${values.length})`);
@@ -256,9 +263,14 @@ export async function loadCeLeadPage(options: {
     where.push(`l.allocated_dealer = any($${values.length}::text[])`);
   }
   if (options.followUps?.length) {
+    // 'Appointment booked' excluded alongside the terminal statuses
+    // (2026-11-03, at the user's request): its next_follow_up_date is the
+    // appointment date, not a "call again" reminder — the customer is
+    // already booked in, so it shouldn't keep resurfacing in the call
+    // queue just because that date has arrived or passed.
     const followUps = {
-      due: "(w.next_follow_up_date <= $1::date and w.status not in ('Converted', 'Not interested', 'Unreachable'))",
-      upcoming: "(w.next_follow_up_date > $1::date and w.status not in ('Converted', 'Not interested', 'Unreachable'))",
+      due: "(w.next_follow_up_date <= $1::date and w.status not in ('Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable', 'Appointment booked'))",
+      upcoming: "(w.next_follow_up_date > $1::date and w.status not in ('Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable', 'Appointment booked'))",
       none: "w.next_follow_up_date is null",
     } as const;
     where.push(`(${options.followUps.map((filter) => followUps[filter]).join(" or ")})`);
@@ -338,6 +350,7 @@ export type CeMrsListRow = {
   attemptCount: number;
   contactNumber: string | null;
   vehicleModel: string | null;
+  assignedTo: string | null;
 };
 
 // Computes the due-date proxy (rules.ts's ceDueDate, re-expressed in SQL
@@ -390,32 +403,100 @@ function addDaysIso(dateIso: string, days: number): string {
 /** The daily MRS catch-list, split into two priorities (confirmed with
  * the user 2026-11-02): "priority" (due CE_MRS_PRIORITY_LEAD_DAYS from
  * now — not today; matches TKM's own N-7 call day, see that constant's
- * comment in rules.ts — the actual daily worklist) and "overdue" (due
- * date already passed, within the CE_MRS_WINDOW_DAYS lookback —
- * secondary, worked through if time allows). Anything due sooner than
- * the priority lead time, or due further out, is deliberately never
- * shown here — not useful to know about yet, per the user. Never on any
- * N-9 list we've imported — see project_mrs_n9_system.md for why
- * "overdue" is bounded to a lookback rather than "ever overdue" (the
- * proxy alone flags ~half of all active leads once the whole
- * reactivation backlog counts). */
+ * comment in rules.ts — the actual daily worklist) and "overdue" (every
+ * other due date within the CE_MRS_WINDOW_DAYS lookback — secondary,
+ * worked through if time allows).
+ *
+ * "overdue" originally meant strictly due_date <= yesterday, which left
+ * a silent 7-day gap: a lead shown once in Priority (due_date = today+7)
+ * and not resolved that day fell out of both sections entirely until its
+ * due date actually passed, since Overdue didn't pick it up until then —
+ * discovered 2026-11-06 when the CAC team cleared 150 of 200 Priority
+ * leads in a day and the other 50 "disappeared". Overdue's upper bound
+ * is now CE_MRS_PRIORITY_LEAD_DAYS-1 days out (today+6) instead of
+ * yesterday, so a lead rolls straight from Priority into Overdue the
+ * very next day with no blackout — Overdue now really means "every
+ * active lead except today's one Priority date", sorted soonest-due/
+ * least-stale first (see the main query's order by) through most
+ * overdue last, about to fall off the trailing edge.
+ *
+ * The trailing CE_MRS_WINDOW_DAYS cutoff itself is unchanged and still
+ * deliberate — see project_mrs_n9_system.md for why "overdue" stays
+ * bounded to a lookback rather than "ever overdue" (the proxy alone
+ * flags ~half of all active leads once the whole reactivation backlog
+ * counts); confirmed to leave as-is 2026-11-06. */
 export async function loadCeMrsGapList(options: {
   today: string;
   section: "priority" | "overdue";
+  /** Splits each section into its own sub-section (added 2026-11-03 at
+   * the user's request): "new" is leads never yet contacted (status =
+   * 'New') — what a CE should work first — "followup" is everything
+   * already attempted at least once — "closed" is leads that resolved
+   * (CE_MRS_RESOLVED_STATUSES) during the day, kept visible here for
+   * tracking instead of disappearing once hard-excluded from new/
+   * followup (added 2026-11-03, at the user's request, after the
+   * Priority tab's count dropped from 131 to 117 with no trace of where
+   * the other 14 went). Keeps the three from interleaving in one list,
+   * which otherwise forced scrolling past already-called rows to find
+   * the next fresh one. */
+  stage: "new" | "followup" | "closed";
   query?: string;
   dealers?: string[];
   statuses?: CeStatus[];
+  brand?: CeVehicleBrand;
+  /** Scopes to one CE agent's own leads (ce_lead_workflow.assigned_to) —
+   * omit for a head/hq view of everyone's. */
+  assignedTo?: string;
   page?: number;
   limit?: number;
 }) {
   const values: unknown[] = [options.today];
+  // A lead an agent promised to call back on (next_follow_up_date) belongs
+  // in today's Priority worklist regardless of where its MRS due_date
+  // falls — otherwise it can sit outside both tabs' windows entirely and
+  // never resurface unless someone remembers to switch on the Follow-up
+  // filter (confirmed with the user 2026-11-16). "<= today" rather than
+  // "= today" so a follow-up that was never actioned stays surfaced
+  // instead of quietly expiring. Overdue then excludes these so a lead
+  // doesn't show in both tabs at once — same mutual-exclusivity the
+  // Priority/Overdue split has always had.
+  //
+  // The explicit "is not null" guard is load-bearing, not decoration: SQL
+  // comparisons against a null column evaluate to unknown rather than
+  // false, so a bare "next_follow_up_date <= $1" is unknown (not false)
+  // for every lead with no follow-up date set yet. Overdue's "not (...)"
+  // around this clause then turned that "unknown" into "drop the row"
+  // instead of "keep it", which silently excluded ~1,983 of 2,787 Overdue
+  // leads in production (every one with no follow-up date, not just the
+  // 107 actually due) before this guard was added — caught 2026-11-16
+  // when the user noticed Overdue's count had collapsed.
+  const FOLLOW_UP_DUE_CLAUSE = "(w.next_follow_up_date is not null and w.next_follow_up_date <= $1::date)";
   const sectionClause = options.section === "priority"
-    ? `f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day'`
-    : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day'`;
+    ? `(f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day' or ${FOLLOW_UP_DUE_CLAUSE})`
+    : `f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS - 1} * interval '1 day' and not (${FOLLOW_UP_DUE_CLAUSE})`;
+  values.push([...CE_MRS_RESOLVED_STATUSES]);
+  const resolvedStatusParam = values.length;
+  const stageClause = options.stage === "new"
+    ? `w.status = 'New'`
+    : options.stage === "closed"
+      ? `w.status = any($${resolvedStatusParam}::text[])`
+      : `w.status <> 'New'`;
   const where = [
     sectionClause,
+    stageClause,
     `not exists (select 1 from n9_leads n where n.vin = f.vin)`,
   ];
+  // Once a lead is resolved (an appointment's already booked, or it's
+  // closed out one way or another) there's nothing left for this catch
+  // list to chase — drop it instead of showing it as if still due. The
+  // "closed" stage is the one place that's inverted: it's exactly those
+  // resolved leads, kept around for tracking (see loadCeMrsGapList's
+  // "stage" doc comment).
+  if (options.stage !== "closed") where.push(`not (w.status = any($${resolvedStatusParam}::text[]))`);
+  if (options.assignedTo) {
+    values.push(options.assignedTo);
+    where.push(`w.assigned_to = $${values.length}`);
+  }
   if (options.query) {
     values.push(`%${options.query}%`);
     where.push(`(f.vin ilike $${values.length} or concat_ws(' ', f.customer_first_name, f.customer_family_name) ilike $${values.length} or f.contact_number ilike $${values.length} or f.vehicle_model ilike $${values.length})`);
@@ -428,21 +509,34 @@ export async function loadCeMrsGapList(options: {
     values.push(options.statuses);
     where.push(`w.status = any($${values.length}::text[])`);
   }
+  if (options.brand) {
+    values.push(LEXUS_VIN_WMI_PREFIXES.map((prefix) => `${prefix}%`));
+    const lexusMatch = `left(f.vin, 3) like any($${values.length}::text[])`;
+    where.push(options.brand === "lexus" ? lexusMatch : `not (${lexusMatch})`);
+  }
   const clause = where.join(" and ");
   const page = Math.max(1, options.page ?? 1);
   const limit = options.limit ?? 50;
   const filterValues = [...values];
   values.push(limit, (page - 1) * limit);
 
-  const [list, countRow, sectionCounts, dealers] = await Promise.all([
+  const resolvedStatusesArray = [...CE_MRS_RESOLVED_STATUSES];
+  const stageCountValues: unknown[] = [options.today, resolvedStatusesArray];
+  let stageCountAssignedClause = "";
+  if (options.assignedTo) {
+    stageCountValues.push(options.assignedTo);
+    stageCountAssignedClause = `and w.assigned_to = $${stageCountValues.length}`;
+  }
+
+  const [list, countRow, sectionCounts, stageCounts, dealers] = await Promise.all([
     pool.query(
       `${MRS_DUE_DATE_CTE}
        select f.vin, trim(concat_ws(' ', f.customer_first_name, f.customer_family_name)) customer_name,
          f.allocated_dealer, f.n_report_date, f.n_mileage, f.due_date,
-         w.status, w.next_follow_up_date, w.attempt_count, f.contact_number, f.vehicle_model
+         w.status, w.next_follow_up_date, w.attempt_count, f.contact_number, f.vehicle_model, w.assigned_to
        from mrs_final f join ce_lead_workflow w using (vin)
        where ${clause}
-       order by f.due_date, f.vin
+       order by f.due_date desc, f.vin
        limit $${values.length - 1} offset $${values.length}`,
       values,
     ),
@@ -452,15 +546,33 @@ export async function loadCeMrsGapList(options: {
       filterValues,
     ),
     // Unfiltered (no search/dealer/status) tab counts, same pattern as
-    // the AVF page's category tiles — just the two sections' raw sizes.
+    // the AVF page's category tiles — just the two sections' raw sizes,
+    // still excluding resolved leads so the tab badges match what's
+    // actually listed underneath.
     pool.query<{ priority: string; overdue: string }>(
       `${MRS_DUE_DATE_CTE}
        select
-         count(*) filter (where f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day') priority,
-         count(*) filter (where f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date - interval '1 day') overdue
-       from mrs_final f
-       where not exists (select 1 from n9_leads n where n.vin = f.vin)`,
-      [options.today],
+         count(*) filter (where f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day' or ${FOLLOW_UP_DUE_CLAUSE}) priority,
+         count(*) filter (where f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS - 1} * interval '1 day' and not (${FOLLOW_UP_DUE_CLAUSE})) overdue
+       from mrs_final f join ce_lead_workflow w using (vin)
+       where not exists (select 1 from n9_leads n where n.vin = f.vin) and not (w.status = any($2::text[]))`,
+      [options.today, resolvedStatusesArray],
+    ),
+    // New/follow-up/closed counts for the active section only (search/
+    // dealer/brand/workflow-filter ignored, same as sectionCounts above),
+    // scoped to the agent's own leads when assignedTo is set so the
+    // sub-tab badges match what that agent's table actually shows. Unlike
+    // sectionCounts, this one deliberately does NOT exclude resolved
+    // leads up front — "closed" needs to count exactly those.
+    pool.query<{ new: string; followup: string; closed: string }>(
+      `${MRS_DUE_DATE_CTE}
+       select
+         count(*) filter (where ${sectionClause} and w.status = 'New') new,
+         count(*) filter (where ${sectionClause} and w.status <> 'New' and not (w.status = any($2::text[]))) followup,
+         count(*) filter (where ${sectionClause} and w.status = any($2::text[])) closed
+       from mrs_final f join ce_lead_workflow w using (vin)
+       where not exists (select 1 from n9_leads n where n.vin = f.vin) ${stageCountAssignedClause}`,
+      stageCountValues,
     ),
     loadCeDealers(true),
   ]);
@@ -477,6 +589,7 @@ export async function loadCeMrsGapList(options: {
     attemptCount: Number(row.attempt_count),
     contactNumber: row.contact_number,
     vehicleModel: row.vehicle_model,
+    assignedTo: row.assigned_to,
   }));
   const total = Number(countRow.rows[0].count);
   return {
@@ -487,8 +600,12 @@ export async function loadCeMrsGapList(options: {
     dealers,
     priorityCount: Number(sectionCounts.rows[0].priority),
     overdueCount: Number(sectionCounts.rows[0].overdue),
+    newCount: Number(stageCounts.rows[0].new),
+    followUpCount: Number(stageCounts.rows[0].followup),
+    closedCount: Number(stageCounts.rows[0].closed),
     priorityDueDate: addDaysIso(options.today, CE_MRS_PRIORITY_LEAD_DAYS),
     overdueWindowStart: addDaysIso(options.today, -CE_MRS_WINDOW_DAYS),
+    overdueWindowEnd: addDaysIso(options.today, CE_MRS_PRIORITY_LEAD_DAYS - 1),
   };
 }
 
@@ -526,9 +643,11 @@ export async function loadCeAvfPage(options: {
   if (options.followUps?.length) {
     filterValues.push(options.today);
     const today = `$${filterValues.length}::date`;
+    // Same "Appointment booked" exclusion as loadCeLeadPage above — see
+    // its comment for why.
     const followUps = {
-      due: `(w.next_follow_up_date <= ${today} and w.status not in ('Converted', 'Not interested', 'Unreachable'))`,
-      upcoming: `(w.next_follow_up_date > ${today} and w.status not in ('Converted', 'Not interested', 'Unreachable'))`,
+      due: `(w.next_follow_up_date <= ${today} and w.status not in ('Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable', 'Appointment booked'))`,
+      upcoming: `(w.next_follow_up_date > ${today} and w.status not in ('Converted', 'Vehicle sold', 'Serviced elsewhere', 'Not interested', 'Unreachable', 'Appointment booked'))`,
       none: "w.next_follow_up_date is null",
     } as const;
     where.push(`(${options.followUps.map((filter) => followUps[filter]).join(" or ")})`);
@@ -609,7 +728,7 @@ export async function loadCeLead(vin: string, today: string): Promise<{ lead: Ce
   const [leadResult, activityResult] = await Promise.all([
     pool.query(
       `select l.*, w.status, w.next_follow_up_date, w.attempt_count, w.latest_call_status,
-        w.latest_outcome, w.last_editor, w.updated_at, i.source_file_name,
+        w.latest_outcome, w.last_editor, w.updated_at, w.assigned_to, i.source_file_name,
         d.source_file_name dms_source_file_name, d.uploaded_at dms_imported_at,
         ($2::date - l.n_report_date)::int age_days,
         case when ($2::date - l.n_report_date) <= 364 then 'hot' when ($2::date - l.n_report_date) <= 730 then 'warm' else 'cold' end category
@@ -659,6 +778,7 @@ export async function loadCeLead(vin: string, today: string): Promise<{ lead: Ce
       category: row.category,
       dmsSourceFileName: row.dms_source_file_name,
       dmsImportedAt: row.dms_imported_at ? new Date(row.dms_imported_at).toISOString() : null,
+      assignedTo: row.assigned_to,
     },
     activity: activityResult.rows.map((item) => ({
       id: String(item.id),
@@ -682,18 +802,24 @@ export async function updateCeLead(input: {
   nextFollowUpDate: string | null;
   note: string;
   username: string;
+  /** Set only for a ce_agent caller — asserts the lead is actually assigned
+   * to them (the UI already only offers the call form for an agent's own
+   * leads via loadCeLead's notFound() check, but a direct form POST could
+   * otherwise bypass that). Omit for ce_head/hq, who can edit any lead. */
+  requireAssignedTo?: string;
 }) {
   if (!input.note.trim()) throw new Error("What the customer said is required.");
   if (input.note.length > 2_000) throw new Error("Keep the customer response to 2,000 characters or fewer.");
   const client = await pool.connect();
   try {
     await client.query("begin");
-    const current = await client.query<{ active: boolean; status: CeStatus; attempt_count: number }>(
-      `select l.active, w.status, w.attempt_count from ce_leads l join ce_lead_workflow w using (vin) where l.vin = $1 for update of w`,
+    const current = await client.query<{ active: boolean; status: CeStatus; attempt_count: number; assigned_to: string | null }>(
+      `select l.active, w.status, w.attempt_count, w.assigned_to from ce_leads l join ce_lead_workflow w using (vin) where l.vin = $1 for update of w`,
       [input.vin],
     );
     if (!current.rows[0]) throw new Error("Lead not found.");
     if (!current.rows[0].active) throw new Error("Archived leads are read-only.");
+    if (input.requireAssignedTo && current.rows[0].assigned_to !== input.requireAssignedTo) throw new Error("This lead isn't assigned to you.");
     const next = deriveCeCallUpdate({
       currentAttemptCount: Number(current.rows[0].attempt_count),
       callStatus: input.callStatus,
@@ -719,5 +845,188 @@ export async function updateCeLead(input: {
   } finally {
     client.release();
   }
+}
+
+const CE_MRS_FOLLOW_UP_SCHEDULED_NOTE = "MRS follow-up already scheduled some other way — no call attempted.";
+
+/** The "not even going to try them" shortcut (2026-11-03, at the user's
+ * request) — for a lead where someone already knows the MRS follow-up is
+ * scheduled some other way, so there's nothing for a call to accomplish.
+ * One click, no input needed. Unlike updateCeLead, this never touches
+ * attempt_count/latest_call_status/latest_outcome — no call happened, so
+ * none of those should move — and logs attempt_number/call_status/outcome
+ * as null in the activity row for the same reason. Closes the lead out
+ * immediately (next_follow_up_date null), same as the other resolved
+ * statuses it joins in CE_MRS_RESOLVED_STATUSES. */
+export async function markCeMrsFollowUpAlreadyScheduled(input: {
+  vin: string;
+  username: string;
+  requireAssignedTo?: string;
+}) {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const current = await client.query<{ active: boolean; status: CeStatus; assigned_to: string | null }>(
+      `select l.active, w.status, w.assigned_to from ce_leads l join ce_lead_workflow w using (vin) where l.vin = $1 for update of w`,
+      [input.vin],
+    );
+    if (!current.rows[0]) throw new Error("Lead not found.");
+    if (!current.rows[0].active) throw new Error("Archived leads are read-only.");
+    if (input.requireAssignedTo && current.rows[0].assigned_to !== input.requireAssignedTo) throw new Error("This lead isn't assigned to you.");
+    await client.query(
+      `update ce_lead_workflow set status = $2, next_follow_up_date = null, last_editor = $3, updated_at = now() where vin = $1`,
+      [input.vin, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS, input.username],
+    );
+    await client.query(
+      `insert into ce_lead_activity (vin, previous_status, status, next_follow_up_date, note, attempt_number, call_status, outcome, author)
+       values ($1, $2, $3, null, $4, null, null, null, $5)`,
+      [input.vin, current.rows[0].status, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS, CE_MRS_FOLLOW_UP_SCHEDULED_NOTE, input.username],
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Persists one apply run's per-row results (2026-11-06, at the user's
+ * request) — so a row that failed (lead archived/reassigned between
+ * preview and apply, a note over 2,000 chars, etc.) can still be looked
+ * up after the upload dialog closes instead of existing only in that one
+ * browser response. One row per attempted sheet row, success or not. */
+export async function logCeMrsBulkApplyResults(results: { rowNumber: number; vin: string; success: boolean; message: string }[], username: string, fileName?: string): Promise<void> {
+  if (results.length === 0) return;
+  const values: unknown[] = [];
+  const tuples = results.map((r, i) => {
+    const base = i * 6;
+    values.push(username, fileName ?? null, r.rowNumber, r.vin, r.success, r.message);
+    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`;
+  });
+  await pool.query(
+    `insert into ce_mrs_bulk_apply_log (uploaded_by, file_name, row_number, vin, success, message) values ${tuples.join(", ")}`,
+    values,
+  );
+}
+
+export type CeBulkLeadLookup = {
+  vin: string;
+  active: boolean;
+  customerName: string;
+  status: CeStatus;
+  attemptCount: number;
+  latestOutcome: string | null;
+  /** IST calendar date (YYYY-MM-DD) the workflow row was last touched —
+   * just what the bulk-upload duplicate-warning heuristic needs, not a
+   * full timestamp (see mrs-bulk-update.ts). */
+  updatedDateIst: string;
+  assignedTo: string | null;
+};
+
+/** One batched lookup for the whole sheet instead of one query per row
+ * (2026-11-05, for the MRS bulk-upload preview/apply routes) — a ~200-row
+ * sheet would otherwise mean ~200 round trips just to see what each lead
+ * currently looks like. */
+export async function loadCeLeadsForBulkUpdate(vins: string[]): Promise<Map<string, CeBulkLeadLookup>> {
+  if (vins.length === 0) return new Map();
+  const { rows } = await pool.query<{
+    vin: string;
+    active: boolean;
+    customer_first_name: string | null;
+    customer_family_name: string | null;
+    status: CeStatus;
+    attempt_count: number;
+    latest_outcome: string | null;
+    updated_date_ist: string;
+    assigned_to: string | null;
+  }>(
+    `select l.vin, l.active, l.customer_first_name, l.customer_family_name,
+            w.status, w.attempt_count, w.latest_outcome, w.assigned_to,
+            (w.updated_at at time zone 'Asia/Kolkata')::date::text as updated_date_ist
+     from ce_leads l join ce_lead_workflow w using (vin)
+     where l.vin = any($1::text[])`,
+    [vins],
+  );
+  const map = new Map<string, CeBulkLeadLookup>();
+  for (const row of rows) {
+    map.set(row.vin, {
+      vin: row.vin,
+      active: row.active,
+      customerName: [row.customer_first_name, row.customer_family_name].filter(Boolean).join(" ").trim() || "Unnamed customer",
+      attemptCount: Number(row.attempt_count),
+      status: row.status,
+      latestOutcome: row.latest_outcome,
+      updatedDateIst: row.updated_date_ist,
+      assignedTo: row.assigned_to,
+    });
+  }
+  return map;
+}
+
+export type CeServiceHistoryVisit = {
+  date: string;
+  branch: string;
+  jobOrderNo: string | null;
+  mileage: number | null;
+  jobLines: string[];
+  reportType: "service_info" | "service_info_bp";
+};
+
+/** "What they did when they came" (2026-11-02, at the user's request): the
+ * Service timeline on a lead's detail page only ever had date/mileage/dealer
+ * per N/N1/N2 visit — the actual job lines only exist in the Service Info
+ * Report's raw rows (one row per job code on a repair order), uploaded
+ * separately from the N/N1/N2 chain and never retained anywhere else. Relies
+ * on raw_upload_rows_service_info_vin_idx (see schema.sql) — without it this
+ * is a full scan of ~900k Service Info rows per lead page load. Grouped by
+ * (date, branch, RO) since one visit spans several job-line rows; capped to
+ * the 15 most recent ROs on file, most recent first, so a high-mileage
+ * vehicle with years of history doesn't blow up the page. */
+export async function loadCeLeadServiceHistory(vin: string): Promise<CeServiceHistoryVisit[]> {
+  const { rows } = await pool.query<{ date: string; branch: string; report_type: "service_info" | "service_info_bp"; ro: string | null; job_desc: string | null; mileage_raw: string | null }>(
+    `select date::text as date, branch, report_type, row_data->>'Job Order No' as ro, row_data->>'Job Desc' as job_desc,
+            coalesce(nullif(row_data->>'Mileage Out', ''), nullif(row_data->>'Mileage In', '')) as mileage_raw
+     from raw_upload_rows
+     where report_type in ('service_info', 'service_info_bp') and upper(trim(row_data->>'Vin no')) = $1
+     order by date desc, row_index`,
+    [vin],
+  );
+
+  const visits = new Map<string, CeServiceHistoryVisit>();
+  for (const row of rows) {
+    const key = `${row.date}#${row.branch}#${row.ro ?? ""}#${row.report_type}`;
+    const desc = (row.job_desc ?? "").trim();
+    let visit = visits.get(key);
+    if (!visit) {
+      const mileageNum = row.mileage_raw ? Number(row.mileage_raw.replace(/,/g, "")) : NaN;
+      visit = { date: row.date, branch: row.branch, jobOrderNo: row.ro || null, mileage: Number.isFinite(mileageNum) ? mileageNum : null, jobLines: [], reportType: row.report_type };
+      visits.set(key, visit);
+    }
+    if (desc && !visit.jobLines.includes(desc)) visit.jobLines.push(desc);
+  }
+
+  return [...visits.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15);
+}
+
+/** The CE head's "Assign evenly" bulk action on /ce/mrs (2026-11-02, at the
+ * user's request): round-robins the given VINs across the given agent
+ * usernames in order — agent[0] gets vins[0], agent[1] gets vins[1], etc.,
+ * wrapping around. Caller (the server action) owns picking which VINs
+ * (checkbox-selected, not "everything currently filtered") and which agents
+ * (every ce_agent reporting to this head — see admin-store.ts's listCeAgents).
+ * Re-assigning an already-assigned lead is allowed — it simply overwrites
+ * assigned_to, no history kept (assignment isn't a workflow status, so it
+ * doesn't go through ce_lead_activity). */
+export async function assignCeLeadsEvenly(input: { vins: string[]; agents: string[] }): Promise<{ assignedCount: number }> {
+  if (input.vins.length === 0 || input.agents.length === 0) return { assignedCount: 0 };
+  const assignments = input.vins.map((vin, i) => ({ vin, assigned_to: input.agents[i % input.agents.length] }));
+  await pool.query(
+    `update ce_lead_workflow w set assigned_to = a.assigned_to
+     from jsonb_to_recordset($1::jsonb) as a(vin text, assigned_to text)
+     where w.vin = a.vin`,
+    [JSON.stringify(assignments)],
+  );
+  return { assignedCount: assignments.length };
 }
 

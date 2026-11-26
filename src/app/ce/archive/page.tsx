@@ -7,6 +7,6 @@ import { LeadsView } from "../leads-view";
 export default async function CeArchivePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/login");
-  if (admin.role !== "ce" && admin.role !== "hq") redirect("/");
+  if (admin.role !== "ce_head" && admin.role !== "ce_agent" && admin.role !== "hq") redirect("/");
   return <CeShell admin={admin} current="archive"><LeadsView active={false} editable={false} today={indiaDate()} searchParams={searchParams} /></CeShell>;
 }

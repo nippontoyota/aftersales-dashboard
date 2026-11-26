@@ -57,12 +57,25 @@ Row-by-row mapping (confirmed against the template he supplied,
   achievement %, every Gentani ratio) or already-blank target placeholders —
   never touched, so Excel recalculates them itself from the inputs above.
 
-Sheet2 ("Service daily report") is a condensed one-row-per-branch view whose
+Sheet2 ("Service daily report") is a condensed per-branch-column view whose
 every figure is itself a formula pulling from Sheet1 — but via a broken
 external-workbook reference ('[2]Oct 20'!...) rather than an internal one.
 fix_sheet2() rewrites those to point at this same workbook's Sheet1 instead,
 so the sheet recalculates correctly standalone; its labels, merges, styles
 and the handful of VAS-target formulas are left exactly as they are.
+
+Sheet2 itself was hand-restructured on 2026-11-05 (at the user's request,
+outside this script - this script never writes to Sheet2 beyond
+fix_sheet2()'s blanket external-link rewrite, which is position-independent
+and needed no change): CO01E, previously folded into the "KOC-Towers" column
+(summed together with CO01B), was un-folded into its own column "KLMSY-BP"
+between "KOC-Towers" and "MVP" - Sheet2 now has 18 branch columns (one per
+Sheet1 branch) instead of 17 groups. A new "Scrap and Used Oil" row was also
+inserted directly under "External Sales- MTD" (Sheet1 rows 65/66 combined),
+folded into "Total MTD" below it. Every row below "External Sales- MTD"
+shifted down by one as a result - if this script ever needs to read or write
+Sheet2 directly, re-check row numbers against the live template rather than
+trusting any row number quoted in old comments or commits.
 
 Known gap (not fixed here): openpyxl silently drops a small number of this
 template's conditional-formatting rules on load (an openpyxl limitation with

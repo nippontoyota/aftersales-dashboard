@@ -16,6 +16,7 @@ export function AccountsHeader({
   asOfLabel,
   backHref,
   backLabel,
+  downloadHref,
   children,
 }: {
   title: string;
@@ -28,6 +29,8 @@ export function AccountsHeader({
   asOfLabel?: string;
   backHref?: string;
   backLabel?: string;
+  /** When set, shows a "Download Excel" link to the daily Revenue Stream workbook for this date — same file/endpoint VP Service and HQ use (2026-11-05). */
+  downloadHref?: string;
   children?: React.ReactNode;
 }) {
   return (
@@ -53,6 +56,17 @@ export function AccountsHeader({
           {children}
           {dates && date && basePath ? (
             <DateSelect dates={dates} selected={date} region="All" basePath={basePath} extraParams={dateExtraParams} />
+          ) : null}
+          {downloadHref ? (
+            <a
+              href={downloadHref}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-surface-2"
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                <path d="M8 2v8m0 0-3-3m3 3 3-3M3 13h10" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Download Excel
+            </a>
           ) : null}
         </div>
       </div>

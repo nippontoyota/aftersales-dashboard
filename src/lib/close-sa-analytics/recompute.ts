@@ -1,5 +1,13 @@
 import { tierForBranch } from "../branch-tier";
-import { loadPartSaleDatesForRos, loadPartSaleRowsForRos, loadRawUploadRows, loadRoCloseSaPairs } from "../raw-upload-rows/store";
+import { withAdvisoryLock } from "../db-lock";
+import { BILL_NO_COLUMN } from "../part-sale/parse";
+import {
+  loadLatestServiceInfoDatePerRo,
+  loadPartSaleDatesForRos,
+  loadPartSaleRowsForRos,
+  loadRawUploadRows,
+  loadRoCloseSaPairs,
+} from "../raw-upload-rows/store";
 import { JOB_ORDER_NO_COLUMN } from "../service-info/parse";
 import { computeCloseSaAnalytics, normalizeCloseSaName, normalizeRo } from "./compute";
 import { saveCloseSaAnalyticsForDate } from "./store";
@@ -16,20 +24,33 @@ import { saveCloseSaAnalyticsForDate } from "./store";
  */
 async function recomputeCloseSaAnalyticsForDates(branch: string, dates: string[]): Promise<void> {
   if (dates.length === 0) return;
+  await withAdvisoryLock("close-sa-analytics", branch, () => recomputeCloseSaAnalyticsForDatesLocked(branch, dates));
+}
 
+async function recomputeCloseSaAnalyticsForDatesLocked(branch: string, dates: string[]): Promise<void> {
   let tier: ReturnType<typeof tierForBranch>;
   let roCloseSaMap: Map<string, string>;
+  let latestServiceInfoDateByRo: Map<string, string>;
   try {
     tier = tierForBranch(branch);
+    // loadRoCloseSaPairs returns rows ordered by date ascending — last
+    // write wins here so each RO lands on its TRUE latest Close SA Name
+    // (confirmed with the user 2026-11-07: 129 ROs company-wide genuinely
+    // have a different Close SA Name across their own re-uploads, a real
+    // reassignment/correction, not a formatting artifact), consistent with
+    // latestServiceInfoDateByRo below. Previously "first in arbitrary row
+    // order wins", which could silently misattribute Labour Sales/Part Sale
+    // lines to a stale SA from an earlier, superseded upload.
     const roCloseSaPairs = await loadRoCloseSaPairs(branch);
     roCloseSaMap = new Map<string, string>();
     for (const { ro, sa } of roCloseSaPairs) {
       const normalizedRo = normalizeRo(ro);
       const normalizedSa = normalizeCloseSaName(sa);
-      if (normalizedRo && normalizedSa && !roCloseSaMap.has(normalizedRo)) {
+      if (normalizedRo && normalizedSa) {
         roCloseSaMap.set(normalizedRo, normalizedSa);
       }
     }
+    latestServiceInfoDateByRo = await loadLatestServiceInfoDatePerRo(branch);
   } catch (err) {
     console.error(`recomputeCloseSaAnalytics failed to load RO→SA map for ${branch}:`, err);
     return;
@@ -37,12 +58,25 @@ async function recomputeCloseSaAnalyticsForDates(branch: string, dates: string[]
 
   for (const date of dates) {
     try {
-      const [serviceInfoRows, serviceInfoBpRows, labourSalesRows, partSaleRows] = await Promise.all([
+      const [serviceInfoRowsRaw, serviceInfoBpRowsRaw, labourSalesRows, partSaleRows] = await Promise.all([
         loadRawUploadRows("service_info", date, branch),
         loadRawUploadRows("service_info_bp", date, branch),
         loadRawUploadRows("labour_sales", date, branch),
         loadRawUploadRows("part_sale", date, branch),
       ]);
+
+      // Only an RO's TRUE final Service Info date should contribute to MTD
+      // totals (RO count, vehicle count, job-type counts, tyre/battery,
+      // Parts ₹, TGLOSS ₹ — everything computed from these rows) — an RO
+      // re-invoiced on a later date would otherwise get credited on BOTH
+      // dates when a month is summed (see loadLatestServiceInfoDatePerRo's
+      // doc comment, confirmed with the user 2026-11-06).
+      const isRosLatestSiRow = (row: Record<string, unknown>): boolean => {
+        const ro = normalizeRo(row[JOB_ORDER_NO_COLUMN]);
+        return !ro || latestServiceInfoDateByRo.get(ro) === date;
+      };
+      const serviceInfoRows = (serviceInfoRowsRaw as Record<string, unknown>[]).filter(isRosLatestSiRow);
+      const serviceInfoBpRows = (serviceInfoBpRowsRaw as Record<string, unknown>[]).filter(isRosLatestSiRow);
 
       // Tyre/battery and Parts ₹ (matched) are keyed to the ROs closing
       // TODAY, not to today's own Part Sale rows (see computeCloseSaAnalytics's
@@ -56,6 +90,19 @@ async function recomputeCloseSaAnalyticsForDates(branch: string, dates: string[]
       ];
       const partSaleRowsForClosedRos = await loadPartSaleRowsForRos(branch, closingRos);
 
+      // Cancellations of those same matched parts (confirmed with the user
+      // 2026-11-06): a cancelled Part Sale line is a second row whose
+      // RefDocNo is the ORIGINAL row's BillNo, not an RO — so it's found by
+      // matching against those BillNos, reusing the same RefDocNo-indexed
+      // lookup (see computeCloseSaAnalytics's partSaleCancellationRowsForClosedRos
+      // doc comment).
+      const billNosOnClosedRoParts = [
+        ...new Set(
+          partSaleRowsForClosedRos.map((row) => normalizeRo((row as Record<string, unknown>)[BILL_NO_COLUMN])).filter(Boolean)
+        ),
+      ];
+      const partSaleCancellationRowsForClosedRos = await loadPartSaleRowsForRos(branch, billNosOnClosedRoParts);
+
       const byCloseSa = computeCloseSaAnalytics(
         serviceInfoRows as Record<string, unknown>[],
         serviceInfoBpRows as Record<string, unknown>[],
@@ -63,7 +110,8 @@ async function recomputeCloseSaAnalyticsForDates(branch: string, dates: string[]
         partSaleRows as Record<string, unknown>[],
         tier,
         roCloseSaMap,
-        partSaleRowsForClosedRos as Record<string, unknown>[]
+        partSaleRowsForClosedRos as Record<string, unknown>[],
+        partSaleCancellationRowsForClosedRos as Record<string, unknown>[]
       );
       await saveCloseSaAnalyticsForDate(branch, date, byCloseSa);
     } catch (err) {

@@ -5,8 +5,11 @@ export const CE_STATUSES = [
   "Follow-up",
   "Appointment booked",
   "Converted",
+  "Vehicle sold",
+  "Serviced elsewhere",
   "Not interested",
   "Unreachable",
+  "MRS follow-up already scheduled",
 ] as const;
 
 export type CeStatus = (typeof CE_STATUSES)[number];
@@ -18,6 +21,58 @@ export type CeFollowUpFilter = (typeof CE_FOLLOW_UP_FILTERS)[number];
 
 export function calculateCeAvf(nMileage: number, n1Mileage: number): number {
   return (nMileage - n1Mileage) / 10_000;
+}
+
+export type CeTimelineEntry = { label: "N" | "N-1" | "N-2"; date: string | null; dealer: string | null; mileage: number | null; source: "uio" | "service_info" };
+
+/**
+ * Merges the UIO/DMS-sourced N/N1/N2 anchors with this VIN's own GS
+ * (periodic-maintenance) Service Info visits, so a vehicle whose N-1/N-2
+ * TKM's own feed never recorded — but that we've serviced ourselves —
+ * still shows a real N-1/N-2 instead of "—", with AVF computed from
+ * whichever pair of dates actually wins out. Display-only: never written
+ * back to ce_leads, so the due-date/AVF figures used elsewhere (MRS,
+ * company-wide stats) keep using the stored chain, which the
+ * Service-Info-link backfill/hook already keep correct on their own
+ * terms. BP (Body & Paint) visits are deliberately excluded — this is
+ * the periodic-maintenance timeline only, per the user's 2026-11-03
+ * "we don't need to know bp uploads" scope.
+ */
+export function mergeCeServiceTimeline(input: {
+  nReportDate: string;
+  nMileage: number;
+  nDealerCode: string;
+  n1ReportDate: string | null;
+  n1Mileage: number | null;
+  n1DealerCode: string | null;
+  n2ReportDate: string | null;
+  n2Mileage: number | null;
+  n2DealerCode: string | null;
+  serviceInfoVisits: { date: string; branch: string; mileage: number | null }[];
+}): CeTimelineEntry[] {
+  type Candidate = { date: string; dealer: string | null; mileage: number | null; source: "uio" | "service_info" };
+  const candidates: Candidate[] = [{ date: input.nReportDate, dealer: input.nDealerCode, mileage: input.nMileage, source: "uio" }];
+  if (input.n1ReportDate) candidates.push({ date: input.n1ReportDate, dealer: input.n1DealerCode, mileage: input.n1Mileage, source: "uio" });
+  if (input.n2ReportDate) candidates.push({ date: input.n2ReportDate, dealer: input.n2DealerCode, mileage: input.n2Mileage, source: "uio" });
+  for (const visit of input.serviceInfoVisits) candidates.push({ date: visit.date, dealer: visit.branch, mileage: visit.mileage, source: "service_info" });
+
+  // One entry per date — prefer whichever candidate actually carries a
+  // mileage figure when the same visit shows up from both sources.
+  const byDate = new Map<string, Candidate>();
+  for (const candidate of candidates) {
+    const existing = byDate.get(candidate.date);
+    if (!existing || (existing.mileage === null && candidate.mileage !== null)) byDate.set(candidate.date, candidate);
+  }
+
+  const merged = [...byDate.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+  const labels = ["N", "N-1", "N-2"] as const;
+  return labels.map((label, i) => ({
+    label,
+    date: merged[i]?.date ?? null,
+    dealer: merged[i]?.dealer ?? null,
+    mileage: merged[i]?.mileage ?? null,
+    source: merged[i]?.source ?? "uio",
+  }));
 }
 
 export function ceAvfCategory(avf: number | null): CeAvfCategory {
@@ -55,7 +110,71 @@ export type CeConnectedOutcome = (typeof CONNECTED_OUTCOMES)[number];
 export type CeNotConnectedOutcome = (typeof NOT_CONNECTED_OUTCOMES)[number];
 export type CeCallOutcome = CeConnectedOutcome | CeNotConnectedOutcome;
 
-export const TERMINAL_CE_STATUSES = new Set<CeStatus>(["Converted", "Not interested", "Unreachable"]);
+export const TERMINAL_CE_STATUSES = new Set<CeStatus>(["Converted", "Vehicle sold", "Serviced elsewhere", "Not interested", "Unreachable", "MRS follow-up already scheduled"]);
+
+/** TERMINAL_CE_STATUSES plus "Appointment booked" — every status where the
+ * CE has already gotten what this catch-list is chasing (a contact, closed
+ * one way or another) and the lead needs no further prompting from it.
+ * Used to hard-exclude these from the MRS catch list (2026-11-03, at the
+ * user's request) — unlike the main leads page's "due"/"upcoming" filter,
+ * the MRS list has no other mode, so this is an unconditional exclusion,
+ * not just one followUps option among others. */
+export const CE_MRS_RESOLVED_STATUSES = new Set<CeStatus>([...TERMINAL_CE_STATUSES, "Appointment booked"]);
+
+/** The status the "not even going to try them" shortcut sets (see
+ * markCeMrsFollowUpAlreadyScheduled in store.ts) — shared here so the
+ * bulk-upload path can recognize the same sentinel value in an Excel
+ * "Outcome" cell without duplicating the literal string. */
+export const CE_MRS_FOLLOW_UP_SCHEDULED_STATUS: CeStatus = "MRS follow-up already scheduled";
+
+/** Every value selectable in the MRS bulk-upload sheet's "Outcome"
+ * dropdown (2026-11-05) — every real call outcome plus the one shortcut
+ * that isn't a call outcome at all. Call status (connected/not) is never
+ * asked for separately in that sheet — it's fully recoverable from which
+ * of the two outcome lists a value came from, since the two never share a
+ * value (see resolveCeBulkOutcome below). */
+export const CE_MRS_BULK_OUTCOME_OPTIONS = [...CONNECTED_OUTCOMES, ...NOT_CONNECTED_OUTCOMES, CE_MRS_FOLLOW_UP_SCHEDULED_STATUS] as const;
+
+/** Same idea for Conquest's own bulk-upload sheet (2026-11-13) — every real
+ * call outcome, minus the MRS-only shortcut, which doesn't apply here (a
+ * conquest lead was never on an MRS list, so "MRS follow-up already
+ * scheduled" isn't even a valid status for ce_conquest_workflow). Reuses
+ * resolveCeBulkOutcome below for classification — its "mrs_follow_up_
+ * scheduled" branch is simply never a legal choice for Conquest, same as
+ * any other unrecognized value. */
+export const CE_CONQUEST_BULK_OUTCOME_OPTIONS = [...CONNECTED_OUTCOMES, ...NOT_CONNECTED_OUTCOMES] as const;
+
+export type CeMrsBulkOutcomeResolution =
+  | { kind: "call"; callStatus: CeCallStatus; outcome: CeCallOutcome }
+  | { kind: "mrs_follow_up_scheduled" }
+  | { kind: "unrecognized" };
+
+/** Classifies a value typed/picked into the bulk-upload sheet's Outcome
+ * column. Trims and matches case-insensitively — Excel's dropdown can't
+ * stop someone retyping over a cell, and a stray space or capitalization
+ * slip shouldn't turn into a silent reject when the intent is obvious. */
+export function resolveCeBulkOutcome(raw: string): CeMrsBulkOutcomeResolution {
+  const value = raw.trim();
+  const match = (list: readonly string[]) => list.find((item) => item.toLowerCase() === value.toLowerCase());
+  if (match([CE_MRS_FOLLOW_UP_SCHEDULED_STATUS])) return { kind: "mrs_follow_up_scheduled" };
+  const connected = match(CONNECTED_OUTCOMES);
+  if (connected) return { kind: "call", callStatus: "connected", outcome: connected as CeConnectedOutcome };
+  const notConnected = match(NOT_CONNECTED_OUTCOMES);
+  if (notConnected) return { kind: "call", callStatus: "not_connected", outcome: notConnected as CeNotConnectedOutcome };
+  return { kind: "unrecognized" };
+}
+
+/** Same rule the lead-detail page's calendar date-picker enforces by
+ * simply not letting you click the cell (see holiday-date-picker.tsx) —
+ * re-expressed as a plain check, because a typed Excel cell has no
+ * picker to stop a bad date from being entered in the first place. */
+export function invalidCeFollowUpDateReason(iso: string, holidays: ReadonlySet<string>, today: string): string | null {
+  if (!isValidIsoDate(iso)) return "not a recognizable date";
+  if (iso <= today) return "must be a future date";
+  if (new Date(`${iso}T00:00:00Z`).getUTCDay() === 0) return "falls on a Sunday — the branch is closed";
+  if (holidays.has(iso)) return "falls on an HQ-flagged holiday";
+  return null;
+}
 
 const FOLLOW_UP_OUTCOMES = new Set<CeCallOutcome>([
   "Appointment booked",
@@ -78,13 +197,6 @@ export function isValidIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-export function parseCeDateInput(value: string): string | null {
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
-  if (!match) return null;
-  const iso = `${match[3]}-${match[2]}-${match[1]}`;
-  return isValidIsoDate(iso) ? iso : null;
 }
 
 export function formatCeDate(value: string): string {
@@ -148,6 +260,10 @@ export function deriveCeCallUpdate(input: {
     status = "Follow-up";
   } else if (outcome === "Already serviced with us") {
     status = "Converted";
+  } else if (outcome === "Vehicle sold") {
+    status = "Vehicle sold";
+  } else if (outcome === "Serviced elsewhere") {
+    status = "Serviced elsewhere";
   } else {
     status = "Not interested";
   }

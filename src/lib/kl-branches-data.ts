@@ -7,6 +7,7 @@ import {
   branchAchieved,
   buildRegionTotals,
   metricBlock,
+  roBlocksFor,
   sumOrNull,
   type RegionBranchRow,
   type RegionExtSalesBlock,
@@ -50,6 +51,7 @@ export async function loadKlBranchesView(date: string, report: Report): Promise<
     const bp = metricBlock(t?.bpTarget ?? null, achieved.bp, elapsed, total);
     const extBase = metricBlock(t?.extTarget ?? null, achieved.ext, elapsed, total);
     const ext: RegionExtSalesBlock = { ...extBase, sprExternalReference: achieved.sprExternal };
+    const { gsRo, bpRo } = roBlocksFor(branch, { gus: b?.gusRoMtd ?? null, bpu: b?.bpuRoMtd ?? null }, elapsed, total);
 
     const totalAchieved = sumOrNull([gs.achieved, bp.achieved, ext.achieved]);
     const totalRevenue = totalAchieved !== null ? totalAchieved + achieved.scrapAndUsedOil : null;
@@ -60,6 +62,8 @@ export async function loadKlBranchesView(date: string, report: Report): Promise<
       gs,
       bp,
       ext,
+      gsRo,
+      bpRo,
       totalMonthlyTarget: sumOrNull([gs.target, bp.target, ext.target]),
       totalAchieved,
       scrapAndUsedOil: achieved.scrapAndUsedOil,
