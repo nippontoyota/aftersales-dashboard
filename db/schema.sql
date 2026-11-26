@@ -1849,3 +1849,30 @@ alter table bp_referrals add column if not exists self_arrived_reason text;
 alter table bp_referrals drop constraint if exists bp_referrals_closed_reason_check;
 alter table bp_referrals add constraint bp_referrals_closed_reason_check
   check (closed_reason is null or closed_reason in ('not_genuine', 'not_interested', 'lost', 'self_arrived'));
+
+-- CTDMS automation's single login (2026-11-26, at the user's request): one
+-- account that can upload AS any branch (branch comes from an explicit form
+-- field at upload time instead of this row's own branch column — see
+-- upload-branch.ts), replacing the one-dashboard-account-per-branch setup
+-- that made the daily automation log in up to 18 times a day. No branch/
+-- region of its own, same shape as hq/ceo/etc.
+alter table admins drop constraint if exists admins_role_check;
+alter table admins add constraint admins_role_check
+  check (role in ('hq', 'branch', 'regional', 'vp_service', 'ceo', 'accounts', 'hq_viewer', 'bp_manager', 'bp_ho', 'ce', 'kl_cluster', 'ce_head', 'ce_agent', 'automation'));
+alter table admins drop constraint if exists admins_role_scope_consistency;
+alter table admins add constraint admins_role_scope_consistency check (
+  (role = 'branch'      and branch is not null and region is null) or
+  (role = 'hq'          and branch is null     and region is null) or
+  (role = 'regional'    and branch is null     and region in ('North', 'Central', 'South')) or
+  (role = 'vp_service'  and branch is null     and region is null) or
+  (role = 'ceo'         and branch is null     and region is null) or
+  (role = 'accounts'    and branch is null     and region is null) or
+  (role = 'hq_viewer'   and branch is null     and region is null) or
+  (role = 'bp_manager'  and branch is not null and region is null) or
+  (role = 'bp_ho'       and branch is null     and region is null) or
+  (role = 'ce'          and branch is null     and region is null) or
+  (role = 'kl_cluster'  and branch is null     and region is null) or
+  (role = 'ce_head'     and branch is null     and region is null) or
+  (role = 'ce_agent'    and branch is null     and region is null) or
+  (role = 'automation'  and branch is null     and region is null)
+);

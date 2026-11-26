@@ -5,6 +5,7 @@ import { parseLabourSalesWorkbook } from "@/lib/labour-sales/parse";
 import { saveLabourSalesSnapshot } from "@/lib/labour-sales/store";
 import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { markPendingRecomputes } from "@/lib/pending-recomputes/store";
+import { resolveUploadBranch } from "@/lib/upload-branch";
 
 /**
  * Labour Sales Report upload — see db/schema.sql's comment on
@@ -24,11 +25,16 @@ export async function POST(request: Request) {
   if (!admin) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
-  if (admin.role !== "branch") {
-    return NextResponse.json({ error: "Only a branch account can upload a Labour Sales Report." }, { status: 403 });
+  if (admin.role !== "branch" && admin.role !== "automation") {
+    return NextResponse.json({ error: "Only a branch (or the automation) account can upload a Labour Sales Report." }, { status: 403 });
   }
 
   const formData = await request.formData();
+  const branchResult = await resolveUploadBranch(admin, formData);
+  if ("error" in branchResult) {
+    return NextResponse.json({ error: branchResult.error }, { status: 400 });
+  }
+  const branch = branchResult.branch;
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "Choose a file to upload." }, { status: 400 });
@@ -61,7 +67,7 @@ export async function POST(request: Request) {
     await dbClient.query("begin");
     for (const day of parsed.days) {
       await saveLabourSalesSnapshot(
-        { date: day.date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts: day.counts, uploadedBy: admin.username },
+        { date: day.date, branch, uploadedAt, sourceFileName: file.name, counts: day.counts, uploadedBy: admin.username },
         dbClient
       );
       await saveRawUploadRows(
@@ -70,7 +76,7 @@ export async function POST(request: Request) {
           date: day.date,
           uploadedAt,
           sourceFileName: file.name,
-          rows: day.rawRows.map((data) => ({ branch: admin.branch, data })),
+          rows: day.rawRows.map((data) => ({ branch, data })),
           uploadedBy: admin.username,
         },
         dbClient
@@ -89,7 +95,7 @@ export async function POST(request: Request) {
   // superseding the after()-deferred recompute from 2026-11-18) — see
   // part-sale's route for the full reasoning, and pending-recomputes/
   // process.ts for the HQ admin action that does the actual recompute.
-  after(() => markPendingRecomputes(parsed.days.map((day) => ({ branch: admin.branch, date: day.date }))));
+  after(() => markPendingRecomputes(parsed.days.map((day) => ({ branch, date: day.date }))));
 
   const totals = parsed.days.reduce(
     (acc, d) => ({
@@ -104,7 +110,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     success: true,
-    branch: admin.branch,
+    branch,
     dates: parsed.days.map((d) => d.date),
     skippedRowCount: parsed.skippedRowCount,
     totals,

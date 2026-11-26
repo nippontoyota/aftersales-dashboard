@@ -68,13 +68,25 @@ export type AdminAccount =
   // but not the whole South region. Never uploads, never sets targets, no
   // Queries access. Same shape as vp_service/ceo/accounts (no branch/region
   // column — the two branches are hardcoded in code, not stored per-admin).
-  | { username: string; passwordHash: string; salt: string; role: "kl_cluster"; canViewDashboard: true };
+  | { username: string; passwordHash: string; salt: string; role: "kl_cluster"; canViewDashboard: true }
+  // CTDMS automation's single login (2026-11-26, at the user's request —
+  // was one dashboard account per branch, so the daily automation re-logged
+  // in up to 18 times a day; every failure traced this session happened at
+  // that login step). Deliberately the one account that can upload AS any
+  // branch — every upload route resolves the branch from an explicit form
+  // field for this role instead of admin.branch (see resolveUploadBranch in
+  // upload-branch.ts), the one place that breaks this file's otherwise-firm
+  // invariant that branch identity comes from who's logged in. No dashboard
+  // access at all (canViewDashboard: false) and no other admin capability —
+  // least privilege, since this account's password lives in two laptops'
+  // .env files rather than a person's head.
+  | { username: string; passwordHash: string; salt: string; role: "automation"; canViewDashboard: false };
 
 type AdminRow = {
   username: string;
   password_hash: string;
   salt: string;
-  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer" | "bp_manager" | "bp_ho" | "ce" | "kl_cluster" | "ce_head" | "ce_agent";
+  role: "hq" | "branch" | "regional" | "vp_service" | "ceo" | "accounts" | "hq_viewer" | "bp_manager" | "bp_ho" | "ce" | "kl_cluster" | "ce_head" | "ce_agent" | "automation";
   branch: string | null;
   region: string | null;
   reports_to: string | null;
@@ -94,6 +106,7 @@ function toAccount(row: AdminRow): AdminAccount {
   if (row.role === "ce_agent") return { ...base, role: "ce_agent", reportsTo: row.reports_to!, canViewDashboard: false };
   if (row.role === "kl_cluster") return { ...base, role: "kl_cluster" };
   if (row.role === "hq") return { ...base, role: "hq" };
+  if (row.role === "automation") return { ...base, role: "automation", canViewDashboard: false };
   throw new Error(`Unsupported admin role: ${String(row.role)}`);
 }
 
@@ -111,6 +124,7 @@ export function adminIdentityLabel(admin: AdminAccount): string {
   if (admin.role === "ce_agent") return "Customer Engagement";
   if (admin.role === "kl_cluster") return "KL01A / KL01B overseer";
   if (admin.role === "bp_manager") return `${admin.branch} BP Manager`;
+  if (admin.role === "automation") return "CTDMS Automation";
   return `${admin.branch} branch`;
 }
 

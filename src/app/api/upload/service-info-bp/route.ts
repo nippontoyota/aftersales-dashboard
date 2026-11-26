@@ -7,6 +7,7 @@ import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { isBpFlavoredServiceInfo, JOB_ORDER_NO_COLUMN, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { saveServiceInfoBpSnapshot } from "@/lib/service-info-bp/store";
 import { markCatchUpPartSaleDatesPending, markPendingRecompute } from "@/lib/pending-recomputes/store";
+import { resolveUploadBranch } from "@/lib/upload-branch";
 
 /** Service Information Report - BP — required daily like every other
  * upload. The raw file is always kept (see raw-report-uploads/store.ts),
@@ -36,11 +37,16 @@ export async function POST(request: Request) {
   if (!admin) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
-  if (admin.role !== "branch") {
-    return NextResponse.json({ error: "Only a branch account can upload a Service Info Report." }, { status: 403 });
+  if (admin.role !== "branch" && admin.role !== "automation") {
+    return NextResponse.json({ error: "Only a branch (or the automation) account can upload a Service Info Report." }, { status: 403 });
   }
 
   const formData = await request.formData();
+  const branchResult = await resolveUploadBranch(admin, formData);
+  if ("error" in branchResult) {
+    return NextResponse.json({ error: branchResult.error }, { status: 400 });
+  }
+  const branch = branchResult.branch;
   const file = formData.get("file");
   const date = String(formData.get("date") ?? "").trim();
 
@@ -51,7 +57,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Choose a valid date for this upload." }, { status: 400 });
   }
 
-  if (await loadRawReportUpload(date, admin.branch, "service_info_bp")) {
+  if (await loadRawReportUpload(date, branch, "service_info_bp")) {
     return NextResponse.json(
       { error: `Already uploaded for ${date} — contact HQ (Upload Sheet) if this needs correcting.` },
       { status: 409 }
@@ -69,8 +75,8 @@ export async function POST(request: Request) {
   // before any save so a bad file never gets saved half-done.
   let bpCounts, bpRawRows;
   try {
-    const staffNames = await listAccessoriesStaffNamesForBranch(admin.branch);
-    ({ counts: bpCounts, rawRows: bpRawRows } = parseServiceInfoWorkbook(buffer, admin.branch, staffNames));
+    const staffNames = await listAccessoriesStaffNamesForBranch(branch);
+    ({ counts: bpCounts, rawRows: bpRawRows } = parseServiceInfoWorkbook(buffer, branch, staffNames));
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
@@ -95,7 +101,7 @@ export async function POST(request: Request) {
   // reconciliation.md). Compares raw file bytes directly against every
   // prior upload this month, not just the most recent one. A genuine false
   // positive now needs HQ (Upload Sheet).
-  const priorUploads = await loadAllRawReportUploadsBefore(admin.branch, "service_info_bp", date);
+  const priorUploads = await loadAllRawReportUploadsBefore(branch, "service_info_bp", date);
   const newHash = hashBuffer(buffer);
   const match = priorUploads.find((u) => hashBuffer(u.fileData) === newHash);
   if (match) {
@@ -108,14 +114,14 @@ export async function POST(request: Request) {
   const uploadedAt = new Date().toISOString();
   await saveRawReportUpload({
     date,
-    branch: admin.branch,
+    branch,
     reportType: "service_info_bp",
     uploadedAt,
     sourceFileName: file.name,
     fileData: buffer,
     uploadedBy: admin.username,
   });
-  await saveServiceInfoBpSnapshot({ date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts: bpCounts, uploadedBy: admin.username });
+  await saveServiceInfoBpSnapshot({ date, branch, uploadedAt, sourceFileName: file.name, counts: bpCounts, uploadedBy: admin.username });
   // Every row, individually (2026-10-09) — previously only the aggregate
   // counts above and the whole file as raw bytes (saveRawReportUpload
   // above) were kept, so a BP VAS-coded row couldn't be matched against
@@ -127,7 +133,7 @@ export async function POST(request: Request) {
     date,
     uploadedAt,
     sourceFileName: file.name,
-    rows: bpRawRows.map((data) => ({ branch: admin.branch, data })),
+    rows: bpRawRows.map((data) => ({ branch, data })),
     uploadedBy: admin.username,
   });
 
@@ -138,9 +144,9 @@ export async function POST(request: Request) {
   // for the full reasoning, and pending-recomputes/process.ts for the HQ
   // admin action that does the actual recompute.
   after(async () => {
-    await markPendingRecompute(admin.branch, date);
-    await markCatchUpPartSaleDatesPending(admin.branch, bpRawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
+    await markPendingRecompute(branch, date);
+    await markCatchUpPartSaleDatesPending(branch, bpRawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
   });
 
-  return NextResponse.json({ success: true, date, branch: admin.branch, sourceFileName: file.name, bpCounts });
+  return NextResponse.json({ success: true, date, branch, sourceFileName: file.name, bpCounts });
 }

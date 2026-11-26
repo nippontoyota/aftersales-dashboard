@@ -9,17 +9,23 @@ import { isBpFlavoredServiceInfo, JOB_ORDER_NO_COLUMN, parseServiceInfoWorkbook 
 import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-info/store";
 import { checkInvoiceDateSanity, checkRoOverlap } from "@/lib/service-info/upload-validation";
 import { markCatchUpPartSaleDatesPending, markPendingRecompute } from "@/lib/pending-recomputes/store";
+import { resolveUploadBranch } from "@/lib/upload-branch";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
-  if (admin.role !== "branch") {
-    return NextResponse.json({ error: "Only a branch account can upload a Service Info Report." }, { status: 403 });
+  if (admin.role !== "branch" && admin.role !== "automation") {
+    return NextResponse.json({ error: "Only a branch (or the automation) account can upload a Service Info Report." }, { status: 403 });
   }
 
   const formData = await request.formData();
+  const branchResult = await resolveUploadBranch(admin, formData);
+  if ("error" in branchResult) {
+    return NextResponse.json({ error: branchResult.error }, { status: 400 });
+  }
+  const branch = branchResult.branch;
   const file = formData.get("file");
   const date = String(formData.get("date") ?? "").trim();
 
@@ -34,7 +40,7 @@ export async function POST(request: Request) {
   // the user's request — prevents accidental re-uploads and makes "has this
   // been done today" visible at a glance). HQ's own uploads (BA Tool, and
   // /upload-sheet on a branch's behalf) are never subject to this.
-  if (await loadServiceInfoSnapshot(date, admin.branch)) {
+  if (await loadServiceInfoSnapshot(date, branch)) {
     return NextResponse.json(
       { error: `Already uploaded for ${date} — contact HQ (Upload Sheet) if this needs correcting.` },
       { status: 409 }
@@ -50,8 +56,8 @@ export async function POST(request: Request) {
 
   let counts, rawRows;
   try {
-    const staffNames = await listAccessoriesStaffNamesForBranch(admin.branch);
-    ({ counts, rawRows } = parseServiceInfoWorkbook(buffer, admin.branch, staffNames));
+    const staffNames = await listAccessoriesStaffNamesForBranch(branch);
+    ({ counts, rawRows } = parseServiceInfoWorkbook(buffer, branch, staffNames));
   } catch (err) {
     return NextResponse.json(
       { error: `Could not parse this file: ${err instanceof Error ? err.message : "unknown error"}` },
@@ -91,7 +97,7 @@ export async function POST(request: Request) {
   // needs HQ (Upload Sheet) to push it through — there's no more self-service
   // click-through.
   const newHash = hashRows(rawRows);
-  const duplicateDate = await findDuplicateBatch("service_info", admin.branch, date, newHash);
+  const duplicateDate = await findDuplicateBatch("service_info", branch, date, newHash);
   if (duplicateDate) {
     return NextResponse.json(
       { error: `This file looks identical to your upload from ${duplicateDate} — same rows. If this really is ${date}'s file, contact HQ (Upload Sheet).` },
@@ -99,7 +105,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const overlap = await checkRoOverlap(admin.branch, rawRows, date);
+  const overlap = await checkRoOverlap(branch, rawRows, date);
   if (overlap.duplicate) {
     return NextResponse.json({ error: `${overlap.message} If this really is new data, contact HQ (Upload Sheet).` }, { status: 422 });
   }
@@ -109,11 +115,11 @@ export async function POST(request: Request) {
   try {
     await dbClient.query("begin");
     await saveServiceInfoSnapshot(
-      { date, branch: admin.branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username },
+      { date, branch, uploadedAt, sourceFileName: file.name, counts, uploadedBy: admin.username },
       dbClient
     );
     await saveRawUploadRows(
-      { reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })), uploadedBy: admin.username, contentHash: newHash },
+      { reportType: "service_info", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username, contentHash: newHash },
       dbClient
     );
     await dbClient.query("commit");
@@ -132,10 +138,10 @@ export async function POST(request: Request) {
   // admin action that does the actual recompute. linkServiceInfoToCeLeads
   // is unrelated (CE lead matching, not SA Analytics) and stays immediate.
   after(async () => {
-    await markPendingRecompute(admin.branch, date);
-    await markCatchUpPartSaleDatesPending(admin.branch, rawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
-    await linkServiceInfoToCeLeads(rawRows, admin.branch);
+    await markPendingRecompute(branch, date);
+    await markCatchUpPartSaleDatesPending(branch, rawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
+    await linkServiceInfoToCeLeads(rawRows, branch);
   });
 
-  return NextResponse.json({ success: true, date, branch: admin.branch, counts });
+  return NextResponse.json({ success: true, date, branch, counts });
 }

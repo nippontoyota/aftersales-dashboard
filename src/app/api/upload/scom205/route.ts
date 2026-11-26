@@ -6,17 +6,23 @@ import { saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { parseScom205Workbook } from "@/lib/scom205/parse";
 import { loadAllScom205SnapshotsBefore, loadScom205Snapshot, saveScom205Snapshot } from "@/lib/scom205/store";
 import { checkGrowth, checkPeriodHeaderSanity } from "@/lib/scom205/upload-validation";
+import { resolveUploadBranch } from "@/lib/upload-branch";
 
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
-  if (admin.role !== "branch") {
-    return NextResponse.json({ error: "Only a branch account can upload a scom205 report." }, { status: 403 });
+  if (admin.role !== "branch" && admin.role !== "automation") {
+    return NextResponse.json({ error: "Only a branch (or the automation) account can upload a scom205 report." }, { status: 403 });
   }
 
   const formData = await request.formData();
+  const branchResult = await resolveUploadBranch(admin, formData);
+  if ("error" in branchResult) {
+    return NextResponse.json({ error: branchResult.error }, { status: 400 });
+  }
+  const branch = branchResult.branch;
   const file = formData.get("file");
   const date = String(formData.get("date") ?? "").trim();
 
@@ -31,7 +37,7 @@ export async function POST(request: Request) {
   // the user's request — prevents accidental re-uploads and makes "has this
   // been done today" visible at a glance). HQ's own uploads (BA Tool, and
   // /upload-sheet on a branch's behalf) are never subject to this.
-  if (await loadScom205Snapshot(date, admin.branch)) {
+  if (await loadScom205Snapshot(date, branch)) {
     return NextResponse.json(
       { error: `Already uploaded for ${date} — contact HQ (Upload Sheet) if this needs correcting.` },
       { status: 409 }
@@ -70,7 +76,7 @@ export async function POST(request: Request) {
   // it is real rather than being forced to go through HQ.
   const growthConfirmed = formData.get("confirmGrowth") === "true";
   if (!growthConfirmed) {
-    const growth = await checkGrowth(admin.branch, date, totals);
+    const growth = await checkGrowth(branch, date, totals);
     if (!growth.ok) {
       return NextResponse.json({ growthWarning: true, message: growth.error });
     }
@@ -86,7 +92,7 @@ export async function POST(request: Request) {
   // TI01C resent its 10 Sept file again on the 15th with a real upload (the
   // 14th) sitting in between (caught 2026-09-16). A genuine false positive
   // now needs HQ (Upload Sheet).
-  const priorSnapshots = await loadAllScom205SnapshotsBefore(date, admin.branch);
+  const priorSnapshots = await loadAllScom205SnapshotsBefore(date, branch);
   const exactMatch = priorSnapshots.find((s) => totalsMatch(totals, s.totals));
   if (exactMatch) {
     return NextResponse.json(
@@ -102,11 +108,11 @@ export async function POST(request: Request) {
   try {
     await dbClient.query("begin");
     await saveScom205Snapshot(
-      { date, branch: admin.branch, uploadedAt, sourceFileName: file.name, totals, stockAndServiceRate, uploadedBy: admin.username },
+      { date, branch, uploadedAt, sourceFileName: file.name, totals, stockAndServiceRate, uploadedBy: admin.username },
       dbClient
     );
     await saveRawUploadRows(
-      { reportType: "scom205", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch: admin.branch, data })), uploadedBy: admin.username },
+      { reportType: "scom205", date, uploadedAt, sourceFileName: file.name, rows: rawRows.map((data) => ({ branch, data })), uploadedBy: admin.username },
       dbClient
     );
     await dbClient.query("commit");
@@ -117,5 +123,5 @@ export async function POST(request: Request) {
     dbClient.release();
   }
 
-  return NextResponse.json({ success: true, date, branch: admin.branch, totals });
+  return NextResponse.json({ success: true, date, branch, totals });
 }

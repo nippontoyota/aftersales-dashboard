@@ -15,6 +15,7 @@
 //   node scripts/add-admin.mjs --username CE --ce-head --password "Something@2026"
 //   node scripts/add-admin.mjs --username ce-agent1 --ce-agent --reports-to CE --password "Something@2026"
 //   node scripts/add-admin.mjs --username biju --kl-cluster --password "Something@2026"
+//   node scripts/add-admin.mjs --username ctdms-automation --automation --password "Something@2026"
 import { randomBytes, scryptSync } from "node:crypto";
 import { Client } from "pg";
 import "./load-env.mjs";
@@ -40,16 +41,17 @@ const isCeHead = args.includes("--ce-head");
 const isCeAgent = args.includes("--ce-agent");
 const reportsTo = getArg("reports-to");
 const isKlCluster = args.includes("--kl-cluster");
+const isAutomation = args.includes("--automation");
 
 const VALID_REGIONS = ["North", "Central", "South"];
 
 if (
   !username ||
   !password ||
-  (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts && !isHqViewer && !isBpManager && !isBpHo && !isCeHead && !isCeAgent && !isKlCluster)
+  (!branch && !isHq && !region && !isVp && !isCeo && !isAccounts && !isHqViewer && !isBpManager && !isBpHo && !isCeHead && !isCeAgent && !isKlCluster && !isAutomation)
 ) {
   console.error(
-    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --hq-viewer | --region <North|Central|South> | --vp | --ceo | --accounts | --bp-manager --branch <BRANCH> | --bp-ho | --ce-head | --ce-agent --reports-to <head-username> | --kl-cluster)",
+    "Usage: node scripts/add-admin.mjs --username <name> --password <pass> (--branch <BRANCH> | --hq | --hq-viewer | --region <North|Central|South> | --vp | --ceo | --accounts | --bp-manager --branch <BRANCH> | --bp-ho | --ce-head | --ce-agent --reports-to <head-username> | --kl-cluster | --automation)",
   );
   process.exit(1);
 }
@@ -92,6 +94,8 @@ const role = isHqViewer
   ? "ce_agent"
   : isKlCluster
   ? "kl_cluster"
+  : isAutomation
+  ? "automation"
   : region
   ? "regional"
   : "branch";
