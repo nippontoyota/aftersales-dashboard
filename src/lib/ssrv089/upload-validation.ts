@@ -43,9 +43,9 @@ export async function checkInvoiceOverlap(branch: string, rawRows: Record<string
     `select row_data->>'Invoice Doc No.' as inv, max(date)::text as last_date
        from raw_upload_rows
       where report_type = 'ssrv089' and branch = $1 and date < $2
-        and coalesce(trim(row_data->>'Invoice Doc No.'), '') <> ''
+        and row_data->>'Invoice Doc No.' = any($3::text[])
       group by row_data->>'Invoice Doc No.'`,
-    [branch, claimedDate]
+    [branch, claimedDate, [...newInvoices]]
   );
 
   const priorDateByInvoice = new Map(rows.map((r) => [r.inv, r.last_date]));

@@ -1621,6 +1621,32 @@ create index if not exists raw_upload_rows_service_info_vin_idx
   on raw_upload_rows ((upper(trim(row_data->>'Vin no'))))
   where report_type in ('service_info', 'service_info_bp');
 
+-- Partial-duplicate overlap checks (part-sale/ssrv089/service-info
+-- upload-validation.ts), 2026-11-26: each ran on every single upload,
+-- scanning a branch's *entire* report-type history with no date lower
+-- bound just to check a few hundred new values for overlap — confirmed in
+-- pg_stat_statements as one of the slowest, most-called query shapes
+-- company-wide (up to ~37s on one call), and one that gets slower every day
+-- as more history piles up (see memory:
+-- project_dashboard_slowness_diagnosis_nov26.md). The query itself was
+-- narrowed to filter by the candidate values up front instead of pulling
+-- every distinct value ever seen; these indexes are what lets that filter
+-- use an index scan instead of a report-type-wide scan. Created with
+-- `concurrently` in production, same reasoning as the two indexes above —
+-- omitted here since CONCURRENTLY can't run inside a transaction block,
+-- which is how this file is normally replayed.
+create index if not exists raw_upload_rows_part_sale_billno_idx
+  on raw_upload_rows (branch, (row_data->>'BillNo'))
+  where report_type = 'part_sale';
+
+create index if not exists raw_upload_rows_service_info_joborder_idx
+  on raw_upload_rows (branch, (row_data->>'Job Order No'))
+  where report_type = 'service_info';
+
+create index if not exists raw_upload_rows_ssrv089_invoicedoc_idx
+  on raw_upload_rows (branch, (row_data->>'Invoice Doc No.'))
+  where report_type = 'ssrv089';
+
 -- CE head/agent lead assignment (2026-11-02, at the user's request): the
 -- single flat 'ce' role is split into 'ce_head' (the existing CE account —
 -- full company-wide visibility, can bulk-assign MRS catch-list leads) and
