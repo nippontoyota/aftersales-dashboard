@@ -1,4 +1,4 @@
-import { recomputeCloseSaAnalytics } from "../close-sa-analytics/recompute";
+import { recomputeCloseSaAnalyticsForDates } from "../close-sa-analytics/recompute";
 import { recomputeVasRevenueReal } from "../vas-revenue-real/recompute";
 import { recomputeUniqueVinVas } from "../unique-vin-vas/recompute";
 import { recomputeTotalCarCareTreatments } from "../total-car-care/recompute";
@@ -10,39 +10,88 @@ export type ProcessPendingResult = {
   processedPairs: number;
   processedBranches: number;
   failures: { branch: string; date: string; error: string }[];
+  /** True if the time budget ran out with pending pairs still unprocessed —
+   * safe, since every pair clears independently; the rest just wait for the
+   * next run (the daily cron, or another click of the HQ button). */
+  ranOutOfTime: boolean;
 };
 
-/** Runs every recompute a (branch, date) pair in pending_recomputes could
- * need, then clears that row — one pair at a time, so an interruption
- * partway through just leaves the remaining rows pending for the next run
- * (safe to call again, not all-or-nothing). Deliberately runs the FULL
- * suite for every pair rather than tracking which upload type triggered
- * each one: simpler and more robust than risking a missed recompute type,
- * and the redundant work this costs doesn't matter here — the whole point
- * of this batch is that it runs later, outside the automation's own
- * upload burst, not under time pressure. cross_month_replacements is
- * branch-scoped (not per date), so it runs once per unique branch in the
- * batch, after every pair's own recompute. */
-export async function processPendingRecomputes(): Promise<ProcessPendingResult> {
-  const pending = await loadAllPendingRecomputes();
-  const result: ProcessPendingResult = { processedPairs: 0, processedBranches: 0, failures: [] };
+// Vercel's hard ceiling is maxDuration (300s on both the /data route and the
+// cron route that call this) — stop well before that so a single oversized
+// branch mid-flight doesn't get killed with nothing to show for it, and so
+// there's still time left for the cross_month_replacements pass below.
+const TIME_BUDGET_MS = 240_000;
 
+/** Runs every recompute a pending_recomputes row could need, then clears it
+ * — grouped by branch so each branch's own expensive, branch-scoped lookups
+ * (the RO→Close SA map in particular, ~2.2s for the largest branch — see
+ * recomputeCloseSaAnalyticsForDates's doc comment) are loaded once per
+ * branch for this whole run, not once per pending date. Previously this
+ * called the single-date recomputeCloseSaAnalytics per pair in a flat loop
+ * — for a branch with, say, 15 pending dates, that reloaded the same
+ * branch-wide history 15 times, which is what was pushing a single run past
+ * Vercel's 300s ceiling (confirmed against three timed-out /data invocations
+ * on 2026-11-25, right when the automation's own uploads were also failing
+ * — see the session this was diagnosed in). cancelled_accessories_adjustments
+ * is similarly deduped to once per (branch, month) instead of once per
+ * (branch, date), since it's a whole-month recompute either way.
+ *
+ * recomputeVasRevenueReal/recomputeUniqueVinVas/recomputeTotalCarCareTreatments
+ * stay per-date — each is a cheap single-day query (per their own doc
+ * comments), not worth the extra risk of a bigger refactor for a marginal
+ * gain. */
+export async function processPendingRecomputes(): Promise<ProcessPendingResult> {
+  const start = Date.now();
+  const pending = await loadAllPendingRecomputes();
+  const result: ProcessPendingResult = { processedPairs: 0, processedBranches: 0, failures: [], ranOutOfTime: false };
+
+  const datesByBranch = new Map<string, string[]>();
   for (const { branch, date } of pending) {
+    const dates = datesByBranch.get(branch);
+    if (dates) dates.push(date);
+    else datesByBranch.set(branch, [date]);
+  }
+
+  const branchesProcessed: string[] = [];
+  for (const [branch, dates] of datesByBranch) {
+    if (Date.now() - start > TIME_BUDGET_MS) {
+      result.ranOutOfTime = true;
+      break;
+    }
+    branchesProcessed.push(branch);
+
+    for (const date of dates) {
+      try {
+        await recomputeVasRevenueReal(branch, date);
+        await recomputeUniqueVinVas(branch, date);
+        await recomputeTotalCarCareTreatments(branch, date);
+      } catch (err) {
+        result.failures.push({ branch, date, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
     try {
-      await recomputeVasRevenueReal(branch, date);
-      await recomputeCloseSaAnalytics(branch, date);
-      await recomputeUniqueVinVas(branch, date);
-      await recomputeTotalCarCareTreatments(branch, date);
-      await recomputeCancelledAccessoriesAdjustmentForBranchMonth(branch, date.slice(0, 7));
+      await recomputeCloseSaAnalyticsForDates(branch, dates);
+    } catch (err) {
+      result.failures.push({ branch, date: "(close-sa-analytics, all pending dates)", error: err instanceof Error ? err.message : String(err) });
+    }
+
+    const months = [...new Set(dates.map((d) => d.slice(0, 7)))];
+    for (const month of months) {
+      try {
+        await recomputeCancelledAccessoriesAdjustmentForBranchMonth(branch, month);
+      } catch (err) {
+        result.failures.push({ branch, date: `(cancelled-accessories, ${month})`, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    for (const date of dates) {
       await clearPendingRecompute(branch, date);
       result.processedPairs++;
-    } catch (err) {
-      result.failures.push({ branch, date, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
-  const branches = [...new Set(pending.map((p) => p.branch))];
-  for (const branch of branches) {
+  for (const branch of branchesProcessed) {
     try {
       await recomputeCrossMonthReplacements([branch]);
       result.processedBranches++;
