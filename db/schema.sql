@@ -1621,6 +1621,32 @@ create index if not exists raw_upload_rows_service_info_vin_idx
   on raw_upload_rows ((upper(trim(row_data->>'Vin no'))))
   where report_type in ('service_info', 'service_info_bp');
 
+-- Partial-duplicate overlap checks (part-sale/ssrv089/service-info
+-- upload-validation.ts), 2026-11-26: each ran on every single upload,
+-- scanning a branch's *entire* report-type history with no date lower
+-- bound just to check a few hundred new values for overlap — confirmed in
+-- pg_stat_statements as one of the slowest, most-called query shapes
+-- company-wide (up to ~37s on one call), and one that gets slower every day
+-- as more history piles up (see memory:
+-- project_dashboard_slowness_diagnosis_nov26.md). The query itself was
+-- narrowed to filter by the candidate values up front instead of pulling
+-- every distinct value ever seen; these indexes are what lets that filter
+-- use an index scan instead of a report-type-wide scan. Created with
+-- `concurrently` in production, same reasoning as the two indexes above —
+-- omitted here since CONCURRENTLY can't run inside a transaction block,
+-- which is how this file is normally replayed.
+create index if not exists raw_upload_rows_part_sale_billno_idx
+  on raw_upload_rows (branch, (row_data->>'BillNo'))
+  where report_type = 'part_sale';
+
+create index if not exists raw_upload_rows_service_info_joborder_idx
+  on raw_upload_rows (branch, (row_data->>'Job Order No'))
+  where report_type = 'service_info';
+
+create index if not exists raw_upload_rows_ssrv089_invoicedoc_idx
+  on raw_upload_rows (branch, (row_data->>'Invoice Doc No.'))
+  where report_type = 'ssrv089';
+
 -- CE head/agent lead assignment (2026-11-02, at the user's request): the
 -- single flat 'ce' role is split into 'ce_head' (the existing CE account —
 -- full company-wide visibility, can bulk-assign MRS catch-list leads) and
@@ -1876,3 +1902,77 @@ alter table admins add constraint admins_role_scope_consistency check (
   (role = 'ce_agent'    and branch is null     and region is null) or
   (role = 'automation'  and branch is null     and region is null)
 );
+
+-- 3C Referrals rework (2026-11-27, at the user's request): the plain
+-- "Referrals" call queue (inactive_customer_referrals) gains a detailed
+-- call-outcome/appointment/RO workflow, mirroring BP Referrals' own
+-- genuine/customer_interested/validated_at/pending_ro_no/matched_ro_no
+-- shape. genuine alone triggers the ₹50 payout (see
+-- inactive_referral_payouts below); a genuine+interested customer who
+-- doesn't come in by their appointment_date becomes a "no show" — not
+-- closed, just re-contacted and rescheduled (appointment_date is
+-- overwritten, not versioned — see src/lib/inactive-referrals/store.ts).
+-- Applied directly against the live DB via
+-- scripts/add-3c-referrals-schema.mjs (schema.sql's own full replay is
+-- broken against live data — see feedback_schema_sql_replay_bug memory).
+alter table inactive_customer_referrals add column if not exists genuine boolean;
+alter table inactive_customer_referrals add column if not exists customer_interested boolean;
+alter table inactive_customer_referrals add column if not exists validated_at timestamptz;
+alter table inactive_customer_referrals add column if not exists closed_at timestamptz;
+alter table inactive_customer_referrals add column if not exists closed_reason text;
+alter table inactive_customer_referrals drop constraint if exists inactive_customer_referrals_closed_reason_check;
+alter table inactive_customer_referrals add constraint inactive_customer_referrals_closed_reason_check
+  check (closed_reason is null or closed_reason in ('not_genuine', 'not_interested'));
+alter table inactive_customer_referrals add column if not exists appointment_date date;
+alter table inactive_customer_referrals add column if not exists pending_ro_no varchar;
+alter table inactive_customer_referrals add column if not exists pending_ro_entered_at timestamptz;
+alter table inactive_customer_referrals add column if not exists matched_ro_no varchar;
+alter table inactive_customer_referrals add column if not exists ro_matched_at timestamptz;
+
+-- Structured reason code for a not-connected call, same convention as
+-- bp_referral_activity.not_connected_reason — alongside the free-text
+-- remark column already there, not instead of it.
+alter table inactive_referral_calls add column if not exists not_connected_reason text;
+
+-- Payout ledger, mirrors bp_referral_payouts exactly: ₹50 per genuine
+-- (validated_at is not null) referral, ₹200 more once its RO verifies
+-- against a GS Service Info upload (ro_matched_at is not null) — see
+-- loadPayoutLedger in store.ts.
+create table if not exists inactive_referral_payouts (
+  id              serial       primary key,
+  employee_id     text,
+  employee_name   text,
+  employee_branch text,
+  amount          numeric      not null,
+  paid_at         timestamptz  not null default now(),
+  paid_by         text         references admins(username)
+);
+create index if not exists inactive_referral_payouts_employee_idx
+  on inactive_referral_payouts (employee_id, employee_name, employee_branch);
+
+-- Verified-genuine inactive customers' contact details (the user's
+-- explicit request: these numbers need to "enter our database" once
+-- confirmed genuine), fed automatically the moment a referral's call
+-- outcome is saved genuine=true. Standalone rather than folded into
+-- ce_leads — ce_leads requires VIN + sales_date + N/N1/N2 mileage/report-
+-- date fields a 3C call never produces, so it isn't a fit.
+create table if not exists verified_inactive_contacts (
+  id                bigserial    primary key,
+  referral_id       integer      not null references inactive_customer_referrals(id),
+  customer_name     varchar,
+  customer_phone_1  varchar,
+  customer_phone_2  varchar,
+  vehicle_reg_no    varchar,
+  vehicle_model     varchar,
+  branch            varchar,
+  created_at        timestamptz  not null default now()
+);
+create unique index if not exists verified_inactive_contacts_referral_idx on verified_inactive_contacts (referral_id);
+
+-- 3C Referrals' call-outcome form split into per-branch reason fields
+-- (2026-11-27, at the user's request) — mirrors bp_referrals'
+-- not_interested_reason precedent: a "Not genuine" or "Not interested"
+-- outcome gets its own labeled reason, instead of one generic remark
+-- reused everywhere. Applied via scripts/add-3c-referrals-reason-columns.mjs.
+alter table inactive_customer_referrals add column if not exists not_genuine_reason text;
+alter table inactive_customer_referrals add column if not exists not_interested_reason text;

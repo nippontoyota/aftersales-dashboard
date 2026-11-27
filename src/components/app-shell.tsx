@@ -6,7 +6,6 @@ import { logoutAction } from "@/lib/actions";
 import { AutoRefresh } from "./auto-refresh";
 import { AdjustmentAckPopupGate } from "./adjustment-ack-popup-gate";
 import { HolidayMergePopupGate } from "./holiday-merge-popup-gate";
-import { LabourSalesIntroPopupGate } from "./labour-sales-intro-popup-gate";
 import { QueryPopupGate } from "./query-popup-gate";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -38,12 +37,14 @@ const NAV_ITEMS = [
   { href: "/bills", label: "Scrap and Used Oil", key: "bills" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true, hqOnly: false },
   { href: "/cancellations", label: "Cancellations", key: "cancellations" as const, requiresDashboard: true, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: true, hqOnly: false },
   { href: "/bp-referrals", label: "BP Referrals", key: "bp-referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: true, branchOnly: false },
-  // Inactive Customer Referrals — branch + HQ (2026-10-22), separate from BP
-  // Referrals above: a branch calls its own inactive customers to
-  // re-engage them, no BPM/payout workflow involved; HQ gets a read-only
-  // company-wide view of the same list (see branchOrHqOnly below).
-  // See src/app/referrals/.
-  { href: "/referrals", label: "Referrals", key: "referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: false, branchOnly: false, branchOrHqOnly: true },
+  // 3C Referrals (named "Referrals" until 2026-11-27) — branch + HQ
+  // (2026-10-22), separate from BP Referrals above: a branch calls its own
+  // inactive customers to re-engage them, with its own detailed call-
+  // outcome/appointment/RO workflow and payout ledger (reworked 2026-11-27,
+  // at the user's request — see src/lib/inactive-referrals/store.ts); HQ
+  // gets a full admin dashboard over the same data (see branchOrHqOnly
+  // below). See src/app/referrals/.
+  { href: "/referrals", label: "3C Referrals", key: "referrals" as const, requiresDashboard: false, companyWide: false, uploadOnly: false, regionalVisible: false, alwaysVisible: false, hqOnly: false, branchOnly: false, branchOrHqOnly: true },
   { href: "/upload", label: "Upload", key: "upload" as const, requiresDashboard: false, companyWide: false, uploadOnly: true, regionalVisible: false, alwaysVisible: false, hqOnly: false, branchOnly: false },
 ];
 
@@ -576,7 +577,6 @@ export function AppShell({
       <QueryPopupGate />
       <HolidayMergePopupGate />
       <AdjustmentAckPopupGate />
-      {isBranch ? <LabourSalesIntroPopupGate /> : null}
       {/* Desktop sidebar — collapsible to an icon rail */}
       <aside
         className={`hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex print:!hidden ${

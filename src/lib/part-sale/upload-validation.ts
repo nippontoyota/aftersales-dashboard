@@ -55,9 +55,9 @@ export async function checkBillOverlap(
     `select row_data->>'BillNo' as bill, max(date)::text as last_date
        from raw_upload_rows
       where report_type = 'part_sale' and branch = $1 and date < $2
-        and coalesce(trim(row_data->>'BillNo'), '') <> ''
+        and row_data->>'BillNo' = any($3::text[])
       group by row_data->>'BillNo'`,
-    [branch, claimedDate]
+    [branch, claimedDate, [...newBills]]
   );
 
   const priorDateByBill = new Map(rows.map((r) => [r.bill, r.last_date]));

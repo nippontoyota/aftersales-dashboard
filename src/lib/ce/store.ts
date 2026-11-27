@@ -528,54 +528,81 @@ export async function loadCeMrsGapList(options: {
     stageCountAssignedClause = `and w.assigned_to = $${stageCountValues.length}`;
   }
 
-  const [list, countRow, sectionCounts, stageCounts, dealers] = await Promise.all([
-    pool.query(
-      `${MRS_DUE_DATE_CTE}
-       select f.vin, trim(concat_ws(' ', f.customer_first_name, f.customer_family_name)) customer_name,
+  // The four queries below all need mrs_final, but each used to prepend its
+  // own full copy of MRS_DUE_DATE_CTE and run as an independent pool.query()
+  // call — meaning the due-date computation over all ~170k active leads ran
+  // FOUR times per page load, AND grabbed four connections out of the pool
+  // at once (plus a fifth for dealers below), out of only 6 total per
+  // instance (see src/lib/db.ts) — confirmed in pg_stat_statements as one of
+  // the slowest, most-called query shapes company-wide (2026-11-26, see
+  // memory: project_dashboard_slowness_diagnosis_nov26.md). Computing
+  // mrs_final once into a temp table on a single dedicated connection, then
+  // reading it four times, cuts both the redundant computation and the
+  // per-request connection-pool footprint from up to 5 down to 1.
+  type MrsListRow = {
+    vin: string; customer_name: string | null; allocated_dealer: string; n_report_date: string; n_mileage: string;
+    due_date: string; status: CeStatus; next_follow_up_date: string | null; attempt_count: string;
+    contact_number: string | null; vehicle_model: string | null; assigned_to: string | null;
+  };
+  const client = await pool.connect();
+  let list: { rows: MrsListRow[] };
+  let countRow: { rows: { count: string }[] };
+  let sectionCounts: { rows: { priority: string; overdue: string }[] };
+  let stageCounts: { rows: { new: string; followup: string; closed: string }[] };
+  try {
+    await client.query("begin");
+    // Named mrs_final_tmp, not mrs_final, so there's no ambiguity with the
+    // CTE of the same name defined inside MRS_DUE_DATE_CTE itself.
+    await client.query(`create temp table mrs_final_tmp on commit drop as (${MRS_DUE_DATE_CTE} select * from mrs_final)`);
+    list = await client.query(
+      `select f.vin, trim(concat_ws(' ', f.customer_first_name, f.customer_family_name)) customer_name,
          f.allocated_dealer, f.n_report_date, f.n_mileage, f.due_date,
          w.status, w.next_follow_up_date, w.attempt_count, f.contact_number, f.vehicle_model, w.assigned_to
-       from mrs_final f join ce_lead_workflow w using (vin)
+       from mrs_final_tmp f join ce_lead_workflow w using (vin)
        where ${clause}
        order by f.due_date desc, f.vin
        limit $${values.length - 1} offset $${values.length}`,
       values,
-    ),
-    pool.query<{ count: string }>(
-      `${MRS_DUE_DATE_CTE}
-       select count(*) from mrs_final f join ce_lead_workflow w using (vin) where ${clause}`,
+    );
+    countRow = await client.query<{ count: string }>(
+      `select count(*) from mrs_final_tmp f join ce_lead_workflow w using (vin) where ${clause}`,
       filterValues,
-    ),
+    );
     // Unfiltered (no search/dealer/status) tab counts, same pattern as
     // the AVF page's category tiles — just the two sections' raw sizes,
     // still excluding resolved leads so the tab badges match what's
     // actually listed underneath.
-    pool.query<{ priority: string; overdue: string }>(
-      `${MRS_DUE_DATE_CTE}
-       select
+    sectionCounts = await client.query<{ priority: string; overdue: string }>(
+      `select
          count(*) filter (where f.due_date = $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS} * interval '1 day' or ${FOLLOW_UP_DUE_CLAUSE}) priority,
          count(*) filter (where f.due_date between $1::date - ${CE_MRS_WINDOW_DAYS} * interval '1 day' and $1::date + ${CE_MRS_PRIORITY_LEAD_DAYS - 1} * interval '1 day' and not (${FOLLOW_UP_DUE_CLAUSE})) overdue
-       from mrs_final f join ce_lead_workflow w using (vin)
+       from mrs_final_tmp f join ce_lead_workflow w using (vin)
        where not exists (select 1 from n9_leads n where n.vin = f.vin) and not (w.status = any($2::text[]))`,
       [options.today, resolvedStatusesArray],
-    ),
+    );
     // New/follow-up/closed counts for the active section only (search/
     // dealer/brand/workflow-filter ignored, same as sectionCounts above),
     // scoped to the agent's own leads when assignedTo is set so the
     // sub-tab badges match what that agent's table actually shows. Unlike
     // sectionCounts, this one deliberately does NOT exclude resolved
     // leads up front — "closed" needs to count exactly those.
-    pool.query<{ new: string; followup: string; closed: string }>(
-      `${MRS_DUE_DATE_CTE}
-       select
+    stageCounts = await client.query<{ new: string; followup: string; closed: string }>(
+      `select
          count(*) filter (where ${sectionClause} and w.status = 'New') new,
          count(*) filter (where ${sectionClause} and w.status <> 'New' and not (w.status = any($2::text[]))) followup,
          count(*) filter (where ${sectionClause} and w.status = any($2::text[])) closed
-       from mrs_final f join ce_lead_workflow w using (vin)
+       from mrs_final_tmp f join ce_lead_workflow w using (vin)
        where not exists (select 1 from n9_leads n where n.vin = f.vin) ${stageCountAssignedClause}`,
       stageCountValues,
-    ),
-    loadCeDealers(true),
-  ]);
+    );
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
+  const dealers = await loadCeDealers(true);
 
   const rows: CeMrsListRow[] = list.rows.map((row) => ({
     vin: row.vin,

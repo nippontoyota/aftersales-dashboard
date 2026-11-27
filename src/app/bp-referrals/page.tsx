@@ -5,10 +5,6 @@ import { adminIdentityLabel, listBranchCodes } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadNavState } from "@/lib/dashboard-data";
 import { REGIONS } from "@/lib/regions";
-import { buildReport } from "@/lib/report";
-import { loadReportHolidaySet } from "@/lib/report-holidays/store";
-import { latestNonHolidayDate, sundayOffWorkingDaysElapsedInMonth, sundayOffWorkingDaysInMonth } from "@/lib/reporting-date";
-import { listSnapshotDates } from "@/lib/snapshot-store";
 import {
   currentMonthKey,
   ensureAssignedBranches,
@@ -49,38 +45,12 @@ export default async function BpReferralsPage({ searchParams }: { searchParams: 
   if (admin.role === "bp_manager" || admin.role === "branch") {
     await ensureAssignedBranches();
     const region = regionalLeadFor(admin.branch);
-    const [queue, branchCodes, regionRollup, transferredOut, allDates, holidays] = await Promise.all([
+    const [queue, branchCodes, regionRollup, transferredOut] = await Promise.all([
       loadQueueForBranch(admin.branch),
       listBranchCodes(),
       region ? loadRegionRollup(region) : Promise.resolve(null),
       loadTransferredOutFromBranch(admin.branch),
-      listSnapshotDates(),
-      loadReportHolidaySet(),
     ]);
-    // BPU target vs. actual for this branch alone (2026-11-12, at the user's
-    // request — BPMs only ever saw referral-program numbers here, never
-    // their own branch's BPU progress; 2026-11-14, swapped from the bay-
-    // utilization BP RO target to the same fixed-month-end BPU metric shown
-    // on the branch dashboard's Targets — MTD panel). Reuses the latest
-    // uploaded, non-holiday date — same "what date to show" rule as the
-    // CEO/branch dashboards (reporting-date.ts's latestNonHolidayDate) —
-    // rather than wiring in this page's own date picker, which nothing else
-    // here needs.
-    const reportDate = latestNonHolidayDate(allDates, holidays);
-    const report = reportDate ? await buildReport(reportDate) : null;
-    const branchReport = report?.branches.find((b) => b.branch === admin.branch) ?? null;
-    const workingDaysElapsed = reportDate ? sundayOffWorkingDaysElapsedInMonth(reportDate, holidays) : 0;
-    const workingDaysTotal = reportDate ? sundayOffWorkingDaysInMonth(reportDate, holidays) : 0;
-    const elapsedFraction = workingDaysTotal > 0 ? workingDaysElapsed / workingDaysTotal : null;
-    const bpuMtd = branchReport?.bpuAchievementForTheMonth ?? null;
-    const bpuTarget = branchReport?.bpuTarget ?? null;
-    const bpuRatio = bpuMtd !== null && bpuTarget !== null && bpuTarget !== 0 ? bpuMtd / bpuTarget : null;
-    const bpuProgress = {
-      mtd: bpuMtd,
-      target: bpuTarget,
-      ratio: bpuRatio,
-      paceRatio: bpuRatio === null || elapsedFraction === null || elapsedFraction === 0 ? null : bpuRatio / elapsedFraction,
-    };
     const queueClient = (
       <BpmQueueClient
         ownBranch={admin.branch}
@@ -89,7 +59,6 @@ export default async function BpReferralsPage({ searchParams }: { searchParams: 
         regionName={region}
         regionRollup={regionRollup}
         transferredOut={transferredOut}
-        bpuProgress={bpuProgress}
         readOnly={admin.role === "branch"}
       />
     );

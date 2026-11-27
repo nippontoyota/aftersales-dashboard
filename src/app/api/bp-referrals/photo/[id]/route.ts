@@ -63,7 +63,7 @@ function svgResponse(message: string, status = 200) {
 
 async function hasAccess(admin: NonNullable<Awaited<ReturnType<typeof getCurrentAdmin>>>, assignedBranch: string | null): Promise<boolean> {
   if (admin.role === "bp_ho" || admin.role === "hq") return true;
-  if (admin.role !== "bp_manager") return false;
+  if (admin.role !== "bp_manager" && admin.role !== "branch") return false;
   if (assignedBranch === admin.branch) return true;
   const region = regionalLeadFor(admin.branch);
   if (region && assignedBranch && (REGIONS[region] as readonly string[]).includes(assignedBranch)) return true;

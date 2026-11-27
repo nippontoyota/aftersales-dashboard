@@ -51,9 +51,9 @@ export async function checkRoOverlap(branch: string, rawRows: Record<string, unk
     `select row_data->>'Job Order No' as ro, max(date)::text as last_date
        from raw_upload_rows
       where report_type = 'service_info' and branch = $1 and date < $2
-        and coalesce(trim(row_data->>'Job Order No'), '') <> ''
+        and row_data->>'Job Order No' = any($3::text[])
       group by row_data->>'Job Order No'`,
-    [branch, claimedDate]
+    [branch, claimedDate, [...newRos]]
   );
 
   const priorDateByRo = new Map(rows.map((r) => [r.ro, r.last_date]));

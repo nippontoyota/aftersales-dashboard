@@ -4,6 +4,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { hashRows } from "@/lib/duplicate-detection";
 import { linkServiceInfoToCeLeads } from "@/lib/ce/service-info-link";
+import { matchInactiveReferralsFromServiceInfoRows } from "@/lib/inactive-referrals/ro-matcher";
 import { findDuplicateBatch, saveRawUploadRows } from "@/lib/raw-upload-rows/store";
 import { isBpFlavoredServiceInfo, JOB_ORDER_NO_COLUMN, parseServiceInfoWorkbook } from "@/lib/service-info/parse";
 import { loadServiceInfoSnapshot, saveServiceInfoSnapshot } from "@/lib/service-info/store";
@@ -141,6 +142,13 @@ export async function POST(request: Request) {
     await markPendingRecompute(branch, date);
     await markCatchUpPartSaleDatesPending(branch, rawRows.map((row) => row[JOB_ORDER_NO_COLUMN]), date);
     await linkServiceInfoToCeLeads(rawRows, branch);
+    // 3C Referrals' RO verification (₹200 payout trigger) — best-effort,
+    // same as linkServiceInfoToCeLeads above, must never block this upload.
+    try {
+      await matchInactiveReferralsFromServiceInfoRows(rawRows, branch);
+    } catch (err) {
+      console.error("3C Referrals RO matching failed", err);
+    }
   });
 
   return NextResponse.json({ success: true, date, branch, counts });
