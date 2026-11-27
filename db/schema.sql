@@ -1968,3 +1968,11 @@ create table if not exists verified_inactive_contacts (
   created_at        timestamptz  not null default now()
 );
 create unique index if not exists verified_inactive_contacts_referral_idx on verified_inactive_contacts (referral_id);
+
+-- 3C Referrals' call-outcome form split into per-branch reason fields
+-- (2026-11-27, at the user's request) — mirrors bp_referrals'
+-- not_interested_reason precedent: a "Not genuine" or "Not interested"
+-- outcome gets its own labeled reason, instead of one generic remark
+-- reused everywhere. Applied via scripts/add-3c-referrals-reason-columns.mjs.
+alter table inactive_customer_referrals add column if not exists not_genuine_reason text;
+alter table inactive_customer_referrals add column if not exists not_interested_reason text;

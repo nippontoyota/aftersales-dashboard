@@ -251,12 +251,35 @@ function CallOutcomeForm({ id, onDone }: { id: number; onDone: () => void }) {
         <div className="mt-1 flex gap-2">
           {(["yes", "no"] as const).map((v) => (
             <label key={v} className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm ${genuine === v ? "border-accent bg-accent-soft text-accent-text" : "border-border-strong text-fg-muted"}`}>
-              <input type="radio" name="genuine" value={v} checked={genuine === v} onChange={() => setGenuine(v)} className="sr-only" />
+              <input
+                type="radio"
+                name="genuine"
+                value={v}
+                checked={genuine === v}
+                onChange={() => {
+                  setGenuine(v);
+                  // Switching the top answer always clears whatever was
+                  // picked under the old one (2026-11-27, fixing a real bug
+                  // — the appointment date field used to stay visible after
+                  // flipping back to "No" here, since it only checked
+                  // `interested`, never `genuine`, and this state was never
+                  // reset).
+                  setInterested("");
+                }}
+                className="sr-only"
+              />
               {v === "yes" ? "Yes" : "No"}
             </label>
           ))}
         </div>
       </div>
+
+      {genuine === "no" ? (
+        <div>
+          <span className={eyebrow}>Why isn&apos;t this a genuine inactive customer? (required)</span>
+          <textarea name="notGenuineReason" required rows={2} className={remarkField} />
+        </div>
+      ) : null}
 
       {genuine === "yes" ? (
         <div>
@@ -272,22 +295,28 @@ function CallOutcomeForm({ id, onDone }: { id: number; onDone: () => void }) {
         </div>
       ) : null}
 
-      {interested === "yes" ? (
+      {genuine === "yes" && interested === "no" ? (
         <div>
-          <span className={eyebrow}>Appointment date (if they gave you one)</span>
-          <input type="date" name="appointmentDate" className={`${control} mt-1 w-full px-2`} />
-          <p className="mt-1 text-[11px] text-fg-faint">Leave blank if they haven&apos;t committed a date yet — you can set it later.</p>
+          <span className={eyebrow}>Why isn&apos;t the customer interested? (required)</span>
+          <textarea name="notInterestedReason" required rows={2} className={remarkField} />
         </div>
       ) : null}
 
-      {genuine ? (
-        <div>
-          <span className={eyebrow}>What did the customer say? (required)</span>
-          <textarea name="remark" required rows={2} className={remarkField} />
-        </div>
+      {genuine === "yes" && interested === "yes" ? (
+        <>
+          <div>
+            <span className={eyebrow}>Appointment date (if they gave you one)</span>
+            <input type="date" name="appointmentDate" className={`${control} mt-1 w-full px-2`} />
+            <p className="mt-1 text-[11px] text-fg-faint">Leave blank if they haven&apos;t committed a date yet — you can set it later.</p>
+          </div>
+          <div>
+            <span className={eyebrow}>Notes (optional)</span>
+            <textarea name="remark" rows={2} className={remarkField} />
+          </div>
+        </>
       ) : null}
 
-      {genuine && (genuine === "no" || interested) ? (
+      {genuine === "no" || (genuine === "yes" && interested) ? (
         <div className="flex items-center gap-2 pt-1">
           <button type="submit" disabled={pending} className="h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60">
             {pending ? "Saving…" : "Save call outcome"}
@@ -403,10 +432,22 @@ export function DetailModal({ referral, ownBranch, readOnly, onClose }: { referr
               <dd className="text-fg">{r.genuine ? "Yes" : "No"}</dd>
             </div>
           ) : null}
+          {r.notGenuineReason ? (
+            <div>
+              <dt className="text-fg-faint">Why not genuine</dt>
+              <dd className="mt-0.5 text-fg">{r.notGenuineReason}</dd>
+            </div>
+          ) : null}
           {r.customerInterested !== null ? (
             <div className="flex justify-between gap-3">
               <dt className="text-fg-faint">Interested</dt>
               <dd className="text-fg">{r.customerInterested ? "Yes" : "No"}</dd>
+            </div>
+          ) : null}
+          {r.notInterestedReason ? (
+            <div>
+              <dt className="text-fg-faint">Why not interested</dt>
+              <dd className="mt-0.5 text-fg">{r.notInterestedReason}</dd>
             </div>
           ) : null}
           {r.appointmentDate ? (

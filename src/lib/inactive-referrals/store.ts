@@ -27,6 +27,8 @@ export type InactiveReferralRow = {
   validatedAt: Date | string | null;
   closedAt: Date | string | null;
   closedReason: "not_genuine" | "not_interested" | null;
+  notGenuineReason: string | null;
+  notInterestedReason: string | null;
   appointmentDate: string | null;
   pendingRoNo: string | null;
   pendingRoEnteredAt: Date | string | null;
@@ -38,7 +40,7 @@ const SELECT_COLUMNS = `
   id, referral_date, vehicle_reg_no, vehicle_model, customer_name, customer_phone_1, customer_phone_2,
   customer_address, referring_employee_id, referring_employee_name, referring_employee_branch, dealer_code,
   submitted_at, assigned_branch, call_status, handled_by, last_contacted_at,
-  genuine, customer_interested, validated_at, closed_at, closed_reason,
+  genuine, customer_interested, validated_at, closed_at, closed_reason, not_genuine_reason, not_interested_reason,
   appointment_date::text as appointment_date, pending_ro_no, pending_ro_entered_at, matched_ro_no, ro_matched_at
 `;
 
@@ -65,6 +67,8 @@ type RawReferralRow = {
   validated_at: Date | string | null;
   closed_at: Date | string | null;
   closed_reason: "not_genuine" | "not_interested" | null;
+  not_genuine_reason: string | null;
+  not_interested_reason: string | null;
   appointment_date: string | null;
   pending_ro_no: string | null;
   pending_ro_entered_at: Date | string | null;
@@ -96,6 +100,8 @@ function toRow(r: RawReferralRow): InactiveReferralRow {
     validatedAt: r.validated_at,
     closedAt: r.closed_at,
     closedReason: r.closed_reason,
+    notGenuineReason: r.not_genuine_reason,
+    notInterestedReason: r.not_interested_reason,
     appointmentDate: r.appointment_date,
     pendingRoNo: r.pending_ro_no,
     pendingRoEnteredAt: r.pending_ro_entered_at,
@@ -170,42 +176,46 @@ export async function markNotConnected(id: number, branch: string, performedBy: 
 }
 
 export type CallOutcome =
-  | { genuine: false }
-  | { genuine: true; customerInterested: false }
-  | { genuine: true; customerInterested: true; appointmentDate?: string };
+  | { genuine: false; reason: string }
+  | { genuine: true; customerInterested: false; reason: string }
+  | { genuine: true; customerInterested: true; appointmentDate?: string; remark?: string };
 
 /** The call-outcome submission once a branch actually connects with the
  * customer. genuine alone is the ₹50 payout trigger (validated_at) — the
  * user's explicit call: paid once the call confirms this really is an
  * inactive customer worth it, regardless of whether they agree to come in.
  * genuine=false or genuine+not-interested both close the referral out
- * (closed_at/closed_reason) with no further follow-up; genuine+interested
- * stays open. appointmentDate is captured right here when the branch
- * already has one off the call (2026-11-27, at the user's request — the
- * form has a date picker right where "interested" is answered, rather
- * than making the branch reopen the referral for a separate step); left
+ * (closed_at/closed_reason, each with its own labeled reason — 2026-11-27,
+ * at the user's request, mirroring bp_referrals.not_interested_reason)
+ * with no further follow-up; genuine+interested stays open. appointmentDate
+ * is captured right here when the branch already has one off the call —
+ * the form has a date picker right where "interested" is answered, rather
+ * than making the branch reopen the referral for a separate step; left
  * blank it falls back to "Set appointment date" on the Connected stage,
  * for when a customer agrees "in principle" but can't commit a date on
  * the spot. A genuine outcome also writes a row to
  * verified_inactive_contacts — the user's explicit request that a verified-
  * genuine inactive customer's number "enters our database". */
-export async function submitCallOutcome(id: number, branch: string, handledBy: string, outcome: CallOutcome, remark: string): Promise<void> {
+export async function submitCallOutcome(id: number, branch: string, handledBy: string, outcome: CallOutcome): Promise<void> {
   await assertOwnedByBranch(id, branch);
+  let logRemark: string;
   if (!outcome.genuine) {
     await pool.query(
       `update inactive_customer_referrals set call_status = 'connected', genuine = false, handled_by = $2,
-         last_contacted_at = now(), closed_at = now(), closed_reason = 'not_genuine'
+         last_contacted_at = now(), closed_at = now(), closed_reason = 'not_genuine', not_genuine_reason = $3
        where id = $1`,
-      [id, handledBy],
+      [id, handledBy, outcome.reason],
     );
+    logRemark = outcome.reason;
   } else if (!outcome.customerInterested) {
     await pool.query(
       `update inactive_customer_referrals set call_status = 'connected', genuine = true, customer_interested = false,
          handled_by = $2, last_contacted_at = now(), validated_at = now(),
-         closed_at = now(), closed_reason = 'not_interested'
+         closed_at = now(), closed_reason = 'not_interested', not_interested_reason = $3
        where id = $1`,
-      [id, handledBy],
+      [id, handledBy, outcome.reason],
     );
+    logRemark = outcome.reason;
   } else {
     await pool.query(
       `update inactive_customer_referrals set call_status = 'connected', genuine = true, customer_interested = true,
@@ -213,8 +223,9 @@ export async function submitCallOutcome(id: number, branch: string, handledBy: s
        where id = $1`,
       [id, handledBy, outcome.appointmentDate ?? null],
     );
+    logRemark = outcome.remark?.trim() || (outcome.appointmentDate ? `Appointment set for ${outcome.appointmentDate}.` : "Interested — no appointment date yet.");
   }
-  await logCall(id, "connected", remark, handledBy);
+  await logCall(id, "connected", logRemark, handledBy);
 
   if (outcome.genuine) {
     await pool.query(

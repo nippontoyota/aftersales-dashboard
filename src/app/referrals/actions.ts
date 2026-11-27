@@ -51,29 +51,32 @@ export async function submitCallOutcomeAction(_prev: ReferralActionState, formDa
 
   const id = Number(formData.get("id"));
   if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
-  const remark = requiredField(formData, "remark");
-  if (!remark) return { error: "A remark is required.", ok: false };
 
   const genuine = String(formData.get("genuine") ?? "");
   if (genuine !== "yes" && genuine !== "no") return { error: "Say whether this is genuine.", ok: false };
 
   let outcome: CallOutcome;
   if (genuine === "no") {
-    outcome = { genuine: false };
+    const reason = requiredField(formData, "notGenuineReason");
+    if (!reason) return { error: "Say why this isn't a genuine inactive customer.", ok: false };
+    outcome = { genuine: false, reason };
   } else {
     const interested = String(formData.get("customerInterested") ?? "");
     if (interested !== "yes" && interested !== "no") return { error: "Say whether the customer is interested.", ok: false };
     if (interested === "no") {
-      outcome = { genuine: true, customerInterested: false };
+      const reason = requiredField(formData, "notInterestedReason");
+      if (!reason) return { error: "Say why the customer isn't interested.", ok: false };
+      outcome = { genuine: true, customerInterested: false, reason };
     } else {
       const appointmentDate = requiredField(formData, "appointmentDate");
       if (appointmentDate && !/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate)) return { error: "Pick a valid appointment date.", ok: false };
-      outcome = { genuine: true, customerInterested: true, appointmentDate: appointmentDate ?? undefined };
+      const remark = requiredField(formData, "remark");
+      outcome = { genuine: true, customerInterested: true, appointmentDate: appointmentDate ?? undefined, remark: remark ?? undefined };
     }
   }
 
   try {
-    await submitCallOutcome(id, admin.branch, admin.username, outcome, remark);
+    await submitCallOutcome(id, admin.branch, admin.username, outcome);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't save the call outcome.", ok: false };
   }
