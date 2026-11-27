@@ -3,8 +3,16 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
-import { achievementTone } from "@/lib/aggregate";
-import { formatNumber, formatPercent } from "@/lib/format";
+import {
+  classify as classifyKpi,
+  KpiCard,
+  KpiModal,
+  Lightbox,
+  AlarmIcon,
+  PhoneIcon,
+  PhoneOffIcon,
+  XCircleIcon,
+} from "./kpi-shared";
 import {
   changePaymentTypeAction,
   closeFollowUpAsLostAction,
@@ -1298,11 +1306,6 @@ function QueueList({
   );
 }
 
-/** This branch's BPU achievement vs. its fixed month-end target — same
- * metric as the "BPU" card on the branch dashboard's Targets — MTD panel.
- * null when the branch has no BPU target set for the month. */
-type BpuProgress = { mtd: number | null; target: number | null; ratio: number | null; paceRatio: number | null };
-
 export function BpmQueueClient({
   ownBranch,
   queue,
@@ -1310,7 +1313,6 @@ export function BpmQueueClient({
   regionName,
   regionRollup,
   transferredOut,
-  bpuProgress,
   readOnly = false,
 }: {
   ownBranch: string;
@@ -1319,11 +1321,6 @@ export function BpmQueueClient({
   regionName: string | null;
   regionRollup: BpmQueueReferral[] | null;
   transferredOut: BpmQueueReferral[];
-  /** 2026-11-12, at the user's request: BP managers only ever saw the
-   * referral-program numbers on this page, never their own branch's BPU
-   * progress. 2026-11-14, swapped from the bay-utilization BP RO target to
-   * this fixed-month-end BPU metric, to match the branch dashboard. */
-  bpuProgress: BpuProgress | null;
   /** True for the plain "branch" account's own read-only view of this same
    * page (2026-11-16, at the user's request) — every call/follow-up/RO/
    * payment-type/transfer control disappears (same canAct gating QueueList
@@ -1334,6 +1331,25 @@ export function BpmQueueClient({
   readOnly?: boolean;
 }) {
   const [view, setView] = useState<"own" | "region" | "transferred_out">("own");
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [activeKpi, setActiveKpi] = useState<{ title: string; predicate: (r: BpmQueueReferral) => boolean } | null>(null);
+
+  // Branch-view-only hero strip (2026-11-27, at the user's request, replacing
+  // the BPU — MTD card below) — same KPI-card / needs-attention visuals as
+  // BP HO's own dashboard, scoped to just this branch's own queue (no new
+  // data: everything comes from `queue`, already loaded for the table).
+  const classified = useMemo(() => queue.map((r) => ({ r, status: classifyKpi(r) })), [queue]);
+  const heroCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const { status } of classified) counts[status] = (counts[status] ?? 0) + 1;
+    return counts;
+  }, [classified]);
+  const toCallAndNotConnected = useMemo(
+    () => classified.filter((c) => c.status === "pending" || c.status === "not_connected").map((c) => c.r),
+    [classified],
+  );
+  const dropped = useMemo(() => classified.filter((c) => c.status === "dropped").map((c) => c.r), [classified]);
+  const openKpi = (title: string, predicate: (r: BpmQueueReferral) => boolean) => setActiveKpi({ title, predicate });
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -1380,34 +1396,75 @@ export function BpmQueueClient({
         </div>
       </div>
 
-      {bpuProgress && bpuProgress.mtd !== null ? (
-        <div className="mb-6 rounded-lg border border-border bg-surface p-3 shadow-sm">
-          <div className={eyebrow}>BPU — MTD</div>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-lg font-semibold tabular-nums text-fg">{formatNumber(bpuProgress.mtd)}</span>
-            {bpuProgress.target !== null ? (
-              <span className="text-xs text-fg-faint">/ Target {formatNumber(bpuProgress.target)}</span>
-            ) : null}
-          </div>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2">
-            <div
-              className={`h-full rounded-full ${
-                { good: "bg-good-solid", warn: "bg-warn-solid", critical: "bg-bad-solid", neutral: "bg-border-strong" }[
-                  achievementTone(bpuProgress.paceRatio)
-                ]
-              }`}
-              style={{ width: `${bpuProgress.ratio === null ? 0 : Math.min(100, Math.round(bpuProgress.ratio * 100))}%` }}
+      {readOnly && view === "own" ? (
+        <>
+          {lightboxUrl ? <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} /> : null}
+          {activeKpi ? (
+            <KpiModal
+              title={activeKpi.title}
+              rows={queue.filter(activeKpi.predicate)}
+              branchCodes={[ownBranch]}
+              showBranchFilter={false}
+              onClose={() => setActiveKpi(null)}
+              onPhotoClick={(id) => setLightboxUrl(`/api/bp-referrals/photo/${id}`)}
             />
+          ) : null}
+
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <KpiCard icon={<PhoneIcon />} color="accent" label="To call" value={heroCounts.pending ?? 0} onClick={() => openKpi("To call", (r) => classifyKpi(r) === "pending")} />
+            <KpiCard icon={<PhoneOffIcon />} color="accent" label="Not connected" value={heroCounts.not_connected ?? 0} onClick={() => openKpi("Not connected", (r) => classifyKpi(r) === "not_connected")} />
+            <KpiCard icon={<AlarmIcon />} color="warn" label="Follow-up overdue" value={heroCounts.followup_overdue ?? 0} onClick={() => openKpi("Follow-up overdue", (r) => classifyKpi(r) === "followup_overdue")} />
+            <KpiCard icon={<XCircleIcon />} color="bad" label="Dropped" value={heroCounts.dropped ?? 0} onClick={() => openKpi("Dropped", (r) => classifyKpi(r) === "dropped")} />
           </div>
-          <div className="mt-1 text-[11px] text-fg-faint">
-            {bpuProgress.ratio === null ? "no target" : `${formatPercent(bpuProgress.ratio)} of target`}
-            {bpuProgress.paceRatio !== null
-              ? bpuProgress.paceRatio >= 1
-                ? " — on / ahead of pace"
-                : ` — ${formatPercent(1 - bpuProgress.paceRatio)} behind pace`
-              : null}
+
+          <div className="mb-6 grid gap-5 lg:grid-cols-2">
+            <div className="rounded-xl border border-bad/30 bg-surface shadow-sm">
+              <div className="flex items-center gap-2 border-b border-bad/20 bg-bad-soft/40 px-4 py-2.5">
+                <PhoneIcon />
+                <h2 className="text-sm font-bold text-bad">To call + Not connected</h2>
+                <span className="ml-auto text-xs font-semibold text-bad">{toCallAndNotConnected.length}</span>
+              </div>
+              <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                {toCallAndNotConnected.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-fg-muted">Nothing to call.</p>
+                ) : (
+                  toCallAndNotConnected.map((r) => (
+                    <div key={r.id} className="px-4 py-2.5 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-fg">{r.referring_employee_name ?? "—"}</span>
+                        <span className="font-mono text-xs text-fg-faint">{r.vehicle_reg_no ?? "—"}</span>
+                      </div>
+                      <div className="text-xs text-fg-faint">submitted {fmt(r.submitted_at)}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-bad/30 bg-surface shadow-sm">
+              <div className="flex items-center gap-2 border-b border-bad/20 bg-bad-soft/40 px-4 py-2.5">
+                <XCircleIcon />
+                <h2 className="text-sm font-bold text-bad">Dropped (no contact in 3+ days)</h2>
+                <span className="ml-auto text-xs font-semibold text-bad">{dropped.length}</span>
+              </div>
+              <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                {dropped.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-fg-muted">Nothing dropped.</p>
+                ) : (
+                  dropped.map((r) => (
+                    <div key={r.id} className="px-4 py-2.5 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-fg">{r.referring_employee_name ?? "—"}</span>
+                        <span className="font-mono text-xs text-fg-faint">{r.vehicle_reg_no ?? "—"}</span>
+                      </div>
+                      <div className="text-xs text-fg-faint">last contact {fmt(r.last_contacted_at ?? r.submitted_at)}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        </>
       ) : null}
 
       {view === "own" ? (
