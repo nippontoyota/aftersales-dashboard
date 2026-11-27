@@ -90,6 +90,14 @@ import { withAdvisoryLock } from "../db-lock";
  * instead of the usual subtraction. Applies regardless of
  * NEW_RULE_CUTOVER_DATE — it's a different question (whether to subtract at
  * all) from which value to subtract.
+ *
+ * ACCESSORIES-STAFF EXCLUSION (2026-11-23): An invoice closed by an
+ * Accessories-staff SA is already eliminated from GUS Parts/Labour MTD via
+ * the monthly Accessories deduction (see ssrv089/parse.ts and report.ts).
+ * If an RO closed by Accessories staff is also matched as a cross-month
+ * replacement, subtracting its value from GUS MTD double-deducts the job
+ * from GUS revenue. Invoices closed by Accessories staff are therefore
+ * excluded from ssrv_dedup.
  */
 
 /** Replacements with a row date on/after this use the new (original-value)
@@ -297,7 +305,14 @@ export async function computeCrossMonthReplacementsFresh(branches?: string[]): P
                ${toNumericExpr("Pnt Mat Sale")} as pnt_mat_sale,
                ${toNumericExpr("Labour Sale")} as labour_sale
         from raw_upload_rows r
-        where r.report_type in ('ssrv089', 'ssrv089_bp') and r.date >= $1::date and ($2::text[] is null or r.branch = any($2::text[]))
+        where r.report_type in ('ssrv089', 'ssrv089_bp')
+          and r.date >= $1::date
+          and ($2::text[] is null or r.branch = any($2::text[]))
+          and not exists (
+            select 1 from accessories_staff a
+            where a.branch = r.branch
+              and lower(regexp_replace(a.name, '\\s+', ' ', 'g')) = lower(regexp_replace(trim(coalesce(r.row_data->>'Close SA Name', '')), '\\s+', ' ', 'g'))
+          )
       ) x
       group by branch, ro, inv, row_month
     )
