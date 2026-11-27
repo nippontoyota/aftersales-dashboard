@@ -63,7 +63,13 @@ export async function submitCallOutcomeAction(_prev: ReferralActionState, formDa
   } else {
     const interested = String(formData.get("customerInterested") ?? "");
     if (interested !== "yes" && interested !== "no") return { error: "Say whether the customer is interested.", ok: false };
-    outcome = interested === "yes" ? { genuine: true, customerInterested: true } : { genuine: true, customerInterested: false };
+    if (interested === "no") {
+      outcome = { genuine: true, customerInterested: false };
+    } else {
+      const appointmentDate = requiredField(formData, "appointmentDate");
+      if (appointmentDate && !/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate)) return { error: "Pick a valid appointment date.", ok: false };
+      outcome = { genuine: true, customerInterested: true, appointmentDate: appointmentDate ?? undefined };
+    }
   }
 
   try {

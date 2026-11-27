@@ -272,6 +272,14 @@ function CallOutcomeForm({ id, onDone }: { id: number; onDone: () => void }) {
         </div>
       ) : null}
 
+      {interested === "yes" ? (
+        <div>
+          <span className={eyebrow}>Appointment date (if they gave you one)</span>
+          <input type="date" name="appointmentDate" className={`${control} mt-1 w-full px-2`} />
+          <p className="mt-1 text-[11px] text-fg-faint">Leave blank if they haven&apos;t committed a date yet — you can set it later.</p>
+        </div>
+      ) : null}
+
       {genuine ? (
         <div>
           <span className={eyebrow}>What did the customer say? (required)</span>

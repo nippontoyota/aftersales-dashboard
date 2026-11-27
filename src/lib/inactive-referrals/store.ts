@@ -172,7 +172,7 @@ export async function markNotConnected(id: number, branch: string, performedBy: 
 export type CallOutcome =
   | { genuine: false }
   | { genuine: true; customerInterested: false }
-  | { genuine: true; customerInterested: true };
+  | { genuine: true; customerInterested: true; appointmentDate?: string };
 
 /** The call-outcome submission once a branch actually connects with the
  * customer. genuine alone is the ₹50 payout trigger (validated_at) — the
@@ -180,9 +180,12 @@ export type CallOutcome =
  * inactive customer worth it, regardless of whether they agree to come in.
  * genuine=false or genuine+not-interested both close the referral out
  * (closed_at/closed_reason) with no further follow-up; genuine+interested
- * stays open, with "Set appointment date" the next step (see
- * setAppointmentDate below) — deliberately not captured in this same call,
- * since a customer agreeing "in principle" often can't commit a date on
+ * stays open. appointmentDate is captured right here when the branch
+ * already has one off the call (2026-11-27, at the user's request — the
+ * form has a date picker right where "interested" is answered, rather
+ * than making the branch reopen the referral for a separate step); left
+ * blank it falls back to "Set appointment date" on the Connected stage,
+ * for when a customer agrees "in principle" but can't commit a date on
  * the spot. A genuine outcome also writes a row to
  * verified_inactive_contacts — the user's explicit request that a verified-
  * genuine inactive customer's number "enters our database". */
@@ -206,9 +209,9 @@ export async function submitCallOutcome(id: number, branch: string, handledBy: s
   } else {
     await pool.query(
       `update inactive_customer_referrals set call_status = 'connected', genuine = true, customer_interested = true,
-         handled_by = $2, last_contacted_at = now(), validated_at = now()
+         handled_by = $2, last_contacted_at = now(), validated_at = now(), appointment_date = coalesce($3::date, appointment_date)
        where id = $1`,
-      [id, handledBy],
+      [id, handledBy, outcome.appointmentDate ?? null],
     );
   }
   await logCall(id, "connected", remark, handledBy);
