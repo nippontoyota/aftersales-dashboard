@@ -1,54 +1,169 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { getCallHistoryAction, markConnectedAction, markNotConnectedAction, type ReferralActionState } from "./actions";
-import type { InactiveReferralCallRow, InactiveReferralRow } from "@/lib/inactive-referrals/store";
+import { useActionState, useMemo, useState } from "react";
+import { control, eyebrow } from "@/lib/ui";
 import { branchName } from "@/lib/branch-names";
+import {
+  enterRoNumberAction,
+  getCallHistoryAction,
+  markNotConnectedAction,
+  setAppointmentDateAction,
+  submitCallOutcomeAction,
+  type EnterRoActionState,
+  type ReferralActionState,
+} from "./actions";
+import type { InactiveReferralCallRow, InactiveReferralRow } from "@/lib/inactive-referrals/store";
+import { NotConnectedReasonFields } from "./not-connected-reason-fields";
 
-const INIT: ReferralActionState = { error: null, ok: false };
+/** A referral older than this with a pending (unconfirmed) RO is surfaced
+ * as "Not verified" rather than quietly sitting in "RO entered" forever —
+ * mirrors BP Referrals' own "dropped" overdue convention. Not a rejection:
+ * the next Service Info upload or HQ's re-scan can still confirm it any
+ * time, this is visibility only. */
+const NOT_VERIFIED_OVERDUE_DAYS = 30;
 
-const textareaClass =
-  "w-full rounded-md border border-border-strong bg-surface px-2 py-1 text-[12px] text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
-const buttonClass =
-  "rounded-md bg-accent px-2 py-1 text-[11px] font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60";
-const ghostButtonClass =
-  "rounded-md border border-border px-2 py-1 text-[11px] font-medium text-fg-muted hover:bg-surface-2 disabled:opacity-60";
+export type Stage =
+  | "to_call"
+  | "not_connected"
+  | "connected"
+  | "appointment_set"
+  | "no_show"
+  | "ro_entered"
+  | "not_verified"
+  | "verified"
+  | "closed";
 
-function Dot({ className }: { className: string }) {
-  return <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${className}`} aria-hidden="true" />;
-}
-
-function StatusBadge({ status }: { status: InactiveReferralRow["callStatus"] }) {
-  if (status === "connected") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-good-soft px-2 py-0.5 text-[11px] font-medium text-good-text">
-        <Dot className="bg-good-solid" />
-        Connected
-      </span>
-    );
-  }
-  if (status === "not_connected") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-medium text-warn-text">
-        <Dot className="bg-warn-solid" />
-        Not connected yet
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-fg-faint">
-      <Dot className="bg-fg-faint" />
-      To call
-    </span>
-  );
-}
-
-function fmt(ts: Date | string | null): string {
+export function fmt(ts: Date | string | null): string {
   if (!ts) return "—";
   const d = new Date(ts as string);
   if (isNaN(d.getTime())) return String(ts).slice(0, 16);
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
+
+export function fmtDate(d: string | null): string {
+  if (!d) return "—";
+  return new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function daysSince(ts: Date | string | null): number {
+  if (!ts) return Infinity;
+  const t = new Date(ts as string).getTime();
+  if (isNaN(t)) return Infinity;
+  return (Date.now() - t) / (1000 * 60 * 60 * 24);
+}
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+/** The pipeline (2026-11-27, the user's call): To call -> Not connected ->
+ * Connected -> Appointment set -> No show (follow-up, not terminal —
+ * reschedule returns it to "Appointment set") -> RO entered -> Verified /
+ * Not verified. Closed (not genuine / not interested) is a side bucket, same
+ * convention as BP Referrals' not_genuine/not_interested. */
+export function classify(r: InactiveReferralRow): Stage {
+  if (r.matchedRoNo) return "verified";
+  if (r.pendingRoNo) return daysSince(r.pendingRoEnteredAt) >= NOT_VERIFIED_OVERDUE_DAYS ? "not_verified" : "ro_entered";
+  if (r.closedAt) return "closed";
+  if (r.appointmentDate) return r.appointmentDate < todayStr() ? "no_show" : "appointment_set";
+  if (r.validatedAt) return "connected";
+  if (r.callStatus === "not_connected") return "not_connected";
+  return "to_call";
+}
+
+const STAGE_LABEL: Record<Stage, string> = {
+  to_call: "To call",
+  not_connected: "Not connected",
+  connected: "Connected",
+  appointment_set: "Appointment set",
+  no_show: "No show — follow up",
+  ro_entered: "RO entered",
+  not_verified: "Not verified",
+  verified: "Verified",
+  closed: "Closed",
+};
+
+function Dot({ className }: { className: string }) {
+  return <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${className}`} aria-hidden="true" />;
+}
+
+const STAGE_DOT: Record<Stage, string> = {
+  to_call: "bg-accent",
+  not_connected: "bg-warn-solid",
+  connected: "bg-accent",
+  appointment_set: "bg-info-solid",
+  no_show: "bg-bad-solid",
+  ro_entered: "bg-accent",
+  not_verified: "bg-bad-solid",
+  verified: "bg-good-solid",
+  closed: "bg-fg-faint",
+};
+const STAGE_BADGE: Record<Stage, string> = {
+  to_call: "bg-accent-soft text-accent-text",
+  not_connected: "bg-warn-soft text-warn-text",
+  connected: "bg-accent-soft text-accent-text",
+  appointment_set: "bg-info-soft text-info",
+  no_show: "bg-bad-soft text-bad",
+  ro_entered: "bg-accent-soft text-accent-text",
+  not_verified: "bg-bad-soft text-bad",
+  verified: "bg-good-soft text-good-text",
+  closed: "bg-surface-2 text-fg-faint",
+};
+
+export function StatusBadge({ stage }: { stage: Stage }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${STAGE_BADGE[stage]}`}>
+      <Dot className={STAGE_DOT[stage]} />
+      {STAGE_LABEL[stage]}
+    </span>
+  );
+}
+
+// ---- hero/KPI cards ----
+type AccentColor = "neutral" | "accent" | "info" | "warn" | "bad" | "good";
+const ACCENT: Record<AccentColor, { edge: string; chip: string }> = {
+  neutral: { edge: "bg-fg-faint", chip: "bg-surface-2 text-fg-muted" },
+  accent: { edge: "bg-accent", chip: "bg-accent-soft text-accent-text" },
+  info: { edge: "bg-info-solid", chip: "bg-info-soft text-info" },
+  warn: { edge: "bg-warn-solid", chip: "bg-warn-soft text-warn-text" },
+  bad: { edge: "bg-bad-solid", chip: "bg-bad-soft text-bad" },
+  good: { edge: "bg-good-solid", chip: "bg-good-soft text-good-text" },
+};
+
+function iconBase(children: React.ReactNode) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-[18px] w-[18px]" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+const TotalIcon = () => iconBase(<><rect x="3" y="3" width="6" height="6" rx="1" /><rect x="11" y="3" width="6" height="6" rx="1" /><rect x="3" y="11" width="6" height="6" rx="1" /><rect x="11" y="11" width="6" height="6" rx="1" /></>);
+const PhoneIcon = () => iconBase(<path d="M5 3h3l1.5 4-2 1.5a9 9 0 0 0 4 4l1.5-2 4 1.5v3a1.5 1.5 0 0 1-1.6 1.5A14 14 0 0 1 3.5 4.6 1.5 1.5 0 0 1 5 3z" strokeLinecap="round" strokeLinejoin="round" />);
+const PhoneOffIcon = () => iconBase(<><path d="M5 3h3l1.5 4-2 1.5a9 9 0 0 0 4 4l1.5-2 4 1.5v3a1.5 1.5 0 0 1-1.6 1.5A14 14 0 0 1 3.5 4.6 1.5 1.5 0 0 1 5 3z" strokeLinecap="round" strokeLinejoin="round" /><path d="M3 3l14 14" strokeLinecap="round" /></>);
+const CheckIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M7 10l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" /></>);
+const CalendarIcon = () => iconBase(<><rect x="3.5" y="4.5" width="13" height="12" rx="1.5" /><path d="M3.5 8.5h13M7 3v3M13 3v3" strokeLinecap="round" /></>);
+const AlarmIcon = () => iconBase(<><circle cx="10" cy="11" r="6.5" /><path d="M10 8v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M6 4.5 4 6.5M14 4.5l2 2" strokeLinecap="round" /></>);
+const WrenchIcon = () => iconBase(<path d="M13.5 4a3.5 3.5 0 0 0-4.6 3.9L4 12.8V16h3.2l4.9-4.9a3.5 3.5 0 0 0 3.9-4.6l-2.3 2.3-1.8-.6-.6-1.8L13.5 4z" strokeLinecap="round" strokeLinejoin="round" />);
+const XCircleIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M7.5 7.5l5 5M12.5 7.5l-5 5" strokeLinecap="round" /></>);
+const CheckCircleIcon = CheckIcon;
+
+function KpiCard({ icon, color, label, value, active, onClick }: { icon: React.ReactNode; color: AccentColor; label: string; value: number; active: boolean; onClick: () => void }) {
+  const accent = ACCENT[color];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group relative flex flex-col items-start overflow-hidden rounded-xl border bg-surface p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${active ? "border-accent" : "border-border"}`}
+    >
+      <span className={`absolute inset-x-0 top-0 h-0.5 ${accent.edge}`} aria-hidden="true" />
+      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${accent.chip}`}>{icon}</div>
+      <div className="mt-2 text-xl font-bold tabular-nums text-fg">{value}</div>
+      <div className="text-[11px] font-medium text-fg-subtle">{label}</div>
+    </button>
+  );
+}
+
+const INIT: ReferralActionState = { error: null, ok: false };
+const remarkField =
+  "w-full rounded-md border border-border-strong bg-surface px-2 py-1.5 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
 function CallHistory({ referralId }: { referralId: number }) {
   const [history, setHistory] = useState<InactiveReferralCallRow[] | null>(null);
@@ -60,7 +175,7 @@ function CallHistory({ referralId }: { referralId: number }) {
   };
 
   return (
-    <div className="mt-2">
+    <div className="mt-3 border-t border-border-subtle pt-3">
       <button type="button" onClick={toggle} className="text-[11px] font-medium text-accent-text hover:underline">
         {open ? "Hide call history" : "Show call history"}
       </button>
@@ -83,109 +198,362 @@ function CallHistory({ referralId }: { referralId: number }) {
   );
 }
 
-function CallActions({ referral }: { referral: InactiveReferralRow }) {
-  const [notConnectedState, notConnectedAction, notConnectedPending] = useActionState(markNotConnectedAction, INIT);
-  const [connectedState, connectedAction, connectedPending] = useActionState(markConnectedAction, INIT);
-  const [mode, setMode] = useState<"none" | "not_connected" | "connected">("none");
+function NotConnectedButton({ id, onDone }: { id: number; onDone: () => void }) {
+  const [state, action, pending] = useActionState(markNotConnectedAction, INIT);
+  const [open, setOpen] = useState(false);
 
-  if (mode === "not_connected") {
+  if (!open) {
     return (
-      <form action={notConnectedAction} className="mt-2 space-y-1.5">
-        <input type="hidden" name="id" value={referral.id} />
-        <textarea name="remark" required rows={2} placeholder="What happened on the call? (e.g. no answer, wrong number)" className={textareaClass} />
-        <div className="flex items-center gap-2">
-          <button type="submit" disabled={notConnectedPending} className={buttonClass}>
-            {notConnectedPending ? "Saving…" : "Save"}
-          </button>
-          <button type="button" onClick={() => setMode("none")} className={ghostButtonClass}>
-            Cancel
-          </button>
-          {notConnectedState.error ? <span className="text-[11px] text-bad">{notConnectedState.error}</span> : null}
-        </div>
-      </form>
+      <button type="button" onClick={() => setOpen(true)} className="h-8 rounded-md border border-border-strong px-3 text-sm font-medium text-fg-muted hover:bg-surface-2">
+        Not connected
+      </button>
     );
   }
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      className="space-y-2 rounded-md border border-border-strong bg-surface-2/50 p-3"
+    >
+      <input type="hidden" name="id" value={id} />
+      <NotConnectedReasonFields textareaClassName={remarkField} />
+      <div className="flex items-center gap-2">
+        <button type="submit" disabled={pending} className="h-8 rounded-md border border-border-strong px-3 text-sm font-medium text-fg-muted hover:bg-surface-2 disabled:opacity-60">
+          {pending ? "Saving…" : "Save"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-xs text-fg-muted hover:underline">
+          Cancel
+        </button>
+        {state.error ? <span className="text-xs text-bad">{state.error}</span> : null}
+      </div>
+    </form>
+  );
+}
 
-  if (mode === "connected") {
-    return (
-      <form action={connectedAction} className="mt-2 space-y-1.5">
-        <input type="hidden" name="id" value={referral.id} />
-        <textarea name="remark" required rows={2} placeholder="What did the customer say?" className={textareaClass} />
-        <div className="flex items-center gap-2">
-          <button type="submit" disabled={connectedPending} className={buttonClass}>
-            {connectedPending ? "Saving…" : "Save"}
-          </button>
-          <button type="button" onClick={() => setMode("none")} className={ghostButtonClass}>
-            Cancel
-          </button>
-          {connectedState.error ? <span className="text-[11px] text-bad">{connectedState.error}</span> : null}
-        </div>
-      </form>
-    );
-  }
+function CallOutcomeForm({ id, onDone }: { id: number; onDone: () => void }) {
+  const [state, action, pending] = useActionState(submitCallOutcomeAction, INIT);
+  const [genuine, setGenuine] = useState<"yes" | "no" | "">("");
+  const [interested, setInterested] = useState<"yes" | "no" | "">("");
 
   return (
-    <div className="mt-2 flex items-center gap-2">
-      <button type="button" onClick={() => setMode("connected")} className={buttonClass}>
-        Mark connected
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      className="space-y-3 rounded-lg border border-border-strong bg-surface-2/50 p-3"
+    >
+      <input type="hidden" name="id" value={id} />
+      <div>
+        <span className={eyebrow}>Genuine inactive customer?</span>
+        <div className="mt-1 flex gap-2">
+          {(["yes", "no"] as const).map((v) => (
+            <label key={v} className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm ${genuine === v ? "border-accent bg-accent-soft text-accent-text" : "border-border-strong text-fg-muted"}`}>
+              <input type="radio" name="genuine" value={v} checked={genuine === v} onChange={() => setGenuine(v)} className="sr-only" />
+              {v === "yes" ? "Yes" : "No"}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {genuine === "yes" ? (
+        <div>
+          <span className={eyebrow}>Customer interested in coming in?</span>
+          <div className="mt-1 flex gap-2">
+            {(["yes", "no"] as const).map((v) => (
+              <label key={v} className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm ${interested === v ? "border-accent bg-accent-soft text-accent-text" : "border-border-strong text-fg-muted"}`}>
+                <input type="radio" name="customerInterested" value={v} checked={interested === v} onChange={() => setInterested(v)} className="sr-only" />
+                {v === "yes" ? "Yes" : "No"}
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {genuine ? (
+        <div>
+          <span className={eyebrow}>What did the customer say? (required)</span>
+          <textarea name="remark" required rows={2} className={remarkField} />
+        </div>
+      ) : null}
+
+      {genuine && (genuine === "no" || interested) ? (
+        <div className="flex items-center gap-2 pt-1">
+          <button type="submit" disabled={pending} className="h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60">
+            {pending ? "Saving…" : "Save call outcome"}
+          </button>
+          {state.error ? <span className="text-xs text-bad">{state.error}</span> : null}
+        </div>
+      ) : null}
+    </form>
+  );
+}
+
+function AppointmentForm({ id, reschedule, onDone }: { id: number; reschedule: boolean; onDone: () => void }) {
+  const [state, action, pending] = useActionState(setAppointmentDateAction, INIT);
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      className="space-y-2 rounded-lg border border-border-strong bg-surface-2/50 p-3"
+    >
+      <input type="hidden" name="id" value={id} />
+      <div>
+        <span className={eyebrow}>{reschedule ? "New appointment date" : "Appointment date"} (required)</span>
+        <input type="date" name="appointmentDate" required className={`${control} mt-1 w-full px-2`} />
+      </div>
+      <div>
+        <span className={eyebrow}>{reschedule ? "What did the customer say this time?" : "Remark"} (required)</span>
+        <textarea name="remark" required rows={2} className={remarkField} />
+      </div>
+      <div className="flex items-center gap-2">
+        <button type="submit" disabled={pending} className="h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60">
+          {pending ? "Saving…" : reschedule ? "Reschedule" : "Save appointment date"}
+        </button>
+        {state.error ? <span className="text-xs text-bad">{state.error}</span> : null}
+      </div>
+    </form>
+  );
+}
+
+const ENTER_RO_INIT: EnterRoActionState = { error: null, status: null };
+
+function EnterRoForm({ id, pendingRoNo }: { id: number; pendingRoNo: string | null }) {
+  const [state, action, pending] = useActionState(enterRoNumberAction, ENTER_RO_INIT);
+  return (
+    <form action={action} onClick={(e) => e.stopPropagation()} className="space-y-2 rounded-lg border border-border-strong bg-surface-2/50 p-3">
+      <input type="hidden" name="id" value={id} />
+      <div>
+        <span className={eyebrow}>RO number (required)</span>
+        <input name="roNo" required defaultValue={pendingRoNo ?? ""} placeholder="e.g. 1234567" className={`${control} mt-1 w-full px-2 font-mono`} />
+      </div>
+      <button type="submit" disabled={pending} className="h-8 rounded-md bg-accent px-3 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60">
+        {pending ? "Saving…" : "Save RO number"}
       </button>
-      <button type="button" onClick={() => setMode("not_connected")} className={ghostButtonClass}>
-        Mark not connected
-      </button>
+      {state.error ? <p className="text-xs text-bad">{state.error}</p> : null}
+      {state.status === "pending" ? <p className="text-xs text-fg-faint">Pending — verifies on the next Service Info upload.</p> : null}
+      {state.status === "completed" ? <p className="text-xs text-good-text">Confirmed — ₹200 triggered.</p> : null}
+    </form>
+  );
+}
+
+export function DetailModal({ referral, ownBranch, readOnly, onClose }: { referral: InactiveReferralRow; ownBranch: string; readOnly: boolean; onClose: () => void }) {
+  const r = referral;
+  const stage = classify(r);
+  const canAct = !readOnly && r.assignedBranch === ownBranch;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-fg">{r.customerName}</h2>
+            <p className="text-xs text-fg-faint">
+              {r.vehicleRegNo} · {r.vehicleModel}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1 text-fg-faint hover:bg-surface-2">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+              <path d="M3 3l10 10M13 3L3 13" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mt-3">
+          <StatusBadge stage={stage} />
+        </div>
+
+        <dl className="mt-4 space-y-2 text-sm">
+          <div className="flex justify-between gap-3">
+            <dt className="text-fg-faint">Phone</dt>
+            <dd className="font-semibold text-fg">
+              {r.customerPhone1}
+              {r.customerPhone2 ? ` / ${r.customerPhone2}` : ""}
+            </dd>
+          </div>
+          {r.customerAddress ? (
+            <div>
+              <dt className="text-fg-faint">Address</dt>
+              <dd className="mt-0.5 text-fg-muted">{r.customerAddress}</dd>
+            </div>
+          ) : null}
+          <div className="flex justify-between gap-3">
+            <dt className="text-fg-faint">Referred by</dt>
+            <dd className="text-fg-muted">{r.referringEmployeeName ?? r.referringEmployeeId}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-fg-faint">Submitted</dt>
+            <dd className="text-fg-muted">{r.referralDate ?? fmt(r.submittedAt)}</dd>
+          </div>
+          {r.genuine !== null ? (
+            <div className="flex justify-between gap-3">
+              <dt className="text-fg-faint">Genuine</dt>
+              <dd className="text-fg">{r.genuine ? "Yes" : "No"}</dd>
+            </div>
+          ) : null}
+          {r.customerInterested !== null ? (
+            <div className="flex justify-between gap-3">
+              <dt className="text-fg-faint">Interested</dt>
+              <dd className="text-fg">{r.customerInterested ? "Yes" : "No"}</dd>
+            </div>
+          ) : null}
+          {r.appointmentDate ? (
+            <div className="flex justify-between gap-3">
+              <dt className="text-fg-faint">Appointment date</dt>
+              <dd className="text-fg">{fmtDate(r.appointmentDate)}</dd>
+            </div>
+          ) : null}
+          {r.matchedRoNo ? (
+            <div className="flex justify-between gap-3">
+              <dt className="text-fg-faint">Verified RO</dt>
+              <dd className="font-mono text-fg">{r.matchedRoNo}</dd>
+            </div>
+          ) : r.pendingRoNo ? (
+            <div className="flex justify-between gap-3">
+              <dt className="text-fg-faint">RO entered (pending)</dt>
+              <dd className="font-mono text-fg">{r.pendingRoNo}</dd>
+            </div>
+          ) : null}
+          {r.handledBy ? (
+            <div className="flex justify-between gap-3">
+              <dt className="text-fg-faint">Handled by</dt>
+              <dd className="text-fg">{r.handledBy}</dd>
+            </div>
+          ) : null}
+        </dl>
+
+        <CallHistory referralId={r.id} />
+
+        {canAct && (stage === "to_call" || stage === "not_connected") ? (
+          <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
+            <NotConnectedButton id={r.id} onDone={onClose} />
+            <CallOutcomeForm id={r.id} onDone={onClose} />
+          </div>
+        ) : null}
+
+        {canAct && stage === "connected" ? (
+          <div className="mt-4 border-t border-border-subtle pt-3">
+            <AppointmentForm id={r.id} reschedule={false} onDone={onClose} />
+          </div>
+        ) : null}
+
+        {canAct && stage === "no_show" ? (
+          <div className="mt-4 rounded-md border border-bad/30 bg-bad-soft/40 px-3 py-2 text-xs text-bad">
+            Appointment date passed with no RO entered — re-contact the customer and reschedule below.
+          </div>
+        ) : null}
+
+        {canAct && (stage === "appointment_set" || stage === "no_show") ? (
+          <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
+            <AppointmentForm id={r.id} reschedule={true} onDone={onClose} />
+            <EnterRoForm id={r.id} pendingRoNo={r.pendingRoNo} />
+          </div>
+        ) : null}
+
+        {canAct && stage === "ro_entered" ? (
+          <div className="mt-4 border-t border-border-subtle pt-3">
+            <EnterRoForm id={r.id} pendingRoNo={r.pendingRoNo} />
+          </div>
+        ) : null}
+
+        {canAct && stage === "not_verified" ? (
+          <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
+            <p className="rounded-md border border-bad/30 bg-bad-soft/40 px-3 py-2 text-xs text-bad">
+              This RO hasn&apos;t matched any Service Info upload in {NOT_VERIFIED_OVERDUE_DAYS}+ days — check the number and re-enter if it was mistyped.
+            </p>
+            <EnterRoForm id={r.id} pendingRoNo={r.pendingRoNo} />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 export function ReferralsQueueClient({
   queue,
+  ownBranch,
   readOnly = false,
   showBranch = false,
 }: {
   queue: InactiveReferralRow[];
-  /** HQ's company-wide view — no call/update actions, just visibility. */
+  ownBranch: string;
   readOnly?: boolean;
-  /** Shows which branch each referral is assigned to — only meaningful
-   * once the list spans more than one branch (HQ's view). */
   showBranch?: boolean;
 }) {
+  const [selected, setSelected] = useState<InactiveReferralRow | null>(null);
+  const [activeStage, setActiveStage] = useState<Stage | null>(null);
+
+  const classified = useMemo(() => queue.map((r) => ({ r, stage: classify(r) })), [queue]);
+  const counts = useMemo(() => {
+    const c: Record<Stage, number> = {
+      to_call: 0, not_connected: 0, connected: 0, appointment_set: 0, no_show: 0, ro_entered: 0, not_verified: 0, verified: 0, closed: 0,
+    };
+    for (const { stage } of classified) c[stage]++;
+    return c;
+  }, [classified]);
+
+  const visible = activeStage ? queue.filter((r) => classify(r) === activeStage) : queue;
+
   return (
     <div>
-      <h1 className="text-lg font-semibold text-fg">Referrals</h1>
+      {selected ? <DetailModal referral={selected} ownBranch={ownBranch} readOnly={readOnly} onClose={() => setSelected(null)} /> : null}
+
+      <h1 className="text-lg font-semibold text-fg">3C Referrals</h1>
       <p className="mt-1 text-sm text-fg-muted">
         {readOnly
           ? "Inactive customers referred by employees for re-engagement, across every branch."
-          : "Inactive customers referred by employees for re-engagement. Call each one and record what happened."}
+          : "Inactive customers referred by employees for re-engagement. Call each one, record what happened, and track them through to a verified visit."}
       </p>
 
-      {queue.length === 0 ? (
-        <p className="mt-6 text-sm text-fg-faint">{readOnly ? "No referrals yet." : "No referrals for your branch yet."}</p>
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
+        <KpiCard icon={<TotalIcon />} color="neutral" label="Total" value={queue.length} active={activeStage === null} onClick={() => setActiveStage(null)} />
+        <KpiCard icon={<PhoneIcon />} color="accent" label="To call" value={counts.to_call} active={activeStage === "to_call"} onClick={() => setActiveStage("to_call")} />
+        <KpiCard icon={<PhoneOffIcon />} color="warn" label="Not connected" value={counts.not_connected} active={activeStage === "not_connected"} onClick={() => setActiveStage("not_connected")} />
+        <KpiCard icon={<CheckIcon />} color="accent" label="Connected" value={counts.connected} active={activeStage === "connected"} onClick={() => setActiveStage("connected")} />
+        <KpiCard icon={<CalendarIcon />} color="info" label="Appointment set" value={counts.appointment_set} active={activeStage === "appointment_set"} onClick={() => setActiveStage("appointment_set")} />
+        <KpiCard icon={<AlarmIcon />} color="bad" label="No show" value={counts.no_show} active={activeStage === "no_show"} onClick={() => setActiveStage("no_show")} />
+        <KpiCard icon={<WrenchIcon />} color="accent" label="RO entered" value={counts.ro_entered} active={activeStage === "ro_entered"} onClick={() => setActiveStage("ro_entered")} />
+        <KpiCard icon={<XCircleIcon />} color="bad" label="Not verified" value={counts.not_verified} active={activeStage === "not_verified"} onClick={() => setActiveStage("not_verified")} />
+        <KpiCard icon={<CheckCircleIcon />} color="good" label="Verified" value={counts.verified} active={activeStage === "verified"} onClick={() => setActiveStage("verified")} />
+      </div>
+
+      {visible.length === 0 ? (
+        <p className="mt-6 text-sm text-fg-faint">{readOnly ? "No referrals yet." : "Nothing here."}</p>
       ) : (
         <ul className="mt-6 space-y-3">
-          {queue.map((r) => (
-            <li key={r.id} className="rounded-lg border border-border bg-surface p-4 shadow-card">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium text-fg">{r.customerName}</div>
-                  <div className="mt-0.5 text-[12px] text-fg-muted">
-                    {r.vehicleRegNo} · {r.vehicleModel}
+          {visible.map((r) => {
+            const stage = classify(r);
+            return (
+              <li
+                key={r.id}
+                onClick={() => setSelected(r)}
+                className="cursor-pointer rounded-lg border border-border bg-surface p-4 shadow-card transition-colors hover:bg-surface-2/50"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium text-fg">{r.customerName}</div>
+                    <div className="mt-0.5 text-[12px] text-fg-muted">
+                      {r.vehicleRegNo} · {r.vehicleModel}
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-fg-muted">
+                      {r.customerPhone1}
+                      {r.customerPhone2 ? ` / ${r.customerPhone2}` : ""}
+                    </div>
                   </div>
-                  <div className="mt-0.5 text-[12px] text-fg-muted">
-                    {r.customerPhone1}
-                    {r.customerPhone2 ? ` / ${r.customerPhone2}` : ""}
-                  </div>
-                  {r.customerAddress ? <div className="mt-0.5 text-[12px] text-fg-faint">{r.customerAddress}</div> : null}
+                  <StatusBadge stage={stage} />
                 </div>
-                <StatusBadge status={r.callStatus} />
-              </div>
-              <div className="mt-2 text-[11px] text-fg-faint">
-                Referred by {r.referringEmployeeName ?? r.referringEmployeeId} · {r.referralDate ?? fmt(r.submittedAt)}
-                {showBranch ? ` · ${r.assignedBranch ? branchName(r.assignedBranch) : "Unassigned"}` : ""}
-                {r.handledBy ? ` · Handled by ${r.handledBy}` : ""}
-              </div>
-              {readOnly ? null : <CallActions referral={r} />}
-              <CallHistory referralId={r.id} />
-            </li>
-          ))}
+                <div className="mt-2 text-[11px] text-fg-faint">
+                  Referred by {r.referringEmployeeName ?? r.referringEmployeeId} · {r.referralDate ?? fmt(r.submittedAt)}
+                  {showBranch ? ` · ${r.assignedBranch ? branchName(r.assignedBranch) : "Unassigned"}` : ""}
+                  {r.appointmentDate ? ` · Appointment ${fmtDate(r.appointmentDate)}` : ""}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
