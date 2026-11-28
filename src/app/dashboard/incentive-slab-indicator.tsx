@@ -136,12 +136,15 @@ export function IncentiveSlabIndicator({
   const thresholds = [slabs.slab1, slabs.slab2, slabs.slab3, slabs.slab4];
   const currentSlabLabel = achievedCount === 0 ? "Not Achieved" : String(achievedCount);
 
-  // Forecast: where the metric lands by month-end at the current run rate
-  // (computePace — target is irrelevant to projectedEom, only actual/date,
-  // so it's passed null), evaluated against the same slabs. This never feeds
-  // ring color/fill — see the RingStatus/ringGreen-only comparison below —
-  // it only drives the "at this rate…" text and each pending ring's tooltip.
-  const projectedEom = date ? computePace(date, actual, null, holidays).projectedEom : null;
+  // Forecast: where the metric lands by month-end at the current run rate,
+  // evaluated against the same slabs. This never feeds ring color/fill — see
+  // the RingStatus/ringGreen-only comparison below — it only drives the "at
+  // this rate…" text and each pending ring's tooltip. Computed against Slab 4
+  // specifically (runRatePerDay/requiredRatePerDay below reuse this same
+  // call) since projectedEom itself doesn't depend on which target it's
+  // compared to.
+  const slab4Pace = date ? computePace(date, actual, slabs.slab4, holidays) : null;
+  const projectedEom = slab4Pace?.projectedEom ?? null;
   const projected = projectedEom !== null ? computeSlabsAchieved(projectedEom, slabs) : null;
 
   // The "at this rate..." line below the rings (2026-09-18, at the user's
@@ -254,6 +257,28 @@ export function IncentiveSlabIndicator({
                   })}
                 </div>
               </div>
+
+              {slab4Pace && (
+                <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg bg-surface-2 px-4 py-3 text-xs text-fg-muted">
+                  <span>
+                    Current pace:{" "}
+                    <span className="font-semibold text-fg">
+                      {slab4Pace.runRatePerDay !== null ? `${currencyFull(slab4Pace.runRatePerDay)}/working day` : "—"}
+                    </span>
+                  </span>
+                  {slab4Pace.gap !== null && slab4Pace.gap <= 0 ? (
+                    <span className="font-semibold text-good">Slab 4 achieved</span>
+                  ) : (
+                    <span>
+                      Need{" "}
+                      <span className="font-semibold text-fg">
+                        {slab4Pace.requiredRatePerDay !== null ? `${currencyFull(slab4Pace.requiredRatePerDay)}/working day` : "—"}
+                      </span>{" "}
+                      to hit Slab 4
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Table / List */}
               <div className="divide-y divide-border rounded-lg border border-border">
