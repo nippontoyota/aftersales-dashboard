@@ -32,7 +32,7 @@ export async function loadNavState(
   queriesBadge: number;
   cancellationsBadge: number;
 }> {
-  const canUpload = admin.role !== "regional" && admin.role !== "hq_viewer" && admin.role !== "bp_ho";
+  const canUpload = admin.role !== "regional" && admin.role !== "hq_viewer" && admin.role !== "bp_ho" && admin.role !== "bp_manager";
   if (admin.role === "hq" || admin.role === "hq_viewer" || admin.role === "bp_ho") {
     const [vpOpen, regionActionable, cancellationsBadge] = await Promise.all([
       countOpenForHq(),
@@ -51,12 +51,12 @@ export async function loadNavState(
   // Branch / regional accounts get the slim nav (company pages dropped, their
   // content folded into the branch-first dashboard) — but only once the
   // latest date is published; before that they're still in raw-report mode.
-  const slimNav = admin.role === "branch" || admin.role === "regional";
+  const slimNav = admin.role === "branch" || admin.role === "bp_manager" || admin.role === "regional";
   const [dates, queriesBadge, cancellationsBadge] = await Promise.all([
     listSnapshotDates(),
     admin.role === "regional"
       ? Promise.all([countActionableForRegion(admin.region), countOpenForRegion(admin.region)]).then(([a, b]) => a + b)
-      : admin.role === "branch"
+      : admin.role === "branch" || admin.role === "bp_manager"
       ? Promise.all([countActionableForBranch(admin.branch), countOpenVpForBranch(admin.branch)]).then(([a, b]) => a + b)
       : Promise.resolve(0),
     countPendingJustifications(admin),
@@ -135,7 +135,7 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   const date = searchParams.date && DATE_RE.test(searchParams.date) ? searchParams.date : latestNonHolidayDate(dates, holidays)!;
 
   const latestDate = allDates.at(-1)!;
-  const billBranch = admin.role === "branch" ? admin.branch : undefined;
+  const billBranch = admin.role === "branch" || admin.role === "bp_manager" ? admin.branch : undefined;
   const [reportRaw, monthSnapshots, serviceInfoMonthSnapshotsRaw, vasRevenueRealMonth, isPublished, billTotalsRaw, latestPublished] = await Promise.all([
     buildReport(date),
     loadSnapshotsForMonthUpTo(date),
@@ -158,12 +158,12 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   // every branch-visible page builds on, so every consumer (hero cards, the
   // all-branches comparison panel, the incentive slab ring, the pre-publish
   // Daily Report) inherits it automatically.
-  const report = reportRaw && admin.role === "branch" ? { ...reportRaw, branches: maskBranchRevenue(reportRaw.branches, reportRaw.date) } : reportRaw;
-  const billTotals = admin.role === "branch" ? billTotalsRaw.filter((m) => m.month >= BRANCH_REVENUE_VISIBLE_FROM_MONTH) : billTotalsRaw;
+  const report = reportRaw && (admin.role === "branch" || admin.role === "bp_manager") ? { ...reportRaw, branches: maskBranchRevenue(reportRaw.branches, reportRaw.date) } : reportRaw;
+  const billTotals = admin.role === "branch" || admin.role === "bp_manager" ? billTotalsRaw.filter((m) => m.month >= BRANCH_REVENUE_VISIBLE_FROM_MONTH) : billTotalsRaw;
 
   const isLatestPublished = latestPublished ?? isPublished;
   const isCompanyScope = isHq || isPublished;
-  const showBranchDailyReport = admin.role === "branch" && !isPublished;
+  const showBranchDailyReport = (admin.role === "branch" || admin.role === "bp_manager") && !isPublished;
   const showCompanyTabs = isHq || isLatestPublished;
 
   // Region: a regional manager is locked to their own region until the date
@@ -189,7 +189,7 @@ export async function loadDashboardData(searchParams: { date?: string; region?: 
   }
 
   let filteredBranches = report ? filterBranchesByRegion(report.branches, region) : [];
-  if (!isCompanyScope && admin.role === "branch") {
+  if (!isCompanyScope && (admin.role === "branch" || admin.role === "bp_manager")) {
     filteredBranches = filteredBranches.filter((b) => b.branch === admin.branch);
   }
 

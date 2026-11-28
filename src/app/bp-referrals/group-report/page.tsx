@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { BpShell } from "@/components/bp-shell";
 import { adminIdentityLabel } from "@/lib/admin-store";
 import { getCurrentAdmin } from "@/lib/auth";
 import { loadNavState } from "@/lib/dashboard-data";
@@ -71,10 +70,11 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
   const { from, to } = resolveGroupReportRange(params.from, params.to);
   // BP manager/branch (2026-11-16, at the user's request): own branch only,
   // same scoping mechanism a regional admin's own region already uses
-  // below. BpShell below for bp_manager (matching their main /bp-referrals
-  // queue page's own bare shell), AppShell for branch (matching theirs).
+  // below. Both now share the same AppShell (2026-11-28 — bp_manager used to
+  // get its own bare BpShell, matching its main /bp-referrals queue page;
+  // now that page uses the full sidebar too, so this one follows).
   const branches = admin.role === "regional" ? [...REGIONS[admin.region]] : admin.role === "bp_manager" || admin.role === "branch" ? [admin.branch] : undefined;
-  const navState = admin.role === "bp_manager" ? null : await loadNavState(admin);
+  const navState = await loadNavState(admin);
 
   const rows = await loadGroupReportRows(inclusiveDateRange(from, to), branches);
   const pivot = buildPivot(rows);
@@ -150,10 +150,6 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
       </div>
   );
 
-  if (admin.role === "bp_manager") {
-    return <BpShell identity={adminIdentityLabel(admin)}>{content}</BpShell>;
-  }
-
   return (
     <AppShell
       current="bp-referrals"
@@ -161,15 +157,16 @@ export default async function GroupReportPage({ searchParams }: { searchParams: 
       isHq={admin.role === "hq"}
       isBpHo={admin.role === "bp_ho"}
       isRegional={admin.role === "regional"}
-      isBranch={admin.role === "branch"}
+      isBranch={admin.role === "branch" || admin.role === "bp_manager"}
+      isBpManager={admin.role === "bp_manager"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
-      companyTabs={navState!.companyTabs}
-      canUpload={navState!.canUpload}
-      slimNav={admin.role === "regional" || admin.role === "branch" ? navState!.slimNav : undefined}
-      dashboardLabel={navState!.dashboardLabel}
-      queriesBadge={navState!.queriesBadge}
-      cancellationsBadge={navState!.cancellationsBadge}
+      companyTabs={navState.companyTabs}
+      canUpload={navState.canUpload}
+      slimNav={admin.role === "regional" || admin.role === "branch" || admin.role === "bp_manager" ? navState.slimNav : undefined}
+      dashboardLabel={navState.dashboardLabel}
+      queriesBadge={navState.queriesBadge}
+      cancellationsBadge={navState.cancellationsBadge}
       identity={adminIdentityLabel(admin)}
     >
       {content}

@@ -83,14 +83,22 @@ export default async function CancellationsPage({
   // Scope: HQ sees everything; a branch account sees only its own; a
   // regional manager sees its region's branches.
   const scopeBranches =
-    admin.role === "branch" ? [admin.branch] : admin.role === "regional" ? [...REGIONS[admin.region]] : null;
+    admin.role === "branch" || admin.role === "bp_manager"
+      ? [admin.branch]
+      : admin.role === "regional"
+        ? [...REGIONS[admin.region]]
+        : null;
   const scopeSet = scopeBranches ? new Set(scopeBranches) : null;
 
   const months = await loadCancellationMonths(scopeBranches?.length === 1 ? scopeBranches[0] : undefined);
   const month = params.month && /^\d{4}-\d{2}$/.test(params.month) ? params.month : months[0];
 
   let branchFilter =
-    admin.role === "branch" ? admin.branch : params.branch && /^[A-Z0-9]{3,8}$/.test(params.branch) ? params.branch : undefined;
+    admin.role === "branch" || admin.role === "bp_manager"
+      ? admin.branch
+      : params.branch && /^[A-Z0-9]{3,8}$/.test(params.branch)
+        ? params.branch
+        : undefined;
   if (branchFilter && scopeSet && !scopeSet.has(branchFilter)) branchFilter = undefined;
 
   const shell = (body: React.ReactNode) => (
@@ -103,7 +111,8 @@ export default async function CancellationsPage({
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}
       isRegional={admin.role === "regional"}
-      isBranch={admin.role === "branch"}
+      isBranch={admin.role === "branch" || admin.role === "bp_manager"}
+      isBpManager={admin.role === "bp_manager"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       queriesBadge={nav.queriesBadge}
@@ -121,7 +130,7 @@ export default async function CancellationsPage({
         <h1 className="text-xl font-semibold tracking-tight text-fg">Cancellations</h1>
         <div className="mt-4 rounded-lg border border-dashed border-border-strong bg-surface p-6 text-sm text-fg-subtle">
           No Cancellation Reports have been uploaded yet.
-          {admin.role !== "regional" ? " Upload the DMS report from the Upload page." : ""}
+          {admin.role !== "regional" && admin.role !== "bp_manager" ? " Upload the DMS report from the Upload page." : ""}
         </div>
       </>,
     );
@@ -144,8 +153,9 @@ export default async function CancellationsPage({
   const accessoriesImpactedValue = accessoriesImpacted.reduce((s, r) => s + r.beforeTax, 0);
   const adjusted = reconcile.rows.filter((r) => r.status === "adjusted" && (!scopeSet || scopeSet.has(r.branch)));
   const justifications = await loadJustifications(flagged.map((r) => r.docNo));
-  // branch/regional/hq only — every other role redirected away above.
-  const viewerRole: "hq" | "branch" | "regional" = admin.role === "branch" ? "branch" : admin.role === "regional" ? "regional" : "hq";
+  // branch/bp_manager/regional/hq only — every other role redirected away above.
+  const viewerRole: "hq" | "branch" | "regional" =
+    admin.role === "branch" || admin.role === "bp_manager" ? "branch" : admin.role === "regional" ? "regional" : "hq";
 
   const totalCount = kpis.reduce((s, k) => s + k.count, 0);
   const totalValue = kpis.reduce((s, k) => s + k.beforeTaxTotal, 0);

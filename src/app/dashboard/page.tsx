@@ -56,7 +56,6 @@ export default async function DashboardPage({
   if (admin?.role === "vp_service") redirect("/vp");
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
-  if (admin?.role === "bp_manager") redirect("/bp-referrals");
   if (admin?.role === "kl_cluster") redirect("/kl-branches");
   if (!admin?.canViewDashboard) {
     redirect("/upload");
@@ -74,7 +73,8 @@ export default async function DashboardPage({
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}
       isRegional={admin.role === "regional"}
-      isBranch={admin.role === "branch"}
+      isBranch={admin.role === "branch" || admin.role === "bp_manager"}
+      isBpManager={admin.role === "bp_manager"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       queriesBadge={nav.queriesBadge}
@@ -191,7 +191,7 @@ async function DashboardContent({
   // its own layout either way, with a DraftWarning banner standing in for a
   // separate pre-publish page (2026-09-24, at Central's request; extended to
   // South/North 2026-10-20 for the same layout everywhere).
-  if (admin.role === "branch") {
+  if (admin.role === "branch" || admin.role === "bp_manager") {
     const monthStart = `${date.slice(0, 7)}-01`;
     const [view, branchSlabTargets, closeSaRows, accessoriesStaffNames, repeatFlags] = await Promise.all([
       loadBranchView(admin.branch, date, report, monthSnapshots, serviceInfoMonthSnapshots),

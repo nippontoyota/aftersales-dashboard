@@ -60,12 +60,13 @@ export default async function ModelWisePage({ searchParams }: { searchParams: Pr
       showDashboardLink
       isHq={admin.role === "hq"}
       isRegional={admin.role === "regional"}
-      isBranch={admin.role === "branch"}
+      isBranch={admin.role === "branch" || admin.role === "bp_manager"}
+      isBpManager={admin.role === "bp_manager"}
       // Same role-based derivation loadNavState() uses for the real
       // dashboard — without it, a branch admin here would see the
       // full company-wide nav (Branch Performance/Reports/TKM Targets)
       // instead of their usual restricted one.
-      slimNav={admin.role === "branch" || admin.role === "regional"}
+      slimNav={admin.role === "branch" || admin.role === "bp_manager" || admin.role === "regional"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       identity={identity}

@@ -28,7 +28,15 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
   if (admin?.role === "ceo") redirect("/ceo");
   if (admin?.role === "accounts") redirect("/accounts");
   if (!admin?.canViewDashboard) redirect("/upload");
-  if (admin.role !== "hq" && admin.role !== "hq_viewer" && admin.role !== "bp_ho" && admin.role !== "regional" && admin.role !== "branch") redirect("/dashboard");
+  if (
+    admin.role !== "hq" &&
+    admin.role !== "hq_viewer" &&
+    admin.role !== "bp_ho" &&
+    admin.role !== "regional" &&
+    admin.role !== "branch" &&
+    admin.role !== "bp_manager"
+  )
+    redirect("/dashboard");
 
   const nav = await loadNavState(admin);
   const identity = adminIdentityLabel(admin);
@@ -42,7 +50,8 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
       companyTabs={nav.companyTabs}
       canUpload={nav.canUpload}
       isRegional={admin.role === "regional"}
-      isBranch={admin.role === "branch"}
+      isBranch={admin.role === "branch" || admin.role === "bp_manager"}
+      isBpManager={admin.role === "bp_manager"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       slimNav={nav.slimNav}
@@ -53,7 +62,7 @@ export default async function QueriesPage({ searchParams }: { searchParams: Prom
     >
       {admin.role === "regional" ? (
         <RegionalQueriesContent admin={admin} />
-      ) : admin.role === "branch" ? (
+      ) : admin.role === "branch" || admin.role === "bp_manager" ? (
         <BranchQueriesContent admin={admin} />
       ) : (
         <Suspense fallback={<DashboardPageSkeleton />}>
@@ -266,7 +275,7 @@ async function RegionalQueriesContent({ admin }: { admin: Extract<AdminAccount, 
  * upward yet — see the conversation for why this is scoped that way for
  * now). Reuses the exact same RegionQueryThread/"Mark resolved" flow as
  * every other role. */
-async function BranchQueriesContent({ admin }: { admin: Extract<AdminAccount, { role: "branch" }> }) {
+async function BranchQueriesContent({ admin }: { admin: Extract<AdminAccount, { role: "branch" | "bp_manager" }> }) {
   const [queries, vpThreads] = await Promise.all([listRegionQueriesForBranch(admin.branch), listVpQueryThreadsForBranch(admin.branch)]);
   const open = queries.filter((q) => q.status !== "closed");
   const closed = queries.filter((q) => q.status === "closed");

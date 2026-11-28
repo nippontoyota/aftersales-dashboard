@@ -33,21 +33,24 @@ export default async function BillsPage({
   // Branch admins see only their own bills; regional managers see their
   // whole region; everyone else (HQ, HQ viewer) sees all.
   const scopeBranch: BillBranchScope =
-    admin.role === "branch" ? admin.branch : admin.role === "regional" ? REGIONS[admin.region] : undefined;
-  const scopeLabel = admin.role === "branch" ? admin.branch : admin.role === "regional" ? `the ${admin.region} region` : null;
+    admin.role === "branch" || admin.role === "bp_manager" ? admin.branch : admin.role === "regional" ? REGIONS[admin.region] : undefined;
+  const scopeLabel =
+    admin.role === "branch" || admin.role === "bp_manager" ? admin.branch : admin.role === "regional" ? `the ${admin.region} region` : null;
 
   // Branches the viewer is allowed to filter down to — their own region for
-  // a regional manager, every branch for HQ/HQ viewer/BP HO. A branch admin
-  // never sees the filter (their scope is already a single branch).
+  // a regional manager, every branch for HQ/HQ viewer/BP HO. A branch (or BP
+  // manager) admin never sees the filter (their scope is already a single
+  // branch).
   const branchOptions: string[] =
-    admin.role === "branch"
+    admin.role === "branch" || admin.role === "bp_manager"
       ? []
       : admin.role === "regional"
         ? [...REGIONS[admin.region]]
         : [...new Set(Object.values(REGIONS).flat())].sort();
 
   const params = await searchParams;
-  const branchFilter = admin.role !== "branch" && params.branch && branchOptions.includes(params.branch) ? params.branch : undefined;
+  const branchFilter =
+    admin.role !== "branch" && admin.role !== "bp_manager" && params.branch && branchOptions.includes(params.branch) ? params.branch : undefined;
   // Narrowing to one branch overrides the broader scope for both the totals
   // and the drilldown below.
   const effectiveScope: BillBranchScope = branchFilter ?? scopeBranch;
@@ -57,7 +60,8 @@ export default async function BillsPage({
   // same cutover as the rest of their dashboard (see
   // branch-revenue-visibility.ts) — HQ and regional managers still see every
   // backfilled month.
-  const allMonths = admin.role === "branch" ? allMonthsRaw.filter((m) => m.month >= BRANCH_REVENUE_VISIBLE_FROM_MONTH) : allMonthsRaw;
+  const allMonths =
+    admin.role === "branch" || admin.role === "bp_manager" ? allMonthsRaw.filter((m) => m.month >= BRANCH_REVENUE_VISIBLE_FROM_MONTH) : allMonthsRaw;
 
   // Validate ?month= param
   const month =
@@ -75,7 +79,8 @@ export default async function BillsPage({
       canUpload={nav.canUpload}
       slimNav={nav.slimNav}
       isRegional={admin.role === "regional"}
-      isBranch={admin.role === "branch"}
+      isBranch={admin.role === "branch" || admin.role === "bp_manager"}
+      isBpManager={admin.role === "bp_manager"}
       centralNav={admin.role === "regional" && admin.region === "Central"}
       regionalRmNav={admin.role === "regional" && admin.region !== "Central"}
       queriesBadge={nav.queriesBadge}

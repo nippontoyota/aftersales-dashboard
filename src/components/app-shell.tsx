@@ -7,6 +7,8 @@ import { AutoRefresh } from "./auto-refresh";
 import { AdjustmentAckPopupGate } from "./adjustment-ack-popup-gate";
 import { HolidayMergePopupGate } from "./holiday-merge-popup-gate";
 import { QueryPopupGate } from "./query-popup-gate";
+import { BpFollowUpPopupGate } from "./bp-followup-popup-gate";
+import { BpUrgentContactPopupGate } from "./bp-urgent-contact-popup-gate";
 import { ThemeToggle } from "./theme-toggle";
 
 // Every branch admin sees the full company-wide dashboard, identical to HQ
@@ -368,6 +370,7 @@ export function AppShell({
   slimNav = false,
   isRegional = false,
   isBranch = false,
+  isBpManager = false,
   queriesBadge = 0,
   cancellationsBadge = 0,
   dashboardLabel = "Executive Overview",
@@ -419,6 +422,13 @@ export function AppShell({
    * items (Queries, since 2026-09-26 branches get their own queries too)
    * showing even under slimNav. Defaults to false. */
   isBranch?: boolean;
+  /** A BP Manager account using this shell (2026-11-28, at the user's
+   * request — BPM used to get its own bare BpShell) — passed alongside
+   * `isBranch` (BPM gets the same Dashboard/BP Referrals/slim-nav treatment
+   * as a real branch account) but excludes the "3C Referrals" nav item
+   * below, which is a separate branch-staff workflow /referrals itself
+   * redirects a bp_manager away from. Defaults to false. */
+  isBpManager?: boolean;
   /** Count shown as a small badge on the Queries nav item — threads awaiting
    * this viewer's attention. 0 (default) renders no badge. */
   queriesBadge?: number;
@@ -455,7 +465,7 @@ export function AppShell({
           (!item.uploadOnly || canUpload) &&
           (!item.hqOnly || isHq || isBpHo || isBranch) &&
           (!item.branchOnly || isBranch) &&
-          (!item.branchOrHqOnly || isBranch || isHq),
+          (!item.branchOrHqOnly || (isBranch && !isBpManager) || isHq),
       ).map((item) => (item.key === "dashboard" ? { ...item, label: dashboardLabel } : item));
   const utilityItems = isHq && !accountsNav && !centralNav && !regionalRmNav ? UTILITY_NAV_ITEMS : [];
 
@@ -577,6 +587,13 @@ export function AppShell({
       <QueryPopupGate />
       <HolidayMergePopupGate />
       <AdjustmentAckPopupGate />
+      {/* Harmless for every non-bp_manager role — both decide for
+       * themselves, server-side, same convention as QueryPopupGate (see
+       * bp-followup-popup-gate.tsx's doc comment). Mounted here too
+       * (2026-11-28) now that bp_manager uses this shell instead of its own
+       * bare BpShell. */}
+      <BpFollowUpPopupGate />
+      <BpUrgentContactPopupGate />
       {/* Desktop sidebar — collapsible to an icon rail */}
       <aside
         className={`hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex print:!hidden ${
