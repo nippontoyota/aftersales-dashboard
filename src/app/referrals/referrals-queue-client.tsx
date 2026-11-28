@@ -404,14 +404,20 @@ function AppointmentForm({ id, reschedule, onDone }: { id: number; reschedule: b
  * sits in "Visited — RO pending" until EnterRoForm below is used, same
  * verification/payout path as always (see markAlreadyVisited in store.ts).
  * One click, no extra fields — unlike NotConnectedButton this never needs a
- * reason, so there's nothing to gate behind an "open" step. */
-function AlreadyVisitedButton({ id, onDone }: { id: number; onDone: () => void }) {
+ * reason, so there's nothing to gate behind an "open" step.
+ *
+ * Deliberately does NOT close the modal (2026-11-28, fixing a real
+ * complaint: closing forced the branch to reopen the referral just to reach
+ * the RO field they were about to use anyway). onMarked instead flips the
+ * modal's local "just marked visited" flag so it re-renders straight into
+ * the EnterRoForm in the same view. */
+function AlreadyVisitedButton({ id, onMarked }: { id: number; onMarked: () => void }) {
   const [state, action, pending] = useActionState(markAlreadyVisitedAction, INIT);
   return (
     <form
       action={async (fd) => {
         await action(fd);
-        onDone();
+        onMarked();
       }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -447,7 +453,11 @@ function EnterRoForm({ id, pendingRoNo }: { id: number; pendingRoNo: string | nu
 
 export function DetailModal({ referral, ownBranch, readOnly, onClose }: { referral: InactiveReferralRow; ownBranch: string; readOnly: boolean; onClose: () => void }) {
   const r = referral;
-  const stage = classify(r);
+  // Overrides classify(r) the instant "Already visited" is clicked, so the
+  // modal moves straight to the RO field without waiting on a close/reopen
+  // round trip to pick up the server's freshly-updated visited_ack_at.
+  const [justMarkedVisited, setJustMarkedVisited] = useState(false);
+  const stage = justMarkedVisited ? "visited_awaiting_ro" : classify(r);
   const canAct = !readOnly && r.assignedBranch === ownBranch;
 
   return (
@@ -523,11 +533,11 @@ export function DetailModal({ referral, ownBranch, readOnly, onClose }: { referr
               <dd className="text-fg">{fmtDate(r.appointmentDate)}</dd>
             </div>
           ) : null}
-          {r.visitedAckAt ? (
+          {r.visitedAckAt || justMarkedVisited ? (
             <div className="flex justify-between gap-3">
               <dt className="text-fg-faint">Marked visited</dt>
               <dd className="text-fg">
-                {fmt(r.visitedAckAt)}
+                {r.visitedAckAt ? fmt(r.visitedAckAt) : "Just now"}
                 {r.visitedAckBy ? ` · ${r.visitedAckBy}` : ""}
               </dd>
             </div>
@@ -586,7 +596,7 @@ export function DetailModal({ referral, ownBranch, readOnly, onClose }: { referr
 
         {canAct && (stage === "appointment_set" || stage === "pending_verification" || stage === "no_show") ? (
           <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
-            {stage === "pending_verification" || stage === "no_show" ? <AlreadyVisitedButton id={r.id} onDone={onClose} /> : null}
+            {stage === "pending_verification" || stage === "no_show" ? <AlreadyVisitedButton id={r.id} onMarked={() => setJustMarkedVisited(true)} /> : null}
             <AppointmentForm id={r.id} reschedule={true} onDone={onClose} />
             <EnterRoForm id={r.id} pendingRoNo={r.pendingRoNo} />
           </div>
