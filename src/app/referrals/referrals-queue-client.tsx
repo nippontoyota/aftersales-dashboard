@@ -545,12 +545,18 @@ export function DetailModal({ referral, ownBranch, readOnly, onClose }: { referr
           {r.matchedRoNo ? (
             <div className="flex justify-between gap-3">
               <dt className="text-fg-faint">Verified RO</dt>
-              <dd className="font-mono text-fg">{r.matchedRoNo}</dd>
+              <dd className="font-mono text-fg">
+                {r.matchedRoNo}
+                <span className="ml-1.5 font-sans text-[11px] text-fg-faint">· {fmt(r.roMatchedAt)}</span>
+              </dd>
             </div>
           ) : r.pendingRoNo ? (
             <div className="flex justify-between gap-3">
               <dt className="text-fg-faint">RO entered (pending)</dt>
-              <dd className="font-mono text-fg">{r.pendingRoNo}</dd>
+              <dd className="font-mono text-fg">
+                {r.pendingRoNo}
+                <span className="ml-1.5 font-sans text-[11px] text-fg-faint">· {fmt(r.pendingRoEnteredAt)}</span>
+              </dd>
             </div>
           ) : null}
           {r.handledBy ? (
