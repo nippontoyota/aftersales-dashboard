@@ -34,6 +34,8 @@ export type InactiveReferralRow = {
   pendingRoEnteredAt: Date | string | null;
   matchedRoNo: string | null;
   roMatchedAt: Date | string | null;
+  visitedAckAt: Date | string | null;
+  visitedAckBy: string | null;
 };
 
 const SELECT_COLUMNS = `
@@ -41,7 +43,8 @@ const SELECT_COLUMNS = `
   customer_address, referring_employee_id, referring_employee_name, referring_employee_branch, dealer_code,
   submitted_at, assigned_branch, call_status, handled_by, last_contacted_at,
   genuine, customer_interested, validated_at, closed_at, closed_reason, not_genuine_reason, not_interested_reason,
-  appointment_date::text as appointment_date, pending_ro_no, pending_ro_entered_at, matched_ro_no, ro_matched_at
+  appointment_date::text as appointment_date, pending_ro_no, pending_ro_entered_at, matched_ro_no, ro_matched_at,
+  visited_ack_at, visited_ack_by
 `;
 
 type RawReferralRow = {
@@ -74,6 +77,8 @@ type RawReferralRow = {
   pending_ro_entered_at: Date | string | null;
   matched_ro_no: string | null;
   ro_matched_at: Date | string | null;
+  visited_ack_at: Date | string | null;
+  visited_ack_by: string | null;
 };
 
 function toRow(r: RawReferralRow): InactiveReferralRow {
@@ -107,6 +112,8 @@ function toRow(r: RawReferralRow): InactiveReferralRow {
     pendingRoEnteredAt: r.pending_ro_entered_at,
     matchedRoNo: r.matched_ro_no,
     roMatchedAt: r.ro_matched_at,
+    visitedAckAt: r.visited_ack_at,
+    visitedAckBy: r.visited_ack_by,
   };
 }
 
@@ -301,6 +308,30 @@ export async function enterRoNumber(id: number, branch: string, enteredBy: strin
   );
   await logCall(id, "connected", `RO entered: ${normalizedRo} (pending confirmation)`, enteredBy);
   return "pending";
+}
+
+/** Branch's quick escape hatch (2026-11-28, at the user's request) for a
+ * referral the system is about to brand "No show" when the vehicle has
+ * actually already visited — e.g. the branch hasn't had time to look up the
+ * RO number yet. Purely a UI signal: it suppresses the no-show flag
+ * (referrals-queue-client.tsx's classify()) but does NOT complete the
+ * referral or touch payout fields — ro_matched_at (the ₹200 trigger) still
+ * only comes from an actual RO entered via enterRoNumber() above. */
+export async function markAlreadyVisited(id: number, branch: string, performedBy: string): Promise<void> {
+  await assertOwnedByBranch(id, branch);
+  const { rows } = await pool.query<{ genuine: boolean | null; customer_interested: boolean | null; closed_at: Date | string | null; ro_matched_at: Date | string | null }>(
+    `select genuine, customer_interested, closed_at, ro_matched_at from inactive_customer_referrals where id = $1`,
+    [id],
+  );
+  const referral = rows[0];
+  if (!referral || !referral.genuine || !referral.customer_interested || referral.closed_at || referral.ro_matched_at) {
+    throw new Error("This referral isn't open to mark as visited.");
+  }
+  await pool.query(
+    `update inactive_customer_referrals set visited_ack_at = now(), visited_ack_by = $2 where id = $1`,
+    [id, performedBy],
+  );
+  await logCall(id, "connected", "Marked as already visited — RO pending", performedBy);
 }
 
 export type InactiveReferralCallRow = {

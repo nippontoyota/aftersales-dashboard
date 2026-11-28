@@ -1976,3 +1976,10 @@ create unique index if not exists verified_inactive_contacts_referral_idx on ver
 -- reused everywhere. Applied via scripts/add-3c-referrals-reason-columns.mjs.
 alter table inactive_customer_referrals add column if not exists not_genuine_reason text;
 alter table inactive_customer_referrals add column if not exists not_interested_reason text;
+
+-- 3C Referrals "Already visited" quick action (2026-11-28, at the user's
+-- request) — lets a branch clear a false "No show" the moment they know the
+-- vehicle actually came in, without yet having the RO number to hand.
+-- Applied via scripts/add-3c-referrals-visited-ack.mjs.
+alter table inactive_customer_referrals add column if not exists visited_ack_at timestamptz;
+alter table inactive_customer_referrals add column if not exists visited_ack_by text references admins(username);

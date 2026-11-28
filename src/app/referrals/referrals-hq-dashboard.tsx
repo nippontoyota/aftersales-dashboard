@@ -25,6 +25,8 @@ const CalendarIcon = () => iconBase(<><rect x="3.5" y="4.5" width="13" height="1
 const AlarmIcon = () => iconBase(<><circle cx="10" cy="11" r="6.5" /><path d="M10 8v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M6 4.5 4 6.5M14 4.5l2 2" strokeLinecap="round" /></>);
 const WrenchIcon = () => iconBase(<path d="M13.5 4a3.5 3.5 0 0 0-4.6 3.9L4 12.8V16h3.2l4.9-4.9a3.5 3.5 0 0 0 3.9-4.6l-2.3 2.3-1.8-.6-.6-1.8L13.5 4z" strokeLinecap="round" strokeLinejoin="round" />);
 const XCircleIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M7.5 7.5l5 5M12.5 7.5l-5 5" strokeLinecap="round" /></>);
+const CalendarQuestionIcon = () => iconBase(<><rect x="3.5" y="4.5" width="13" height="12" rx="1.5" /><path d="M3.5 8.5h13M7 3v3M13 3v3" strokeLinecap="round" /><path d="M9 11.5a1 1 0 0 1 1-1c.6 0 1.2.4 1.2 1 0 .6-1.2.7-1.2 1.6" strokeLinecap="round" /><circle cx="10" cy="15" r="0.4" fill="currentColor" stroke="none" /></>);
+const EyeIcon = () => iconBase(<><path d="M2.5 10S5.5 5 10 5s7.5 5 7.5 5-3 5-7.5 5-7.5-5-7.5-5z" strokeLinecap="round" strokeLinejoin="round" /><circle cx="10" cy="10" r="2" /></>);
 const WalletIcon = () => iconBase(<><rect x="3" y="5.5" width="14" height="10" rx="1.5" /><path d="M3 8.5h14" /><circle cx="14" cy="11.5" r="1" fill="currentColor" stroke="none" /></>);
 const BranchIcon = () => iconBase(<><path d="M5 3v6a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3V8" strokeLinecap="round" strokeLinejoin="round" /><path d="M10 12v5" strokeLinecap="round" /><circle cx="5" cy="3" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="10" cy="17" r="1.4" /></>);
 const ListIcon = () => iconBase(<><path d="M7 5h10M7 10h10M7 15h10" strokeLinecap="round" /><circle cx="3.5" cy="5" r="0.9" fill="currentColor" stroke="none" /><circle cx="3.5" cy="10" r="0.9" fill="currentColor" stroke="none" /><circle cx="3.5" cy="15" r="0.9" fill="currentColor" stroke="none" /></>);
@@ -76,7 +78,8 @@ export function ReferralsHqDashboard({
   const classified = useMemo(() => referrals.map((r) => ({ r, stage: classify(r) })), [referrals]);
   const counts = useMemo(() => {
     const c: Record<Stage, number> = {
-      to_call: 0, not_connected: 0, connected: 0, appointment_set: 0, no_show: 0, ro_entered: 0, not_verified: 0, verified: 0, closed: 0,
+      to_call: 0, not_connected: 0, connected: 0, appointment_set: 0, pending_verification: 0, no_show: 0,
+      visited_awaiting_ro: 0, ro_entered: 0, not_verified: 0, verified: 0, closed: 0,
     };
     for (const { stage } of classified) c[stage]++;
     return c;
@@ -94,13 +97,15 @@ export function ReferralsHqDashboard({
         <p className="mt-1 text-sm text-fg-muted">Company-wide inactive-customer re-engagement — {referrals.length} referral{referrals.length === 1 ? "" : "s"}.</p>
       </div>
 
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-9">
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-11">
         <KpiCard icon={<TotalIcon />} color="neutral" label="Total" value={referrals.length} onClick={() => setActiveStage(null)} />
         <KpiCard icon={<PhoneIcon />} color="accent" label="To call" value={counts.to_call} onClick={() => setActiveStage("to_call")} />
         <KpiCard icon={<PhoneOffIcon />} color="warn" label="Not connected" value={counts.not_connected} onClick={() => setActiveStage("not_connected")} />
         <KpiCard icon={<CheckIcon />} color="accent" label="Connected" value={counts.connected} onClick={() => setActiveStage("connected")} />
         <KpiCard icon={<CalendarIcon />} color="info" label="Appointment set" value={counts.appointment_set} onClick={() => setActiveStage("appointment_set")} />
+        <KpiCard icon={<CalendarQuestionIcon />} color="warn" label="Appointment passed" value={counts.pending_verification} onClick={() => setActiveStage("pending_verification")} />
         <KpiCard icon={<AlarmIcon />} color="bad" label="No show" value={counts.no_show} onClick={() => setActiveStage("no_show")} />
+        <KpiCard icon={<EyeIcon />} color="accent" label="Visited — RO pending" value={counts.visited_awaiting_ro} onClick={() => setActiveStage("visited_awaiting_ro")} />
         <KpiCard icon={<WrenchIcon />} color="accent" label="RO entered" value={counts.ro_entered} onClick={() => setActiveStage("ro_entered")} />
         <KpiCard icon={<XCircleIcon />} color="bad" label="Not verified" value={counts.not_verified} onClick={() => setActiveStage("not_verified")} />
         <KpiCard icon={<CheckIcon />} color="good" label="Verified" value={counts.verified} onClick={() => setActiveStage("verified")} />

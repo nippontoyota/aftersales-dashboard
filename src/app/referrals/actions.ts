@@ -5,6 +5,7 @@ import { getCurrentAdmin } from "@/lib/auth";
 import {
   enterRoNumber,
   loadCallHistory,
+  markAlreadyVisited,
   markNotConnected,
   setAppointmentDate,
   submitCallOutcome,
@@ -122,6 +123,22 @@ export async function enterRoNumberAction(_prev: EnterRoActionState, formData: F
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Couldn't save the RO number.", status: null };
   }
+}
+
+export async function markAlreadyVisitedAction(_prev: ReferralActionState, formData: FormData): Promise<ReferralActionState> {
+  const admin = requireBranchAdmin(await getCurrentAdmin());
+  if (!admin) return { error: "Not allowed.", ok: false };
+
+  const id = Number(formData.get("id"));
+  if (!Number.isFinite(id) || id <= 0) return { error: "Bad referral id.", ok: false };
+
+  try {
+    await markAlreadyVisited(id, admin.branch, admin.username);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Couldn't update that referral.", ok: false };
+  }
+  revalidatePath("/referrals");
+  return { error: null, ok: true };
 }
 
 /** The detail view's call-history list — any viewer who can reach the page

@@ -6,6 +6,7 @@ import { branchName } from "@/lib/branch-names";
 import {
   enterRoNumberAction,
   getCallHistoryAction,
+  markAlreadyVisitedAction,
   markNotConnectedAction,
   setAppointmentDateAction,
   submitCallOutcomeAction,
@@ -22,12 +23,23 @@ import { NotConnectedReasonFields } from "./not-connected-reason-fields";
  * time, this is visibility only. */
 const NOT_VERIFIED_OVERDUE_DAYS = 30;
 
+/** Grace window (2026-11-28, at the user's request) between the
+ * appointment date passing and this flipping to a hard "No show" — real
+ * incident: vehicles that had already come in were showing "No show —
+ * follow up" before the branch manager had even had a chance to check,
+ * purely because nobody had typed the RO number in yet. One day buys the
+ * branch same-day-lag room to look the vehicle up before the system
+ * accuses them of a no-show. */
+const NO_SHOW_GRACE_DAYS = 1;
+
 export type Stage =
   | "to_call"
   | "not_connected"
   | "connected"
   | "appointment_set"
+  | "pending_verification"
   | "no_show"
+  | "visited_awaiting_ro"
   | "ro_entered"
   | "not_verified"
   | "verified"
@@ -54,16 +66,37 @@ function daysSince(ts: Date | string | null): number {
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-/** The pipeline (2026-11-27, the user's call): To call -> Not connected ->
- * Connected -> Appointment set -> No show (follow-up, not terminal —
- * reschedule returns it to "Appointment set") -> RO entered -> Verified /
- * Not verified. Closed (not genuine / not interested) is a side bucket, same
- * convention as BP Referrals' not_genuine/not_interested. */
+/** Whole calendar days between an appointment date (YYYY-MM-DD) and today,
+ * both read as UTC midnight so this doesn't drift with the server's local
+ * time zone the way daysSince()'s now()-based math would near a day
+ * boundary. */
+function daysPastAppointment(appointmentDate: string): number {
+  const apt = new Date(`${appointmentDate}T00:00:00Z`).getTime();
+  const today = new Date(`${todayStr()}T00:00:00Z`).getTime();
+  return Math.round((today - apt) / (1000 * 60 * 60 * 24));
+}
+
+/** The pipeline (2026-11-27, the user's call; grace window and the two
+ * "don't presume a no-show" stages added 2026-11-28): To call -> Not
+ * connected -> Connected -> Appointment set -> Appointment passed (soft,
+ * within the grace window) -> No show (follow-up, not terminal — reschedule
+ * returns it to "Appointment set") -> RO entered -> Verified / Not
+ * verified. A branch can mark "Already visited" at any point after the
+ * appointment date (pending-verification or no-show alike) to clear the
+ * no-show framing immediately without yet having the RO number — see
+ * visited_awaiting_ro below, which pre-empts the date math entirely since
+ * the branch has already confirmed the visit. Closed (not genuine / not
+ * interested) is a side bucket, same convention as BP Referrals'
+ * not_genuine/not_interested. */
 export function classify(r: InactiveReferralRow): Stage {
   if (r.matchedRoNo) return "verified";
   if (r.pendingRoNo) return daysSince(r.pendingRoEnteredAt) >= NOT_VERIFIED_OVERDUE_DAYS ? "not_verified" : "ro_entered";
   if (r.closedAt) return "closed";
-  if (r.appointmentDate) return r.appointmentDate < todayStr() ? "no_show" : "appointment_set";
+  if (r.appointmentDate) {
+    if (r.visitedAckAt) return "visited_awaiting_ro";
+    if (r.appointmentDate >= todayStr()) return "appointment_set";
+    return daysPastAppointment(r.appointmentDate) > NO_SHOW_GRACE_DAYS ? "no_show" : "pending_verification";
+  }
   if (r.validatedAt) return "connected";
   if (r.callStatus === "not_connected") return "not_connected";
   return "to_call";
@@ -74,7 +107,9 @@ const STAGE_LABEL: Record<Stage, string> = {
   not_connected: "Not connected",
   connected: "Connected",
   appointment_set: "Appointment set",
+  pending_verification: "Appointment passed — verify",
   no_show: "No show — follow up",
+  visited_awaiting_ro: "Visited — RO pending",
   ro_entered: "RO entered",
   not_verified: "Not verified",
   verified: "Verified",
@@ -90,7 +125,9 @@ const STAGE_DOT: Record<Stage, string> = {
   not_connected: "bg-warn-solid",
   connected: "bg-accent",
   appointment_set: "bg-info-solid",
+  pending_verification: "bg-warn-solid",
   no_show: "bg-bad-solid",
+  visited_awaiting_ro: "bg-accent",
   ro_entered: "bg-accent",
   not_verified: "bg-bad-solid",
   verified: "bg-good-solid",
@@ -101,7 +138,9 @@ const STAGE_BADGE: Record<Stage, string> = {
   not_connected: "bg-warn-soft text-warn-text",
   connected: "bg-accent-soft text-accent-text",
   appointment_set: "bg-info-soft text-info",
+  pending_verification: "bg-warn-soft text-warn-text",
   no_show: "bg-bad-soft text-bad",
+  visited_awaiting_ro: "bg-accent-soft text-accent-text",
   ro_entered: "bg-accent-soft text-accent-text",
   not_verified: "bg-bad-soft text-bad",
   verified: "bg-good-soft text-good-text",
@@ -144,6 +183,8 @@ const AlarmIcon = () => iconBase(<><circle cx="10" cy="11" r="6.5" /><path d="M1
 const WrenchIcon = () => iconBase(<path d="M13.5 4a3.5 3.5 0 0 0-4.6 3.9L4 12.8V16h3.2l4.9-4.9a3.5 3.5 0 0 0 3.9-4.6l-2.3 2.3-1.8-.6-.6-1.8L13.5 4z" strokeLinecap="round" strokeLinejoin="round" />);
 const XCircleIcon = () => iconBase(<><circle cx="10" cy="10" r="7" /><path d="M7.5 7.5l5 5M12.5 7.5l-5 5" strokeLinecap="round" /></>);
 const CheckCircleIcon = CheckIcon;
+const CalendarQuestionIcon = () => iconBase(<><rect x="3.5" y="4.5" width="13" height="12" rx="1.5" /><path d="M3.5 8.5h13M7 3v3M13 3v3" strokeLinecap="round" /><path d="M9 11.5a1 1 0 0 1 1-1c.6 0 1.2.4 1.2 1 0 .6-1.2.7-1.2 1.6" strokeLinecap="round" /><circle cx="10" cy="15" r="0.4" fill="currentColor" stroke="none" /></>);
+const EyeIcon = () => iconBase(<><path d="M2.5 10S5.5 5 10 5s7.5 5 7.5 5-3 5-7.5 5-7.5-5-7.5-5z" strokeLinecap="round" strokeLinejoin="round" /><circle cx="10" cy="10" r="2" /></>);
 
 function KpiCard({ icon, color, label, value, active, onClick }: { icon: React.ReactNode; color: AccentColor; label: string; value: number; active: boolean; onClick: () => void }) {
   const accent = ACCENT[color];
@@ -357,6 +398,32 @@ function AppointmentForm({ id, reschedule, onDone }: { id: number; reschedule: b
   );
 }
 
+/** The quick escape hatch (2026-11-28, at the user's request) for when the
+ * branch already knows the vehicle came in but doesn't have the RO number
+ * to hand yet — clears the no-show framing immediately; the referral then
+ * sits in "Visited — RO pending" until EnterRoForm below is used, same
+ * verification/payout path as always (see markAlreadyVisited in store.ts).
+ * One click, no extra fields — unlike NotConnectedButton this never needs a
+ * reason, so there's nothing to gate behind an "open" step. */
+function AlreadyVisitedButton({ id, onDone }: { id: number; onDone: () => void }) {
+  const [state, action, pending] = useActionState(markAlreadyVisitedAction, INIT);
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        onDone();
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <input type="hidden" name="id" value={id} />
+      <button type="submit" disabled={pending} className="h-8 rounded-md border border-border-strong px-3 text-sm font-medium text-fg-muted hover:bg-surface-2 disabled:opacity-60">
+        {pending ? "Saving…" : "Already visited — I'll enter the RO shortly"}
+      </button>
+      {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
+    </form>
+  );
+}
+
 const ENTER_RO_INIT: EnterRoActionState = { error: null, status: null };
 
 function EnterRoForm({ id, pendingRoNo }: { id: number; pendingRoNo: string | null }) {
@@ -456,6 +523,15 @@ export function DetailModal({ referral, ownBranch, readOnly, onClose }: { referr
               <dd className="text-fg">{fmtDate(r.appointmentDate)}</dd>
             </div>
           ) : null}
+          {r.visitedAckAt ? (
+            <div className="flex justify-between gap-3">
+              <dt className="text-fg-faint">Marked visited</dt>
+              <dd className="text-fg">
+                {fmt(r.visitedAckAt)}
+                {r.visitedAckBy ? ` · ${r.visitedAckBy}` : ""}
+              </dd>
+            </div>
+          ) : null}
           {r.matchedRoNo ? (
             <div className="flex justify-between gap-3">
               <dt className="text-fg-faint">Verified RO</dt>
@@ -490,20 +566,33 @@ export function DetailModal({ referral, ownBranch, readOnly, onClose }: { referr
           </div>
         ) : null}
 
-        {canAct && stage === "no_show" ? (
-          <div className="mt-4 rounded-md border border-bad/30 bg-bad-soft/40 px-3 py-2 text-xs text-bad">
-            Appointment date passed with no RO entered — re-contact the customer and reschedule below.
+        {canAct && stage === "pending_verification" ? (
+          <div className="mt-4 rounded-md border border-warn/30 bg-warn-soft/40 px-3 py-2 text-xs text-warn-text">
+            Appointment date passed — check with the customer or your service board before assuming a no-show. If the vehicle already came in, mark it below instead of rescheduling.
           </div>
         ) : null}
 
-        {canAct && (stage === "appointment_set" || stage === "no_show") ? (
+        {canAct && stage === "no_show" ? (
+          <div className="mt-4 rounded-md border border-bad/30 bg-bad-soft/40 px-3 py-2 text-xs text-bad">
+            Appointment date passed with no RO entered — re-contact the customer and reschedule below, or mark it as already visited if the vehicle came in.
+          </div>
+        ) : null}
+
+        {canAct && stage === "visited_awaiting_ro" ? (
+          <div className="mt-4 rounded-md border border-accent/30 bg-accent-soft/40 px-3 py-2 text-xs text-accent-text">
+            Marked as already visited{r.visitedAckAt ? ` on ${fmt(r.visitedAckAt)}` : ""} — enter the RO number below once you have it.
+          </div>
+        ) : null}
+
+        {canAct && (stage === "appointment_set" || stage === "pending_verification" || stage === "no_show") ? (
           <div className="mt-4 space-y-3 border-t border-border-subtle pt-3">
+            {stage === "pending_verification" || stage === "no_show" ? <AlreadyVisitedButton id={r.id} onDone={onClose} /> : null}
             <AppointmentForm id={r.id} reschedule={true} onDone={onClose} />
             <EnterRoForm id={r.id} pendingRoNo={r.pendingRoNo} />
           </div>
         ) : null}
 
-        {canAct && stage === "ro_entered" ? (
+        {canAct && (stage === "ro_entered" || stage === "visited_awaiting_ro") ? (
           <div className="mt-4 border-t border-border-subtle pt-3">
             <EnterRoForm id={r.id} pendingRoNo={r.pendingRoNo} />
           </div>
@@ -539,7 +628,8 @@ export function ReferralsQueueClient({
   const classified = useMemo(() => queue.map((r) => ({ r, stage: classify(r) })), [queue]);
   const counts = useMemo(() => {
     const c: Record<Stage, number> = {
-      to_call: 0, not_connected: 0, connected: 0, appointment_set: 0, no_show: 0, ro_entered: 0, not_verified: 0, verified: 0, closed: 0,
+      to_call: 0, not_connected: 0, connected: 0, appointment_set: 0, pending_verification: 0, no_show: 0,
+      visited_awaiting_ro: 0, ro_entered: 0, not_verified: 0, verified: 0, closed: 0,
     };
     for (const { stage } of classified) c[stage]++;
     return c;
@@ -564,7 +654,9 @@ export function ReferralsQueueClient({
         <KpiCard icon={<PhoneOffIcon />} color="warn" label="Not connected" value={counts.not_connected} active={activeStage === "not_connected"} onClick={() => setActiveStage("not_connected")} />
         <KpiCard icon={<CheckIcon />} color="accent" label="Connected" value={counts.connected} active={activeStage === "connected"} onClick={() => setActiveStage("connected")} />
         <KpiCard icon={<CalendarIcon />} color="info" label="Appointment set" value={counts.appointment_set} active={activeStage === "appointment_set"} onClick={() => setActiveStage("appointment_set")} />
+        <KpiCard icon={<CalendarQuestionIcon />} color="warn" label="Appointment passed" value={counts.pending_verification} active={activeStage === "pending_verification"} onClick={() => setActiveStage("pending_verification")} />
         <KpiCard icon={<AlarmIcon />} color="bad" label="No show" value={counts.no_show} active={activeStage === "no_show"} onClick={() => setActiveStage("no_show")} />
+        <KpiCard icon={<EyeIcon />} color="accent" label="Visited — RO pending" value={counts.visited_awaiting_ro} active={activeStage === "visited_awaiting_ro"} onClick={() => setActiveStage("visited_awaiting_ro")} />
         <KpiCard icon={<WrenchIcon />} color="accent" label="RO entered" value={counts.ro_entered} active={activeStage === "ro_entered"} onClick={() => setActiveStage("ro_entered")} />
         <KpiCard icon={<XCircleIcon />} color="bad" label="Not verified" value={counts.not_verified} active={activeStage === "not_verified"} onClick={() => setActiveStage("not_verified")} />
         <KpiCard icon={<CheckCircleIcon />} color="good" label="Verified" value={counts.verified} active={activeStage === "verified"} onClick={() => setActiveStage("verified")} />
