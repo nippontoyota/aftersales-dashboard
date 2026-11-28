@@ -423,7 +423,7 @@ function AlreadyVisitedButton({ id, onMarked }: { id: number; onMarked: () => vo
     >
       <input type="hidden" name="id" value={id} />
       <button type="submit" disabled={pending} className="h-8 rounded-md border border-border-strong px-3 text-sm font-medium text-fg-muted hover:bg-surface-2 disabled:opacity-60">
-        {pending ? "Saving…" : "Already visited — I'll enter the RO shortly"}
+        {pending ? "Saving…" : "Already visited"}
       </button>
       {state.error ? <p className="mt-1 text-xs text-bad">{state.error}</p> : null}
     </form>
